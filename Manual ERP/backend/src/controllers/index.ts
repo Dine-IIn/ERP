@@ -34,7 +34,11 @@ export const HIERARCHICAL_FEATURES = [
   
   { key: "NOTIFICATIONS", name: "Alerts & Logs Category", description: "Enable system alerts and logs" },
   { key: "NOTIFICATIONS_PUSH", name: "Push Notifications", description: "Receive real-time push events on devices" },
-  { key: "NOTIFICATIONS_AUDIT", name: "System Audit Logs", description: "View secure administrative history trails" }
+  { key: "NOTIFICATIONS_AUDIT", name: "System Audit Logs", description: "View secure administrative history trails" },
+
+  { key: "MDM", name: "Master Data Management Category", description: "Enable Master Data Management category" },
+  { key: "MDM_PRODUCTS", name: "Product Master", description: "Manage central product master records" },
+  { key: "MDM_PARTNERS", name: "Partners (Customer/Vendor)", description: "Manage central customer and vendor master records" }
 ];
 
 // Global reference to the WebSockets emitter
@@ -246,7 +250,9 @@ export async function login(req: AuthenticatedRequest, res: Response) {
         companyCode: company.companyCode,
         companyName: company.name,
         role: user.role?.name || null,
-        isSuperAdmin: false
+        isSuperAdmin: false,
+        hasBackupAccess: user.hasBackupAccess,
+        backupAccess: company.backupAccess
       }
     });
   } catch (error: any) {
@@ -387,7 +393,7 @@ export async function updateCompany(req: AuthenticatedRequest, res: Response) {
       return res.status(400).json({ error: parsed.error.issues[0].message });
     }
 
-    const { name, companyCode, createdAt, status, features } = req.body;
+    const { name, companyCode, createdAt, status, features, fileSizeLimit, backupAccess, backupRetentionDays } = req.body;
 
     const company = await prisma.company.findUnique({
       where: { id }
@@ -408,7 +414,10 @@ export async function updateCompany(req: AuthenticatedRequest, res: Response) {
     const updatedData: any = {
       ...(name && { name }),
       ...(companyCode && { companyCode: companyCode.toUpperCase() }),
-      ...(status && { status })
+      ...(status && { status }),
+      ...(fileSizeLimit !== undefined && { fileSizeLimit: Number(fileSizeLimit) }),
+      ...(backupAccess !== undefined && { backupAccess: Boolean(backupAccess) }),
+      ...(backupRetentionDays !== undefined && { backupRetentionDays: Number(backupRetentionDays) })
     };
 
     if (createdAt) {
@@ -822,7 +831,8 @@ export async function getCompanyRolesAndUsers(req: AuthenticatedRequest, res: Re
       email: u.email,
       status: u.status,
       role: u.role?.name || null,
-      createdAt: u.createdAt
+      createdAt: u.createdAt,
+      hasBackupAccess: u.hasBackupAccess
     }));
 
     // Fetch active subscription features
@@ -908,3 +918,7 @@ export async function registerPushToken(req: AuthenticatedRequest, res: Response
     return res.status(500).json({ error: error.message });
   }
 }
+
+// Export all General Administration Controllers
+export * from './admin';
+

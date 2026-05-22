@@ -1,4 +1,18 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -37,7 +51,10 @@ exports.HIERARCHICAL_FEATURES = [
     { key: "FINANCE_INVOICING", name: "Invoicing", description: "Generate invoices and manage client billing" },
     { key: "NOTIFICATIONS", name: "Alerts & Logs Category", description: "Enable system alerts and logs" },
     { key: "NOTIFICATIONS_PUSH", name: "Push Notifications", description: "Receive real-time push events on devices" },
-    { key: "NOTIFICATIONS_AUDIT", name: "System Audit Logs", description: "View secure administrative history trails" }
+    { key: "NOTIFICATIONS_AUDIT", name: "System Audit Logs", description: "View secure administrative history trails" },
+    { key: "MDM", name: "Master Data Management Category", description: "Enable Master Data Management category" },
+    { key: "MDM_PRODUCTS", name: "Product Master", description: "Manage central product master records" },
+    { key: "MDM_PARTNERS", name: "Partners (Customer/Vendor)", description: "Manage central customer and vendor master records" }
 ];
 // Global reference to the WebSockets emitter
 exports.ioInstance = null;
@@ -224,7 +241,9 @@ async function login(req, res) {
                 companyCode: company.companyCode,
                 companyName: company.name,
                 role: user.role?.name || null,
-                isSuperAdmin: false
+                isSuperAdmin: false,
+                hasBackupAccess: user.hasBackupAccess,
+                backupAccess: company.backupAccess
             }
         });
     }
@@ -346,7 +365,7 @@ async function updateCompany(req, res) {
         if (!parsed.success) {
             return res.status(400).json({ error: parsed.error.issues[0].message });
         }
-        const { name, companyCode, createdAt, status, features } = req.body;
+        const { name, companyCode, createdAt, status, features, fileSizeLimit, backupAccess, backupRetentionDays } = req.body;
         const company = await db_1.default.company.findUnique({
             where: { id }
         });
@@ -364,7 +383,10 @@ async function updateCompany(req, res) {
         const updatedData = {
             ...(name && { name }),
             ...(companyCode && { companyCode: companyCode.toUpperCase() }),
-            ...(status && { status })
+            ...(status && { status }),
+            ...(fileSizeLimit !== undefined && { fileSizeLimit: Number(fileSizeLimit) }),
+            ...(backupAccess !== undefined && { backupAccess: Boolean(backupAccess) }),
+            ...(backupRetentionDays !== undefined && { backupRetentionDays: Number(backupRetentionDays) })
         };
         if (createdAt) {
             const date = new Date(createdAt);
@@ -730,7 +752,8 @@ async function getCompanyRolesAndUsers(req, res) {
             email: u.email,
             status: u.status,
             role: u.role?.name || null,
-            createdAt: u.createdAt
+            createdAt: u.createdAt,
+            hasBackupAccess: u.hasBackupAccess
         }));
         // Fetch active subscription features
         const activeFeatures = await db_1.default.companyFeature.findMany({
@@ -805,4 +828,6 @@ async function registerPushToken(req, res) {
         return res.status(500).json({ error: error.message });
     }
 }
+// Export all General Administration Controllers
+__exportStar(require("./admin"), exports);
 //# sourceMappingURL=index.js.map

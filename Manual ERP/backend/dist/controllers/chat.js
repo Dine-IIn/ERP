@@ -9,6 +9,7 @@ exports.getChatGroupMessages = getChatGroupMessages;
 exports.sendChatGroupMessage = sendChatGroupMessage;
 exports.manageChatGroupMembers = manageChatGroupMembers;
 exports.updateChatGroupSettings = updateChatGroupSettings;
+exports.getCompanyChatStats = getCompanyChatStats;
 const db_1 = __importDefault(require("../services/db"));
 const index_1 = require("./index");
 /**
@@ -454,6 +455,136 @@ async function updateChatGroupSettings(req, res) {
     }
     catch (error) {
         console.error("❌ Error updating group configurations:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+}
+/**
+ * 7. Retrieve company-wide stats: Total Company Expense, Individual Net Sum, Individual Total Expense
+ */
+async function getCompanyChatStats(req, res) {
+    try {
+        const user = req.user;
+        if (!user) {
+            return res.status(401).json({ error: "Unauthorized access" });
+        }
+        // 1. Fetch all expense groups in the company
+        const groups = await db_1.default.chatGroup.findMany({
+            where: {
+                companyId: user.companyId,
+                type: 'EXPENSE'
+            },
+            select: {
+                id: true
+            }
+        });
+        const groupIds = groups.map(g => g.id);
+        // If there are no groups, return all zeros
+        if (groupIds.length === 0) {
+            return res.json({
+                totalCompanyExpense: 0,
+                individualNetSum: 0,
+                individualTotalExpense: 0
+            });
+        }
+        // 2. Fetch all members of these groups
+        const members = await db_1.default.groupMember.findMany({
+            where: {
+                groupId: { in: groupIds }
+            },
+            select: {
+                groupId: true,
+                userId: true
+            }
+        });
+        // 3. Fetch all expense/payment messages in these groups
+        const messages = await db_1.default.chatMessage.findMany({
+            where: {
+                groupId: { in: groupIds },
+                type: { in: ['EXPENSE', 'PAYMENT'] }
+            },
+            orderBy: {
+                createdAt: 'asc'
+            }
+        });
+        let totalCompanyExpense = 0;
+        let individualTotalExpense = 0;
+        // Group the messages and members by groupId for faster access
+        const messagesByGroup = {};
+        const membersByGroup = {};
+        groupIds.forEach(gId => {
+            messagesByGroup[gId] = [];
+            membersByGroup[gId] = [];
+        });
+        messages.forEach(msg => {
+            if (messagesByGroup[msg.groupId]) {
+                messagesByGroup[msg.groupId].push(msg);
+            }
+        });
+        members.forEach(m => {
+            if (membersByGroup[m.groupId]) {
+                membersByGroup[m.groupId].push(m.userId);
+            }
+        });
+        let individualNetSum = 0;
+        // For each group, compute balances
+        groupIds.forEach(gId => {
+            const gMembers = membersByGroup[gId];
+            const gMessages = messagesByGroup[gId];
+            const netBalances = {};
+            gMembers.forEach(userId => {
+                netBalances[userId] = 0;
+            });
+            gMessages.forEach(msg => {
+                if (msg.type === 'EXPENSE') {
+                    try {
+                        const data = typeof msg.expenseData === 'string' ? JSON.parse(msg.expenseData) : msg.expenseData;
+                        if (data) {
+                            const amount = Number(data.amount || 0);
+                            const paidBy = data.paidBy || msg.senderId;
+                            const splits = data.splits || {};
+                            totalCompanyExpense += amount;
+                            if (paidBy === user.userId) {
+                                individualTotalExpense += amount;
+                            }
+                            netBalances[paidBy] = (netBalances[paidBy] || 0) + amount;
+                            Object.entries(splits).forEach(([uId, share]) => {
+                                netBalances[uId] = (netBalances[uId] || 0) - Number(share || 0);
+                            });
+                        }
+                    }
+                    catch (e) {
+                        console.error("Error parsing expenseData in stats:", e);
+                    }
+                }
+                else if (msg.type === 'PAYMENT') {
+                    try {
+                        const data = typeof msg.expenseData === 'string' ? JSON.parse(msg.expenseData) : msg.expenseData;
+                        if (data) {
+                            const amount = Number(data.amount || 0);
+                            const from = data.from;
+                            const to = data.to;
+                            netBalances[from] = (netBalances[from] || 0) + amount;
+                            netBalances[to] = (netBalances[to] || 0) - amount;
+                        }
+                    }
+                    catch (e) {
+                        console.error("Error parsing payment expenseData in stats:", e);
+                    }
+                }
+            });
+            // Add this group's user balance to individualNetSum
+            if (netBalances[user.userId] !== undefined) {
+                individualNetSum += netBalances[user.userId];
+            }
+        });
+        res.json({
+            totalCompanyExpense,
+            individualNetSum,
+            individualTotalExpense
+        });
+    }
+    catch (error) {
+        console.error("❌ Error computing company stats:", error);
         res.status(500).json({ error: "Internal server error" });
     }
 }

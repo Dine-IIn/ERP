@@ -3,6 +3,7 @@ import cors from 'cors';
 import http from 'http';
 import { Server } from 'socket.io';
 import dotenv from 'dotenv';
+import path from 'path';
 import {
   authenticateToken,
   requireSuperAdmin
@@ -25,7 +26,43 @@ import {
   listNotifications,
   markAsRead,
   registerPushToken,
-  setIoInstance
+  setIoInstance,
+  getCompanyProfile,
+  updateCompanyProfile,
+  listTaxSettings,
+  createTaxSetting,
+  updateTaxSetting,
+  deleteTaxSetting,
+  calculateTax,
+  listCurrencies,
+  createCurrency,
+  updateCurrency,
+  deleteCurrency,
+  getAuditLogs,
+  listWorkflows,
+  createWorkflow,
+  updateWorkflow,
+  deleteWorkflow,
+  listApprovalRequests,
+  createApprovalRequest,
+  submitApprovalAction,
+  archiveNotification,
+  listDocuments,
+  uploadDocument,
+  addDocumentVersion,
+  getBackupLogs,
+  triggerBackup,
+  restoreBackup,
+  getCompanyFeatures,
+  toggleCompanyFeature,
+  getDashboardLayout,
+  saveDashboardLayout,
+  toggleUserBackupAccess,
+  testEmailConnection,
+  listDepartments,
+  createDepartment,
+  updateDepartment,
+  deleteDepartment
 } from './controllers';
 import {
   listChatGroups,
@@ -33,8 +70,11 @@ import {
   getChatGroupMessages,
   sendChatGroupMessage,
   manageChatGroupMembers,
-  updateChatGroupSettings
+  updateChatGroupSettings,
+  getCompanyChatStats
 } from './controllers/chat';
+import mdmRouter from './controllers/mdm';
+import financeRouter, { setFinanceIo } from './controllers/finance';
 
 dotenv.config();
 
@@ -49,6 +89,10 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// Serve static assets for uploads and backups
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+app.use('/backups', express.static(path.join(process.cwd(), 'backups')));
+
 // Setup HTTP and WebSockets
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -60,6 +104,7 @@ const io = new Server(server, {
 
 // Share Socket.io instance with controllers
 setIoInstance(io);
+setFinanceIo(io);
 
 // WebSocket Connection Handler for Realtime Dashboard Popups
 io.on('connection', (socket) => {
@@ -123,11 +168,79 @@ app.post('/api/notifications/register-token', authenticateToken, registerPushTok
 
 // 5. Enterprise Real-time Chat & Expense Spaces Routes
 app.get('/api/chat/groups', authenticateToken, listChatGroups);
+app.get('/api/chat/stats', authenticateToken, getCompanyChatStats);
 app.post('/api/chat/group', authenticateToken, createChatGroup);
 app.get('/api/chat/group/:groupId/messages', authenticateToken, getChatGroupMessages);
 app.post('/api/chat/group/:groupId/message', authenticateToken, sendChatGroupMessage);
 app.post('/api/chat/group/:groupId/members', authenticateToken, manageChatGroupMembers);
 app.patch('/api/chat/group/:groupId/settings', authenticateToken, updateChatGroupSettings);
+// 6. General Administration Module Routes
+
+// Company Profile Management
+app.get('/api/admin/company/profile', authenticateToken, getCompanyProfile);
+app.patch('/api/admin/company/profile', authenticateToken, updateCompanyProfile);
+
+// GST / Tax Settings
+app.get('/api/admin/tax/settings', authenticateToken, listTaxSettings);
+app.post('/api/admin/tax/setting', authenticateToken, createTaxSetting);
+app.patch('/api/admin/tax/setting/:id', authenticateToken, updateTaxSetting);
+app.delete('/api/admin/tax/setting/:id', authenticateToken, deleteTaxSetting);
+app.post('/api/admin/tax/calculate', authenticateToken, calculateTax);
+
+// Currency Management
+app.get('/api/admin/currencies', authenticateToken, listCurrencies);
+app.post('/api/admin/currency', authenticateToken, createCurrency);
+app.patch('/api/admin/currency/:id', authenticateToken, updateCurrency);
+app.delete('/api/admin/currency/:id', authenticateToken, deleteCurrency);
+
+// Audit Log System
+app.get('/api/admin/audit-logs', authenticateToken, getAuditLogs);
+
+// Approval Workflow Engine
+app.get('/api/admin/workflows', authenticateToken, listWorkflows);
+app.post('/api/admin/workflow', authenticateToken, createWorkflow);
+app.patch('/api/admin/workflow/:id', authenticateToken, updateWorkflow);
+app.delete('/api/admin/workflow/:id', authenticateToken, deleteWorkflow);
+app.get('/api/admin/approvals', authenticateToken, listApprovalRequests);
+app.post('/api/admin/approval/request', authenticateToken, createApprovalRequest);
+app.post('/api/admin/approval/action', authenticateToken, submitApprovalAction);
+
+// Notification Center (Extended)
+app.patch('/api/notifications/:id/archive', authenticateToken, archiveNotification);
+
+// Document Management System
+app.get('/api/admin/documents', authenticateToken, listDocuments);
+app.post('/api/admin/document/upload', authenticateToken, uploadDocument);
+app.post('/api/admin/document/:id/version', authenticateToken, addDocumentVersion);
+
+// Backup & Restore
+app.get('/api/admin/backups', authenticateToken, getBackupLogs);
+app.post('/api/admin/backup/trigger', authenticateToken, triggerBackup);
+app.post('/api/admin/backup/restore', authenticateToken, restoreBackup);
+app.patch('/api/admin/users/:userId/backup-access', authenticateToken, toggleUserBackupAccess);
+
+// Email Integration Connection Diagnostics
+app.post('/api/admin/email/test', authenticateToken, testEmailConnection);
+
+// Department Management CRUD
+app.get('/api/admin/departments', authenticateToken, listDepartments);
+app.post('/api/admin/departments', authenticateToken, createDepartment);
+app.patch('/api/admin/departments/:id', authenticateToken, updateDepartment);
+app.delete('/api/admin/departments/:id', authenticateToken, deleteDepartment);
+
+// Feature Toggles (Subscription Control)
+app.get('/api/admin/features', authenticateToken, getCompanyFeatures);
+app.post('/api/super/feature/toggle', authenticateToken, requireSuperAdmin, toggleCompanyFeature);
+
+// Dashboard Layout Customization
+app.get('/api/admin/dashboard/layout', authenticateToken, getDashboardLayout);
+app.post('/api/admin/dashboard/layout', authenticateToken, saveDashboardLayout);
+
+// Master Data Management Module Routes
+app.use('/api/mdm', authenticateToken, mdmRouter);
+
+// Finance & Accounting Module Routes
+app.use('/api/finance', authenticateToken, financeRouter);
 
 
 // Start the Integrated Express + HTTP + WebSockets Server
