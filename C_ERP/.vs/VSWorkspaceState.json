@@ -1,0 +1,16 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\apps\\desktop",
+    "\\apps\\desktop\\scripts",
+    "\\apps\\desktop\\src-tauri",
+    "\\packages\\shared-types",
+    "\\services\\api",
+    "\\services\\api\\src",
+    "\\services\\api\\src\\common",
+    "\\services\\api\\src\\modules",
+    "\\services\\api\\src\\modules\\inventory"
+  ],
+  "SelectedNode": "\\.env.example",
+  "PreviewInSolutionExplorer": false
+}

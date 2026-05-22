@@ -1,0 +1,153 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Enforced via application level validation: "PENDING" | "ACTIVE" | "SUSPENDED"
+model Company {
+  id               String           @id @default(uuid())
+  companyCode      String           @unique
+  name             String
+  status           String           @default("ACTIVE")
+  subscriptionTier String           @default("BASIC") // "BASIC" | "PREMIUM" | "ENTERPRISE"
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  users            User[]
+  roles            Role[]
+  features         CompanyFeature[]
+
+  @@map("companies")
+}
+
+model Feature {
+  id          String           @id @default(uuid())
+  key         String           @unique // e.g., "CRM", "HR", "FINANCE", "NOTIFICATIONS"
+  name        String
+  description String?
+  companies   CompanyFeature[]
+
+  @@map("features")
+}
+
+model CompanyFeature {
+  companyId String
+  featureId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  feature   Feature @relation(fields: [featureId], references: [id], onDelete: Cascade)
+
+  @@id([companyId, featureId])
+  @@map("company_features")
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  companyId   String?  // Nullable for system-wide global roles
+  company     Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name        String
+  permissions String   // JSON stringified permissions mapping, e.g. '{"CRM": ["read", "write"]}'
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  users       User[]
+
+  @@unique([companyId, name])
+  @@map("roles")
+}
+
+// Status enforced via validation: "PENDING_APPROVAL" | "ACTIVE" | "SUSPENDED"
+model User {
+  id           String         @id @default(uuid())
+  companyId    String
+  company      Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  username     String
+  passwordHash String
+  mobileNo     String         @unique
+  email        String?
+  status       String         @default("PENDING_APPROVAL")
+  roleId       String?
+  role         Role?          @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  pushTokens   PushToken[]
+  notifications Notification[]
+
+  @@unique([companyId, username])
+  @@map("users")
+}
+
+model OTPVerification {
+  id        String   @id @default(uuid())
+  mobileNo  String
+  otpCode   String
+  expiresAt DateTime
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("otp_verifications")
+}
+
+model PushToken {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceToken String   @unique
+  platform    String   // "ios" | "android" | "web" | "desktop"
+  updatedAt   DateTime @updatedAt
+
+  @@map("push_tokens")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  category  String   // "system" | "CRM" | "hr" | "finance"
+  channels  String   // comma-separated e.g. "in_app,push"
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
+}
+
+model ChatGroup {
+  id          String   @id @default(uuid())
+  companyId   String
+  name        String
+  type        String   // "GENERAL" | "EXPENSE" | "DIRECT"
+  createdById String
+  settings    String   @default("{}") // JSON stringified settings
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("chat_groups")
+}
+
+model GroupMember {
+  id        String   @id @default(uuid())
+  groupId   String
+  userId    String
+  role      String   @default("MEMBER") // "ADMIN" | "MEMBER"
+  createdAt DateTime @default(now())
+
+  @@unique([groupId, userId])
+  @@map("group_members")
+}
+
+model ChatMessage {
+  id          String   @id @default(uuid())
+  groupId     String
+  senderId    String
+  senderName  String
+  message     String
+  type        String   @default("TEXT") // "TEXT" | "EXPENSE" | "TRANSFER"
+  expenseData String?  // JSON stringified expense/transfer logs
+  createdAt   DateTime @default(now())
+
+  @@map("chat_messages")
+}
+
