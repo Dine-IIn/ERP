@@ -42,6 +42,7 @@ interface GeneralAdminProps {
   onUpdateFeatures: (features: string[]) => void;
   initialTab?: 'profile' | 'tax' | 'currency' | 'audit' | 'workflow' | 'notifications' | 'dms' | 'backup' | 'features' | 'email' | 'org';
   initialOrgSubTab?: 'dept_crud' | 'org_chart';
+  activeTab?: string;
 }
 
 export default function GeneralAdmin({
@@ -52,7 +53,8 @@ export default function GeneralAdmin({
   companyFeatures,
   onUpdateFeatures,
   initialTab,
-  initialOrgSubTab
+  initialOrgSubTab,
+  activeTab: activeTabProp
 }: GeneralAdminProps) {
   // Navigation tabs
   const [activeTab, setActiveTab] = useState<'profile' | 'tax' | 'currency' | 'audit' | 'workflow' | 'notifications' | 'dms' | 'backup' | 'features' | 'email' | 'org'>('profile');
@@ -218,6 +220,34 @@ export default function GeneralAdmin({
       setOrgSubTab(initialOrgSubTab);
     }
   }, [initialOrgSubTab]);
+
+  useEffect(() => {
+    const mapping: Record<string, string> = {
+      'ADMIN_PROFILE': 'profile',
+      'ADMIN_TAX': 'tax',
+      'ADMIN_CURRENCY': 'currency',
+      'ADMIN_AUDIT': 'audit',
+      'ADMIN_APPROVALS': 'workflow',
+      'ADMIN_NOTIFICATIONS': 'notifications',
+      'ADMIN_BACKUP': 'backup',
+      'ADMIN_DOCUMENTS': 'dms',
+      'ADMIN_EMAIL': 'email',
+      'ADMIN_TOGGLES': 'features',
+      'ADMIN_DASHBOARD': 'profile',
+      'ADMIN_ORG': 'org',
+      'ADMIN_DEPARTMENTS': 'org',
+      'ADMIN_ACTIVITY': 'audit'
+    };
+
+    if (activeTabProp && mapping[activeTabProp]) {
+      setActiveTab(mapping[activeTabProp] as any);
+      if (activeTabProp === 'ADMIN_DEPARTMENTS') {
+        setOrgSubTab('dept_crud');
+      } else if (activeTabProp === 'ADMIN_ORG') {
+        setOrgSubTab('org_chart');
+      }
+    }
+  }, [activeTabProp]);
   const [deptForm, setDeptForm] = useState({
     departmentCode: '',
     departmentName: '',

@@ -335,6 +335,7 @@ export default function App() {
 
   // --- FLOATING CHAT DRAWER STATES ---
   const [showChatDrawer, setShowChatDrawer] = useState(false);
+  const [showAlertsPopup, setShowAlertsPopup] = useState(false);
   const [colleagueSearch, setColleagueSearch] = useState('');
   const [chatActiveView, setChatActiveView] = useState<'list' | 'room' | 'ledger'>('list');
   const [chatGroups, setChatGroups] = useState<any[]>([]);
@@ -2264,67 +2265,7 @@ export default function App() {
                     </div>
                   )}
 
-                  {/* Category F: Alerts Feed */}
-                  <div className="flex flex-col mt-2 relative">
-                    {sidebarCollapsed ? (
-                      <div className="flex justify-center border-t border-[var(--border-color)] pt-2">
-                        <button
-                          onClick={() => setActivePopoverCategory(activePopoverCategory === 'alerts' ? null : 'alerts')}
-                          className={`p-2.5 rounded-xl hover:bg-[var(--bg-tertiary)] transition-colors cursor-pointer ${activeWorkspaceModule === 'alerts' ? 'bg-purple-500/10 text-purple-500' : 'text-purple-400'}`}
-                          title="Alert Logs"
-                        >
-                          <Bell className="w-4 h-4" />
-                        </button>
-                        {activePopoverCategory === 'alerts' && (
-                          <div className="absolute left-14 top-0 z-50 w-48 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl shadow-2xl p-2 animate-scale-up text-left">
-                            <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-widest uppercase px-2 block mb-1">Alert Logs</span>
-                            <button
-                              onClick={() => {
-                                setActiveWorkspaceModule('alerts');
-                                setActivePopoverCategory(null);
-                              }}
-                              className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors ${
-                                activeWorkspaceModule === 'alerts' ? 'text-purple-400 font-bold bg-purple-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                              }`}
-                            >
-                              In-App Alerts {notifications.filter(n => !n.isRead).length > 0 && `(${notifications.filter(n => !n.isRead).length})`}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="border-t border-[var(--border-color)] pt-2">
-                        <button
-                          onClick={() => toggleSidebarCategory('alerts')}
-                          className="w-full py-2 px-3 rounded-lg text-left text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] flex items-center justify-between transition-colors cursor-pointer"
-                        >
-                          <span className="flex items-center gap-2">
-                            <Bell className="w-4 h-4 text-purple-400" style={{ flexShrink: 0 }} />
-                            <span>Alert Logs</span>
-                          </span>
-                          {expandedCategories.alerts ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                        </button>
 
-                        {expandedCategories.alerts && (
-                          <div className="pl-6 flex flex-col gap-1 mt-1 border-l border-[var(--border-color)] ml-4">
-                            <button
-                              onClick={() => setActiveWorkspaceModule('alerts')}
-                              className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center justify-between ${
-                                activeWorkspaceModule === 'alerts'
-                                  ? 'text-purple-400 font-bold bg-purple-500/5'
-                                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                              }`}
-                            >
-                              <span>In-App Alerts</span>
-                              {notifications.filter(n => !n.isRead).length > 0 && (
-                                <span className="bg-purple-500 text-white font-extrabold text-[8px] px-1.5 py-0.5 rounded-full leading-none">{notifications.filter(n => !n.isRead).length}</span>
-                              )}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
                 </>
               )}
             </div>
@@ -3030,6 +2971,7 @@ export default function App() {
                   onUpdateFeatures={setCompanyFeatures}
                   initialTab={adminTab as any}
                   initialOrgSubTab={adminOrgSubTab as any}
+                  activeTab={activeWorkspaceSubModule}
                 />
               )}
 
@@ -3236,22 +3178,22 @@ export default function App() {
                   ========================================== */}
 
               {activeWorkspaceModule === 'inventory' && !selectedCompany && (
-                <InventoryWarehouse user={user} />
+                <InventoryWarehouse user={user!} activeTab={activeWorkspaceSubModule} />
               )}
               {activeWorkspaceModule === 'purchase' && !selectedCompany && (
-                <PurchaseProcurement user={user} />
+                <PurchaseProcurement user={user!} activeTab={activeWorkspaceSubModule} />
               )}
               {activeWorkspaceModule === 'sales' && !selectedCompany && (
-                <SalesOrder user={user} />
+                <SalesOrder user={user!} activeTab={activeWorkspaceSubModule} />
               )}
               {activeWorkspaceModule === 'manufacturing' && !selectedCompany && (
-                <ManufacturingProduction user={user} />
+                <ManufacturingProduction user={user!} activeTab={activeWorkspaceSubModule} />
               )}
               {activeWorkspaceModule === 'quality' && !selectedCompany && (
-                <QualityMaintenance user={user} />
+                <QualityMaintenance user={user!} activeTab={activeWorkspaceSubModule} />
               )}
               {activeWorkspaceModule === 'email' && !selectedCompany && (
-                <GlobalEmailSystem user={user} />
+                <GlobalEmailSystem user={user!} activeTab={activeWorkspaceSubModule} />
               )}
 
               {activeWorkspaceModule === 'alerts' && !selectedCompany && (
@@ -4197,11 +4139,128 @@ export default function App() {
           )}
 
           {/* ==========================================
+              POPUP OVERLAY BACKDROP & DRAWER FOR ALERT FEED
+              ========================================== */}
+          {showAlertsPopup && (
+            <div 
+              className="fixed inset-0 z-30 bg-transparent cursor-default" 
+              onClick={() => setShowAlertsPopup(false)}
+            />
+          )}
+
+          {showAlertsPopup && (
+            <div
+              className="fixed bottom-40 z-40 w-[380px] h-[480px] bg-[var(--bg-card)]/95 backdrop-blur-md border border-[var(--border-color)] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-scale-up text-left text-xs font-sans"
+              style={{
+                left: sidebarCollapsed ? '88px' : '280px',
+                transition: 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s ease',
+              }}
+            >
+              {/* Header */}
+              <div className="p-4 bg-[var(--bg-secondary)] border-b border-[var(--border-color)] flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Bell className="w-5 h-5 text-purple-500 animate-pulse" />
+                  <h3 className="font-bold text-sm text-[var(--text-primary)] font-display">Alert Logs & Feed</h3>
+                </div>
+                <div className="flex items-center gap-2">
+                  {notifications.filter((n: any) => !n.isRead).length > 0 && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          await Promise.all(
+                            notifications.filter((n: any) => !n.isRead).map((n: any) =>
+                              apiRequest(`/api/notifications/${n.id}/read`, 'PATCH')
+                            )
+                          );
+                          setNotifications(prev => prev.map((n: any) => ({ ...n, isRead: true })));
+                        } catch (e) {}
+                      }}
+                      className="text-[9.5px] font-bold text-purple-400 hover:text-purple-300 border border-purple-500/25 bg-purple-500/5 px-2 py-0.5 rounded cursor-pointer transition-all"
+                    >
+                      Mark all read
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setShowAlertsPopup(false)}
+                    className="p-1 rounded hover:bg-[var(--bg-primary)] text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Feed Content */}
+              <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 custom-scrollbar">
+                {notifications.length === 0 ? (
+                  <div className="flex-1 flex flex-col items-center justify-center py-12 text-center text-xs text-[var(--text-muted)] font-medium">
+                    <Bell className="w-8 h-8 opacity-20 mb-2" />
+                    <span>Your notification ledger is clear.</span>
+                  </div>
+                ) : (
+                  notifications.map((n: any) => (
+                    <div 
+                      key={n.id} 
+                      onClick={() => handleMarkNotificationRead(n.id)}
+                      className={`p-3 border rounded-xl flex items-start gap-3 transition-all cursor-pointer text-left hover:shadow-md ${
+                        n.isRead 
+                          ? 'bg-[var(--bg-secondary)]/30 border-[var(--border-color)]/50 opacity-60' 
+                          : 'bg-purple-500/5 border-purple-500/20 hover:border-purple-500/30'
+                      }`}
+                    >
+                      <div className={`p-2 rounded-lg shrink-0 ${n.isRead ? 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)]' : 'bg-purple-500/10 text-purple-400'}`}>
+                        <Bell className="w-4 h-4" />
+                      </div>
+                      <div className="text-left flex-1">
+                        <div className="flex justify-between items-center">
+                          <span className={`text-[8.5px] font-extrabold tracking-widest uppercase ${n.isRead ? 'text-[var(--text-muted)]' : 'text-purple-400'}`}>
+                            {n.category}
+                          </span>
+                          <span className="text-[8.5px] text-[var(--text-muted)] font-mono">
+                            {new Date(n.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                          </span>
+                        </div>
+                        <h4 className="font-bold text-[11px] text-[var(--text-primary)] mt-1 font-display leading-tight">{n.title}</h4>
+                        <p className="text-[10px] text-[var(--text-secondary)] mt-0.5 leading-snug">{n.message}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ==========================================
+              LAUNCHER BUBBLE ACTION FOR ALERT LOGS
+              ========================================== */}
+          <button
+            onClick={() => {
+              setShowAlertsPopup(!showAlertsPopup);
+              setShowChatDrawer(false);
+            }}
+            className={`fixed bottom-24 z-40 p-4 ${
+              showAlertsPopup ? 'bg-purple-700' : 'bg-purple-600 hover:bg-purple-500'
+            } hover:scale-105 active:scale-95 text-white rounded-full shadow-lg cursor-pointer transition-all duration-200 flex items-center justify-center`}
+            style={{
+              left: sidebarCollapsed ? '88px' : '280px',
+              transition: 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            }}
+            title="Alert Logs & Gateways"
+          >
+            <Bell className="w-6 h-6" />
+            {notifications.filter((n: any) => !n.isRead).length > 0 && (
+              <span className="absolute -top-1 -right-1 bg-rose-500 text-white font-extrabold text-[9px] px-1.5 py-0.5 rounded-full border-2 border-slate-900 shadow-md animate-scale-up">
+                {notifications.filter((n: any) => !n.isRead).length}
+              </span>
+            )}
+          </button>
+
+          {/* ==========================================
               LAUNCHER BUBBLE ACTION TRIGGER BUTTON
               ========================================== */}
           <button
             onClick={() => {
               setShowChatDrawer(!showChatDrawer);
+              setShowAlertsPopup(false);
               setChatActiveView('list');
             }}
             className="fixed bottom-6 z-40 p-4 bg-indigo-600 hover:bg-indigo-500 hover:scale-105 active:scale-95 text-white rounded-full shadow-lg cursor-pointer transition-all duration-200 flex items-center justify-center"
