@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import os
+
+mfg_content = """import React, { useState } from 'react';
 import { 
   Factory, Settings, Layers, Box, 
   Wrench, Activity, BarChart3, Plus, Search, Filter, Download, 
@@ -337,3 +339,8 @@ const ManufacturingProduction: React.FC<Props> = ({ user, activeTab }) => {
 };
 
 export default ManufacturingProduction;
+"""
+
+with open(r"d:\ERP\Manual ERP\frontend\src\components\ManufacturingProduction.tsx", "w", encoding="utf-8") as f:
+    f.write(mfg_content)
+print("Manufacturing Module Updated.")

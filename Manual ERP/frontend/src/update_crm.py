@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import os
+
+crm_content = """import React, { useState } from 'react';
 import { 
   Users, Activity, PhoneCall, Calendar, 
   Target, BarChart3, Plus, Search, Filter, Download, 
@@ -355,3 +357,8 @@ const CrmModule: React.FC<Props> = ({ user, activeTab }) => {
 };
 
 export default CrmModule;
+"""
+
+with open(r"d:\ERP\Manual ERP\frontend\src\components\CrmModule.tsx", "w", encoding="utf-8") as f:
+    f.write(crm_content)
+print("CRM Module Updated.")

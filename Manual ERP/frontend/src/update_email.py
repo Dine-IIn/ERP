@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import os
+
+email_content = """import React, { useState } from 'react';
 import { 
   Mail, Settings, LayoutTemplate, Send, 
   Inbox, BarChart3, Plus, Search, Filter, Download, 
@@ -307,3 +309,8 @@ const GlobalEmailSystem: React.FC<Props> = ({ user, activeTab }) => {
 };
 
 export default GlobalEmailSystem;
+"""
+
+with open(r"d:\ERP\Manual ERP\frontend\src\components\GlobalEmailSystem.tsx", "w", encoding="utf-8") as f:
+    f.write(email_content)
+print("Email System Updated.")

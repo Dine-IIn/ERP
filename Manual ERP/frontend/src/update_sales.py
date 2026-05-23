@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import os
+
+sales_content = """import React, { useState } from 'react';
 import { 
   ShoppingBag, Users, FileText, Receipt, 
   CreditCard, BarChart3, Plus, Search, Filter, Download, ArrowUpRight, 
@@ -282,3 +284,8 @@ const SalesOrder: React.FC<Props> = ({ user, activeTab }) => {
 };
 
 export default SalesOrder;
+"""
+
+with open(r"d:\ERP\Manual ERP\frontend\src\components\SalesOrder.tsx", "w", encoding="utf-8") as f:
+    f.write(sales_content)
+print("Sales Order Updated.")

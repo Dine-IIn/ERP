@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import os
+
+quality_content = """import React, { useState } from 'react';
 import { 
   ShieldCheck, Wrench, AlertOctagon, FileText, 
   Settings, BarChart3, Plus, Search, Filter, Download, 
@@ -303,3 +305,8 @@ const QualityMaintenance: React.FC<Props> = ({ user, activeTab }) => {
 };
 
 export default QualityMaintenance;
+"""
+
+with open(r"d:\ERP\Manual ERP\frontend\src\components\QualityMaintenance.tsx", "w", encoding="utf-8") as f:
+    f.write(quality_content)
+print("Quality Module Updated.")

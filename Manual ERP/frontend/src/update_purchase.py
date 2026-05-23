@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import os
+
+purchase_content = """import React, { useState } from 'react';
 import { 
   ShoppingCart, Users, FileText, FileSpreadsheet, 
   CreditCard, BarChart3, Plus, Search, Filter, Download, ArrowUpRight, 
@@ -327,3 +329,8 @@ const PurchaseProcurement: React.FC<Props> = ({ user, activeTab }) => {
 };
 
 export default PurchaseProcurement;
+"""
+
+with open(r"d:\ERP\Manual ERP\frontend\src\components\PurchaseProcurement.tsx", "w", encoding="utf-8") as f:
+    f.write(purchase_content)
+print("Purchase Module Updated.")

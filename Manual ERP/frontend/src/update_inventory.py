@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import os
+
+inv_content = """import React, { useState } from 'react';
 import { 
   Box, MapPin, ArrowRightLeft, SlidersHorizontal, FileText, 
   Truck, BarChart3, Plus, Search, Filter, Download, ArrowUpRight, 
@@ -350,3 +352,8 @@ const InventoryWarehouse: React.FC<Props> = ({ user, activeTab }) => {
 };
 
 export default InventoryWarehouse;
+"""
+
+with open(r"d:\ERP\Manual ERP\frontend\src\components\InventoryWarehouse.tsx", "w", encoding="utf-8") as f:
+    f.write(inv_content)
+print("Inventory Module Updated.")

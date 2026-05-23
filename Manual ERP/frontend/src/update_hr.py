@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import os
+
+hr_content = """import React, { useState } from 'react';
 import { 
   Users, Calendar, Clock, DollarSign, 
   UserPlus, BarChart3, Plus, Search, Filter, Download, 
@@ -344,3 +346,8 @@ const HumanResources: React.FC<Props> = ({ user, activeTab }) => {
 };
 
 export default HumanResources;
+"""
+
+with open(r"d:\ERP\Manual ERP\frontend\src\components\HumanResources.tsx", "w", encoding="utf-8") as f:
+    f.write(hr_content)
+print("HR Module Updated.")
