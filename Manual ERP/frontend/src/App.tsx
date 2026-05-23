@@ -44,11 +44,21 @@ import {
   Package,
   Ruler,
   Tag,
-  Sliders
+  Sliders,
+  Truck,
+  UserCircle,
+  Receipt,
+  Warehouse
 } from 'lucide-react';
 
 import GeneralAdmin from './components/GeneralAdmin';
-import MasterDataManagement from './components/MasterDataManagement';
+import ProductMasterUI from './components/masters/ProductMasterUI';
+import CustomerMasterUI from './components/masters/CustomerMasterUI';
+import VendorMasterUI from './components/masters/VendorMasterUI';
+import EmployeeMasterUI from './components/masters/EmployeeMasterUI';
+import WarehouseMasterUI from './components/masters/WarehouseMasterUI';
+import FinanceMastersUI from './components/masters/FinanceMastersUI';
+import ClassificationMastersUI from './components/masters/ClassificationMastersUI';
 import FinanceAccounting from './components/FinanceAccounting';
 import CustomDashboard from './components/CustomDashboard';
 import InventoryWarehouse from './components/InventoryWarehouse';
@@ -1694,19 +1704,44 @@ export default function App() {
                           {activePopoverCategory === mKey && (
                             <div className="absolute left-14 top-0 z-50 w-52 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl shadow-2xl p-2 animate-scale-up text-left flex flex-col gap-1 max-h-[360px] overflow-y-auto">
                               <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-widest uppercase px-2 block mb-1">{catData.name}</span>
-                              {catData.children.map((child: any) => {
-                                if (!companyFeatures.includes(child.key)) return null;
-                                const isActive = activeWorkspaceModule === mKey && activeWorkspaceSubModule === child.key;
-                                return (
-                                  <button
-                                    key={child.key}
-                                    onClick={() => { setActiveWorkspaceModule(mKey); setActiveWorkspaceSubModule(child.key); setActivePopoverCategory(null); }}
-                                    className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${isActive ? `${theme.textHover} font-bold ${theme.activeBg}` : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
-                                  >
-                                    <Folder className="w-3.5 h-3.5" /> <span>{child.name}</span>
-                                  </button>
-                                );
-                              })}
+                              {mKey === 'master_data' ? (
+                                [
+                                  { id: 'MDM_PRODUCT', label: 'Product Master', icon: <Package className="w-3.5 h-3.5" />, color: 'text-indigo-400' },
+                                  { id: 'MDM_CUSTOMER', label: 'Customer Master', icon: <Users className="w-3.5 h-3.5" />, color: 'text-emerald-400' },
+                                  { id: 'MDM_VENDOR', label: 'Vendor Master', icon: <Truck className="w-3.5 h-3.5" />, color: 'text-amber-500' },
+                                  { id: 'MDM_EMPLOYEE', label: 'Employee Master', icon: <UserCircle className="w-3.5 h-3.5" />, color: 'text-purple-400' },
+                                  { id: 'MDM_WAREHOUSE', label: 'Warehouse Master', icon: <Warehouse className="w-3.5 h-3.5" />, color: 'text-cyan-400' },
+                                  { id: 'MDM_FINANCE', label: 'Finance & Tax', icon: <Receipt className="w-3.5 h-3.5" />, color: 'text-rose-400', reqs: ['MDM_TAX', 'MDM_COA'] },
+                                  { id: 'MDM_CLASSIFICATION', label: 'Classifications', icon: <Tag className="w-3.5 h-3.5" />, color: 'text-orange-400', reqs: ['MDM_UNIT', 'MDM_CATEGORY', 'MDM_BRAND'] }
+                                ].map(uiItem => {
+                                  const reqs = uiItem.reqs || [uiItem.id];
+                                  if (!reqs.some(f => companyFeatures.includes(f))) return null;
+                                  const isActive = activeWorkspaceModule === mKey && activeWorkspaceSubModule === uiItem.id;
+                                  return (
+                                    <button
+                                      key={uiItem.id}
+                                      onClick={() => { setActiveWorkspaceModule(mKey); setActiveWorkspaceSubModule(uiItem.id); setActivePopoverCategory(null); }}
+                                      className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${isActive ? `${uiItem.color} font-bold ${theme.activeBg}` : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+                                    >
+                                      {uiItem.icon} <span>{uiItem.label}</span>
+                                    </button>
+                                  );
+                                })
+                              ) : (
+                                catData.children.map((child: any) => {
+                                  if (!companyFeatures.includes(child.key)) return null;
+                                  const isActive = activeWorkspaceModule === mKey && activeWorkspaceSubModule === child.key;
+                                  return (
+                                    <button
+                                      key={child.key}
+                                      onClick={() => { setActiveWorkspaceModule(mKey); setActiveWorkspaceSubModule(child.key); setActivePopoverCategory(null); }}
+                                      className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${isActive ? `${theme.textHover} font-bold ${theme.activeBg}` : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+                                    >
+                                      <Folder className="w-3.5 h-3.5" /> <span>{child.name}</span>
+                                    </button>
+                                  );
+                                })
+                              )}
                             </div>
                           )}
                         </div>
@@ -1725,20 +1760,46 @@ export default function App() {
                           
                           {expandedCategories[mKey] && (
                             <div className="pl-6 flex flex-col gap-1 mt-1 border-l border-[var(--border-color)] ml-4">
-                              {catData.children.map((child: any) => {
-                                if (!companyFeatures.includes(child.key)) return null;
-                                const isActive = activeWorkspaceModule === mKey && activeWorkspaceSubModule === child.key;
-                                return (
-                                  <button
-                                    key={child.key}
-                                    onClick={() => { setActiveWorkspaceModule(mKey); setActiveWorkspaceSubModule(child.key); }}
-                                    className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${isActive ? `${theme.textHover} font-bold ${theme.activeBg}` : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
-                                  >
-                                    <Folder className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                    <span>{child.name}</span>
-                                  </button>
-                                );
-                              })}
+                              {mKey === 'master_data' ? (
+                                [
+                                  { id: 'MDM_PRODUCT', label: 'Product Master', icon: <Package className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />, color: 'text-indigo-400' },
+                                  { id: 'MDM_CUSTOMER', label: 'Customer Master', icon: <Users className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />, color: 'text-emerald-400' },
+                                  { id: 'MDM_VENDOR', label: 'Vendor Master', icon: <Truck className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />, color: 'text-amber-500' },
+                                  { id: 'MDM_EMPLOYEE', label: 'Employee Master', icon: <UserCircle className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />, color: 'text-purple-400' },
+                                  { id: 'MDM_WAREHOUSE', label: 'Warehouse Master', icon: <Warehouse className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />, color: 'text-cyan-400' },
+                                  { id: 'MDM_FINANCE', label: 'Finance & Tax', icon: <Receipt className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />, color: 'text-rose-400', reqs: ['MDM_TAX', 'MDM_COA'] },
+                                  { id: 'MDM_CLASSIFICATION', label: 'Classifications', icon: <Tag className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />, color: 'text-orange-400', reqs: ['MDM_UNIT', 'MDM_CATEGORY', 'MDM_BRAND'] }
+                                ].map(uiItem => {
+                                  const reqs = uiItem.reqs || [uiItem.id];
+                                  if (!reqs.some(f => companyFeatures.includes(f))) return null;
+                                  const isActive = activeWorkspaceModule === mKey && activeWorkspaceSubModule === uiItem.id;
+                                  return (
+                                    <button
+                                      key={uiItem.id}
+                                      onClick={() => { setActiveWorkspaceModule(mKey); setActiveWorkspaceSubModule(uiItem.id); }}
+                                      className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${isActive ? `${uiItem.color} font-bold ${theme.activeBg}` : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+                                    >
+                                      {uiItem.icon}
+                                      <span>{uiItem.label}</span>
+                                    </button>
+                                  );
+                                })
+                              ) : (
+                                catData.children.map((child: any) => {
+                                  if (!companyFeatures.includes(child.key)) return null;
+                                  const isActive = activeWorkspaceModule === mKey && activeWorkspaceSubModule === child.key;
+                                  return (
+                                    <button
+                                      key={child.key}
+                                      onClick={() => { setActiveWorkspaceModule(mKey); setActiveWorkspaceSubModule(child.key); }}
+                                      className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${isActive ? `${theme.textHover} font-bold ${theme.activeBg}` : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+                                    >
+                                      <Folder className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
+                                      <span>{child.name}</span>
+                                    </button>
+                                  );
+                                })
+                              )}
                             </div>
                           )}
                         </>
@@ -2941,18 +3002,22 @@ export default function App() {
                   user={user!}
                   token={token || ''}
                   backendUrl={BACKEND_URL}
+                  activeSubModule={activeWorkspaceSubModule}
                   initialTab={financeDeepTab as any}
                   initialSubTab={financeDeepSubTab}
                 />
               )}
 
               {activeWorkspaceModule === 'master_data' && !selectedCompany && (
-                <MasterDataManagement
-                  user={user!}
-                  token={token || ''}
-                  backendUrl={BACKEND_URL}
-                  initialMaster={mdmMaster as any}
-                />
+                <div className="flex-1 w-full bg-[var(--bg-primary)] overflow-hidden flex flex-col">
+                  {(!activeWorkspaceSubModule || activeWorkspaceSubModule === 'MDM_PRODUCT') && <ProductMasterUI token={token || ''} backendUrl={BACKEND_URL} />}
+                  {activeWorkspaceSubModule === 'MDM_CUSTOMER' && <CustomerMasterUI token={token || ''} backendUrl={BACKEND_URL} />}
+                  {activeWorkspaceSubModule === 'MDM_VENDOR' && <VendorMasterUI token={token || ''} backendUrl={BACKEND_URL} />}
+                  {activeWorkspaceSubModule === 'MDM_EMPLOYEE' && <EmployeeMasterUI token={token || ''} backendUrl={BACKEND_URL} />}
+                  {activeWorkspaceSubModule === 'MDM_WAREHOUSE' && <WarehouseMasterUI token={token || ''} backendUrl={BACKEND_URL} />}
+                  {activeWorkspaceSubModule === 'MDM_FINANCE' && <FinanceMastersUI token={token || ''} backendUrl={BACKEND_URL} />}
+                  {activeWorkspaceSubModule === 'MDM_CLASSIFICATION' && <ClassificationMastersUI token={token || ''} backendUrl={BACKEND_URL} />}
+                </div>
               )}
 
               {activeWorkspaceModule === 'general_admin' && !selectedCompany && (

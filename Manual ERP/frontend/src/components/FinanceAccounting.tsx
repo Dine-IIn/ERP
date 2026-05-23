@@ -26,19 +26,108 @@ interface FinanceProps {
   };
   token: string;
   backendUrl: string;
+  activeSubModule?: string;
   initialTab?: TabType;
   initialSubTab?: string;
 }
 
-type TabType = 'general_ledger' | 'financial_statements' | 'subledgers' | 'fixed_assets' | 'budgets_reconciliation' | 'fiscal_periods';
+type TabType =
+  | 'general_ledger'
+  | 'financial_statements'
+  | 'subledgers'
+  | 'fixed_assets'
+  | 'budgets_reconciliation'
+  | 'fiscal_periods'
+  | 'expense_tracking'
+  | 'gst_management'
+  | 'tax_management'
+  | 'financial_reports'
+  | 'voucher_system';
 type StatementType = 'trial_balance' | 'profit_loss' | 'balance_sheet' | 'cash_flow';
 type SubledgerType = 'receivables' | 'payables';
 
-export default function FinanceAccounting({ user: _user, token, backendUrl, initialTab, initialSubTab }: FinanceProps) {
+export default function FinanceAccounting({
+  user: _user,
+  token,
+  backendUrl,
+  activeSubModule,
+  initialTab,
+  initialSubTab
+}: FinanceProps) {
   const [activeTab, setActiveTab] = useState<TabType>('general_ledger');
   const [statementSubTab, setStatementSubTab] = useState<StatementType>('trial_balance');
   const [subledgerSubTab, setSubledgerSubTab] = useState<SubledgerType>('receivables');
   const [budgetsReconSubTab, setBudgetsReconSubTab] = useState<'budgets' | 'reconciliation'>('budgets');
+
+  // Sidebar deep link sync
+  useEffect(() => {
+    if (activeSubModule) {
+      switch (activeSubModule) {
+        case 'FINANCE_LEDGER':
+          setActiveTab('general_ledger');
+          break;
+        case 'FINANCE_JOURNAL':
+          setActiveTab('general_ledger');
+          break;
+        case 'FINANCE_TRIAL_BALANCE':
+          setActiveTab('financial_statements');
+          setStatementSubTab('trial_balance');
+          break;
+        case 'FINANCE_PNL':
+          setActiveTab('financial_statements');
+          setStatementSubTab('profit_loss');
+          break;
+        case 'FINANCE_BALANCE_SHEET':
+          setActiveTab('financial_statements');
+          setStatementSubTab('balance_sheet');
+          break;
+        case 'FINANCE_CASH_FLOW':
+          setActiveTab('financial_statements');
+          setStatementSubTab('cash_flow');
+          break;
+        case 'FINANCE_AR':
+          setActiveTab('subledgers');
+          setSubledgerSubTab('receivables');
+          break;
+        case 'FINANCE_AP':
+          setActiveTab('subledgers');
+          setSubledgerSubTab('payables');
+          break;
+        case 'FINANCE_EXPENSE':
+          setActiveTab('expense_tracking');
+          break;
+        case 'FINANCE_GST':
+          setActiveTab('gst_management');
+          break;
+        case 'FINANCE_TAX':
+          setActiveTab('tax_management');
+          break;
+        case 'FINANCE_ASSET':
+        case 'FINANCE_DEPRECIATION':
+          setActiveTab('fixed_assets');
+          break;
+        case 'FINANCE_BUDGET':
+          setActiveTab('budgets_reconciliation');
+          setBudgetsReconSubTab('budgets');
+          break;
+        case 'FINANCE_BANK_RECON':
+          setActiveTab('budgets_reconciliation');
+          setBudgetsReconSubTab('reconciliation');
+          break;
+        case 'FINANCE_REPORTS':
+          setActiveTab('financial_reports');
+          break;
+        case 'FINANCE_VOUCHER':
+          setActiveTab('voucher_system');
+          break;
+        case 'FINANCE_FISCAL_YEAR':
+          setActiveTab('fiscal_periods');
+          break;
+        default:
+          break;
+      }
+    }
+  }, [activeSubModule]);
 
   useEffect(() => {
     if (initialTab) {
@@ -1797,6 +1886,575 @@ export default function FinanceAccounting({ user: _user, token, backendUrl, init
                       </table>
                     </div>
                   )}
+                </div>
+              </div>
+            )}
+
+            {/* VIEW G: GST MANAGEMENT */}
+            {activeTab === 'gst_management' && (
+              <div className="space-y-6 animate-fade-in text-left">
+                <div>
+                  <h4 className="text-sm font-bold text-[var(--text-primary)] font-display flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span> GST & Indirect Tax Compliance Hub
+                  </h4>
+                  <p className="text-[10px] text-[var(--text-secondary)] mt-0.5">Automated input tax credit (ITC) reconciliation and GSTR filings tracker</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Output GST Card */}
+                  <div className="bg-[var(--bg-tertiary)]/30 border border-[var(--border-color)] rounded-2xl p-4 flex items-center justify-between shadow-sm">
+                    <div>
+                      <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-wider uppercase block">Output GST Liability</span>
+                      <span className="text-base font-mono font-bold text-amber-500 mt-1 block">$18,452.80</span>
+                      <span className="text-[8px] text-emerald-400 font-semibold block mt-0.5">Collected from Sales</span>
+                    </div>
+                    <div className="p-2.5 bg-amber-500/10 text-amber-500 rounded-xl border border-amber-500/20">
+                      <DollarSign className="w-5 h-5" />
+                    </div>
+                  </div>
+
+                  {/* Input GST Credit Card */}
+                  <div className="bg-[var(--bg-tertiary)]/30 border border-[var(--border-color)] rounded-2xl p-4 flex items-center justify-between shadow-sm">
+                    <div>
+                      <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-wider uppercase block">Input Tax Credit (ITC)</span>
+                      <span className="text-base font-mono font-bold text-emerald-500 mt-1 block">$12,840.40</span>
+                      <span className="text-[8px] text-indigo-400 font-semibold block mt-0.5">Claimable on Purchases</span>
+                    </div>
+                    <div className="p-2.5 bg-emerald-500/10 text-emerald-500 rounded-xl border border-emerald-500/20">
+                      <TrendingUp className="w-5 h-5" />
+                    </div>
+                  </div>
+
+                  {/* Net GST Payable Card */}
+                  <div className="bg-[var(--bg-tertiary)]/30 border border-[var(--border-color)] rounded-2xl p-4 flex items-center justify-between shadow-sm">
+                    <div>
+                      <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-wider uppercase block">Net GST Payable</span>
+                      <span className="text-base font-mono font-bold text-indigo-400 mt-1 block">$5,612.40</span>
+                      <span className="text-[8px] text-amber-500 font-semibold block mt-0.5">Payable for Current Quarter</span>
+                    </div>
+                    <div className="p-2.5 bg-indigo-500/10 text-indigo-400 rounded-xl border border-indigo-500/20">
+                      <BarChart3 className="w-5 h-5" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                  {/* HSN Mappings */}
+                  <div className="lg:col-span-2 border border-[var(--border-color)] bg-[var(--bg-tertiary)]/10 rounded-2xl p-4 space-y-4">
+                    <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-widest uppercase block">HSN/SAC Goods & Services Slabs</span>
+                    
+                    <div className="space-y-2">
+                      {[
+                        { code: 'HSN-8471', desc: 'Computers & Electronics', rate: '18% GST' },
+                        { code: 'HSN-8517', desc: 'Telecommunication Devices', rate: '18% GST' },
+                        { code: 'SAC-9983', desc: 'Professional Services', rate: '18% GST' },
+                        { code: 'HSN-3004', desc: 'Essential Medicines', rate: '5% GST' }
+                      ].map((item, i) => (
+                        <div key={i} className="flex justify-between items-center bg-[var(--bg-secondary)] border border-[var(--border-color)] p-2.5 rounded-xl text-xs">
+                          <div>
+                            <span className="font-bold text-[var(--text-primary)] font-mono">{item.code}</span>
+                            <span className="text-[9px] text-[var(--text-secondary)] block mt-0.5">{item.desc}</span>
+                          </div>
+                          <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[9px] font-bold rounded">{item.rate}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <button className="w-full py-1.5 border border-[var(--border-color)] bg-[var(--bg-primary)] hover:bg-[var(--bg-tertiary)] text-[var(--text-primary)] font-bold rounded-lg text-[10px] cursor-pointer transition-colors">
+                      + Configure HSN Rate Mapping
+                    </button>
+                  </div>
+
+                  {/* GST Filings History */}
+                  <div className="lg:col-span-3 border border-[var(--border-color)] bg-[var(--bg-tertiary)]/20 rounded-2xl overflow-hidden flex flex-col">
+                    <div className="px-4 py-3 bg-[var(--bg-tertiary)]/60 border-b border-[var(--border-color)] flex justify-between items-center">
+                      <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-widest uppercase block">Recent GSTR Filing Returns Ledger</span>
+                      <span className="text-[8px] bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded font-bold uppercase">Quarterly cycle</span>
+                    </div>
+
+                    <div className="overflow-x-auto flex-1">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-[var(--border-color)] text-[var(--text-muted)] font-bold bg-[var(--bg-tertiary)]/10">
+                            <th className="py-2.5 px-3">Period</th>
+                            <th className="py-2.5 px-3">Form Type</th>
+                            <th className="py-2.5 px-3">Filing Date</th>
+                            <th className="py-2.5 px-3 text-right">Tax Paid</th>
+                            <th className="py-2.5 px-3 text-center">Filing Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[
+                            { period: 'Q3 FY2026', type: 'GSTR-3B (Summary Return)', date: '2026-04-20', tax: '$5,400.00', status: 'FILED' },
+                            { period: 'Q3 FY2026', type: 'GSTR-1 (Outward Supplies)', date: '2026-04-11', tax: '$0.00', status: 'FILED' },
+                            { period: 'Q2 FY2026', type: 'GSTR-3B (Summary Return)', date: '2026-01-18', tax: '$4,820.00', status: 'FILED' },
+                            { period: 'Q1 FY2026', type: 'GSTR-3B (Summary Return)', date: '2025-10-15', tax: '$6,110.00', status: 'FILED' }
+                          ].map((ret, i) => (
+                            <tr key={i} className="border-b border-[var(--border-color)] hover:bg-[var(--bg-primary)]/50 transition-colors">
+                              <td className="py-2.5 px-3 font-mono font-bold text-indigo-400">{ret.period}</td>
+                              <td className="py-2.5 px-3 font-medium text-[var(--text-primary)]">{ret.type}</td>
+                              <td className="py-2.5 px-3 font-mono">{ret.date}</td>
+                              <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-400">{ret.tax}</td>
+                              <td className="py-2.5 px-3 text-center">
+                                <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[9px] font-bold rounded">FILED</span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* VIEW H: TAX MANAGEMENT */}
+            {activeTab === 'tax_management' && (
+              <div className="space-y-6 animate-fade-in text-left">
+                <div>
+                  <h4 className="text-sm font-bold text-[var(--text-primary)] font-display flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-amber-500"></span> Tax & Compliance Configuration
+                  </h4>
+                  <p className="text-[10px] text-[var(--text-secondary)] mt-0.5">Corporate Income Tax computation settings and TDS/TCS withholdings logs</p>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* Tax Withholdings Configuration */}
+                  <div className="lg:col-span-1 border border-[var(--border-color)] bg-[var(--bg-tertiary)]/10 rounded-2xl p-4 space-y-4 text-xs">
+                    <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-widest uppercase block">Corporate Tax Rates Settings</span>
+                    
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-[9px] font-bold text-[var(--text-secondary)] block mb-1">Corporate Income Tax Slab (%)</label>
+                        <input type="number" defaultValue="25" className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg py-1.5 px-3 text-xs text-[var(--text-primary)] focus:outline-none" />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-bold text-[var(--text-secondary)] block mb-1">Minimum Alternate Tax (MAT) (%)</label>
+                        <input type="number" defaultValue="15" className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg py-1.5 px-3 text-xs text-[var(--text-primary)] focus:outline-none" />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-bold text-[var(--text-secondary)] block mb-1">TDS Rate for Contractors (%)</label>
+                        <input type="number" defaultValue="2" className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg py-1.5 px-3 text-xs text-[var(--text-primary)] focus:outline-none" />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-bold text-[var(--text-secondary)] block mb-1">TDS Rate for Professional Services (%)</label>
+                        <input type="number" defaultValue="10" className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg py-1.5 px-3 text-xs text-[var(--text-primary)] focus:outline-none" />
+                      </div>
+                    </div>
+
+                    <button className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-xs shadow-md transition-colors">
+                      Save Settings Configuration
+                    </button>
+                  </div>
+
+                  {/* Withheld Ledger (TDS/TCS) */}
+                  <div className="lg:col-span-2 border border-[var(--border-color)] bg-[var(--bg-tertiary)]/20 rounded-2xl overflow-hidden flex flex-col">
+                    <div className="px-4 py-3 bg-[var(--bg-tertiary)]/60 border-b border-[var(--border-color)] flex justify-between items-center">
+                      <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-widest uppercase block">TDS/TCS Withholding Registry Ledger</span>
+                      <span className="text-[8px] bg-amber-500/10 text-amber-500 px-2 py-0.5 rounded font-bold uppercase">Pending Filing</span>
+                    </div>
+
+                    <div className="overflow-x-auto flex-1">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-[var(--border-color)] text-[var(--text-muted)] font-bold bg-[var(--bg-tertiary)]/10">
+                            <th className="py-2.5 px-3">Date</th>
+                            <th className="py-2.5 px-3">Entity Name</th>
+                            <th className="py-2.5 px-3">TDS Section</th>
+                            <th className="py-2.5 px-3 text-right">Base Amount</th>
+                            <th className="py-2.5 px-3 text-right">Tax Withheld</th>
+                            <th className="py-2.5 px-3 text-center">Filing</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[
+                            { date: '2026-05-18', name: 'Sigma Consulting Ltd', section: 'Sec 194J (10%)', base: '$1,500.00', withheld: '$150.00', status: 'PENDING' },
+                            { date: '2026-05-12', name: 'Apex Logistics Inc', section: 'Sec 194C (2%)', base: '$2,800.00', withheld: '$56.00', status: 'PENDING' },
+                            { date: '2026-04-28', name: 'Alpha Agency', section: 'Sec 194C (2%)', base: '$4,100.00', withheld: '$82.00', status: 'DEPOSITED' },
+                            { date: '2026-04-15', name: 'Delta Software Solutions', section: 'Sec 194J (10%)', base: '$6,000.00', withheld: '$600.00', status: 'DEPOSITED' }
+                          ].map((row, i) => (
+                            <tr key={i} className="border-b border-[var(--border-color)] hover:bg-[var(--bg-primary)]/50 transition-colors">
+                              <td className="py-2.5 px-3 font-mono">{row.date}</td>
+                              <td className="py-2.5 px-3 font-bold text-[var(--text-primary)]">{row.name}</td>
+                              <td className="py-2.5 px-3 font-medium text-[var(--text-secondary)]">{row.section}</td>
+                              <td className="py-2.5 px-3 text-right font-mono">{row.base}</td>
+                              <td className="py-2.5 px-3 text-right font-mono font-bold text-amber-500">{row.withheld}</td>
+                              <td className="py-2.5 px-3 text-center">
+                                <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${
+                                  row.status === 'PENDING' ? 'bg-amber-500/10 border-amber-500/20 text-amber-500' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                                }`}>
+                                  {row.status}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* VIEW I: EXPENSE TRACKING */}
+            {activeTab === 'expense_tracking' && (
+              <div className="space-y-6 animate-fade-in text-left">
+                <div className="flex flex-wrap justify-between items-center gap-3">
+                  <div>
+                    <h4 className="text-sm font-bold text-[var(--text-primary)] font-display flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span> Corporate Expense Operations Ledger
+                    </h4>
+                    <p className="text-[10px] text-[var(--text-secondary)] mt-0.5">Record corporate overhead, office supplies, utility payments, and travel claims</p>
+                  </div>
+
+                  <div className="flex bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-xl p-1 gap-1 text-[10px] font-bold">
+                    <span className="px-3 py-1.5 rounded-lg text-emerald-400 bg-emerald-500/10 font-mono font-bold">
+                      Spent This Month: $4,582.30
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                  {/* Expense Logger Form */}
+                  <div className="lg:col-span-2 border border-[var(--border-color)] bg-[var(--bg-tertiary)]/10 rounded-2xl p-5 space-y-4 text-xs">
+                    <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-widest uppercase block">Log Corporate Expense</span>
+                    
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-[9px] font-bold text-[var(--text-secondary)] block mb-1">Expense Title / Item</label>
+                        <input type="text" placeholder="e.g. Server Hosting AWS" className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg py-1.5 px-3 text-xs text-[var(--text-primary)] focus:outline-none" />
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[9px] font-bold text-[var(--text-secondary)] block mb-1">Category</label>
+                          <select className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg py-1.5 px-3 text-xs text-[var(--text-primary)] focus:outline-none">
+                            <option>Overhead / Operations</option>
+                            <option>Office Supplies</option>
+                            <option>Travel & Lodging</option>
+                            <option>Marketing / Sales</option>
+                            <option>Utility Bill</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[9px] font-bold text-[var(--text-secondary)] block mb-1">Expense Amount ($)</label>
+                          <input type="number" placeholder="0.00" className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg py-1.5 px-3 text-xs text-[var(--text-primary)] focus:outline-none" />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[9px] font-bold text-[var(--text-secondary)] block mb-1">Date of Expense</label>
+                          <input type="date" defaultValue={new Date().toISOString().split('T')[0]} className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg py-1.5 px-3 text-xs text-[var(--text-primary)] focus:outline-none" />
+                        </div>
+                        <div>
+                          <label className="text-[9px] font-bold text-[var(--text-secondary)] block mb-1">Paid Via Account</label>
+                          <select className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg py-1.5 px-3 text-xs text-[var(--text-primary)] focus:outline-none">
+                            <option>Corporate Debit Card</option>
+                            <option>Petty Cash Drawer</option>
+                            <option>Operating Bank Checking</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-xs shadow-md transition-colors">
+                      Record Expense Entry
+                    </button>
+                  </div>
+
+                  {/* Expense Register Ledger */}
+                  <div className="lg:col-span-3 border border-[var(--border-color)] bg-[var(--bg-tertiary)]/20 rounded-2xl overflow-hidden flex flex-col">
+                    <div className="px-4 py-3 bg-[var(--bg-tertiary)]/60 border-b border-[var(--border-color)]">
+                      <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-widest uppercase block">Overhead & Operational Expense Ledger</span>
+                    </div>
+
+                    <div className="overflow-x-auto flex-1">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-[var(--border-color)] text-[var(--text-muted)] font-bold bg-[var(--bg-tertiary)]/10">
+                            <th className="py-2.5 px-3">Date</th>
+                            <th className="py-2.5 px-3">Expense Name</th>
+                            <th className="py-2.5 px-3">Category</th>
+                            <th className="py-2.5 px-3 text-right">Amount</th>
+                            <th className="py-2.5 px-3 text-center">Paid Method</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[
+                            { date: '2026-05-20', name: 'Monthly Office Internet Fiber', cat: 'Utility Bill', amt: '$120.00', pay: 'Debit Card' },
+                            { date: '2026-05-18', name: 'AWS Production Cloud Hosting', cat: 'Overhead / Operations', amt: '$1,480.00', pay: 'Bank Checking' },
+                            { date: '2026-05-15', name: 'Office Stationeries and printer inks', cat: 'Office Supplies', amt: '$84.50', pay: 'Petty Cash' },
+                            { date: '2026-05-11', name: 'Client Dinner meeting', cat: 'Travel & Lodging', amt: '$180.20', pay: 'Debit Card' },
+                            { date: '2026-05-04', name: 'Google Workspace Workspace Licensing', cat: 'Overhead / Operations', amt: '$420.00', pay: 'Bank Checking' }
+                          ].map((row, i) => (
+                            <tr key={i} className="border-b border-[var(--border-color)] hover:bg-[var(--bg-primary)]/50 transition-colors">
+                              <td className="py-2.5 px-3 font-mono">{row.date}</td>
+                              <td className="py-2.5 px-3 font-bold text-[var(--text-primary)]">{row.name}</td>
+                              <td className="py-2.5 px-3 font-medium text-[var(--text-secondary)]">{row.cat}</td>
+                              <td className="py-2.5 px-3 text-right font-mono font-bold text-rose-400">{row.amt}</td>
+                              <td className="py-2.5 px-3 text-center">
+                                <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[9px] font-bold rounded uppercase">
+                                  {row.pay}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* VIEW J: FINANCIAL ANALYTICS & REPORTS */}
+            {activeTab === 'financial_reports' && (
+              <div className="space-y-6 animate-fade-in text-left">
+                <div>
+                  <h4 className="text-sm font-bold text-[var(--text-primary)] font-display flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span> Executive Financial Analytics & Dashboard
+                  </h4>
+                  <p className="text-[10px] text-[var(--text-secondary)] mt-0.5">Real-time charts, profit margins tracking, and liquidity overview summaries</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  {/* Gross Margin Card */}
+                  <div className="bg-[var(--bg-tertiary)]/20 border border-[var(--border-color)] rounded-2xl p-4 space-y-1">
+                    <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-wider uppercase">Gross Profit Margin</span>
+                    <span className="text-xl font-bold font-mono text-emerald-400 block">62.8%</span>
+                    <div className="w-full bg-[var(--bg-tertiary)] h-1.5 rounded-full overflow-hidden border border-[var(--border-color)] mt-1.5">
+                      <div className="h-full bg-emerald-500 rounded-full" style={{ width: '62.8%' }}></div>
+                    </div>
+                  </div>
+
+                  {/* Net Margin Card */}
+                  <div className="bg-[var(--bg-tertiary)]/20 border border-[var(--border-color)] rounded-2xl p-4 space-y-1">
+                    <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-wider uppercase">Net Profit Margin</span>
+                    <span className="text-xl font-bold font-mono text-indigo-400 block">28.4%</span>
+                    <div className="w-full bg-[var(--bg-tertiary)] h-1.5 rounded-full overflow-hidden border border-[var(--border-color)] mt-1.5">
+                      <div className="h-full bg-indigo-500 rounded-full" style={{ width: '28.4%' }}></div>
+                    </div>
+                  </div>
+
+                  {/* Working Capital Card */}
+                  <div className="bg-[var(--bg-tertiary)]/20 border border-[var(--border-color)] rounded-2xl p-4 space-y-1">
+                    <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-wider uppercase">Working Capital Ratio</span>
+                    <span className="text-xl font-bold font-mono text-amber-500 block">2.14</span>
+                    <span className="text-[8px] text-emerald-400 font-semibold block">Liquidity: Highly Stable</span>
+                  </div>
+
+                  {/* Debt to Equity Card */}
+                  <div className="bg-[var(--bg-tertiary)]/20 border border-[var(--border-color)] rounded-2xl p-4 space-y-1">
+                    <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-wider uppercase">Debt to Equity Ratio</span>
+                    <span className="text-xl font-bold font-mono text-indigo-400 block">0.38</span>
+                    <span className="text-[8px] text-indigo-400 font-semibold block">Leverage: Under Control</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* Operating Revenues vs Expenses Visual */}
+                  <div className="lg:col-span-2 border border-[var(--border-color)] bg-[var(--bg-tertiary)]/10 rounded-2xl p-5 space-y-4">
+                    <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-widest uppercase block">Monthly Financial Performance Tracker</span>
+                    
+                    <div className="space-y-4">
+                      {/* Revenue Bar */}
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="font-semibold text-[var(--text-primary)]">Gross Operating Revenues</span>
+                          <span className="font-mono font-bold text-emerald-400">$64,820.00</span>
+                        </div>
+                        <div className="w-full bg-[var(--bg-primary)] h-3 rounded-full overflow-hidden border border-[var(--border-color)]">
+                          <div className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 rounded-full" style={{ width: '85%' }}></div>
+                        </div>
+                      </div>
+
+                      {/* Expenses Bar */}
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="font-semibold text-[var(--text-primary)]">Operating Overhead Expenses</span>
+                          <span className="font-mono font-bold text-amber-500">$34,180.00</span>
+                        </div>
+                        <div className="w-full bg-[var(--bg-primary)] h-3 rounded-full overflow-hidden border border-[var(--border-color)]">
+                          <div className="h-full bg-gradient-to-r from-amber-600 to-amber-400 rounded-full" style={{ width: '48%' }}></div>
+                        </div>
+                      </div>
+
+                      {/* Income Bar */}
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="font-semibold text-[var(--text-primary)]">Net Retained Income</span>
+                          <span className="font-mono font-bold text-indigo-400">$30,640.00</span>
+                        </div>
+                        <div className="w-full bg-[var(--bg-primary)] h-3 rounded-full overflow-hidden border border-[var(--border-color)]">
+                          <div className="h-full bg-gradient-to-r from-indigo-600 to-indigo-400 rounded-full" style={{ width: '37%' }}></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Financial Reports Downloads list */}
+                  <div className="lg:col-span-1 border border-[var(--border-color)] bg-[var(--bg-tertiary)]/20 rounded-2xl p-4 space-y-4">
+                    <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-widest uppercase block">Exportable Financial Audited Reports</span>
+                    
+                    <div className="space-y-2">
+                      {[
+                        { title: 'Full Audited General Ledger.xlsx', desc: 'Detailing all posted postings' },
+                        { title: 'Tax & Compliance filings.pdf', desc: 'HSN code rate mappings and returns' },
+                        { title: 'Executive Balance Sheet.pdf', desc: 'Live Statement of Financial Position' },
+                        { title: 'Quarterly Cash Flow.xlsx', desc: 'Cash inflows & outflows ledger' }
+                      ].map((item, i) => (
+                        <div key={i} className="bg-[var(--bg-secondary)] border border-[var(--border-color)] p-2.5 rounded-xl hover:bg-[var(--bg-primary)]/40 transition-colors flex justify-between items-center cursor-pointer">
+                          <div className="text-xs">
+                            <span className="font-bold text-indigo-400 block text-[11px]">{item.title}</span>
+                            <span className="text-[8px] text-[var(--text-secondary)] block mt-0.5">{item.desc}</span>
+                          </div>
+                          <span className="text-[9px] font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">GET</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* VIEW K: VOUCHER SYSTEM */}
+            {activeTab === 'voucher_system' && (
+              <div className="space-y-6 animate-fade-in text-left">
+                <div className="flex flex-wrap justify-between items-center gap-3">
+                  <div>
+                    <h4 className="text-sm font-bold text-[var(--text-primary)] font-display flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-indigo-500"></span> Double-Entry Voucher System
+                    </h4>
+                    <p className="text-[10px] text-[var(--text-secondary)] mt-0.5">Generate Receipt (RC), Payment (PY), Journal (JV), or Contra (CN) vouchers</p>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      if (!activeFiscalYear) {
+                        showToast("Please open an active fiscal year first before spawning vouchers", "warning");
+                        return;
+                      }
+                      setShowVoucherModal(true);
+                    }}
+                    className="py-1.5 px-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-xs flex items-center gap-1 cursor-pointer transition-colors shadow-lg"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Post Double-Entry Voucher
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                  {/* Voucher Preview Receipt Sheet */}
+                  <div className="lg:col-span-2 border border-[var(--border-color)] bg-[var(--bg-tertiary)]/20 p-5 rounded-2xl space-y-4">
+                    <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-widest uppercase block">Selected Voucher Printable Sheet Preview</span>
+                    
+                    <div className="border border-[var(--border-color)] bg-[var(--bg-primary)]/40 p-4 rounded-xl space-y-4 text-xs font-mono select-none">
+                      <div className="border-b border-[var(--border-color)] pb-3 text-center space-y-1">
+                        <span className="text-xs font-bold text-[var(--text-primary)] tracking-wide font-sans block uppercase">MANUAL ENTERPRISE ERP</span>
+                        <span className="text-[8px] text-[var(--text-secondary)] block">FINANCIAL LEDGER VOUCHER SHEET</span>
+                      </div>
+
+                      <div className="space-y-1.5 text-[10px] text-[var(--text-secondary)]">
+                        <div className="flex justify-between">
+                          <span>Voucher Ref:</span>
+                          <span className="font-bold text-[var(--text-primary)]">JV-2026-0004</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Posting Date:</span>
+                          <span className="font-bold text-[var(--text-primary)]">2026-05-23</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Fiscal Year:</span>
+                          <span className="font-bold text-[var(--text-primary)]">{activeFiscalYear?.yearName || 'FY2026'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Reference:</span>
+                          <span className="font-bold text-amber-500">INV-1029</span>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-b border-[var(--border-color)] py-2 text-[9px] space-y-2">
+                        <div className="flex justify-between font-bold text-[var(--text-primary)] border-b border-[var(--border-color)] pb-1">
+                          <span>Particulars Account</span>
+                          <div className="flex gap-4">
+                            <span>Debit</span>
+                            <span>Credit</span>
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex justify-between">
+                            <span>[GL-2882] Operating checking</span>
+                            <div className="flex gap-4 font-mono">
+                              <span className="text-emerald-400">$1,500.00</span>
+                              <span>-</span>
+                            </div>
+                          </div>
+                          <div className="flex justify-between pl-2">
+                            <span>[GL-4929] Accounts Receivable</span>
+                            <div className="flex gap-4 font-mono">
+                              <span>-</span>
+                              <span className="text-amber-500">$1,500.00</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1 text-[10px] text-[var(--text-secondary)]">
+                        <span className="block font-bold">Narration:</span>
+                        <p className="text-[9px] leading-relaxed">Payment received against Customer Invoice INV-1029. Balance rolled over.</p>
+                      </div>
+
+                      <div className="pt-4 flex justify-between text-[9px] border-t border-[var(--border-color)] text-[var(--text-muted)] font-sans font-bold">
+                        <span>PREPARED BY: MANAV</span>
+                        <span>APPROVED BY: SYSTEM</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Recent Vouchers registry list */}
+                  <div className="lg:col-span-2 border border-[var(--border-color)] bg-[var(--bg-tertiary)]/10 rounded-2xl overflow-hidden flex flex-col">
+                    <div className="px-4 py-3 bg-[var(--bg-tertiary)]/60 border-b border-[var(--border-color)]">
+                      <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-widest uppercase block">Vouchers Registry Entries Ledger</span>
+                    </div>
+
+                    <div className="overflow-x-auto flex-1">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-[var(--border-color)] text-[var(--text-muted)] font-bold bg-[var(--bg-tertiary)]/10">
+                            <th className="py-2.5 px-3">Voucher #</th>
+                            <th className="py-2.5 px-3">Type</th>
+                            <th className="py-2.5 px-3">Reference</th>
+                            <th className="py-2.5 px-3 text-right">Total Balance</th>
+                            <th className="py-2.5 px-3 text-center">Filing Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[
+                            { code: 'JV-2026-0004', type: 'Journal (JV)', ref: 'INV-1029', amt: '$1,500.00' },
+                            { code: 'PY-2026-0012', type: 'Payment (PY)', ref: 'AWS-9912', amt: '$1,480.00' },
+                            { code: 'RC-2026-0002', type: 'Receipt (RC)', ref: 'CUST-0021', amt: '$2,100.00' },
+                            { code: 'CN-2026-0001', type: 'Contra (CN)', ref: 'CASH-BANK', amt: '$5,000.00' }
+                          ].map((row, i) => (
+                            <tr key={i} className="border-b border-[var(--border-color)] hover:bg-[var(--bg-primary)]/50 transition-colors">
+                              <td className="py-3 px-3 font-mono font-bold text-indigo-400">{row.code}</td>
+                              <td className="py-3 px-3">
+                                <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[9px] font-bold rounded uppercase">
+                                  {row.type}
+                                </span>
+                              </td>
+                              <td className="py-3 px-3 font-semibold text-[var(--text-primary)]">{row.ref}</td>
+                              <td className="py-3 px-3 text-right font-mono font-bold text-[var(--text-primary)]">{row.amt}</td>
+                              <td className="py-3 px-3 text-center">
+                                <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[9px] font-bold rounded uppercase">
+                                  POSTED
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

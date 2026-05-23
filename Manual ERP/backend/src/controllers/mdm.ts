@@ -95,7 +95,7 @@ function invalidateCache(masterType: string, companyId: string) {
 }
 
 // ==========================================
-// 1. REUSABLE MASTER DROPDOWN API WITH CACHING
+// 1. REUSABLE MASTER DROPDOWN API WITH CACHING & FILTERS
 // ==========================================
 router.get('/dropdown/:masterType', async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -111,32 +111,52 @@ router.get('/dropdown/:masterType', async (req: AuthenticatedRequest, res: Respo
       return res.status(400).json({ error: `Invalid master data type: ${masterType}` });
     }
 
-    const cacheKey = `${masterType.toLowerCase()}:${companyId}`;
+    // Dynamic filtering for dependent dropdowns (e.g. ?warehouseId=XYZ or ?categoryId=ABC)
+    const filters = { ...req.query };
+    delete filters.search; // Remove search from exact match filters
+
+    // Build unique cache key including stringified filters
+    const filterString = Object.keys(filters).length > 0 ? JSON.stringify(filters) : '';
+    const searchString = String(req.query.search || '').trim();
+    const cacheKey = `${masterType.toLowerCase()}:${companyId}:${filterString}:${searchString}`;
+    
     const now = Date.now();
     if (dropdownCache[cacheKey] && dropdownCache[cacheKey].expiry > now) {
       return res.json({ records: dropdownCache[cacheKey].data });
     }
 
+    const whereClause: any = {
+      companyId,
+      isDeleted: false,
+      status: 'ACTIVE',
+      ...filters
+    };
+
+    if (searchString) {
+      whereClause.OR = [
+        { [config.codeField]: { contains: searchString } },
+        { [config.nameField]: { contains: searchString } }
+      ];
+    }
+
     const records = await config.model.findMany({
-      where: {
-        companyId,
-        isDeleted: false,
-        status: 'ACTIVE'
-      },
+      where: whereClause,
       select: {
         id: true,
         [config.codeField]: true,
-        [config.nameField]: true
+        [config.nameField]: true,
+        ...Object.keys(filters).reduce((acc, key) => ({ ...acc, [key]: true }), {}) // Ensure filter fields are available if needed
       },
       orderBy: {
-        [config.codeField]: 'asc'
+        [config.nameField]: 'asc'
       }
     });
 
     const formatted = records.map((r: any) => ({
       id: r.id,
       code: r[config.codeField],
-      name: r[config.nameField]
+      name: r[config.nameField],
+      ...r // Include other selected fields useful for dependency context
     }));
 
     // Cache the dropdown records
