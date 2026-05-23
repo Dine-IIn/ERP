@@ -1,6 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { MASTER_FEATURES_HIERARCHY, getCategoryKeys, getChildKeys, getParentKey } from './features';
 import {
+  Wrench,
+  Factory,
+  ShoppingCart,
+  Box,
   Shield,
   Users,
   Bell,
@@ -46,6 +51,12 @@ import GeneralAdmin from './components/GeneralAdmin';
 import MasterDataManagement from './components/MasterDataManagement';
 import FinanceAccounting from './components/FinanceAccounting';
 import CustomDashboard from './components/CustomDashboard';
+import InventoryWarehouse from './components/InventoryWarehouse';
+import PurchaseProcurement from './components/PurchaseProcurement';
+import SalesOrder from './components/SalesOrder';
+import ManufacturingProduction from './components/ManufacturingProduction';
+import QualityMaintenance from './components/QualityMaintenance';
+import GlobalEmailSystem from './components/GlobalEmailSystem';
 
 const BACKEND_URL = 'http://localhost:5000';
 
@@ -239,6 +250,64 @@ export default function App() {
   // Edit Tenant User/Admin Modal
   const [showEditUserModal, setShowEditUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
+    const [featureSearchTerm, setFeatureSearchTerm] = useState('');
+    const [expandedFeatureCategories, setExpandedFeatureCategories] = useState<string[]>([]);
+  
+  const toggleCategoryAccordion = (key: string) => {
+    setExpandedFeatureCategories(prev =>
+      prev.includes(key)
+        ? prev.filter(k => k !== key)
+        : [...prev, key]
+    );
+  };
+  
+  const filteredHierarchy = MASTER_FEATURES_HIERARCHY.map(cat => {
+    const term = featureSearchTerm.toLowerCase();
+    const matchCat = cat.name.toLowerCase().includes(term) || cat.desc.toLowerCase().includes(term);
+    const matchChildren = cat.children.filter(c => c.name.toLowerCase().includes(term) || c.desc.toLowerCase().includes(term));
+    if (term && (matchCat || matchChildren.length > 0)) {
+      return { ...cat, children: matchCat ? cat.children : matchChildren, isMatch: true };
+    } else if (!term) {
+      return { ...cat, isMatch: false };
+    }
+    return null;
+  }).filter(Boolean);
+
+  const handleEnableAllNewCompany = () => {
+    const all = MASTER_FEATURES_HIERARCHY.flatMap(cat => [cat.key, ...cat.children.map(c => c.key)]);
+    setNewCompany({ ...newCompany, features: all });
+  };
+
+  const handleEnableCategoryAllNewCompany = (catKey: string) => {
+    const cat = MASTER_FEATURES_HIERARCHY.find(c => c.key === catKey);
+    if (!cat) return;
+    const toAdd = [cat.key, ...cat.children.map(c => c.key)];
+    const updated = [...new Set([...newCompany.features, ...toAdd])];
+    setNewCompany({ ...newCompany, features: updated });
+  };
+
+  const handleEnableAllCompany = async () => {
+    if (!selectedCompany) return;
+    const all = MASTER_FEATURES_HIERARCHY.flatMap(cat => [cat.key, ...cat.children.map(c => c.key)]);
+    try {
+      await apiRequest(`/api/super/company/${selectedCompany.id}`, 'PATCH', { features: all });
+      fetchSuperAdminData();
+    } catch (e) {}
+  };
+
+  const handleEnableCategoryAllCompany = async (catKey: string) => {
+    if (!selectedCompany) return;
+    const cat = MASTER_FEATURES_HIERARCHY.find(c => c.key === catKey);
+    if (!cat) return;
+    const current = selectedCompany.features.map((f: any) => f.feature.key);
+    const toAdd = [cat.key, ...cat.children.map(c => c.key)];
+    const updated = [...new Set([...current, ...toAdd])];
+    try {
+      await apiRequest(`/api/super/company/${selectedCompany.id}`, 'PATCH', { features: updated });
+      fetchSuperAdminData();
+    } catch (e) {}
+  };
+
   const [editUserForm, setEditUserForm] = useState({
     username: '',
     password: '',
@@ -272,10 +341,36 @@ export default function App() {
   const [paymentTo, setPaymentTo] = useState('');
   const [paymentAmount, setPaymentAmount] = useState('');
   const [showGroupSettingsModal, setShowGroupSettingsModal] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   // Refs for tracking active group and auto-scrolling
   const selectedGroupIdRef = useRef<string | null>(null);
   const chatMessagesEndRef = useRef<HTMLDivElement | null>(null);
+  const sidebarRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (sidebarRef.current && !sidebarRef.current.contains(event.target as Node)) {
+        setActivePopoverCategory(null);
+        setShowProfileDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   useEffect(() => {
     selectedGroupIdRef.current = selectedChatGroup?.id || null;
@@ -598,22 +693,15 @@ export default function App() {
     
     // Map current features
     let updatedFeatures: string[] = selectedCompany.features.map((f: any) => f.feature.key);
-    const isCategory = ['CRM', 'HR', 'FINANCE', 'NOTIFICATIONS', 'MDM'].includes(featureKey);
+    const isCategory = getCategoryKeys().includes(featureKey);
 
     if (isCategory) {
       if (featureKey === 'NOTIFICATIONS') return; // Cannot disable notifications
       if (updatedFeatures.includes(featureKey)) {
         // Toggle off parent -> remove parent and all its children
         updatedFeatures = updatedFeatures.filter(k => k !== featureKey);
-        if (featureKey === 'CRM') {
-          updatedFeatures = updatedFeatures.filter(k => k !== 'CRM_LEADS' && k !== 'CRM_CUSTOMER');
-        } else if (featureKey === 'HR') {
-          updatedFeatures = updatedFeatures.filter(k => k !== 'HR_ROSTER' && k !== 'HR_ATTENDANCE');
-        } else if (featureKey === 'FINANCE') {
-          updatedFeatures = updatedFeatures.filter(k => k !== 'FINANCE_LEDGER' && k !== 'FINANCE_INVOICING');
-        } else if (featureKey === 'MDM') {
-          updatedFeatures = updatedFeatures.filter(k => k !== 'MDM_PRODUCTS' && k !== 'MDM_PARTNERS');
-        }
+        const childKeys = getChildKeys(featureKey);
+        updatedFeatures = updatedFeatures.filter(k => !childKeys.includes(k));
       } else {
         // Toggle on parent -> add category key
         updatedFeatures.push(featureKey);
@@ -626,13 +714,7 @@ export default function App() {
       } else {
         // Toggle on child -> add child and auto-enable parent category
         updatedFeatures.push(featureKey);
-        let parent = '';
-        if (['CRM_LEADS', 'CRM_CUSTOMER'].includes(featureKey)) parent = 'CRM';
-        else if (['HR_ROSTER', 'HR_ATTENDANCE'].includes(featureKey)) parent = 'HR';
-        else if (['FINANCE_LEDGER', 'FINANCE_INVOICING'].includes(featureKey)) parent = 'FINANCE';
-        else if (['NOTIFICATIONS_PUSH', 'NOTIFICATIONS_AUDIT'].includes(featureKey)) parent = 'NOTIFICATIONS';
-        else if (['MDM_PRODUCTS', 'MDM_PARTNERS'].includes(featureKey)) parent = 'MDM';
-        
+        const parent = getParentKey(featureKey);
         if (parent && !updatedFeatures.includes(parent)) {
           updatedFeatures.push(parent);
         }
@@ -650,22 +732,15 @@ export default function App() {
 
   const handleToggleNewCompanyFeatureHierarchical = (featureKey: string) => {
     let updated = [...newCompany.features];
-    const isCategory = ['CRM', 'HR', 'FINANCE', 'NOTIFICATIONS', 'MDM'].includes(featureKey);
+    const isCategory = getCategoryKeys().includes(featureKey);
 
     if (isCategory) {
       if (featureKey === 'NOTIFICATIONS') return; // Enforced
       if (updated.includes(featureKey)) {
         // Toggle off parent -> remove parent and all its children
         updated = updated.filter(k => k !== featureKey);
-        if (featureKey === 'CRM') {
-          updated = updated.filter(k => k !== 'CRM_LEADS' && k !== 'CRM_CUSTOMER');
-        } else if (featureKey === 'HR') {
-          updated = updated.filter(k => k !== 'HR_ROSTER' && k !== 'HR_ATTENDANCE');
-        } else if (featureKey === 'FINANCE') {
-          updated = updated.filter(k => k !== 'FINANCE_LEDGER' && k !== 'FINANCE_INVOICING');
-        } else if (featureKey === 'MDM') {
-          updated = updated.filter(k => k !== 'MDM_PRODUCTS' && k !== 'MDM_PARTNERS');
-        }
+        const childKeys = getChildKeys(featureKey);
+        updated = updated.filter(k => !childKeys.includes(k));
       } else {
         // Toggle on parent
         updated.push(featureKey);
@@ -676,13 +751,7 @@ export default function App() {
         updated = updated.filter(k => k !== featureKey);
       } else {
         updated.push(featureKey);
-        let parent = '';
-        if (['CRM_LEADS', 'CRM_CUSTOMER'].includes(featureKey)) parent = 'CRM';
-        else if (['HR_ROSTER', 'HR_ATTENDANCE'].includes(featureKey)) parent = 'HR';
-        else if (['FINANCE_LEDGER', 'FINANCE_INVOICING'].includes(featureKey)) parent = 'FINANCE';
-        else if (['NOTIFICATIONS_PUSH', 'NOTIFICATIONS_AUDIT'].includes(featureKey)) parent = 'NOTIFICATIONS';
-        else if (['MDM_PRODUCTS', 'MDM_PARTNERS'].includes(featureKey)) parent = 'MDM';
-        
+        const parent = getParentKey(featureKey);
         if (parent && !updated.includes(parent)) {
           updated.push(parent);
         }
@@ -1373,7 +1442,7 @@ export default function App() {
           {/* ==========================================
               FIXED LEFT SIDEBAR MENU
               ========================================== */}
-          <aside className={`fixed top-0 bottom-0 left-0 bg-[var(--bg-secondary)] border-r border-[var(--border-color)] flex flex-col z-30 transition-all duration-300 ${sidebarCollapsed ? 'w-16 overflow-visible' : 'w-64'}`}>
+          <aside ref={sidebarRef} className={`fixed top-0 bottom-0 left-0 bg-[var(--bg-secondary)] border-r border-[var(--border-color)] flex flex-col z-30 transition-all duration-300 ${sidebarCollapsed ? 'w-16 overflow-visible' : 'w-64'}`}>
             
             {/* Top Left User Profile Card Dropdown */}
             <div className="relative border-b border-[var(--border-color)] p-4 flex justify-center">
@@ -2417,7 +2486,7 @@ export default function App() {
                   )}
 
                   {/* Category E: System Administration (Admin Role Only) */}
-                  {user.role === 'Admin' && (
+                  {user.role === 'Admin' && companyFeatures.includes('ADMIN') && (
                     <div className="flex flex-col mt-2 relative">
                       {sidebarCollapsed ? (
                         <div className="flex justify-center border-t border-[var(--border-color)] pt-2">
@@ -2980,6 +3049,38 @@ export default function App() {
                   {selectedCompany ? `${selectedCompany.name} Profile` : activeWorkspaceModule.replace('_', ' ')}
                 </h1>
               </div>
+
+              {/* Top Right Corner Status */}
+              <div className="flex items-center gap-4">
+                {/* Backup Info & Trigger */}
+                <div className="flex items-center gap-2 border-r border-[var(--border-color)] pr-4">
+                  <button
+                    onClick={() => {
+                      setActiveWorkspaceModule('general_admin');
+                      setAdminTab('backup');
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border border-emerald-500/20 transition-colors text-xs font-bold cursor-pointer"
+                    title="Initiate Backup"
+                  >
+                    <Database className="w-3.5 h-3.5" /> Backup Now
+                  </button>
+                  <div className="text-[9px] text-[var(--text-secondary)] font-mono leading-tight">
+                    <div>Last Backup</div>
+                    <div className="text-[var(--text-primary)] font-bold">Today, 10:30 AM</div>
+                  </div>
+                </div>
+
+                {/* Online/Offline Status */}
+                <div className="flex items-center gap-1.5">
+                  <span className="relative flex h-2.5 w-2.5">
+                    {isOnline && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>}
+                    <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isOnline ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
+                  </span>
+                  <span className={`text-[10px] font-bold uppercase tracking-wider ${isOnline ? 'text-[var(--text-primary)]' : 'text-rose-400'}`}>
+                    {isOnline ? 'Online' : 'Offline'}
+                  </span>
+                </div>
+              </div>
             </header>
 
             {/* Central Work Content Pane */}
@@ -3090,87 +3191,72 @@ export default function App() {
                       </div>
                           {/* Subscription Modules Toggle Switches - replaced flat view with hierarchical tree */}
                     <div className="col-span-1 md:col-span-2 text-left">
-                      <label className="text-[10px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-3">Subscription Feature Modules (Hierarchical Configuration)</label>
+                      <div className="flex items-center justify-between mb-3">
+                        <label className="text-[10px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Subscription Feature Modules</label>
+                        <button type="button" onClick={handleEnableAllNewCompany} className="px-3 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold shadow-sm transition-colors cursor-pointer">
+                          Enable All Categories & Features
+                        </button>
+                      </div>
+                      <div className="mb-4 relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <Activity className="h-4 w-4 text-[var(--text-muted)]" />
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="Search features or categories..."
+                          value={featureSearchTerm}
+                          onChange={(e) => setFeatureSearchTerm(e.target.value)}
+                          className="w-full pl-9 pr-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg text-xs focus:outline-none focus:border-indigo-500/50 text-[var(--text-primary)] transition-colors"
+                        />
+                      </div>
                       <div className="flex flex-col gap-3">
-                        {[
-                          {
-                            key: 'CRM',
-                            name: 'Sales & CRM Category',
-                            desc: 'Licensing CRM workflows & lead management tools',
-                            children: [
-                              { key: 'CRM_LEADS', name: 'Leads & Pipelines', desc: 'Manage opportunities and lead tracking' },
-                              { key: 'CRM_CUSTOMER', name: 'Customer Logs', desc: 'Track customer interactions and histories' }
-                            ]
-                          },
-                          {
-                            key: 'HR',
-                            name: 'Human Resources Category',
-                            desc: 'Licensing roster management & employee directories',
-                            children: [
-                              { key: 'HR_ROSTER', name: 'Employee Roster', desc: 'Directory of company workforce and permissions' },
-                              { key: 'HR_ATTENDANCE', name: 'Attendance Log', desc: 'Check in/out metrics and shift timesheets' }
-                            ]
-                          },
-                          {
-                            key: 'FINANCE',
-                            name: 'Financials Category',
-                            desc: 'Licensing ledgers, double-entry assets, & billing',
-                            children: [
-                              { key: 'FINANCE_LEDGER', name: 'General Ledger', desc: 'Track double-entry assets and liabilities' },
-                              { key: 'FINANCE_INVOICING', name: 'Invoicing Module', desc: 'Generate invoices and manage client billing' }
-                            ]
-                          },
-                          {
-                            key: 'NOTIFICATIONS',
-                            name: 'Alerts & Audit Logs Category',
-                            desc: 'Core notification gateways & secure audit trails',
-                            children: [
-                              { key: 'NOTIFICATIONS_PUSH', name: 'Push Notifications', desc: 'Receive real-time push events on devices' },
-                              { key: 'NOTIFICATIONS_AUDIT', name: 'System Audit Logs', desc: 'View secure administrative history trails' }
-                            ]
-                          },
-                          {
-                            key: 'MDM',
-                            name: 'Master Data Management Category',
-                            desc: 'Licensing central master data records',
-                            children: [
-                              { key: 'MDM_PRODUCTS', name: 'Product Master', desc: 'Manage central product master records' },
-                              { key: 'MDM_PARTNERS', name: 'Partners (Customer/Vendor)', desc: 'Manage central customer and vendor master records' }
-                            ]
-                          }
-                        ].map(cat => {
+                        {filteredHierarchy.map((cat: any) => {
                           const isParentActive = newCompany.features.includes(cat.key);
                           const isNotifications = cat.key === 'NOTIFICATIONS';
+                          const isExpanded = expandedFeatureCategories.includes(cat.key) || cat.isMatch;
 
                           return (
                             <div key={cat.key} className="bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-xl p-4 flex flex-col gap-3 select-none">
                               <div className="flex items-center justify-between pb-2 border-b border-[var(--border-color)]/50">
-                                <div className="text-left">
-                                  <span className="text-xs font-extrabold text-[var(--text-primary)] block font-display uppercase tracking-wider flex items-center gap-1.5">
+                                <div className="text-left cursor-pointer flex-1" onClick={() => toggleCategoryAccordion(cat.key)}>
+                                  <span className="text-xs font-extrabold text-[var(--text-primary)] block font-display uppercase tracking-wider flex items-center gap-2">
+                                    {isExpanded ? <ChevronDown size={14} className="text-indigo-500" /> : <ChevronRight size={14} className="text-slate-400" />}
                                     <span className={`w-2.5 h-2.5 rounded-full ${isParentActive ? 'bg-indigo-500 animate-pulse' : 'bg-slate-500'}`} />
                                     {cat.name}
                                   </span>
-                                  <span className="text-[9px] text-[var(--text-muted)] mt-0.5 block">{cat.desc}</span>
+                                  <span className="text-[9px] text-[var(--text-muted)] mt-0.5 block ml-6">{cat.desc}</span>
                                 </div>
-                                <button
-                                  type="button"
-                                  disabled={isNotifications}
-                                  onClick={() => handleToggleNewCompanyFeatureHierarchical(cat.key)}
-                                  className={`px-3 py-1 rounded text-[10px] font-extrabold transition-colors cursor-pointer ${
-                                    isNotifications 
-                                      ? 'bg-indigo-500/20 text-indigo-400 cursor-not-allowed border border-indigo-500/30'
-                                      : isParentActive 
-                                        ? 'bg-emerald-600 text-white hover:bg-emerald-700' 
-                                        : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                  }`}
-                                >
-                                  {isNotifications ? 'ENFORCED' : isParentActive ? 'ENABLED' : 'DISABLED'}
-                                </button>
+                                <div className="flex items-center gap-2">
+                                  {!isNotifications && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleEnableCategoryAllNewCompany(cat.key)}
+                                      className="px-2 py-1 rounded text-[9px] font-bold bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 border border-indigo-500/20 cursor-pointer"
+                                    >
+                                      ENABLE ALL
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    disabled={isNotifications}
+                                    onClick={() => handleToggleNewCompanyFeatureHierarchical(cat.key)}
+                                    className={`px-3 py-1 rounded text-[10px] font-extrabold transition-colors cursor-pointer ${
+                                      isNotifications 
+                                        ? 'bg-indigo-500/20 text-indigo-400 cursor-not-allowed border border-indigo-500/30'
+                                        : isParentActive 
+                                          ? 'bg-emerald-600 text-white hover:bg-emerald-700' 
+                                          : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                                    }`}
+                                  >
+                                    {isNotifications ? 'ENFORCED' : isParentActive ? 'ENABLED' : 'DISABLED'}
+                                  </button>
+                                </div>
                               </div>
 
                               {/* Child items grid */}
+                              {isExpanded && (
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-1 pl-4 border-l-2 border-indigo-500/10">
-                                {cat.children.map(child => {
+                                {cat.children.map((child: any) => {
                                   const isChildActive = newCompany.features.includes(child.key);
                                   const isLocked = !isParentActive; // Lock if parent category is disabled
 
@@ -3208,6 +3294,7 @@ export default function App() {
                                   );
                                 })}
                               </div>
+                              )}
                             </div>
                           );
                         })}
@@ -3332,88 +3419,75 @@ export default function App() {
                         Toggle category locks or individually assign active features for this corporate tenant. Child sub-features auto-enable their parent categories.
                       </p>
 
+                      <div className="flex items-center justify-between mt-3 mb-1">
+                        <label className="text-[10px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Subscription Feature Modules</label>
+                        <button type="button" onClick={handleEnableAllCompany} className="px-3 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold shadow-sm transition-colors cursor-pointer">
+                          Enable All Categories & Features
+                        </button>
+                      </div>
+                      <div className="mb-4 relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <Activity className="h-4 w-4 text-[var(--text-muted)]" />
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="Search features or categories..."
+                          value={featureSearchTerm}
+                          onChange={(e) => setFeatureSearchTerm(e.target.value)}
+                          className="w-full pl-9 pr-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg text-xs focus:outline-none focus:border-indigo-500/50 text-[var(--text-primary)] transition-colors"
+                        />
+                      </div>
                       <div className="flex flex-col gap-3">
-                        {[
-                          {
-                            key: 'CRM',
-                            name: 'Sales & CRM Category',
-                            desc: 'Licensing CRM workflows & lead management tools',
-                            children: [
-                              { key: 'CRM_LEADS', name: 'Leads & Pipelines', desc: 'Manage opportunities and lead tracking' },
-                              { key: 'CRM_CUSTOMER', name: 'Customer Logs', desc: 'Track customer interactions and histories' }
-                            ]
-                          },
-                          {
-                            key: 'HR',
-                            name: 'Human Resources Category',
-                            desc: 'Licensing roster management & employee directories',
-                            children: [
-                              { key: 'HR_ROSTER', name: 'Employee Roster', desc: 'Directory of company workforce and permissions' },
-                              { key: 'HR_ATTENDANCE', name: 'Attendance Log', desc: 'Check in/out metrics and shift timesheets' }
-                            ]
-                          },
-                          {
-                            key: 'FINANCE',
-                            name: 'Financials Category',
-                            desc: 'Licensing ledgers, double-entry assets, & billing',
-                            children: [
-                              { key: 'FINANCE_LEDGER', name: 'General Ledger', desc: 'Track double-entry assets and liabilities' },
-                              { key: 'FINANCE_INVOICING', name: 'Invoicing Module', desc: 'Generate invoices and manage client billing' }
-                            ]
-                          },
-                          {
-                            key: 'NOTIFICATIONS',
-                            name: 'Alerts & Audit Logs Category',
-                            desc: 'Core notification gateways & secure audit trails',
-                            children: [
-                              { key: 'NOTIFICATIONS_PUSH', name: 'Push Notifications', desc: 'Receive real-time push events on devices' },
-                              { key: 'NOTIFICATIONS_AUDIT', name: 'System Audit Logs', desc: 'View secure administrative history trails' }
-                            ]
-                          },
-                          {
-                            key: 'MDM',
-                            name: 'Master Data Management Category',
-                            desc: 'Licensing central master data records',
-                            children: [
-                              { key: 'MDM_PRODUCTS', name: 'Product Master', desc: 'Manage central product master records' },
-                              { key: 'MDM_PARTNERS', name: 'Partners (Customer/Vendor)', desc: 'Manage central customer and vendor master records' }
-                            ]
-                          }
-                        ].map(cat => {
+                        {filteredHierarchy.map((cat: any) => {
                           const activeKeys = selectedCompany.features.map((f: any) => f.feature.key);
                           const isParentActive = activeKeys.includes(cat.key);
                           const isNotifications = cat.key === 'NOTIFICATIONS';
+                          const isExpanded = expandedFeatureCategories.includes(cat.key) || cat.isMatch;
 
                           return (
                             <div key={cat.key} className="bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-xl p-3 flex flex-col gap-2.5 select-none">
                               <div className="flex items-center justify-between pb-1.5 border-b border-[var(--border-color)]/50">
-                                <div className="text-left">
-                                  <span className="text-[11px] font-extrabold text-[var(--text-primary)] block font-display uppercase tracking-wider flex items-center gap-1.5">
+                                <div className="text-left cursor-pointer flex-1" onClick={() => toggleCategoryAccordion(cat.key)}>
+                                  <span className="text-[11px] font-extrabold text-[var(--text-primary)] block font-display uppercase tracking-wider flex items-center gap-2">
+                                    {isExpanded ? <ChevronDown size={14} className="text-indigo-500" /> : <ChevronRight size={14} className="text-slate-400" />}
                                     <span className={`w-2 h-2 rounded-full ${isParentActive ? 'bg-indigo-500 animate-pulse' : 'bg-slate-500'}`} />
                                     {cat.name}
                                   </span>
+                                  <span className="text-[9px] text-[var(--text-muted)] mt-0.5 block ml-6">{cat.desc}</span>
                                 </div>
-                                <button
-                                  type="button"
-                                  disabled={isNotifications}
-                                  onClick={() => handleToggleCompanyFeatureHierarchical(cat.key)}
-                                  className={`px-2 py-0.5 rounded text-[9px] font-extrabold transition-colors cursor-pointer ${
-                                    isNotifications 
-                                      ? 'bg-indigo-500/20 text-indigo-400 cursor-not-allowed border border-indigo-500/30'
-                                      : isParentActive 
-                                        ? 'bg-emerald-600 text-white hover:bg-emerald-700' 
-                                        : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                  }`}
-                                >
-                                  {isNotifications ? 'ENFORCED' : isParentActive ? 'ENABLED' : 'DISABLED'}
-                                </button>
+                                <div className="flex items-center gap-2">
+                                  {!isNotifications && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleEnableCategoryAllCompany(cat.key)}
+                                      className="px-2 py-1 rounded text-[9px] font-bold bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 border border-indigo-500/20 cursor-pointer"
+                                    >
+                                      ENABLE ALL
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    disabled={isNotifications}
+                                    onClick={() => handleToggleCompanyFeatureHierarchical(cat.key)}
+                                    className={`px-2 py-0.5 rounded text-[9px] font-extrabold transition-colors cursor-pointer ${
+                                      isNotifications 
+                                        ? 'bg-indigo-500/20 text-indigo-400 cursor-not-allowed border border-indigo-500/30'
+                                        : isParentActive 
+                                          ? 'bg-emerald-600 text-white hover:bg-emerald-700' 
+                                          : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                                    }`}
+                                  >
+                                    {isNotifications ? 'ENFORCED' : isParentActive ? 'ENABLED' : 'DISABLED'}
+                                  </button>
+                                </div>
                               </div>
 
                               {/* Child items grid */}
+                              {isExpanded && (
                               <div className="grid grid-cols-1 gap-2 mt-0.5 pl-3 border-l-2 border-indigo-500/10 text-left">
-                                {cat.children.map(child => {
+                                {cat.children.map((child: any) => {
                                   const isChildActive = activeKeys.includes(child.key);
-                                  const isLocked = !isParentActive; // Lock if parent category is disabled
+                                  const isLocked = !isParentActive;
 
                                   return (
                                     <div 
@@ -3449,6 +3523,7 @@ export default function App() {
                                   );
                                 })}
                               </div>
+                              )}
                             </div>
                           );
                         })}
@@ -3603,29 +3678,7 @@ export default function App() {
                     </span>
                   </div>
 
-                  {/* Sub-Tab Navigation */}
-                  <div className="flex border-b border-[var(--border-color)] mt-4 gap-2 text-xs select-none">
-                    {companyFeatures.includes('CRM_LEADS') && (
-                      <button
-                        onClick={() => setCrmSubTab('leads')}
-                        className={`px-4 py-2 font-bold cursor-pointer transition-colors ${
-                          crmSubTab === 'leads' ? 'border-b-2 border-indigo-500 text-indigo-400' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                        }`}
-                      >
-                        Leads & Opportunities
-                      </button>
-                    )}
-                    {companyFeatures.includes('CRM_CUSTOMER') && (
-                      <button
-                        onClick={() => setCrmSubTab('customer_logs')}
-                        className={`px-4 py-2 font-bold cursor-pointer transition-colors ${
-                          crmSubTab === 'customer_logs' ? 'border-b-2 border-indigo-500 text-indigo-400' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                        }`}
-                      >
-                        Customer Support Logs
-                      </button>
-                    )}
-                  </div>
+
 
                   {crmSubTab === 'leads' && companyFeatures.includes('CRM_LEADS') && (
                     <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4 animate-fade-in">
@@ -3749,30 +3802,6 @@ export default function App() {
                     <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[9px] font-bold rounded">
                       ACTIVE
                     </span>
-                  </div>
-
-                  {/* Sub-Tab Navigation */}
-                  <div className="flex border-b border-[var(--border-color)] mt-4 gap-2 text-xs select-none">
-                    {companyFeatures.includes('HR_ROSTER') && (
-                      <button
-                        onClick={() => setHrSubTab('roster')}
-                        className={`px-4 py-2 font-bold cursor-pointer transition-colors ${
-                          hrSubTab === 'roster' ? 'border-b-2 border-indigo-500 text-indigo-400' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                        }`}
-                      >
-                        Corporate Employee Roster
-                      </button>
-                    )}
-                    {companyFeatures.includes('HR_ATTENDANCE') && (
-                      <button
-                        onClick={() => setHrSubTab('attendance')}
-                        className={`px-4 py-2 font-bold cursor-pointer transition-colors ${
-                          hrSubTab === 'attendance' ? 'border-b-2 border-indigo-500 text-indigo-400' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                        }`}
-                      >
-                        Shift Attendance Logs
-                      </button>
-                    )}
                   </div>
 
                   {hrSubTab === 'roster' && companyFeatures.includes('HR_ROSTER') && (
@@ -4131,6 +4160,26 @@ export default function App() {
               {/* ==========================================
                   IN-APP ALERTS / NOTIFICATIONS FEED MODULE
                   ========================================== */}
+
+              {activeWorkspaceModule === 'inventory' && !selectedCompany && (
+                <InventoryWarehouse user={user} />
+              )}
+              {activeWorkspaceModule === 'purchase' && !selectedCompany && (
+                <PurchaseProcurement user={user} />
+              )}
+              {activeWorkspaceModule === 'sales' && !selectedCompany && (
+                <SalesOrder user={user} />
+              )}
+              {activeWorkspaceModule === 'manufacturing' && !selectedCompany && (
+                <ManufacturingProduction user={user} />
+              )}
+              {activeWorkspaceModule === 'quality' && !selectedCompany && (
+                <QualityMaintenance user={user} />
+              )}
+              {activeWorkspaceModule === 'email' && !selectedCompany && (
+                <GlobalEmailSystem user={user} />
+              )}
+
               {activeWorkspaceModule === 'alerts' && !selectedCompany && (
                 <div className="max-w-3xl mx-auto select-none animate-fade-in">
                   <div className="flex justify-between items-center border-b border-[var(--border-color)] pb-3 mb-4">
@@ -4143,29 +4192,7 @@ export default function App() {
                     </span>
                   </div>
 
-                  {/* Sub-Tab Navigation */}
-                  <div className="flex border-b border-[var(--border-color)] mt-4 gap-2 text-xs select-none">
-                    {companyFeatures.includes('NOTIFICATIONS_PUSH') && (
-                      <button
-                        onClick={() => setAlertsSubTab('alerts')}
-                        className={`px-4 py-2 font-bold cursor-pointer transition-colors ${
-                          alertsSubTab === 'alerts' ? 'border-b-2 border-indigo-500 text-indigo-400' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                        }`}
-                      >
-                        In-App Alerts Feed
-                      </button>
-                    )}
-                    {companyFeatures.includes('NOTIFICATIONS_AUDIT') && (
-                      <button
-                        onClick={() => setAlertsSubTab('audit_logs')}
-                        className={`px-4 py-2 font-bold cursor-pointer transition-colors ${
-                          alertsSubTab === 'audit_logs' ? 'border-b-2 border-indigo-500 text-indigo-400' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                        }`}
-                      >
-                        System Secure Audit Logs
-                      </button>
-                    )}
-                  </div>
+
 
                   {alertsSubTab === 'alerts' && companyFeatures.includes('NOTIFICATIONS_PUSH') && (
                     <div className="animate-fade-in">

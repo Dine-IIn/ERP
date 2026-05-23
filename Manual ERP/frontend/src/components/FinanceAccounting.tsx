@@ -774,75 +774,10 @@ export default function FinanceAccounting({ user: _user, token, backendUrl, init
         </div>
 
         {/* Outer Tabs Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 min-h-[580px]">
-          
-          {/* Vertical Navigation Column */}
-          <div className="lg:col-span-1 border-r border-[var(--border-color)] bg-[var(--bg-tertiary)]/40 p-4 space-y-1">
-            <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-widest uppercase px-3 block mb-2">Accounting Modules</span>
-            
-            <button
-              onClick={() => setActiveTab('general_ledger')}
-              className={`w-full py-2.5 px-3 rounded-xl text-left text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border ${
-                activeTab === 'general_ledger' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20 shadow-sm font-semibold' : 'text-[var(--text-secondary)] border-transparent hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]'
-              }`}
-            >
-              <BookOpen className="w-4 h-4" />
-              General Ledger
-            </button>
-
-            <button
-              onClick={() => setActiveTab('financial_statements')}
-              className={`w-full py-2.5 px-3 rounded-xl text-left text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border ${
-                activeTab === 'financial_statements' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20 shadow-sm font-semibold' : 'text-[var(--text-secondary)] border-transparent hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]'
-              }`}
-            >
-              <TrendingUp className="w-4 h-4" />
-              Financial Statements
-            </button>
-
-            <button
-              onClick={() => setActiveTab('subledgers')}
-              className={`w-full py-2.5 px-3 rounded-xl text-left text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border ${
-                activeTab === 'subledgers' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20 shadow-sm font-semibold' : 'text-[var(--text-secondary)] border-transparent hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]'
-              }`}
-            >
-              <BarChart3 className="w-4 h-4" />
-              AP / AR Subledgers
-            </button>
-
-            <button
-              onClick={() => setActiveTab('fixed_assets')}
-              className={`w-full py-2.5 px-3 rounded-xl text-left text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border ${
-                activeTab === 'fixed_assets' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20 shadow-sm font-semibold' : 'text-[var(--text-secondary)] border-transparent hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]'
-              }`}
-            >
-              <Coins className="w-4 h-4" />
-              Fixed Asset Register
-            </button>
-
-            <button
-              onClick={() => setActiveTab('budgets_reconciliation')}
-              className={`w-full py-2.5 px-3 rounded-xl text-left text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border ${
-                activeTab === 'budgets_reconciliation' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20 shadow-sm font-semibold' : 'text-[var(--text-secondary)] border-transparent hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]'
-              }`}
-            >
-              <UploadCloud className="w-4 h-4" />
-              Budget & Recon
-            </button>
-
-            <button
-              onClick={() => setActiveTab('fiscal_periods')}
-              className={`w-full py-2.5 px-3 rounded-xl text-left text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border ${
-                activeTab === 'fiscal_periods' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20 shadow-sm font-semibold' : 'text-[var(--text-secondary)] border-transparent hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]'
-              }`}
-            >
-              <Calendar className="w-4 h-4" />
-              Fiscal Periods
-            </button>
-          </div>
+        <div className="flex flex-col min-h-[580px]">
 
           {/* Active View Details Panel */}
-          <div className="lg:col-span-4 p-6 bg-[var(--bg-secondary)] overflow-y-auto max-h-[640px]">
+          <div className="p-6 bg-[var(--bg-secondary)] overflow-y-auto max-h-[640px]">
             
             {/* VIEW A: GENERAL LEDGER */}
             {activeTab === 'general_ledger' && (

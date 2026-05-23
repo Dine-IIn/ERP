@@ -477,33 +477,7 @@ export default function MasterDataManagement({ user: _user, token, backendUrl, i
   };
 
   return (
-    <div className="flex h-full gap-0 animate-fade-in select-none">
-      {/* ===================== SIDE NAV ===================== */}
-      <aside className="w-52 shrink-0 border-r border-[var(--border-color)] pr-3 mr-4">
-        <div className="mb-4">
-          <h3 className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-2">Master Records</h3>
-        </div>
-        <nav className="flex flex-col gap-1">
-          {MASTER_CONFIGS.map(m => {
-            const c = COLOR_MAP[m.color];
-            const isActive = activeMaster === m.key;
-            return (
-              <button
-                key={m.key}
-                onClick={() => setActiveMaster(m.key)}
-                className={`w-full text-left py-2 px-3 rounded-xl text-xs font-bold flex items-center gap-2.5 transition-all cursor-pointer border ${
-                  isActive
-                    ? `${c.bg} ${c.text} ${c.border}`
-                    : 'text-[var(--text-secondary)] border-transparent hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]'
-                }`}
-              >
-                <span className={isActive ? c.text : 'text-[var(--text-muted)]'}>{m.icon}</span>
-                {m.label}
-              </button>
-            );
-          })}
-        </nav>
-      </aside>
+    <div className="flex h-full flex-col animate-fade-in select-none p-6">
 
       {/* ===================== MAIN CONTENT ===================== */}
       <div className="flex-1 min-w-0 flex flex-col">
