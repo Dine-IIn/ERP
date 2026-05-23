@@ -1,36 +1,40 @@
-import React, { useState } from 'react';
+import os
+
+file_path = "d:\\ERP\\Manual ERP\\frontend\\src\\components\\HumanResources.tsx"
+
+content = """import React, { useState } from 'react';
 import { 
-  Box, MapPin, ArrowRightLeft, SlidersHorizontal, FileText, 
-  Truck, BarChart3, Plus, Search, Filter, Download, ArrowUpRight, 
-  Package, AlertTriangle, Layers, QrCode, ShieldCheck
+  Users, UserPlus, Clock, Calendar, 
+  Briefcase, BarChart3, Plus, Search, Filter, Download, 
+  MoreHorizontal, Banknote, ShieldCheck
 } from 'lucide-react';
 
 interface Props {
-  activeTab?: string;
   user: any;
 }
 
-const InventoryWarehouse: React.FC<Props> = ({ user, activeTab }) => {
-    const mapping: any = {'INVENTORY_TRACKING': 'ledger', 'INVENTORY_MULTI_WH': 'locations', 'INVENTORY_TRANSFERS': 'transfers', 'INVENTORY_ADJUSTMENTS': 'adjustments', 'INVENTORY_GRN': 'grn', 'INVENTORY_DISPATCH': 'dispatch', 'INVENTORY_REPORTS': 'reports', 'INVENTORY_LEDGER': 'ledger'};
-  const currentTab = (activeTab && mapping[activeTab]) ? mapping[activeTab] : 'ledger';
+const HumanResources: React.FC<Props> = ({ user }) => {
+  const [activeTab, setActiveTab] = useState('directory');
   const [searchQuery, setSearchQuery] = useState('');
 
   const tabs = [
-    { id: 'ledger', label: 'Stock Ledger', icon: Box },
-    { id: 'locations', label: 'Locations & Bins', icon: MapPin },
-    { id: 'transfers', label: 'Stock Transfers', icon: ArrowRightLeft },
-    { id: 'adjustments', label: 'Adjustments', icon: SlidersHorizontal },
-    { id: 'grn', label: 'Goods Receipt (GRN)', icon: FileText },
-    { id: 'dispatch', label: 'Dispatch', icon: Truck },
-    { id: 'reports', label: 'Reports & Alerts', icon: BarChart3 }
+    { id: 'dashboard', label: 'HR Dashboard', icon: BarChart3 },
+    { id: 'directory', label: 'Employee Directory', icon: Users },
+    { id: 'attendance', label: 'Attendance', icon: Clock },
+    { id: 'leave', label: 'Leave Management', icon: Calendar },
+    { id: 'payroll', label: 'Payroll & Salary', icon: Banknote },
+    { id: 'recruitment', label: 'Recruitment', icon: UserPlus },
+    { id: 'performance', label: 'Performance', icon: Briefcase }
   ];
 
-  // Dummy data
-  const stockItems = [
-    { id: 'STK-001', name: 'Premium Office Chair', sku: 'POC-992', warehouse: 'Main Hub', qty: 245, minStock: 50, status: 'Healthy', val: '$24,500' },
-    { id: 'STK-002', name: 'Ergonomic Desk', sku: 'ED-104', warehouse: 'Main Hub', qty: 12, minStock: 20, status: 'Low Stock', val: '$3,600' },
-    { id: 'STK-003', name: 'Wireless Mouse', sku: 'WM-009', warehouse: 'East Wing', qty: 890, minStock: 100, status: 'Healthy', val: '$13,350' },
-    { id: 'STK-004', name: 'Mechanical Keyboard', sku: 'MK-111', warehouse: 'West Wing', qty: 0, minStock: 30, status: 'Out of Stock', val: '$0' }
+  // Dummy employee data
+  const employees = [
+    { id: 'EMP-001', name: 'Sarah Miller', role: 'Head of Sales', dept: 'Sales', status: 'Active', joinDate: 'Jan 15, 2024' },
+    { id: 'EMP-002', name: 'John Doe', role: 'Software Engineer', dept: 'Engineering', status: 'Active', joinDate: 'Mar 01, 2024' },
+    { id: 'EMP-003', name: 'Anna Lee', role: 'HR Manager', dept: 'Human Resources', status: 'On Leave', joinDate: 'Feb 10, 2024' },
+    { id: 'EMP-004', name: 'Mark Smith', role: 'Financial Analyst', dept: 'Finance', status: 'Active', joinDate: 'Apr 22, 2024' },
+    { id: 'EMP-005', name: 'Emma Davis', role: 'Marketing Specialist', dept: 'Marketing', status: 'Active', joinDate: 'May 05, 2024' },
+    { id: 'EMP-006', name: 'Robert Chen', role: 'Product Manager', dept: 'Product', status: 'Resigned', joinDate: 'Nov 12, 2023' }
   ];
 
   return (
@@ -39,10 +43,10 @@ const InventoryWarehouse: React.FC<Props> = ({ user, activeTab }) => {
       <div className="flex justify-between items-center border-b border-[var(--border-color)] pb-4 mb-4">
         <div>
           <h3 className="font-bold text-xl text-[var(--text-primary)] flex items-center gap-2 font-display">
-            <Box className="w-6 h-6 text-indigo-500" />
-            Inventory & Warehouse
+            <Users className="w-6 h-6 text-indigo-500" />
+            Human Resources (HRM)
           </h3>
-          <p className="text-sm text-[var(--text-secondary)] mt-1">Manage stock tracking, locations, and movements</p>
+          <p className="text-sm text-[var(--text-secondary)] mt-1">Manage employee profiles, attendance, and payroll</p>
         </div>
         <div className="flex gap-2">
           <button className="px-4 py-2 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-xl text-sm font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors flex items-center gap-2">
@@ -50,23 +54,45 @@ const InventoryWarehouse: React.FC<Props> = ({ user, activeTab }) => {
             Export
           </button>
           <button className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-indigo-500/20 flex items-center gap-2">
-            <Plus className="w-4 h-4" />
-            New Entry
+            <UserPlus className="w-4 h-4" />
+            Add Employee
           </button>
         </div>
       </div>
 
+      {/* Tabs */}
+      <div className="flex gap-1 overflow-x-auto no-scrollbar border-b border-[var(--border-color)] mb-6">
+        {tabs.map(tab => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-2 px-4 py-3 border-b-2 font-semibold text-sm transition-colors whitespace-nowrap ${
+                isActive 
+                  ? 'border-indigo-500 text-indigo-400 bg-indigo-500/5' 
+                  : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]'
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
       {/* Content Area */}
       <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
-        {currentTab === 'ledger' && (
+        {activeTab === 'directory' && (
           <div className="flex flex-col gap-6 animate-fade-in">
             {/* KPI Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               {[
-                { title: 'Total Items in Stock', val: '14,234', icon: Package, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-                { title: 'Inventory Valuation', val: '$1.42M', icon: BarChart3, color: 'text-indigo-500', bg: 'bg-indigo-500/10' },
-                { title: 'Low Stock Alerts', val: '24', icon: AlertTriangle, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-                { title: 'Pending Transfers', val: '8', icon: ArrowRightLeft, color: 'text-blue-500', bg: 'bg-blue-500/10' }
+                { title: 'Total Employees', val: '142', icon: Users, color: 'text-indigo-500', bg: 'bg-indigo-500/10' },
+                { title: 'Present Today', val: '135', icon: ShieldCheck, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+                { title: 'On Leave', val: '7', icon: Calendar, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+                { title: 'Open Positions', val: '4', icon: UserPlus, color: 'text-blue-500', bg: 'bg-blue-500/10' }
               ].map((kpi, i) => (
                 <div key={i} className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl p-5 flex items-center gap-4 hover:border-indigo-500/30 transition-all">
                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${kpi.bg}`}>
@@ -87,7 +113,7 @@ const InventoryWarehouse: React.FC<Props> = ({ user, activeTab }) => {
                   <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
                   <input 
                     type="text" 
-                    placeholder="Search SKU or Item..." 
+                    placeholder="Search employees..." 
                     className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg pl-9 pr-4 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-indigo-500 transition-colors"
                   />
                 </div>
@@ -100,53 +126,49 @@ const InventoryWarehouse: React.FC<Props> = ({ user, activeTab }) => {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-[var(--border-color)] bg-[var(--bg-primary)]/50">
-                      <th className="p-4 text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Item Details</th>
-                      <th className="p-4 text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Location</th>
-                      <th className="p-4 text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Quantity</th>
+                      <th className="p-4 text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Employee</th>
+                      <th className="p-4 text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Employee ID</th>
+                      <th className="p-4 text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Department</th>
+                      <th className="p-4 text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Join Date</th>
                       <th className="p-4 text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Status</th>
-                      <th className="p-4 text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider text-right">Valuation</th>
                       <th className="p-4 text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider text-center">Action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {stockItems.map((item, i) => (
+                    {employees.map((emp, i) => (
                       <tr key={i} className="border-b border-[var(--border-color)] hover:bg-[var(--bg-tertiary)]/30 transition-colors">
                         <td className="p-4">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-color)] flex items-center justify-center">
-                              <Box className="w-5 h-5 text-indigo-400" />
+                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold text-sm shadow-sm">
+                              {emp.name.split(' ').map(n => n[0]).join('')}
                             </div>
                             <div>
-                              <p className="text-sm font-bold text-[var(--text-primary)]">{item.name}</p>
-                              <p className="text-xs text-[var(--text-secondary)] mt-0.5">{item.sku}</p>
+                              <p className="text-sm font-bold text-[var(--text-primary)]">{emp.name}</p>
+                              <p className="text-xs text-[var(--text-secondary)] mt-0.5">{emp.role}</p>
                             </div>
                           </div>
                         </td>
-                        <td className="p-4 text-sm text-[var(--text-secondary)] font-medium">
-                          <div className="flex items-center gap-1.5">
-                            <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                            {item.warehouse}
-                          </div>
+                        <td className="p-4 text-sm font-bold text-[var(--text-secondary)] font-display">
+                          {emp.id}
                         </td>
-                        <td className="p-4">
-                          <span className="text-sm font-black text-[var(--text-primary)] font-display">{item.qty}</span>
-                          <span className="text-xs text-[var(--text-muted)] ml-1">/ {item.minStock} min</span>
+                        <td className="p-4 text-sm text-[var(--text-secondary)] font-medium">
+                          {emp.dept}
+                        </td>
+                        <td className="p-4 text-sm text-[var(--text-secondary)]">
+                          {emp.joinDate}
                         </td>
                         <td className="p-4">
                           <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide border ${
-                            item.status === 'Healthy' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
-                            item.status === 'Low Stock' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
-                            'bg-red-500/10 text-red-500 border-red-500/20'
+                            emp.status === 'Active' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                            emp.status === 'On Leave' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
+                            'bg-slate-500/10 text-slate-400 border-slate-500/20'
                           }`}>
-                            {item.status}
+                            {emp.status}
                           </span>
-                        </td>
-                        <td className="p-4 text-right text-sm font-bold text-[var(--text-primary)]">
-                          {item.val}
                         </td>
                         <td className="p-4 text-center">
                           <button className="p-2 text-[var(--text-secondary)] hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-colors">
-                            <ArrowUpRight className="w-4 h-4" />
+                            <MoreHorizontal className="w-4 h-4" />
                           </button>
                         </td>
                       </tr>
@@ -159,10 +181,10 @@ const InventoryWarehouse: React.FC<Props> = ({ user, activeTab }) => {
         )}
 
         {/* Other tabs placeholder */}
-        {activeTab !== 'ledger' && (
+        {activeTab !== 'directory' && (
           <div className="h-full flex flex-col items-center justify-center text-center p-12 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl animate-fade-in">
             <div className="w-20 h-20 bg-[var(--bg-tertiary)] rounded-full flex items-center justify-center mb-6">
-              {React.createElement(tabs.find(t => t.id === activeTab)?.icon || Box, { className: "w-10 h-10 text-[var(--text-muted)]" })}
+              {React.createElement(tabs.find(t => t.id === activeTab)?.icon || Users, { className: "w-10 h-10 text-[var(--text-muted)]" })}
             </div>
             <h4 className="text-xl font-bold text-[var(--text-primary)] mb-2 font-display">
               {tabs.find(t => t.id === activeTab)?.label}
@@ -180,4 +202,9 @@ const InventoryWarehouse: React.FC<Props> = ({ user, activeTab }) => {
   );
 };
 
-export default InventoryWarehouse;
+export default HumanResources;
+"""
+
+with open(file_path, "w", encoding="utf-8") as f:
+    f.write(content)
+print("HumanResources created.")

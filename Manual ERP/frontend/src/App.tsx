@@ -19,7 +19,7 @@ import {
   Lock,
   User,
   Mail,
-  TrendingUp,
+  BarChart3,
   AlertCircle,
   Clock,
   Briefcase,
@@ -57,6 +57,8 @@ import SalesOrder from './components/SalesOrder';
 import ManufacturingProduction from './components/ManufacturingProduction';
 import QualityMaintenance from './components/QualityMaintenance';
 import GlobalEmailSystem from './components/GlobalEmailSystem';
+import CrmModule from './components/CrmModule';
+import HumanResources from './components/HumanResources';
 
 const BACKEND_URL = 'http://localhost:5000';
 
@@ -123,6 +125,7 @@ export default function App() {
   const [companyRoles, setCompanyRoles] = useState<any[]>([]); // Company Admin roles definitions
   const [companyFeatures, setCompanyFeatures] = useState<string[]>([]); // Mapped workspace modules
   const [activeWorkspaceModule, setActiveWorkspaceModule] = useState<string>('dashboard');
+  const [activeWorkspaceSubModule, setActiveWorkspaceSubModule] = useState<string>('');
 
   // --- WORKSPACE SUB-TAB STATES ---
   const [crmSubTab, setCrmSubTab] = useState<'leads' | 'customer_logs'>('leads');
@@ -1628,862 +1631,121 @@ export default function App() {
                     {!sidebarCollapsed && <span>Console Home</span>}
                   </button>
 
-                  {/* Category A: CRM */}
-                  {companyFeatures.includes('CRM') && (
-                    <div className="flex flex-col mt-1 relative">
+                  {/* Dynamic Sidebar Modules */}
+                  {['MDM', 'FINANCE', 'INVENTORY', 'PURCHASE', 'SALES', 'MANUFACTURING', 'QUALITY', 'EMAIL', 'CRM', 'HR'].map((modKey) => {
+                    if (!companyFeatures.includes(modKey)) return null;
+                    const catData = MASTER_FEATURES_HIERARCHY.find(c => c.key === modKey);
+                    if (!catData) return null;
+                    
+                    const moduleKeyMap: Record<string, string> = {
+                        'INVENTORY': 'inventory',
+                        'PURCHASE': 'purchase',
+                        'SALES': 'sales',
+                        'MANUFACTURING': 'manufacturing',
+                        'QUALITY': 'quality',
+                        'EMAIL': 'email',
+                        'CRM': 'crm',
+                        'HR': 'hr',
+                        'FINANCE': 'finance',
+                        'MDM': 'master_data'
+                    };
+                    const mKey = moduleKeyMap[modKey];
+                    
+                    const iconMap: Record<string, any> = {
+                        'INVENTORY': Box,
+                        'PURCHASE': ShoppingCart,
+                        'SALES': Tag,
+                        'MANUFACTURING': Factory,
+                        'QUALITY': Shield,
+                        'EMAIL': Mail,
+                        'CRM': MessageSquare,
+                        'HR': Users,
+                        'FINANCE': BarChart3,
+                        'MDM': Layers
+                    };
+                    const Icon = iconMap[modKey] || Folder;
+                    
+                    // Tailwind requires full class names
+                    const colors: Record<string, any> = {
+                        'INVENTORY': { text: 'text-blue-400', bgHover: 'bg-blue-500/10', textHover: 'text-blue-500', activeBg: 'bg-blue-500/5' },
+                        'PURCHASE': { text: 'text-teal-400', bgHover: 'bg-teal-500/10', textHover: 'text-teal-500', activeBg: 'bg-teal-500/5' },
+                        'SALES': { text: 'text-pink-400', bgHover: 'bg-pink-500/10', textHover: 'text-pink-500', activeBg: 'bg-pink-500/5' },
+                        'MANUFACTURING': { text: 'text-orange-400', bgHover: 'bg-orange-500/10', textHover: 'text-orange-500', activeBg: 'bg-orange-500/5' },
+                        'QUALITY': { text: 'text-rose-400', bgHover: 'bg-rose-500/10', textHover: 'text-rose-500', activeBg: 'bg-rose-500/5' },
+                        'EMAIL': { text: 'text-amber-400', bgHover: 'bg-amber-500/10', textHover: 'text-amber-500', activeBg: 'bg-amber-500/5' },
+                        'CRM': { text: 'text-purple-400', bgHover: 'bg-purple-500/10', textHover: 'text-purple-500', activeBg: 'bg-purple-500/5' },
+                        'HR': { text: 'text-cyan-400', bgHover: 'bg-cyan-500/10', textHover: 'text-cyan-500', activeBg: 'bg-cyan-500/5' },
+                        'FINANCE': { text: 'text-emerald-400', bgHover: 'bg-emerald-500/10', textHover: 'text-emerald-500', activeBg: 'bg-emerald-500/5' },
+                        'MDM': { text: 'text-indigo-400', bgHover: 'bg-indigo-500/10', textHover: 'text-indigo-500', activeBg: 'bg-indigo-500/5' }
+                    };
+                    const theme = colors[modKey];
+
+                    return (
+                    <div key={modKey} className="flex flex-col mt-1 relative">
                       {sidebarCollapsed ? (
                         <div className="flex justify-center">
                           <button
-                            onClick={() => setActivePopoverCategory(activePopoverCategory === 'crm' ? null : 'crm')}
-                            className={`p-2.5 rounded-xl hover:bg-[var(--bg-tertiary)] transition-colors cursor-pointer ${activeWorkspaceModule === 'crm' ? 'bg-indigo-500/10 text-indigo-500' : 'text-indigo-400'}`}
-                            title="Sales & CRM"
+                            onClick={() => setActivePopoverCategory(activePopoverCategory === mKey ? null : mKey)}
+                            className={`p-2.5 rounded-xl hover:bg-[var(--bg-tertiary)] transition-colors cursor-pointer ${activeWorkspaceModule === mKey ? `${theme.bgHover} ${theme.textHover}` : theme.text}`}
+                            title={catData.name}
                           >
-                            <Users className="w-4 h-4" />
+                            <Icon className="w-4 h-4" />
                           </button>
-                          {activePopoverCategory === 'crm' && (
-                            <div className="absolute left-14 top-0 z-50 w-52 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl shadow-2xl p-2 animate-scale-up text-left flex flex-col gap-1">
-                              <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-widest uppercase px-2 block mb-1">Sales & CRM</span>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('crm');
-                                  setCrmSubTab('leads');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'crm' && crmSubTab === 'leads' ? 'text-indigo-400 font-bold bg-indigo-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Activity className="w-3.5 h-3.5" />
-                                <span>Leads & Opportunities</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('crm');
-                                  setCrmSubTab('customer_logs');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'crm' && crmSubTab === 'customer_logs' ? 'text-indigo-400 font-bold bg-indigo-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Users className="w-3.5 h-3.5" />
-                                <span>Customer Database</span>
-                              </button>
+                          {activePopoverCategory === mKey && (
+                            <div className="absolute left-14 top-0 z-50 w-52 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl shadow-2xl p-2 animate-scale-up text-left flex flex-col gap-1 max-h-[360px] overflow-y-auto">
+                              <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-widest uppercase px-2 block mb-1">{catData.name}</span>
+                              {catData.children.map((child: any) => {
+                                if (!companyFeatures.includes(child.key)) return null;
+                                const isActive = activeWorkspaceModule === mKey && activeWorkspaceSubModule === child.key;
+                                return (
+                                  <button
+                                    key={child.key}
+                                    onClick={() => { setActiveWorkspaceModule(mKey); setActiveWorkspaceSubModule(child.key); setActivePopoverCategory(null); }}
+                                    className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${isActive ? `${theme.textHover} font-bold ${theme.activeBg}` : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+                                  >
+                                    <Folder className="w-3.5 h-3.5" /> <span>{child.name}</span>
+                                  </button>
+                                );
+                              })}
                             </div>
                           )}
                         </div>
                       ) : (
                         <>
                           <button
-                            onClick={() => toggleSidebarCategory('crm')}
+                            onClick={() => toggleSidebarCategory(mKey)}
                             className="w-full py-2 px-3 rounded-lg text-left text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] flex items-center justify-between transition-colors cursor-pointer"
                           >
                             <span className="flex items-center gap-2">
-                              <Users className="w-4 h-4 text-indigo-400" style={{ flexShrink: 0 }} />
-                              <span>Sales & CRM</span>
+                              <Icon className={`w-4 h-4 ${theme.text}`} style={{ flexShrink: 0 }} />
+                              <span>{catData.name}</span>
                             </span>
-                            {expandedCategories.crm ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                            {expandedCategories[mKey] ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
                           </button>
                           
-                          {expandedCategories.crm && (
+                          {expandedCategories[mKey] && (
                             <div className="pl-6 flex flex-col gap-1 mt-1 border-l border-[var(--border-color)] ml-4">
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('crm');
-                                  setCrmSubTab('leads');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'crm' && crmSubTab === 'leads'
-                                    ? 'text-indigo-400 font-bold bg-indigo-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Activity className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Leads & Opportunities</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('crm');
-                                  setCrmSubTab('customer_logs');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'crm' && crmSubTab === 'customer_logs'
-                                    ? 'text-indigo-400 font-bold bg-indigo-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Users className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Customer Database</span>
-                              </button>
+                              {catData.children.map((child: any) => {
+                                if (!companyFeatures.includes(child.key)) return null;
+                                const isActive = activeWorkspaceModule === mKey && activeWorkspaceSubModule === child.key;
+                                return (
+                                  <button
+                                    key={child.key}
+                                    onClick={() => { setActiveWorkspaceModule(mKey); setActiveWorkspaceSubModule(child.key); }}
+                                    className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${isActive ? `${theme.textHover} font-bold ${theme.activeBg}` : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+                                  >
+                                    <Folder className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
+                                    <span>{child.name}</span>
+                                  </button>
+                                );
+                              })}
                             </div>
                           )}
                         </>
                       )}
                     </div>
-                  )}
-
-                  {/* Category B: HR */}
-                  {companyFeatures.includes('HR') && (
-                    <div className="flex flex-col mt-1 relative">
-                      {sidebarCollapsed ? (
-                        <div className="flex justify-center">
-                          <button
-                            onClick={() => setActivePopoverCategory(activePopoverCategory === 'hr' ? null : 'hr')}
-                            className={`p-2.5 rounded-xl hover:bg-[var(--bg-tertiary)] transition-colors cursor-pointer ${activeWorkspaceModule === 'hr' ? 'bg-emerald-500/10 text-emerald-500' : 'text-emerald-400'}`}
-                            title="Human Resources"
-                          >
-                            <Briefcase className="w-4 h-4" />
-                          </button>
-                          {activePopoverCategory === 'hr' && (
-                            <div className="absolute left-14 top-0 z-50 w-52 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl shadow-2xl p-2 animate-scale-up text-left flex flex-col gap-1">
-                              <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-widest uppercase px-2 block mb-1">Human Resources</span>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('hr');
-                                  setHrSubTab('roster');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'hr' && hrSubTab === 'roster' ? 'text-emerald-400 font-bold bg-emerald-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <User className="w-3.5 h-3.5" />
-                                <span>Employee Roster</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('hr');
-                                  setHrSubTab('attendance');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'hr' && hrSubTab === 'attendance' ? 'text-emerald-400 font-bold bg-emerald-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Clock className="w-3.5 h-3.5" />
-                                <span>Attendance Logs</span>
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <>
-                          <button
-                            onClick={() => toggleSidebarCategory('hr')}
-                            className="w-full py-2 px-3 rounded-lg text-left text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] flex items-center justify-between transition-colors cursor-pointer"
-                          >
-                            <span className="flex items-center gap-2">
-                              <Briefcase className="w-4 h-4 text-emerald-400" style={{ flexShrink: 0 }} />
-                              <span>Human Resources</span>
-                            </span>
-                            {expandedCategories.hr ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                          </button>
-
-                          {expandedCategories.hr && (
-                            <div className="pl-6 flex flex-col gap-1 mt-1 border-l border-[var(--border-color)] ml-4">
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('hr');
-                                  setHrSubTab('roster');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'hr' && hrSubTab === 'roster'
-                                    ? 'text-emerald-400 font-bold bg-emerald-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <User className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Employee Roster</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('hr');
-                                  setHrSubTab('attendance');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'hr' && hrSubTab === 'attendance'
-                                    ? 'text-emerald-400 font-bold bg-emerald-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Clock className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Attendance Logs</span>
-                              </button>
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Category C: Finance */}
-                  {companyFeatures.includes('FINANCE') && (
-                    <div className="flex flex-col mt-1 relative">
-                      {sidebarCollapsed ? (
-                        <div className="flex justify-center">
-                          <button
-                            onClick={() => setActivePopoverCategory(activePopoverCategory === 'finance' ? null : 'finance')}
-                            className={`p-2.5 rounded-xl hover:bg-[var(--bg-tertiary)] transition-colors cursor-pointer ${activeWorkspaceModule === 'finance' ? 'bg-amber-500/10 text-amber-500' : 'text-amber-500'}`}
-                            title="Financials"
-                          >
-                            <DollarSign className="w-4 h-4" />
-                          </button>
-                          {activePopoverCategory === 'finance' && (
-                            <div className="absolute left-14 top-0 z-50 w-52 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl shadow-2xl p-2 animate-scale-up text-left flex flex-col gap-1 max-h-[360px] overflow-y-auto">
-                              <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-widest uppercase px-2 block mb-1">Financials</span>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('finance');
-                                  setFinanceDeepTab('general_ledger');
-                                  setFinanceDeepSubTab('');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'finance' && financeDeepTab === 'general_ledger' ? 'text-amber-500 font-bold bg-amber-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <BookOpen className="w-3.5 h-3.5" />
-                                <span>General Ledger</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('finance');
-                                  setFinanceDeepTab('financial_statements');
-                                  setFinanceDeepSubTab('trial_balance');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'finance' && financeDeepTab === 'financial_statements' && financeDeepSubTab === 'trial_balance' ? 'text-amber-500 font-bold bg-amber-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Sliders className="w-3.5 h-3.5" />
-                                <span>Trial Balance</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('finance');
-                                  setFinanceDeepTab('financial_statements');
-                                  setFinanceDeepSubTab('profit_loss');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'finance' && financeDeepTab === 'financial_statements' && financeDeepSubTab === 'profit_loss' ? 'text-amber-500 font-bold bg-amber-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <TrendingUp className="w-3.5 h-3.5" />
-                                <span>Profit & Loss</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('finance');
-                                  setFinanceDeepTab('financial_statements');
-                                  setFinanceDeepSubTab('balance_sheet');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'finance' && financeDeepTab === 'financial_statements' && financeDeepSubTab === 'balance_sheet' ? 'text-amber-500 font-bold bg-amber-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Layers className="w-3.5 h-3.5" />
-                                <span>Balance Sheet</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('finance');
-                                  setFinanceDeepTab('financial_statements');
-                                  setFinanceDeepSubTab('cash_flow');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'finance' && financeDeepTab === 'financial_statements' && financeDeepSubTab === 'cash_flow' ? 'text-amber-500 font-bold bg-amber-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Activity className="w-3.5 h-3.5" />
-                                <span>Cash Flow</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('finance');
-                                  setFinanceDeepTab('subledgers');
-                                  setFinanceDeepSubTab('receivables');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'finance' && financeDeepTab === 'subledgers' && financeDeepSubTab === 'receivables' ? 'text-amber-500 font-bold bg-amber-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Percent className="w-3.5 h-3.5" />
-                                <span>Accounts Receivable</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('finance');
-                                  setFinanceDeepTab('subledgers');
-                                  setFinanceDeepSubTab('payables');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'finance' && financeDeepTab === 'subledgers' && financeDeepSubTab === 'payables' ? 'text-amber-500 font-bold bg-amber-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Percent className="w-3.5 h-3.5" />
-                                <span>Accounts Payable</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('finance');
-                                  setFinanceDeepTab('fixed_assets');
-                                  setFinanceDeepSubTab('');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'finance' && financeDeepTab === 'fixed_assets' ? 'text-amber-500 font-bold bg-amber-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Building className="w-3.5 h-3.5" />
-                                <span>Fixed Assets</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('finance');
-                                  setFinanceDeepTab('budgets_reconciliation');
-                                  setFinanceDeepSubTab('budgets');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'finance' && financeDeepTab === 'budgets_reconciliation' && financeDeepSubTab === 'budgets' ? 'text-amber-500 font-bold bg-amber-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Wallet className="w-3.5 h-3.5" />
-                                <span>Budget Allocation</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('finance');
-                                  setFinanceDeepTab('budgets_reconciliation');
-                                  setFinanceDeepSubTab('reconciliation');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'finance' && financeDeepTab === 'budgets_reconciliation' && financeDeepSubTab === 'reconciliation' ? 'text-amber-500 font-bold bg-amber-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <CheckCircle className="w-3.5 h-3.5" />
-                                <span>Bank Reconciliation</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('finance');
-                                  setFinanceDeepTab('fiscal_periods');
-                                  setFinanceDeepSubTab('');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'finance' && financeDeepTab === 'fiscal_periods' ? 'text-amber-500 font-bold bg-amber-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Settings className="w-3.5 h-3.5" />
-                                <span>Fiscal Year Setup</span>
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <>
-                          <button
-                            onClick={() => toggleSidebarCategory('finance')}
-                            className="w-full py-2 px-3 rounded-lg text-left text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] flex items-center justify-between transition-colors cursor-pointer"
-                          >
-                            <span className="flex items-center gap-2">
-                              <DollarSign className="w-4 h-4 text-amber-500" style={{ flexShrink: 0 }} />
-                              <span>Financials</span>
-                            </span>
-                            {expandedCategories.finance ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                          </button>
-
-                          {expandedCategories.finance && (
-                            <div className="pl-6 flex flex-col gap-1 mt-1 border-l border-[var(--border-color)] ml-4">
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('finance');
-                                  setFinanceDeepTab('general_ledger');
-                                  setFinanceDeepSubTab('');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'finance' && financeDeepTab === 'general_ledger'
-                                    ? 'text-amber-500 font-bold bg-amber-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <BookOpen className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>General Ledger</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('finance');
-                                  setFinanceDeepTab('financial_statements');
-                                  setFinanceDeepSubTab('trial_balance');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'finance' && financeDeepTab === 'financial_statements' && financeDeepSubTab === 'trial_balance'
-                                    ? 'text-amber-500 font-bold bg-amber-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Sliders className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Trial Balance</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('finance');
-                                  setFinanceDeepTab('financial_statements');
-                                  setFinanceDeepSubTab('profit_loss');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'finance' && financeDeepTab === 'financial_statements' && financeDeepSubTab === 'profit_loss'
-                                    ? 'text-amber-500 font-bold bg-amber-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <TrendingUp className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Profit & Loss</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('finance');
-                                  setFinanceDeepTab('financial_statements');
-                                  setFinanceDeepSubTab('balance_sheet');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'finance' && financeDeepTab === 'financial_statements' && financeDeepSubTab === 'balance_sheet'
-                                    ? 'text-amber-500 font-bold bg-amber-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Layers className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Balance Sheet</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('finance');
-                                  setFinanceDeepTab('financial_statements');
-                                  setFinanceDeepSubTab('cash_flow');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'finance' && financeDeepTab === 'financial_statements' && financeDeepSubTab === 'cash_flow'
-                                    ? 'text-amber-500 font-bold bg-amber-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Activity className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Cash Flow</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('finance');
-                                  setFinanceDeepTab('subledgers');
-                                  setFinanceDeepSubTab('receivables');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'finance' && financeDeepTab === 'subledgers' && financeDeepSubTab === 'receivables'
-                                    ? 'text-amber-500 font-bold bg-amber-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Percent className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Accounts Receivable</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('finance');
-                                  setFinanceDeepTab('subledgers');
-                                  setFinanceDeepSubTab('payables');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'finance' && financeDeepTab === 'subledgers' && financeDeepSubTab === 'payables'
-                                    ? 'text-amber-500 font-bold bg-amber-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Percent className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Accounts Payable</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('finance');
-                                  setFinanceDeepTab('fixed_assets');
-                                  setFinanceDeepSubTab('');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'finance' && financeDeepTab === 'fixed_assets'
-                                    ? 'text-amber-500 font-bold bg-amber-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Building className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Fixed Assets</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('finance');
-                                  setFinanceDeepTab('budgets_reconciliation');
-                                  setFinanceDeepSubTab('budgets');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'finance' && financeDeepTab === 'budgets_reconciliation' && financeDeepSubTab === 'budgets'
-                                    ? 'text-amber-500 font-bold bg-amber-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Wallet className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Budget Allocation</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('finance');
-                                  setFinanceDeepTab('budgets_reconciliation');
-                                  setFinanceDeepSubTab('reconciliation');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'finance' && financeDeepTab === 'budgets_reconciliation' && financeDeepSubTab === 'reconciliation'
-                                    ? 'text-amber-500 font-bold bg-amber-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <CheckCircle className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Bank Reconciliation</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('finance');
-                                  setFinanceDeepTab('fiscal_periods');
-                                  setFinanceDeepSubTab('');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'finance' && financeDeepTab === 'fiscal_periods'
-                                    ? 'text-amber-500 font-bold bg-amber-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Settings className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Fiscal Year Setup</span>
-                              </button>
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Category D: Master Data (MDM) */}
-                  {companyFeatures.includes('MDM') && (
-                    <div className="flex flex-col mt-1 relative">
-                      {sidebarCollapsed ? (
-                        <div className="flex justify-center">
-                          <button
-                            onClick={() => setActivePopoverCategory(activePopoverCategory === 'master_data' ? null : 'master_data')}
-                            className={`p-2.5 rounded-xl hover:bg-[var(--bg-tertiary)] transition-colors cursor-pointer ${activeWorkspaceModule === 'master_data' ? 'bg-cyan-500/10 text-cyan-500' : 'text-cyan-400'}`}
-                            title="Master Data"
-                          >
-                            <Database className="w-4 h-4" />
-                          </button>
-                          {activePopoverCategory === 'master_data' && (
-                            <div className="absolute left-14 top-0 z-50 w-52 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl shadow-2xl p-2 animate-scale-up text-left flex flex-col gap-1 max-h-[360px] overflow-y-auto">
-                              <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-widest uppercase px-2 block mb-1">Master Data</span>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('master_data');
-                                  setMdmMaster('product');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'master_data' && mdmMaster === 'product' ? 'text-cyan-400 font-bold bg-cyan-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Package className="w-3.5 h-3.5" />
-                                <span>Product Master</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('master_data');
-                                  setMdmMaster('customer');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'master_data' && mdmMaster === 'customer' ? 'text-cyan-400 font-bold bg-cyan-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Users className="w-3.5 h-3.5" />
-                                <span>Customer Master</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('master_data');
-                                  setMdmMaster('vendor');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'master_data' && mdmMaster === 'vendor' ? 'text-cyan-400 font-bold bg-cyan-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Database className="w-3.5 h-3.5" />
-                                <span>Vendor Master</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('master_data');
-                                  setMdmMaster('employee');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'master_data' && mdmMaster === 'employee' ? 'text-cyan-400 font-bold bg-cyan-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <User className="w-3.5 h-3.5" />
-                                <span>Employee Master</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('master_data');
-                                  setMdmMaster('warehouse');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'master_data' && mdmMaster === 'warehouse' ? 'text-cyan-400 font-bold bg-cyan-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Building className="w-3.5 h-3.5" />
-                                <span>Warehouse Master</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('master_data');
-                                  setMdmMaster('tax');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'master_data' && mdmMaster === 'tax' ? 'text-cyan-400 font-bold bg-cyan-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Percent className="w-3.5 h-3.5" />
-                                <span>Tax Master</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('master_data');
-                                  setMdmMaster('unit');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'master_data' && mdmMaster === 'unit' ? 'text-cyan-400 font-bold bg-cyan-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Ruler className="w-3.5 h-3.5" />
-                                <span>Unit Master</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('master_data');
-                                  setMdmMaster('category');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'master_data' && mdmMaster === 'category' ? 'text-cyan-400 font-bold bg-cyan-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Folder className="w-3.5 h-3.5" />
-                                <span>Category Master</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('master_data');
-                                  setMdmMaster('brand');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'master_data' && mdmMaster === 'brand' ? 'text-cyan-400 font-bold bg-cyan-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Tag className="w-3.5 h-3.5" />
-                                <span>Brand Master</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('master_data');
-                                  setMdmMaster('account');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'master_data' && mdmMaster === 'account' ? 'text-cyan-400 font-bold bg-cyan-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <BookOpen className="w-3.5 h-3.5" />
-                                <span>Chart of Accounts</span>
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <>
-                          <button
-                            onClick={() => toggleSidebarCategory('master_data')}
-                            className="w-full py-2 px-3 rounded-lg text-left text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] flex items-center justify-between transition-colors cursor-pointer"
-                          >
-                            <span className="flex items-center gap-2">
-                              <Database className="w-4 h-4 text-cyan-400" style={{ flexShrink: 0 }} />
-                              <span>Master Data</span>
-                            </span>
-                            {expandedCategories.master_data ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                          </button>
-
-                          {expandedCategories.master_data && (
-                            <div className="pl-6 flex flex-col gap-1 mt-1 border-l border-[var(--border-color)] ml-4">
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('master_data');
-                                  setMdmMaster('product');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'master_data' && mdmMaster === 'product'
-                                    ? 'text-cyan-400 font-bold bg-cyan-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Package className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Product Master</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('master_data');
-                                  setMdmMaster('customer');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'master_data' && mdmMaster === 'customer'
-                                    ? 'text-cyan-400 font-bold bg-cyan-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Users className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Customer Master</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('master_data');
-                                  setMdmMaster('vendor');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'master_data' && mdmMaster === 'vendor'
-                                    ? 'text-cyan-400 font-bold bg-cyan-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Database className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Vendor Master</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('master_data');
-                                  setMdmMaster('employee');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'master_data' && mdmMaster === 'employee'
-                                    ? 'text-cyan-400 font-bold bg-cyan-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <User className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Employee Master</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('master_data');
-                                  setMdmMaster('warehouse');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'master_data' && mdmMaster === 'warehouse'
-                                    ? 'text-cyan-400 font-bold bg-cyan-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Building className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Warehouse Master</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('master_data');
-                                  setMdmMaster('tax');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'master_data' && mdmMaster === 'tax'
-                                    ? 'text-cyan-400 font-bold bg-cyan-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Percent className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Tax Master</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('master_data');
-                                  setMdmMaster('unit');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'master_data' && mdmMaster === 'unit'
-                                    ? 'text-cyan-400 font-bold bg-cyan-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Ruler className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Unit Master</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('master_data');
-                                  setMdmMaster('category');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'master_data' && mdmMaster === 'category'
-                                    ? 'text-cyan-400 font-bold bg-cyan-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Folder className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Category Master</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('master_data');
-                                  setMdmMaster('brand');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'master_data' && mdmMaster === 'brand'
-                                    ? 'text-cyan-400 font-bold bg-cyan-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Tag className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Brand Master</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('master_data');
-                                  setMdmMaster('account');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'master_data' && mdmMaster === 'account'
-                                    ? 'text-cyan-400 font-bold bg-cyan-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <BookOpen className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Chart of Accounts</span>
-                              </button>
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )}
+                  );
+                  })}
 
                   {/* Category E: System Administration (Admin Role Only) */}
                   {user.role === 'Admin' && companyFeatures.includes('ADMIN') && (
@@ -3667,267 +2929,14 @@ export default function App() {
                   STANDARD USER VIEW A: CRM PIPELINES Mock
                   ========================================== */}
               {activeWorkspaceModule === 'crm' && !selectedCompany && (
-                <div className="max-w-4xl mx-auto select-none animate-fade-in">
-                  <div className="flex justify-between items-center border-b border-[var(--border-color)] pb-3">
-                    <h3 className="font-bold text-base text-[var(--text-primary)] flex items-center gap-2 font-display">
-                      <Users className="w-5 h-5 text-indigo-400" />
-                      Sales & Customer Relations (CRM)
-                    </h3>
-                    <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[9px] font-bold rounded">
-                      ACTIVE
-                    </span>
-                  </div>
-
-
-
-                  {crmSubTab === 'leads' && companyFeatures.includes('CRM_LEADS') && (
-                    <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4 animate-fade-in">
-                      <div className="bg-[var(--bg-secondary)] p-4 rounded-xl border border-[var(--border-color)]">
-                        <h4 className="text-xs font-bold text-[var(--text-secondary)] uppercase font-display">Leads Flow</h4>
-                        <div className="mt-3 flex flex-col gap-2">
-                          <div className="p-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg text-xs flex justify-between items-center">
-                            <div>
-                              <p className="font-bold text-[var(--text-primary)]">Albert Johnson</p>
-                              <span className="text-[10px] text-[var(--text-muted)]">Estimated: $24,000</span>
-                            </div>
-                            <span className="px-1.5 py-0.5 bg-indigo-500/10 text-indigo-400 text-[8px] font-bold rounded uppercase">Hot</span>
-                          </div>
-                          <div className="p-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg text-xs flex justify-between items-center">
-                            <div>
-                              <p className="font-bold text-[var(--text-primary)]">Acme Corp Sales</p>
-                              <span className="text-[10px] text-[var(--text-muted)]">Estimated: $120,000</span>
-                            </div>
-                            <span className="px-1.5 py-0.5 bg-purple-500/10 text-purple-400 text-[8px] font-bold rounded uppercase">Enterprise</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="bg-[var(--bg-secondary)] p-4 rounded-xl border border-[var(--border-color)]">
-                        <h4 className="text-xs font-bold text-[var(--text-secondary)] uppercase font-display">Sales Pipelines Conversion</h4>
-                        <div className="mt-3 bg-[var(--bg-primary)] p-4 rounded-lg flex items-center justify-between border border-[var(--border-color)]">
-                          <div>
-                            <span className="text-[10px] font-bold text-[var(--text-muted)] block uppercase">Target Close Deals</span>
-                            <p className="text-xl font-bold text-[var(--text-primary)] font-display mt-0.5">$144,000</p>
-                          </div>
-                          <div className="w-10 h-10 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400">
-                            <TrendingUp className="w-5 h-5" />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {crmSubTab === 'customer_logs' && companyFeatures.includes('CRM_CUSTOMER') && (
-                    <div className="mt-6 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-xl overflow-hidden p-6 animate-fade-in flex flex-col gap-4 text-left">
-                      <div className="flex justify-between items-center border-b border-[var(--border-color)] pb-3">
-                        <div>
-                          <h4 className="text-sm font-bold text-[var(--text-primary)] font-display">Support Interaction Logs Ledger</h4>
-                          <p className="text-[var(--text-secondary)] text-[10px] mt-0.5">Live tracking of corporate customer relationship points</p>
-                        </div>
-                        <button
-                          onClick={() => {
-                            const newLog = {
-                              id: String(Math.floor(1000 + Math.random() * 9000)),
-                              customer: "Global Partner Support",
-                              details: "Configured multi-tenant database federation schema",
-                              medium: "Video Conf",
-                              status: "RESOLVED",
-                              duration: "28m 15s",
-                              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                            };
-                            setCustomerLogs([newLog, ...customerLogs]);
-                            setSuccessMsg("Support interaction logged successfully!");
-                          }}
-                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-xs cursor-pointer transition-colors"
-                        >
-                          Log Support Interaction
-                        </button>
-                      </div>
-
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs border-collapse">
-                          <thead>
-                            <tr className="border-b border-[var(--border-color)] text-[var(--text-muted)] font-bold">
-                              <th className="py-2.5 px-3">Ticket ID</th>
-                              <th className="py-2.5 px-3">Client</th>
-                              <th className="py-2.5 px-3">Interaction Details</th>
-                              <th className="py-2.5 px-3">Channel</th>
-                              <th className="py-2.5 px-3">Duration</th>
-                              <th className="py-2.5 px-3">Time</th>
-                              <th className="py-2.5 px-3 text-center">Status</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {customerLogs.map(log => (
-                              <tr key={log.id} className="border-b border-[var(--border-color)] hover:bg-[var(--bg-primary)] transition-colors">
-                                <td className="py-3 px-3 font-mono font-bold text-indigo-400">#{log.id}</td>
-                                <td className="py-3 px-3 font-bold text-[var(--text-primary)]">{log.customer}</td>
-                                <td className="py-3 px-3 text-[var(--text-secondary)]">{log.details}</td>
-                                <td className="py-3 px-3">
-                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border border-[var(--border-color)]">
-                                    {log.medium}
-                                  </span>
-                                </td>
-                                <td className="py-3 px-3 text-[var(--text-secondary)] font-mono">{log.duration}</td>
-                                <td className="py-3 px-3 text-[var(--text-muted)] font-mono">{log.time}</td>
-                                <td className="py-3 px-3 text-center">
-                                  <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
-                                    log.status === 'RESOLVED' 
-                                      ? 'bg-emerald-500/10 text-emerald-500' 
-                                      : 'bg-amber-500/10 text-amber-500'
-                                  }`}>
-                                    {log.status}
-                                  </span>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* ==========================================
-                  STANDARD USER VIEW B: HR ROSTER Mock
-                  ========================================== */}
-              {activeWorkspaceModule === 'hr' && !selectedCompany && (
-                <div className="max-w-4xl mx-auto select-none animate-fade-in">
-                  <div className="flex justify-between items-center border-b border-[var(--border-color)] pb-3">
-                    <h3 className="font-bold text-base text-[var(--text-primary)] flex items-center gap-2 font-display">
-                      <Briefcase className="w-5 h-5 text-emerald-400" />
-                      Human Resources Console (HR)
-                    </h3>
-                    <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[9px] font-bold rounded">
-                      ACTIVE
-                    </span>
-                  </div>
-
-                  {hrSubTab === 'roster' && companyFeatures.includes('HR_ROSTER') && (
-                    <div className="mt-6 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-xl overflow-hidden animate-fade-in text-left">
-                      <div className="px-4 py-3 bg-[var(--bg-tertiary)] border-b border-[var(--border-color)]">
-                        <h4 className="text-xs font-bold text-[var(--text-primary)] font-display">Active Corporate Workspace Employees</h4>
-                      </div>
-                      
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs border-collapse">
-                          <thead>
-                            <tr className="border-b border-[var(--border-color)] text-[var(--text-muted)] font-bold">
-                              <th className="py-2.5 px-4">Employee Name</th>
-                              <th className="py-2.5 px-4">Role Mapping</th>
-                              <th className="py-2.5 px-4">Workspace status</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {companyUsers.map(usr => (
-                              <tr key={usr.id} className="border-b border-[var(--border-color)] hover:bg-[var(--bg-primary)]">
-                                <td className="py-3 px-4 font-bold text-[var(--text-primary)]">{usr.username}</td>
-                                <td className="py-3 px-4">
-                                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                    usr.role === 'Admin' ? 'bg-indigo-500/10 text-indigo-400' : 'bg-[var(--bg-tertiary)]'
-                                  }`}>
-                                    {usr.role || 'Employee'}
-                                  </span>
-                                </td>
-                                <td className="py-3 px-4">
-                                  <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-500 rounded-full text-[9px] font-bold">
-                                    {usr.status}
-                                  </span>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-
-                  {hrSubTab === 'attendance' && companyFeatures.includes('HR_ATTENDANCE') && (
-                    <div className="mt-6 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-xl overflow-hidden p-6 animate-fade-in flex flex-col gap-4 text-left">
-                      <div className="flex justify-between items-center border-b border-[var(--border-color)] pb-3">
-                        <div>
-                          <h4 className="text-sm font-bold text-[var(--text-primary)] font-display">Shift Punch-Clock & Roster Logs</h4>
-                          <p className="text-[var(--text-secondary)] text-[10px] mt-0.5">Interactive employee clock-in records & hourly duration metrics</p>
-                        </div>
-                        <button
-                          onClick={() => {
-                            if (isPunchedIn) {
-                              setAttendanceLogs(prev => prev.map((log, i) => i === 0 && log.username === (user?.username || 'Employee') ? {
-                                ...log,
-                                checkOut: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-                                duration: "8.5 hrs",
-                                status: "OFF_DUTY"
-                              } : log));
-                              setIsPunchedIn(false);
-                              setSuccessMsg("Shift punch-out recorded. Duration finalized!");
-                            } else {
-                              const newRecord = {
-                                id: String(attendanceLogs.length + 1),
-                                username: user?.username || "Employee",
-                                checkIn: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-                                checkOut: "--:--:--",
-                                duration: "Running...",
-                                status: "ON_DUTY"
-                              };
-                              setAttendanceLogs([newRecord, ...attendanceLogs]);
-                              setIsPunchedIn(true);
-                              setSuccessMsg("Shift punch-in recorded successfully! Roster clock active.");
-                            }
-                          }}
-                          className={`px-4 py-2 font-bold rounded-lg text-xs cursor-pointer transition-colors ${
-                            isPunchedIn 
-                              ? 'bg-red-500 hover:bg-red-600 text-white' 
-                              : 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                          }`}
-                        >
-                          {isPunchedIn ? 'Punch Out Current Shift' : 'Punch In New Shift'}
-                        </button>
-                      </div>
-
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs border-collapse">
-                          <thead>
-                            <tr className="border-b border-[var(--border-color)] text-[var(--text-muted)] font-bold">
-                              <th className="py-2.5 px-3">Roster Index</th>
-                              <th className="py-2.5 px-3">Employee Name</th>
-                              <th className="py-2.5 px-3">Clock In Time</th>
-                              <th className="py-2.5 px-3">Clock Out Time</th>
-                              <th className="py-2.5 px-3 font-mono">Shift Duration</th>
-                              <th className="py-2.5 px-3 text-center">Status</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {attendanceLogs.map(log => (
-                              <tr key={log.id} className="border-b border-[var(--border-color)] hover:bg-[var(--bg-primary)] transition-colors">
-                                <td className="py-3 px-3 font-mono text-[var(--text-muted)]">#{log.id}</td>
-                                <td className="py-3 px-3 font-bold text-[var(--text-primary)]">{log.username}</td>
-                                <td className="py-3 px-3 font-mono text-[var(--text-secondary)]">{log.checkIn}</td>
-                                <td className="py-3 px-3 font-mono text-[var(--text-secondary)]">{log.checkOut}</td>
-                                <td className="py-3 px-3 font-mono text-indigo-400 font-bold">{log.duration}</td>
-                                <td className="py-3 px-3 text-center">
-                                  <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
-                                    log.status === 'ON_DUTY' 
-                                      ? 'bg-emerald-500/10 text-emerald-500 animate-pulse' 
-                                      : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)]'
-                                  }`}>
-                                    {log.status.replace('_', ' ')}
-                                  </span>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* ==========================================
-                  STANDARD USER VIEW C: FINANCIALS (Finance)
-                  ========================================== */}
-              {activeWorkspaceModule === 'finance' && !selectedCompany && (
+                  <CrmModule user={user!} activeTab={activeWorkspaceSubModule} />
+                )}
+  
+                {activeWorkspaceModule === 'hr' && !selectedCompany && (
+                  <HumanResources user={user!} activeTab={activeWorkspaceSubModule} />
+                )}
+  
+                {activeWorkspaceModule === 'finance' && !selectedCompany && (
                 <FinanceAccounting
                   user={user!}
                   token={token || ''}

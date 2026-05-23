@@ -1,4 +1,8 @@
-import React, { useState } from 'react';
+import os
+
+file_path = "d:\\ERP\\Manual ERP\\frontend\\src\\components\\InventoryWarehouse.tsx"
+
+content = """import React, { useState } from 'react';
 import { 
   Box, MapPin, ArrowRightLeft, SlidersHorizontal, FileText, 
   Truck, BarChart3, Plus, Search, Filter, Download, ArrowUpRight, 
@@ -6,13 +10,11 @@ import {
 } from 'lucide-react';
 
 interface Props {
-  activeTab?: string;
   user: any;
 }
 
-const InventoryWarehouse: React.FC<Props> = ({ user, activeTab }) => {
-    const mapping: any = {'INVENTORY_TRACKING': 'ledger', 'INVENTORY_MULTI_WH': 'locations', 'INVENTORY_TRANSFERS': 'transfers', 'INVENTORY_ADJUSTMENTS': 'adjustments', 'INVENTORY_GRN': 'grn', 'INVENTORY_DISPATCH': 'dispatch', 'INVENTORY_REPORTS': 'reports', 'INVENTORY_LEDGER': 'ledger'};
-  const currentTab = (activeTab && mapping[activeTab]) ? mapping[activeTab] : 'ledger';
+const InventoryWarehouse: React.FC<Props> = ({ user }) => {
+  const [activeTab, setActiveTab] = useState('ledger');
   const [searchQuery, setSearchQuery] = useState('');
 
   const tabs = [
@@ -56,9 +58,31 @@ const InventoryWarehouse: React.FC<Props> = ({ user, activeTab }) => {
         </div>
       </div>
 
+      {/* Tabs */}
+      <div className="flex gap-1 overflow-x-auto no-scrollbar border-b border-[var(--border-color)] mb-6">
+        {tabs.map(tab => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-2 px-4 py-3 border-b-2 font-semibold text-sm transition-colors whitespace-nowrap ${
+                isActive 
+                  ? 'border-indigo-500 text-indigo-400 bg-indigo-500/5' 
+                  : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]'
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
       {/* Content Area */}
       <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
-        {currentTab === 'ledger' && (
+        {activeTab === 'ledger' && (
           <div className="flex flex-col gap-6 animate-fade-in">
             {/* KPI Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -181,3 +205,8 @@ const InventoryWarehouse: React.FC<Props> = ({ user, activeTab }) => {
 };
 
 export default InventoryWarehouse;
+"""
+
+with open(file_path, "w", encoding="utf-8") as f:
+    f.write(content)
+print("InventoryWarehouse created.")
