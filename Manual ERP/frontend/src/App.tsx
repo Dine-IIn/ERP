@@ -130,6 +130,9 @@ export default function App() {
   const [companies, setCompanies] = useState<any[]>([]); // Super Admin company list
   const [selectedCompany, setSelectedCompany] = useState<any | null>(null); // Super Admin focused tenant profile
   const [selectedCompanyUsers, setSelectedCompanyUsers] = useState<any[]>([]); // Super Admin focused tenant's users list
+  const [editCompanyFeatures, setEditCompanyFeatures] = useState<string[]>([]);
+  const [isEditingAccess, setIsEditingAccess] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   
   const [pendingUsers, setPendingUsers] = useState<any[]>([]); // Company Admin approvals list
   const [companyUsers, setCompanyUsers] = useState<any[]>([]); // Company Admin employees list
@@ -202,6 +205,16 @@ export default function App() {
       }
     }
   }, [companyFeatures]);
+
+  useEffect(() => {
+    if (selectedCompany) {
+      setEditCompanyFeatures(selectedCompany.features.map((f: any) => f.feature.key));
+    } else {
+      setEditCompanyFeatures([]);
+    }
+    setIsEditingAccess(false);
+    setSaveStatus('idle');
+  }, [selectedCompany]);
 
   // --- FORM STATES ---
   // Login Form
@@ -300,26 +313,42 @@ export default function App() {
     setNewCompany({ ...newCompany, features: updated });
   };
 
-  const handleEnableAllCompany = async () => {
-    if (!selectedCompany) return;
+  const handleEnableAllCompany = () => {
     const all = MASTER_FEATURES_HIERARCHY.flatMap(cat => [cat.key, ...cat.children.map(c => c.key)]);
-    try {
-      await apiRequest(`/api/super/company/${selectedCompany.id}`, 'PATCH', { features: all });
-      fetchSuperAdminData();
-    } catch (e) {}
+    setEditCompanyFeatures(all);
   };
 
-  const handleEnableCategoryAllCompany = async (catKey: string) => {
-    if (!selectedCompany) return;
+  const handleEnableCategoryAllCompany = (catKey: string) => {
     const cat = MASTER_FEATURES_HIERARCHY.find(c => c.key === catKey);
     if (!cat) return;
-    const current = selectedCompany.features.map((f: any) => f.feature.key);
     const toAdd = [cat.key, ...cat.children.map(c => c.key)];
-    const updated = [...new Set([...current, ...toAdd])];
+    setEditCompanyFeatures(prev => [...new Set([...prev, ...toAdd])]);
+  };
+
+  const handleSaveCompanyFeatures = async () => {
+    if (!selectedCompany) return;
+    if (editCompanyFeatures.length === 0) {
+      setErrorMsg("Please enable at least one feature flag module.");
+      return;
+    }
+    setSaveStatus('saving');
+    setErrorMsg(null);
+    setSuccessMsg(null);
     try {
-      await apiRequest(`/api/super/company/${selectedCompany.id}`, 'PATCH', { features: updated });
-      fetchSuperAdminData();
-    } catch (e) {}
+      await apiRequest(`/api/super/company/${selectedCompany.id}`, 'PATCH', {
+        features: editCompanyFeatures
+      });
+      setSaveStatus('success');
+      await fetchSuperAdminData();
+      
+      // Auto-close success modal and exit edit mode after 1.5 seconds
+      setTimeout(() => {
+        setSaveStatus('idle');
+        setIsEditingAccess(false);
+      }, 1500);
+    } catch (e) {
+      setSaveStatus('error');
+    }
   };
 
   const [editUserForm, setEditUserForm] = useState({
@@ -709,11 +738,11 @@ export default function App() {
     setErrorMsg(null);
   };
 
-  const handleToggleCompanyFeatureHierarchical = async (featureKey: string) => {
+  const handleToggleCompanyFeatureHierarchical = (featureKey: string) => {
     if (!selectedCompany) return;
     
     // Map current features
-    let updatedFeatures: string[] = selectedCompany.features.map((f: any) => f.feature.key);
+    let updatedFeatures = [...editCompanyFeatures];
     const isCategory = getCategoryKeys().includes(featureKey);
 
     if (isCategory) {
@@ -742,13 +771,7 @@ export default function App() {
       }
     }
 
-    try {
-      await apiRequest(`/api/super/company/${selectedCompany.id}`, 'PATCH', {
-        features: updatedFeatures
-      });
-      setSuccessMsg(`Features mapping updated successfully.`);
-      fetchSuperAdminData();
-    } catch (e) {}
+    setEditCompanyFeatures(updatedFeatures);
   };
 
   const handleToggleNewCompanyFeatureHierarchical = (featureKey: string) => {
@@ -2312,7 +2335,7 @@ export default function App() {
           <div className={`flex-1 ${sidebarCollapsed ? 'ml-16' : 'ml-64'} flex flex-col min-h-screen transition-all duration-300`}>
             
             {/* Top Workspace Header */}
-            <header className="sticky top-0 z-20 bg-[var(--bg-secondary)] border-b border-[var(--border-color)] px-6 py-4 flex items-center justify-between select-none">
+            <header className="sticky top-0 z-35 bg-[var(--bg-secondary)] border-b border-[var(--border-color)] px-6 py-4 flex items-center justify-between select-none">
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-bold text-indigo-500 tracking-wider uppercase font-display">Workstation Hub</span>
                 <span className="text-slate-400">/</span>
@@ -2323,6 +2346,47 @@ export default function App() {
 
               {/* Top Right Corner Status */}
               <div className="flex items-center gap-4">
+                {/* Chat & Notification Control Group */}
+                <div className="flex items-center gap-2 border-r border-[var(--border-color)] pr-4">
+                  {/* Chat Toggle Button */}
+                  <button
+                    onClick={() => {
+                      setShowChatDrawer(!showChatDrawer);
+                      setShowAlertsPopup(false);
+                      if (!showChatDrawer) setChatActiveView('list');
+                    }}
+                    className={`flex items-center justify-center p-2 rounded-lg transition-all cursor-pointer border ${
+                      showChatDrawer 
+                        ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/40' 
+                        : 'bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 border-indigo-500/20 hover:scale-105 active:scale-95'
+                    }`}
+                    title="Corporate Chat Messenger"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                  </button>
+
+                  {/* Notification Toggle Button */}
+                  <button
+                    onClick={() => {
+                      setShowAlertsPopup(!showAlertsPopup);
+                      setShowChatDrawer(false);
+                    }}
+                    className={`relative flex items-center justify-center p-2 rounded-lg transition-all cursor-pointer border ${
+                      showAlertsPopup 
+                        ? 'bg-purple-500/20 text-purple-400 border-purple-500/40' 
+                        : 'bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border-purple-500/20 hover:scale-105 active:scale-95'
+                    }`}
+                    title="Alert Logs & Gateways"
+                  >
+                    <Bell className="w-4 h-4" />
+                    {notifications.filter((n: any) => !n.isRead).length > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-rose-500 text-white font-extrabold text-[8px] px-1 py-0.5 rounded-full leading-none shrink-0 shadow-sm animate-pulse">
+                        {notifications.filter((n: any) => !n.isRead).length}
+                      </span>
+                    )}
+                  </button>
+                </div>
+
                 {/* Backup Info & Trigger */}
                 <div className="flex items-center gap-2 border-r border-[var(--border-color)] pr-4">
                   <button
@@ -2690,11 +2754,46 @@ export default function App() {
                         Toggle category locks or individually assign active features for this corporate tenant. Child sub-features auto-enable their parent categories.
                       </p>
 
-                      <div className="flex items-center justify-between mt-3 mb-1">
+                      <div className="flex flex-wrap items-center gap-2 justify-between mt-3 mb-1">
                         <label className="text-[10px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Subscription Feature Modules</label>
-                        <button type="button" onClick={handleEnableAllCompany} className="px-3 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold shadow-sm transition-colors cursor-pointer">
-                          Enable All Categories & Features
-                        </button>
+                        <div className="flex gap-2">
+                          {!isEditingAccess ? (
+                            <button
+                              type="button"
+                              onClick={() => setIsEditingAccess(true)}
+                              className="px-3 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold shadow-sm transition-colors cursor-pointer flex items-center gap-1"
+                            >
+                              <Sliders className="w-3.5 h-3.5" /> Edit Access
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={handleSaveCompanyFeatures}
+                                className="px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold shadow-sm transition-colors cursor-pointer flex items-center gap-1 shrink-0"
+                              >
+                                <CheckCircle className="w-3.5 h-3.5" /> Save
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsEditingAccess(false);
+                                  setEditCompanyFeatures(selectedCompany.features.map((f: any) => f.feature.key));
+                                }}
+                                className="px-3 py-1.5 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-[10px] font-bold shadow-sm transition-colors cursor-pointer shrink-0"
+                              >
+                                Cancel
+                              </button>
+                              <button 
+                                type="button" 
+                                onClick={handleEnableAllCompany} 
+                                className="px-3 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold shadow-sm transition-colors cursor-pointer shrink-0"
+                              >
+                                Enable All
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </div>
                       <div className="mb-4 relative">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -2710,7 +2809,7 @@ export default function App() {
                       </div>
                       <div className="flex flex-col gap-3">
                         {filteredHierarchy.map((cat: any) => {
-                          const activeKeys = selectedCompany.features.map((f: any) => f.feature.key);
+                          const activeKeys = editCompanyFeatures;
                           const isParentActive = activeKeys.includes(cat.key);
                           const isNotifications = cat.key === 'NOTIFICATIONS';
                           const isExpanded = expandedFeatureCategories.includes(cat.key) || cat.isMatch;
@@ -2727,7 +2826,7 @@ export default function App() {
                                   <span className="text-[9px] text-[var(--text-muted)] mt-0.5 block ml-6">{cat.desc}</span>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                  {!isNotifications && (
+                                  {!isNotifications && isEditingAccess && (
                                     <button
                                       type="button"
                                       onClick={() => handleEnableCategoryAllCompany(cat.key)}
@@ -2738,14 +2837,16 @@ export default function App() {
                                   )}
                                   <button
                                     type="button"
-                                    disabled={isNotifications}
+                                    disabled={!isEditingAccess || isNotifications}
                                     onClick={() => handleToggleCompanyFeatureHierarchical(cat.key)}
-                                    className={`px-2 py-0.5 rounded text-[9px] font-extrabold transition-colors cursor-pointer ${
-                                      isNotifications 
-                                        ? 'bg-indigo-500/20 text-indigo-400 cursor-not-allowed border border-indigo-500/30'
-                                        : isParentActive 
-                                          ? 'bg-emerald-600 text-white hover:bg-emerald-700' 
-                                          : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                                    className={`px-2 py-0.5 rounded text-[9px] font-extrabold transition-colors ${
+                                      !isEditingAccess
+                                        ? 'bg-[var(--bg-tertiary)] text-[var(--text-muted)] cursor-not-allowed border border-[var(--border-color)]'
+                                        : isNotifications 
+                                          ? 'bg-indigo-500/20 text-indigo-400 cursor-not-allowed border border-indigo-500/30'
+                                          : isParentActive 
+                                            ? 'bg-emerald-600 text-white hover:bg-emerald-700' 
+                                            : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                                     }`}
                                   >
                                     {isNotifications ? 'ENFORCED' : isParentActive ? 'ENABLED' : 'DISABLED'}
@@ -2778,14 +2879,18 @@ export default function App() {
 
                                       <button
                                         type="button"
-                                        disabled={isLocked || (isNotifications && child.key === 'NOTIFICATIONS_PUSH')}
+                                        disabled={isLocked || (isNotifications && child.key === 'NOTIFICATIONS_PUSH') || !isEditingAccess}
                                         onClick={() => handleToggleCompanyFeatureHierarchical(child.key)}
                                         className={`px-1.5 py-0.5 rounded text-[8px] font-bold cursor-pointer transition-colors ${
                                           isLocked
                                             ? 'bg-transparent text-[var(--text-muted)] border border-dashed border-[var(--border-color)] cursor-not-allowed'
-                                            : isChildActive
-                                              ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-                                              : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                                            : !isEditingAccess
+                                              ? isChildActive
+                                                ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 cursor-default'
+                                                : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)] border border-[var(--border-color)] cursor-default'
+                                              : isChildActive
+                                                ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                                                : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                                         }`}
                                       >
                                         {isLocked ? 'LOCKED' : isChildActive ? 'ACTIVE' : 'OFF'}
@@ -2799,6 +2904,28 @@ export default function App() {
                           );
                         })}
                       </div>
+                      
+                      {isEditingAccess && (
+                        <div className="mt-4 pt-3 border-t border-[var(--border-color)]/50 flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsEditingAccess(false);
+                              setEditCompanyFeatures(selectedCompany.features.map((f: any) => f.feature.key));
+                            }}
+                            className="px-4 py-2 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-bold transition-all cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSaveCompanyFeatures}
+                            className="px-5 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-lg transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center gap-1.5"
+                          >
+                            <CheckCircle className="w-4 h-4" /> Save Access Changes
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {/* Corporate Admin addition card */}
@@ -3637,11 +3764,17 @@ export default function App() {
               REAL-TIME ENTERPRISE CHAT DRAWER
               ========================================== */}
           {showChatDrawer && (
+            <div 
+              className="fixed inset-0 z-30 bg-transparent cursor-default" 
+              onClick={() => setShowChatDrawer(false)}
+            />
+          )}
+
+          {showChatDrawer && (
             <div
-              className="fixed bottom-24 z-40 w-[380px] h-[550px] bg-[var(--bg-card)]/95 backdrop-blur-md border border-[var(--border-color)] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-scale-up text-left"
+              className="fixed top-[76px] right-6 z-40 w-[380px] h-[550px] bg-[var(--bg-card)]/95 backdrop-blur-md border border-[var(--border-color)] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-scale-up text-left"
               style={{
-                left: sidebarCollapsed ? '88px' : '280px',
-                transition: 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s ease',
+                transition: 'transform 0.2s ease',
               }}
             >
               {/* Header */}
@@ -4157,10 +4290,9 @@ export default function App() {
 
           {showAlertsPopup && (
             <div
-              className="fixed bottom-40 z-40 w-[380px] h-[480px] bg-[var(--bg-card)]/95 backdrop-blur-md border border-[var(--border-color)] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-scale-up text-left text-xs font-sans"
+              className="fixed top-[76px] right-6 z-40 w-[380px] h-[480px] bg-[var(--bg-card)]/95 backdrop-blur-md border border-[var(--border-color)] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-scale-up text-left text-xs font-sans"
               style={{
-                left: sidebarCollapsed ? '88px' : '280px',
-                transition: 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s ease',
+                transition: 'transform 0.2s ease',
               }}
             >
               {/* Header */}
@@ -4236,49 +4368,7 @@ export default function App() {
             </div>
           )}
 
-          {/* ==========================================
-              LAUNCHER BUBBLE ACTION FOR ALERT LOGS
-              ========================================== */}
-          <button
-            onClick={() => {
-              setShowAlertsPopup(!showAlertsPopup);
-              setShowChatDrawer(false);
-            }}
-            className={`fixed bottom-24 z-40 p-4 ${
-              showAlertsPopup ? 'bg-purple-700' : 'bg-purple-600 hover:bg-purple-500'
-            } hover:scale-105 active:scale-95 text-white rounded-full shadow-lg cursor-pointer transition-all duration-200 flex items-center justify-center`}
-            style={{
-              left: sidebarCollapsed ? '88px' : '280px',
-              transition: 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-            }}
-            title="Alert Logs & Gateways"
-          >
-            <Bell className="w-6 h-6" />
-            {notifications.filter((n: any) => !n.isRead).length > 0 && (
-              <span className="absolute -top-1 -right-1 bg-rose-500 text-white font-extrabold text-[9px] px-1.5 py-0.5 rounded-full border-2 border-slate-900 shadow-md animate-scale-up">
-                {notifications.filter((n: any) => !n.isRead).length}
-              </span>
-            )}
-          </button>
 
-          {/* ==========================================
-              LAUNCHER BUBBLE ACTION TRIGGER BUTTON
-              ========================================== */}
-          <button
-            onClick={() => {
-              setShowChatDrawer(!showChatDrawer);
-              setShowAlertsPopup(false);
-              setChatActiveView('list');
-            }}
-            className="fixed bottom-6 z-40 p-4 bg-indigo-600 hover:bg-indigo-500 hover:scale-105 active:scale-95 text-white rounded-full shadow-lg cursor-pointer transition-all duration-200 flex items-center justify-center"
-            style={{
-              left: sidebarCollapsed ? '88px' : '280px',
-              transition: 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-            }}
-            title="Corporate Chat Messenger"
-          >
-            <MessageSquare className="w-6 h-6 animate-pulse" />
-          </button>
 
           {/* ==========================================
               MODAL: CREATE CHAT GROUP / CHANNEL
@@ -4656,6 +4746,59 @@ export default function App() {
                 >
                   Close Settings
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* ==========================================
+              MODAL: SUPER ADMIN - ACCESS SAVING OVERLAY POPUP
+              ========================================== */}
+          {saveStatus !== 'idle' && (
+            <div className="fixed inset-0 z-55 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 animate-fade-in select-none">
+              <div className="bg-[var(--bg-card)] border border-[var(--border-color)] p-6 rounded-2xl shadow-2xl flex flex-col items-center gap-4 text-center max-w-xs animate-scale-up">
+                {saveStatus === 'saving' && (
+                  <>
+                    <svg className="animate-spin h-10 w-10 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <div>
+                      <h4 className="font-bold text-sm text-[var(--text-primary)] font-display">Saving Configuration</h4>
+                      <p className="text-[var(--text-secondary)] text-[10px] mt-1">Applying access modules to tenant registry...</p>
+                    </div>
+                  </>
+                )}
+
+                {saveStatus === 'success' && (
+                  <>
+                    <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-full border border-emerald-500/20 animate-bounce">
+                      <CheckCircle className="w-8 h-8" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-emerald-500 font-display">Success!</h4>
+                      <p className="text-[var(--text-secondary)] text-[10px] mt-1">Access updated successfully.</p>
+                    </div>
+                  </>
+                )}
+
+                {saveStatus === 'error' && (
+                  <>
+                    <div className="p-3 bg-rose-500/10 text-rose-500 rounded-full border border-rose-500/20 animate-pulse">
+                      <AlertCircle className="w-8 h-8" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-rose-500 font-display">Failed</h4>
+                      <p className="text-[var(--text-secondary)] text-[10px] mt-1">Failed to update access settings.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSaveStatus('idle')}
+                      className="w-full mt-2 bg-[var(--bg-tertiary)] border border-[var(--border-color)] hover:text-[var(--text-primary)] font-bold py-1.5 rounded-lg text-[10px] cursor-pointer"
+                    >
+                      Dismiss
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           )}
