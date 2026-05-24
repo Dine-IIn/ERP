@@ -170,6 +170,18 @@ Our ERP client dashboard is fully optimized to run as a native experience on bot
 
 ---
 
+### 💻 Build Tooling Guide: VS Code vs. Visual Studio Community 2022
+
+To build, develop, and package the application, you will use a combination of tools depending on your target:
+
+| Platform | Primary Workspace Editor | Native Compiler Toolchain Required | Rationale |
+| :--- | :--- | :--- | :--- |
+| **Daily Development** | **VS Code** (Recommended) | *None* | Light-weight editor with premier extensions for TypeScript, React, Express, Prisma, and SQLite. |
+| **Windows Desktop App** | **VS Code** | **Visual Studio Community 2022** *(Workload: Desktop development with C++)* | Tauri's underlying compilation relies on MSVC (Microsoft Visual C++) compiler via VS 2022 to build native `.msi` and `.exe` binaries. Code is written in VS Code, but VS 2022 compiles it in the background. |
+| **Android Mobile App** | **VS Code** | **Android Studio** *(includes Android SDK, Gradle, and Virtual Devices)* | Capacitor creates a native Gradle project. Android Studio compiles this Gradle project into production-ready `.apk` / `.aab` packages. |
+
+---
+
 ### 🪟 1. Windows Desktop Packaging (Tauri / Electron)
 
 You can package the React frontend as a high-performance Windows desktop client using **Tauri** (recommended for tiny bundle sizes) or **Electron** (recommended for maximum legacy OS compatibility).

@@ -2931,11 +2931,11 @@ export default function App() {
                   STANDARD USER VIEW A: CRM PIPELINES Mock
                   ========================================== */}
               {activeWorkspaceModule === 'crm' && !selectedCompany && (
-                  <CrmModule user={user!} activeTab={activeWorkspaceSubModule} />
+                  <CrmModule user={user!} activeTab={activeWorkspaceSubModule} token={token || ''} backendUrl={BACKEND_URL} />
                 )}
   
                 {activeWorkspaceModule === 'hr' && !selectedCompany && (
-                  <HumanResources user={user!} activeTab={activeWorkspaceSubModule} />
+                  <HumanResources user={user!} activeTab={activeWorkspaceSubModule} token={token || ''} backendUrl={BACKEND_URL} />
                 )}
   
                 {activeWorkspaceModule === 'finance' && !selectedCompany && (
@@ -3178,22 +3178,22 @@ export default function App() {
                   ========================================== */}
 
               {activeWorkspaceModule === 'inventory' && !selectedCompany && (
-                <InventoryWarehouse user={user!} activeTab={activeWorkspaceSubModule} />
+                <InventoryWarehouse user={user!} activeTab={activeWorkspaceSubModule} token={token || ''} backendUrl={BACKEND_URL} />
               )}
               {activeWorkspaceModule === 'purchase' && !selectedCompany && (
-                <PurchaseProcurement user={user!} activeTab={activeWorkspaceSubModule} />
+                <PurchaseProcurement user={user!} activeTab={activeWorkspaceSubModule} token={token || ''} backendUrl={BACKEND_URL} />
               )}
               {activeWorkspaceModule === 'sales' && !selectedCompany && (
-                <SalesOrder user={user!} activeTab={activeWorkspaceSubModule} />
+                <SalesOrder user={user!} activeTab={activeWorkspaceSubModule} token={token || ''} backendUrl={BACKEND_URL} />
               )}
               {activeWorkspaceModule === 'manufacturing' && !selectedCompany && (
-                <ManufacturingProduction user={user!} activeTab={activeWorkspaceSubModule} />
+                <ManufacturingProduction user={user!} activeTab={activeWorkspaceSubModule} token={token || ''} backendUrl={BACKEND_URL} />
               )}
               {activeWorkspaceModule === 'quality' && !selectedCompany && (
-                <QualityMaintenance user={user!} activeTab={activeWorkspaceSubModule} />
+                <QualityMaintenance user={user!} activeTab={activeWorkspaceSubModule} token={token || ''} backendUrl={BACKEND_URL} />
               )}
               {activeWorkspaceModule === 'email' && !selectedCompany && (
-                <GlobalEmailSystem user={user!} activeTab={activeWorkspaceSubModule} />
+                <GlobalEmailSystem user={user!} activeTab={activeWorkspaceSubModule} token={token || ''} backendUrl={BACKEND_URL} />
               )}
 
               {activeWorkspaceModule === 'alerts' && !selectedCompany && (

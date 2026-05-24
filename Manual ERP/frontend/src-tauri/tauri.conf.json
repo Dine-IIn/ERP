@@ -1,18 +1,18 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "frontend ERP",
+  "productName": "ERP",
   "version": "0.1.0",
-  "identifier": "com.tauri.dev",
+  "identifier": "com.ERP.enterprise",
   "build": {
-    "frontendDist": "../build../dist",
+    "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "pnpm dev",
-    "beforeBuildCommand": "pnpm build"
+    "beforeDevCommand": "corepack pnpm dev",
+    "beforeBuildCommand": "corepack pnpm build"
   },
   "app": {
     "windows": [
       {
-        "title": "frontendERP Console",
+        "title": "ERP Console",
         "width": 800,
         "height": 600,
         "resizable": true,

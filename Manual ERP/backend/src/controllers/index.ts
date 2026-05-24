@@ -1090,4 +1090,6 @@ export async function registerPushToken(req: AuthenticatedRequest, res: Response
 
 // Export all General Administration Controllers
 export * from './admin';
+export * from './store';
+
 

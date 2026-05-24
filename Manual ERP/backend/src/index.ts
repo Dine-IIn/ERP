@@ -75,6 +75,13 @@ import {
 } from './controllers/chat';
 import mdmRouter from './controllers/mdm';
 import financeRouter, { setFinanceIo } from './controllers/finance';
+import {
+  listStoreDocs,
+  createStoreDoc,
+  bulkCreateStoreDocs,
+  updateStoreDoc,
+  deleteStoreDoc
+} from './controllers';
 
 dotenv.config();
 
@@ -241,6 +248,14 @@ app.use('/api/mdm', authenticateToken, mdmRouter);
 
 // Finance & Accounting Module Routes
 app.use('/api/finance', authenticateToken, financeRouter);
+
+// Generic System Document Store Routes (for CRM, HR, operations, email, etc.)
+app.get('/api/store/:collection', authenticateToken, listStoreDocs);
+app.post('/api/store/:collection', authenticateToken, createStoreDoc);
+app.post('/api/store/:collection/bulk', authenticateToken, bulkCreateStoreDocs);
+app.put('/api/store/:collection/:id', authenticateToken, updateStoreDoc);
+app.patch('/api/store/:collection/:id', authenticateToken, updateStoreDoc);
+app.delete('/api/store/:collection/:id', authenticateToken, deleteStoreDoc);
 
 
 // Start the Integrated Express + HTTP + WebSockets Server

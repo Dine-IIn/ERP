@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ShoppingBag, Users, FileText, Receipt, 
   CreditCard, BarChart3, Plus, Search, Filter, Download, ArrowUpRight, 
@@ -9,9 +9,11 @@ import {
 interface Props {
   activeTab?: string;
   user: any;
+  token?: string;
+  backendUrl?: string;
 }
 
-const SalesOrder: React.FC<Props> = ({ user: _user, activeTab }) => {
+const SalesOrder: React.FC<Props> = ({ user: _user, activeTab, token, backendUrl }) => {
   const mapping: Record<string, string> = {
     'SALES_QUOTATIONS': 'quotations',
     'SALES_ORDERS': 'orders',
@@ -73,56 +75,176 @@ const SalesOrder: React.FC<Props> = ({ user: _user, activeTab }) => {
     { title: 'Completed Sales', val: '284 tickets', change: '+28 completed', isPositive: true, icon: CheckCircle2, color: 'text-blue-500', bg: 'bg-blue-500/10' }
   ];
 
-  const salesOrders = [
+  const [salesOrders, setSalesOrders] = useState([
     { id: 'SO-2026-892', customer: 'Acme Corp', date: 'May 22, 2026', amount: '$12,500', status: 'Processing', payment: 'Paid' },
     { id: 'SO-2026-893', customer: 'Stark Industries', date: 'May 23, 2026', amount: '$45,000', status: 'Shipped', payment: 'Pending' },
     { id: 'SO-2026-894', customer: 'Wayne Enterprises', date: 'May 21, 2026', amount: '$8,200', status: 'Delivered', payment: 'Paid' },
     { id: 'SO-2026-895', customer: 'Oscorp', date: 'May 19, 2026', amount: '$104,000', status: 'Draft', payment: 'Unpaid' }
-  ];
+  ]);
 
-  const quotations = [
+  const [quotations, setQuotations] = useState([
     { id: 'QT-2026-101', customer: 'LexCorp', date: 'May 20, 2026', amount: '$5,400', validity: '30 Days', status: 'Sent' },
     { id: 'QT-2026-102', customer: 'Queen Consolidated', date: 'May 21, 2026', amount: '$12,000', validity: '15 Days', status: 'Accepted' },
     { id: 'QT-2026-103', customer: 'Daily Planet', date: 'May 22, 2026', amount: '$1,200', validity: '30 Days', status: 'Rejected' },
-  ];
+  ]);
 
-  const invoices = [
+  const [invoices, setInvoices] = useState([
     { id: 'INV-2026-441', orderId: 'SO-2026-892', customer: 'Acme Corp', amount: '$12,500', dueDate: 'Jun 22, 2026', status: 'Paid' },
     { id: 'INV-2026-442', orderId: 'SO-2026-893', customer: 'Stark Industries', amount: '$45,000', dueDate: 'Jun 23, 2026', status: 'Unpaid' },
     { id: 'INV-2026-443', orderId: 'SO-2026-894', customer: 'Wayne Enterprises', amount: '$8,200', dueDate: 'Jun 21, 2026', status: 'Paid' },
-  ];
+  ]);
 
-  const returns = [
+  const [returns, setReturns] = useState([
     { id: 'RET-2026-05', orderId: 'SO-2026-880', customer: 'Oscorp', reason: 'Defective item', amount: '$450', status: 'Processing' },
     { id: 'RET-2026-06', orderId: 'SO-2026-871', customer: 'Acme Corp', reason: 'Wrong item shipped', amount: '$1,200', status: 'Completed' },
-  ];
+  ]);
 
-  const creditNotesData = [
+  const [creditNotesData, setCreditNotesData] = useState([
     { id: 'CRN-0992', invRef: 'INV-2026-402', customer: 'Oscorp', issueDate: 'Today', amount: '$450.00', status: 'Approved' },
     { id: 'CRN-0991', invRef: 'INV-2025-110', customer: 'LexCorp', issueDate: 'Yesterday', amount: '$1,200.00', status: 'Credited' }
-  ];
+  ]);
 
-  const deliverySchedules = [
+  const [deliverySchedules, setDeliverySchedules] = useState([
     { id: 'DLV-1021', date: 'Today, 2:30 PM', orderId: 'SO-2026-893', customer: 'Stark Industries', carrier: 'FedEx Expedited', status: 'Out for Delivery' },
     { id: 'DLV-1022', date: 'Tomorrow', orderId: 'SO-2026-892', customer: 'Acme Corp', carrier: 'UPS Ground', status: 'Scheduled' }
-  ];
+  ]);
 
-  const discountCoupons = [
+  const [discountCoupons, setDiscountCoupons] = useState([
     { code: 'SUMMER20', rate: '20% Off', minVal: '$1,000', status: 'Active' },
     { code: 'VIPCORP', rate: '15% Off', minVal: '$5,000', status: 'Active' },
     { code: 'WELCOME10', rate: '10% Off', minVal: '$100', status: 'Expired' }
-  ];
+  ]);
 
-  const emailHistoryData = [
+  const [emailHistoryData, setEmailHistoryData] = useState([
     { id: 'EML-095', date: 'Today, 4:15 PM', recipient: 'billing@acme.com', subject: 'Tax Invoice INV-2026-441 attached', status: 'Delivered' },
     { id: 'EML-094', date: 'Yesterday', recipient: 'finance@stark.com', subject: 'Billing Statement May 2026', status: 'Sent' }
-  ];
+  ]);
 
-  const customerStatementsData = [
+  const [customerStatementsData, setCustomerStatementsData] = useState([
     { customer: 'Acme Corp', invoices: 12, paid: '$112,500.00', balance: '$0.00', status: 'Clear' },
     { customer: 'Stark Industries', invoices: 8, paid: '$450,000.00', balance: '$45,000.00', status: 'Receivables Due' },
     { customer: 'Wayne Enterprises', invoices: 5, paid: '$89,200.00', balance: '$0.00', status: 'Clear' }
-  ];
+  ]);
+
+  // --- DATABASE SYNC & BACKEND CONNECTIVITY ---
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  const apiRequest = async (endpoint: string, method = 'GET', body: any = null) => {
+    if (!token || !backendUrl) return null;
+    try {
+      const headers: any = { 'Authorization': `Bearer ${token}` };
+      if (body) headers['Content-Type'] = 'application/json';
+      const res = await fetch(`${backendUrl}${endpoint}`, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : null
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Request failed');
+      }
+      return await res.json();
+    } catch (err) {
+      console.error(`[Sales API Error] ${endpoint}:`, err);
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    if (!token || !backendUrl) return;
+
+    const loadData = async () => {
+      try {
+        const dbSalesOrders = await apiRequest('/api/store/sal_orders');
+        if (dbSalesOrders && dbSalesOrders.length > 0) setSalesOrders(dbSalesOrders);
+        else await apiRequest('/api/store/sal_orders/bulk', 'POST', salesOrders);
+
+        const dbQuoting = await apiRequest('/api/store/sal_quotations');
+        if (dbQuoting && dbQuoting.length > 0) setQuotations(dbQuoting);
+        else await apiRequest('/api/store/sal_quotations/bulk', 'POST', quotations);
+
+        const dbInvoices = await apiRequest('/api/store/sal_invoices');
+        if (dbInvoices && dbInvoices.length > 0) setInvoices(dbInvoices);
+        else await apiRequest('/api/store/sal_invoices/bulk', 'POST', invoices);
+
+        const dbReturns = await apiRequest('/api/store/sal_returns');
+        if (dbReturns && dbReturns.length > 0) setReturns(dbReturns);
+        else await apiRequest('/api/store/sal_returns/bulk', 'POST', returns);
+
+        const dbCredits = await apiRequest('/api/store/sal_credits');
+        if (dbCredits && dbCredits.length > 0) setCreditNotesData(dbCredits);
+        else await apiRequest('/api/store/sal_credits/bulk', 'POST', creditNotesData);
+
+        const dbDlv = await apiRequest('/api/store/sal_delivery');
+        if (dbDlv && dbDlv.length > 0) setDeliverySchedules(dbDlv);
+        else await apiRequest('/api/store/sal_delivery/bulk', 'POST', deliverySchedules);
+
+        const dbCoupons = await apiRequest('/api/store/sal_coupons');
+        if (dbCoupons && dbCoupons.length > 0) setDiscountCoupons(dbCoupons);
+        else await apiRequest('/api/store/sal_coupons/bulk', 'POST', discountCoupons);
+
+        const dbEmails = await apiRequest('/api/store/sal_emails');
+        if (dbEmails && dbEmails.length > 0) setEmailHistoryData(dbEmails);
+        else await apiRequest('/api/store/sal_emails/bulk', 'POST', emailHistoryData);
+
+        const dbStatements = await apiRequest('/api/store/sal_statements');
+        if (dbStatements && dbStatements.length > 0) setCustomerStatementsData(dbStatements);
+        else await apiRequest('/api/store/sal_statements/bulk', 'POST', customerStatementsData);
+
+        setIsLoaded(true);
+      } catch (err) {
+        console.error('Error loading Sales data from backend:', err);
+        setIsLoaded(true);
+      }
+    };
+
+    loadData();
+  }, [token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/sal_orders/bulk', 'POST', salesOrders);
+  }, [salesOrders, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/sal_quotations/bulk', 'POST', quotations);
+  }, [quotations, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/sal_invoices/bulk', 'POST', invoices);
+  }, [invoices, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/sal_returns/bulk', 'POST', returns);
+  }, [returns, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/sal_credits/bulk', 'POST', creditNotesData);
+  }, [creditNotesData, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/sal_delivery/bulk', 'POST', deliverySchedules);
+  }, [deliverySchedules, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/sal_coupons/bulk', 'POST', discountCoupons);
+  }, [discountCoupons, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/sal_emails/bulk', 'POST', emailHistoryData);
+  }, [emailHistoryData, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/sal_statements/bulk', 'POST', customerStatementsData);
+  }, [customerStatementsData, isLoaded, token, backendUrl]);
 
   // --- ACTIONS HANDLERS ---
   const handleSaveQuote = (e: React.FormEvent) => {
@@ -131,7 +253,17 @@ const SalesOrder: React.FC<Props> = ({ user: _user, activeTab }) => {
       showToast('Please fill all required quotation fields', 'warning');
       return;
     }
-    showToast(`Quotation QT-2026-104 for ${newQuote.customer} sent successfully`, 'success');
+    const nextId = `QT-2026-10${quotations.length + 1}`;
+    const nQt = {
+      id: nextId,
+      customer: newQuote.customer,
+      date: 'Today',
+      amount: `$${Number(newQuote.amount).toLocaleString()}`,
+      validity: newQuote.validity,
+      status: 'Sent'
+    };
+    setQuotations([nQt, ...quotations]);
+    showToast(`Quotation ${nextId} for ${newQuote.customer} sent successfully`, 'success');
     setShowQuoteModal(false);
     setNewQuote({ customer: '', amount: '', validity: '30 Days' });
   };
@@ -142,7 +274,17 @@ const SalesOrder: React.FC<Props> = ({ user: _user, activeTab }) => {
       showToast('Please fill all required sales order fields', 'warning');
       return;
     }
-    showToast(`Sales Order SO-2026-896 generated successfully`, 'success');
+    const nextId = `SO-2026-89${salesOrders.length + 1}`;
+    const nSo = {
+      id: nextId,
+      customer: newOrder.customer,
+      date: 'Today',
+      amount: `$${Number(newOrder.amount).toLocaleString()}`,
+      status: 'Processing',
+      payment: 'Pending'
+    };
+    setSalesOrders([nSo, ...salesOrders]);
+    showToast(`Sales Order ${nextId} generated successfully`, 'success');
     setShowOrderModal(false);
     setNewOrder({ customer: '', amount: '', status: 'Processing' });
   };
@@ -153,7 +295,17 @@ const SalesOrder: React.FC<Props> = ({ user: _user, activeTab }) => {
       showToast('Please fill all required invoice fields', 'warning');
       return;
     }
-    showToast(`Tax Invoice INV-2026-444 generated successfully`, 'success');
+    const nextId = `INV-2026-44${invoices.length + 1}`;
+    const nInv = {
+      id: nextId,
+      orderId: newInvoice.orderId,
+      customer: newInvoice.customer,
+      amount: `$${Number(newInvoice.amount).toLocaleString()}`,
+      dueDate: newInvoice.dueDate || 'TBD',
+      status: 'Unpaid'
+    };
+    setInvoices([nInv, ...invoices]);
+    showToast(`Tax Invoice ${nextId} generated successfully`, 'success');
     setShowInvoiceModal(false);
     setNewInvoice({ orderId: '', customer: '', amount: '', dueDate: '' });
   };
@@ -164,6 +316,13 @@ const SalesOrder: React.FC<Props> = ({ user: _user, activeTab }) => {
       showToast('Please fill all required promotion fields', 'warning');
       return;
     }
+    const nCou = {
+      code: newDiscount.code,
+      rate: `${newDiscount.rate}% Off`,
+      minVal: newDiscount.minVal ? `$${Number(newDiscount.minVal).toLocaleString()}` : '$100',
+      status: 'Active'
+    };
+    setDiscountCoupons([nCou, ...discountCoupons]);
     showToast(`Discount promo code ${newDiscount.code} activated successfully`, 'success');
     setShowDiscountModal(false);
     setNewDiscount({ code: '', rate: '', minVal: '' });
@@ -171,6 +330,15 @@ const SalesOrder: React.FC<Props> = ({ user: _user, activeTab }) => {
 
   const handleSendEmail = (e: React.FormEvent) => {
     e.preventDefault();
+    const nextId = `EML-09${emailHistoryData.length + 1}`;
+    const nEml = {
+      id: nextId,
+      date: 'Today, 4:15 PM',
+      recipient: emailConfig.recipient,
+      subject: emailConfig.subject,
+      status: 'Delivered'
+    };
+    setEmailHistoryData([nEml, ...emailHistoryData]);
     showToast(`Invoice PDF document successfully dispatched to ${emailConfig.recipient}`, 'success');
     setShowEmailModal(false);
   };

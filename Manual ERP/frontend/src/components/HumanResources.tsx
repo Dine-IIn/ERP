@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Users, Calendar, Clock, DollarSign, 
   UserPlus, BarChart3, Plus, Search, Filter, Download, 
@@ -10,6 +10,8 @@ import {
 interface Props {
   activeTab?: string;
   user: any;
+  token?: string;
+  backendUrl?: string;
 }
 
 // Simple Clock3 icon component
@@ -20,7 +22,7 @@ const Clock3 = (props: any) => (
   </svg>
 );
 
-const HumanResources: React.FC<Props> = ({ user: _user, activeTab }) => {
+const HumanResources: React.FC<Props> = ({ user: _user, activeTab, token, backendUrl }) => {
   const mapping: Record<string, string> = {
     'HR_PROFILES': 'profiles',
     'HR_ATTENDANCE': 'attendance',
@@ -141,6 +143,145 @@ const HumanResources: React.FC<Props> = ({ user: _user, activeTab }) => {
     { id: 'DOC-302', name: 'Jane Smith', type: 'NDA signed', filename: 'nda_signed_smith.pdf', size: '1.8 MB', uploaded: '2026-05-12', verified: true },
     { id: 'DOC-303', name: 'Robert Chen', type: 'Degree Certificate', filename: 'mtech_degree_chen.pdf', size: '16.5 MB', uploaded: '2026-05-21', verified: false },
   ]);
+
+  // --- DATABASE SYNC & BACKEND CONNECTIVITY ---
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  const apiRequest = async (endpoint: string, method = 'GET', body: any = null) => {
+    if (!token || !backendUrl) return null;
+    try {
+      const headers: any = { 'Authorization': `Bearer ${token}` };
+      if (body) headers['Content-Type'] = 'application/json';
+      const res = await fetch(`${backendUrl}${endpoint}`, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : null
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Request failed');
+      }
+      return await res.json();
+    } catch (err) {
+      console.error(`[HR API Error] ${endpoint}:`, err);
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    if (!token || !backendUrl) return;
+
+    const loadData = async () => {
+      try {
+        const dbEmployees = await apiRequest('/api/store/hr_employees');
+        if (dbEmployees && dbEmployees.length > 0) setEmployees(dbEmployees);
+        else await apiRequest('/api/store/hr_employees/bulk', 'POST', employees);
+
+        const dbAttendance = await apiRequest('/api/store/hr_attendance');
+        if (dbAttendance && dbAttendance.length > 0) setAttendance(dbAttendance);
+        else await apiRequest('/api/store/hr_attendance/bulk', 'POST', attendance);
+
+        const dbLeaves = await apiRequest('/api/store/hr_leaves');
+        if (dbLeaves && dbLeaves.length > 0) setLeaves(dbLeaves);
+        else await apiRequest('/api/store/hr_leaves/bulk', 'POST', leaves);
+
+        const dbPayroll = await apiRequest('/api/store/hr_payroll');
+        if (dbPayroll && dbPayroll.length > 0) setPayroll(dbPayroll);
+        else await apiRequest('/api/store/hr_payroll/bulk', 'POST', payroll);
+
+        const dbSlips = await apiRequest('/api/store/hr_slips');
+        if (dbSlips && dbSlips.length > 0) setSlips(dbSlips);
+        else await apiRequest('/api/store/hr_slips/bulk', 'POST', slips);
+
+        const dbReimbursements = await apiRequest('/api/store/hr_reimbursements');
+        if (dbReimbursements && dbReimbursements.length > 0) setReimbursements(dbReimbursements);
+        else await apiRequest('/api/store/hr_reimbursements/bulk', 'POST', reimbursements);
+
+        const dbJobs = await apiRequest('/api/store/hr_jobs');
+        if (dbJobs && dbJobs.length > 0) setJobs(dbJobs);
+        else await apiRequest('/api/store/hr_jobs/bulk', 'POST', jobs);
+
+        const dbShifts = await apiRequest('/api/store/hr_shifts');
+        if (dbShifts && dbShifts.length > 0) setShifts(dbShifts);
+        else await apiRequest('/api/store/hr_shifts/bulk', 'POST', shifts);
+
+        const dbReviews = await apiRequest('/api/store/hr_reviews');
+        if (dbReviews && dbReviews.length > 0) setReviews(dbReviews);
+        else await apiRequest('/api/store/hr_reviews/bulk', 'POST', reviews);
+
+        const dbReports = await apiRequest('/api/store/hr_reports');
+        if (dbReports && dbReports.length > 0) setReports(dbReports);
+        else await apiRequest('/api/store/hr_reports/bulk', 'POST', reports);
+
+        const dbDocs = await apiRequest('/api/store/hr_documents');
+        if (dbDocs && dbDocs.length > 0) setDocuments(dbDocs);
+        else await apiRequest('/api/store/hr_documents/bulk', 'POST', documents);
+
+        setIsLoaded(true);
+      } catch (err) {
+        console.error('Error loading HR data from backend:', err);
+        setIsLoaded(true);
+      }
+    };
+
+    loadData();
+  }, [token, backendUrl]);
+
+  // Synchronizers to write state changes to the SQLite database
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/hr_employees/bulk', 'POST', employees);
+  }, [employees, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/hr_attendance/bulk', 'POST', attendance);
+  }, [attendance, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/hr_leaves/bulk', 'POST', leaves);
+  }, [leaves, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/hr_payroll/bulk', 'POST', payroll);
+  }, [payroll, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/hr_slips/bulk', 'POST', slips);
+  }, [slips, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/hr_reimbursements/bulk', 'POST', reimbursements);
+  }, [reimbursements, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/hr_jobs/bulk', 'POST', jobs);
+  }, [jobs, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/hr_shifts/bulk', 'POST', shifts);
+  }, [shifts, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/hr_reviews/bulk', 'POST', reviews);
+  }, [reviews, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/hr_reports/bulk', 'POST', reports);
+  }, [reports, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/hr_documents/bulk', 'POST', documents);
+  }, [documents, isLoaded, token, backendUrl]);
 
   // --- ACTIONS HANDLERS ---
   const handleSaveEmployee = (e: React.FormEvent) => {

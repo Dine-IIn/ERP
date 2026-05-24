@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ShoppingCart, Users, FileText, FileSpreadsheet, 
   CreditCard, BarChart3, Plus, Search, Filter, Download, ArrowUpRight, 
@@ -9,9 +9,11 @@ import {
 interface Props {
   activeTab?: string;
   user: any;
+  token?: string;
+  backendUrl?: string;
 }
 
-const PurchaseProcurement: React.FC<Props> = ({ user: _user, activeTab }) => {
+const PurchaseProcurement: React.FC<Props> = ({ user: _user, activeTab, token, backendUrl }) => {
   const mapping: Record<string, string> = {
     'PURCHASE_VENDOR_MGT': 'vendors',
     'PURCHASE_REQUISITIONS': 'requisitions',
@@ -65,45 +67,147 @@ const PurchaseProcurement: React.FC<Props> = ({ user: _user, activeTab }) => {
     { title: 'Completed POs', val: '98 items', change: '69% fulfillment rate', isPositive: false, icon: CheckCircle2, color: 'text-blue-500', bg: 'bg-blue-500/10' }
   ];
 
-  const vendorsData = [
+  const [vendorsData, setVendorsData] = useState([
     { id: 'VND-001', name: 'Techtronics Inc.', category: 'Hardware', contact: 'John Smith', email: 'sales@techtronics.com', status: 'Active', rating: '4.8' },
     { id: 'VND-002', name: 'Global Supply Co.', category: 'Office Supplies', contact: 'Sarah Connor', email: 'info@global.com', status: 'Active', rating: '4.5' },
     { id: 'VND-003', name: 'OfficeMax Logistics', category: 'Logistics', contact: 'Mike Tyson', email: 'support@officemax.com', status: 'Under Review', rating: '3.2' },
     { id: 'VND-004', name: 'Hardware Solutions', category: 'Hardware', contact: 'Emma Watson', email: 'emma@hwsol.com', status: 'Inactive', rating: '4.0' },
-  ];
+  ]);
 
-  const requisitionsData = [
+  const [requisitionsData, setRequisitionsData] = useState([
     { id: 'REQ-5021', date: 'Today', department: 'Engineering', item: 'MacBook Pro M3', qty: 5, estValue: '$12,500', status: 'Pending' },
     { id: 'REQ-5022', date: 'Yesterday', department: 'Marketing', item: 'Adobe CC Licenses', qty: 10, estValue: '$800', status: 'Approved' },
     { id: 'REQ-5023', date: 'Oct 20, 2026', department: 'Operations', item: 'Office Chairs', qty: 20, estValue: '$4,000', status: 'Rejected' },
-  ];
+  ]);
 
-  const purchaseOrders = [
+  const [purchaseOrders, setPurchaseOrders] = useState([
     { id: 'PO-2026-001', vendor: 'Techtronics Inc.', date: 'May 20, 2026', amount: '$45,200', status: 'Approved', expected: 'May 25, 2026' },
     { id: 'PO-2026-002', vendor: 'Global Supply Co.', date: 'May 21, 2026', amount: '$12,450', status: 'Pending Approval', expected: 'Jun 01, 2026' },
     { id: 'PO-2026-003', vendor: 'OfficeMax Logistics', date: 'May 22, 2026', amount: '$3,200', status: 'Draft', expected: 'TBD' },
     { id: 'PO-2026-004', vendor: 'Hardware Solutions', date: 'May 18, 2026', amount: '$89,000', status: 'Fulfilled', expected: 'Delivered' }
-  ];
+  ]);
 
-  const quotationsData = [
+  const [quotationsData, setQuotationsData] = useState([
     { id: 'QT-991', rfqRef: 'RFQ-102', vendor: 'Techtronics Inc.', date: 'Today', amount: '$42,000', validity: '30 Days', status: 'Received' },
     { id: 'QT-992', rfqRef: 'RFQ-102', vendor: 'Hardware Solutions', date: 'Yesterday', amount: '$44,500', validity: '15 Days', status: 'Shortlisted' },
-  ];
+  ]);
 
-  const paymentsData = [
+  const [paymentsData, setPaymentsData] = useState([
     { id: 'PAY-8812', poRef: 'PO-2026-004', vendor: 'Hardware Solutions', dueDate: 'Jun 15, 2026', amount: '$89,000', method: 'Bank Transfer', status: 'Scheduled' },
     { id: 'PAY-8811', poRef: 'PO-2026-001', vendor: 'Techtronics Inc.', dueDate: 'May 22, 2026', amount: '$45,200', method: 'Credit Card', status: 'Paid' },
-  ];
+  ]);
 
-  const grnMatchingData = [
+  const [grnMatchingData, setGrnMatchingData] = useState([
     { poId: 'PO-2026-004', grnId: 'GRN-5041', product: 'Premium Office Chair', poQty: 100, receivedQty: 100, acceptedQty: 100, status: 'Perfect Match' },
     { poId: 'PO-2026-001', grnId: 'GRN-5042', product: 'Wireless Mouse', poQty: 500, receivedQty: 500, acceptedQty: 480, status: 'Shortage Discrepancy' }
-  ];
+  ]);
 
-  const emailHistoryData = [
+  const [emailHistoryData, setEmailHistoryData] = useState([
     { id: 'EML-091', date: 'Today, 2:10 PM', recipient: 'sales@techtronics.com', subject: 'Purchase Order PO-2026-001 dispatch', status: 'Delivered' },
     { id: 'EML-090', date: 'Yesterday', recipient: 'info@global.com', subject: 'Request for Quote RFQ-102 specs', status: 'Sent' }
-  ];
+  ]);
+
+  // --- DATABASE SYNC & BACKEND CONNECTIVITY ---
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  const apiRequest = async (endpoint: string, method = 'GET', body: any = null) => {
+    if (!token || !backendUrl) return null;
+    try {
+      const headers: any = { 'Authorization': `Bearer ${token}` };
+      if (body) headers['Content-Type'] = 'application/json';
+      const res = await fetch(`${backendUrl}${endpoint}`, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : null
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Request failed');
+      }
+      return await res.json();
+    } catch (err) {
+      console.error(`[Purchase API Error] ${endpoint}:`, err);
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    if (!token || !backendUrl) return;
+
+    const loadData = async () => {
+      try {
+        const dbVendors = await apiRequest('/api/store/pur_vendors');
+        if (dbVendors && dbVendors.length > 0) setVendorsData(dbVendors);
+        else await apiRequest('/api/store/pur_vendors/bulk', 'POST', vendorsData);
+
+        const dbReqs = await apiRequest('/api/store/pur_requisitions');
+        if (dbReqs && dbReqs.length > 0) setRequisitionsData(dbReqs);
+        else await apiRequest('/api/store/pur_requisitions/bulk', 'POST', requisitionsData);
+
+        const dbOrders = await apiRequest('/api/store/pur_orders');
+        if (dbOrders && dbOrders.length > 0) setPurchaseOrders(dbOrders);
+        else await apiRequest('/api/store/pur_orders/bulk', 'POST', purchaseOrders);
+
+        const dbQuotes = await apiRequest('/api/store/pur_quotes');
+        if (dbQuotes && dbQuotes.length > 0) setQuotationsData(dbQuotes);
+        else await apiRequest('/api/store/pur_quotes/bulk', 'POST', quotationsData);
+
+        const dbPayments = await apiRequest('/api/store/pur_payments');
+        if (dbPayments && dbPayments.length > 0) setPaymentsData(dbPayments);
+        else await apiRequest('/api/store/pur_payments/bulk', 'POST', paymentsData);
+
+        const dbGrn = await apiRequest('/api/store/pur_grn');
+        if (dbGrn && dbGrn.length > 0) setGrnMatchingData(dbGrn);
+        else await apiRequest('/api/store/pur_grn/bulk', 'POST', grnMatchingData);
+
+        const dbEmails = await apiRequest('/api/store/pur_emails');
+        if (dbEmails && dbEmails.length > 0) setEmailHistoryData(dbEmails);
+        else await apiRequest('/api/store/pur_emails/bulk', 'POST', emailHistoryData);
+
+        setIsLoaded(true);
+      } catch (err) {
+        console.error('Error loading Purchase data from backend:', err);
+        setIsLoaded(true);
+      }
+    };
+
+    loadData();
+  }, [token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/pur_vendors/bulk', 'POST', vendorsData);
+  }, [vendorsData, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/pur_requisitions/bulk', 'POST', requisitionsData);
+  }, [requisitionsData, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/pur_orders/bulk', 'POST', purchaseOrders);
+  }, [purchaseOrders, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/pur_quotes/bulk', 'POST', quotationsData);
+  }, [quotationsData, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/pur_payments/bulk', 'POST', paymentsData);
+  }, [paymentsData, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/pur_grn/bulk', 'POST', grnMatchingData);
+  }, [grnMatchingData, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/pur_emails/bulk', 'POST', emailHistoryData);
+  }, [emailHistoryData, isLoaded, token, backendUrl]);
 
   // --- ACTIONS HANDLERS ---
   const handleSaveRequisition = (e: React.FormEvent) => {
@@ -112,7 +216,18 @@ const PurchaseProcurement: React.FC<Props> = ({ user: _user, activeTab }) => {
       showToast('Please fill all required requisition details', 'warning');
       return;
     }
-    showToast(`Purchase Requisition REQ-5024 for ${newRequisition.item} logged successfully`, 'success');
+    const nextId = `REQ-50${20 + requisitionsData.length + 1}`;
+    const newReq = {
+      id: nextId,
+      date: 'Today',
+      department: newRequisition.dept,
+      item: newRequisition.item,
+      qty: Number(newRequisition.qty),
+      estValue: `$${Number(newRequisition.est).toLocaleString()}`,
+      status: 'Pending'
+    };
+    setRequisitionsData([newReq, ...requisitionsData]);
+    showToast(`Purchase Requisition ${nextId} for ${newRequisition.item} logged successfully`, 'success');
     setShowRequisitionModal(false);
     setNewRequisition({ item: '', dept: 'Engineering', qty: '', est: '' });
   };
@@ -123,7 +238,17 @@ const PurchaseProcurement: React.FC<Props> = ({ user: _user, activeTab }) => {
       showToast('Please fill all required PO details', 'warning');
       return;
     }
-    showToast(`Draft Purchase Order PO-2026-005 generated successfully`, 'success');
+    const nextId = `PO-2026-0${purchaseOrders.length + 1}`;
+    const nPo = {
+      id: nextId,
+      vendor: newPO.vendor,
+      date: newPO.date,
+      amount: `$${Number(newPO.amount).toLocaleString()}`,
+      status: 'Pending Approval',
+      expected: newPO.expected || 'TBD'
+    };
+    setPurchaseOrders([nPo, ...purchaseOrders]);
+    showToast(`Draft Purchase Order ${nextId} generated successfully`, 'success');
     setShowPOModal(false);
     setNewPO({ vendor: '', date: '', amount: '', expected: '' });
   };
@@ -134,13 +259,33 @@ const PurchaseProcurement: React.FC<Props> = ({ user: _user, activeTab }) => {
       showToast('Please fill all required quote details', 'warning');
       return;
     }
-    showToast(`Vendor Quotation QT-993 for RFQ-103 recorded successfully`, 'success');
+    const nextId = `QT-99${quotationsData.length + 1}`;
+    const nQt = {
+      id: nextId,
+      rfqRef: newQuote.rfq,
+      vendor: newQuote.vendor,
+      date: 'Today',
+      amount: `$${Number(newQuote.amount).toLocaleString()}`,
+      validity: newQuote.validity,
+      status: 'Received'
+    };
+    setQuotationsData([nQt, ...quotationsData]);
+    showToast(`Vendor Quotation ${nextId} for ${newQuote.rfq} recorded successfully`, 'success');
     setShowQuoteModal(false);
     setNewQuote({ rfq: 'RFQ-103', vendor: '', amount: '', validity: '30 Days' });
   };
 
   const handleSendEmail = (e: React.FormEvent) => {
     e.preventDefault();
+    const nextId = `EML-09${emailHistoryData.length + 1}`;
+    const nEml = {
+      id: nextId,
+      date: 'Today, 2:10 PM',
+      recipient: emailPOConfig.recipient,
+      subject: emailPOConfig.subject,
+      status: 'Delivered'
+    };
+    setEmailHistoryData([nEml, ...emailHistoryData]);
     showToast(`PO Document successfully dispatched to ${emailPOConfig.recipient}`, 'success');
     setShowEmailModal(false);
   };

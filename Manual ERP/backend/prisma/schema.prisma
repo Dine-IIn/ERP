@@ -1,5 +1,5 @@
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -1007,4 +1007,16 @@ model BankStatementLine {
   createdAt             DateTime      @default(now())
 
   @@map("bank_statement_lines")
+}
+
+model SystemDocumentStore {
+  id         String   @id @default(uuid())
+  companyId  String
+  collection String
+  data       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([companyId, collection])
+  @@map("system_document_store")
 }

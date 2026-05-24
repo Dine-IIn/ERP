@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Factory, Settings, Layers, Box, 
   Wrench, Activity, BarChart3, Plus, Search, Filter, Download, 
@@ -9,9 +9,11 @@ import {
 interface Props {
   activeTab?: string;
   user: any;
+  token?: string;
+  backendUrl?: string;
 }
 
-const ManufacturingProduction: React.FC<Props> = ({ user: _user, activeTab }) => {
+const ManufacturingProduction: React.FC<Props> = ({ user: _user, activeTab, token, backendUrl }) => {
   const mapping: Record<string, string> = {
     'MANUFACTURING_BOM': 'bom',
     'MANUFACTURING_ORDERS': 'orders',
@@ -135,6 +137,136 @@ const ManufacturingProduction: React.FC<Props> = ({ user: _user, activeTab }) =>
   const [finishedGoods, setFinishedGoods] = useState([
     { id: 'FG-8801', prodOrder: 'PROD-1026', item: 'Copper Wire Spool', lotNo: 'LOT-CW-026', receiptedQty: 150, location: 'WH-A / RACK-03', receiptDate: 'May 18, 2026' }
   ]);
+
+  // --- DATABASE SYNC & BACKEND CONNECTIVITY ---
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  const apiRequest = async (endpoint: string, method = 'GET', body: any = null) => {
+    if (!token || !backendUrl) return null;
+    try {
+      const headers: any = { 'Authorization': `Bearer ${token}` };
+      if (body) headers['Content-Type'] = 'application/json';
+      const res = await fetch(`${backendUrl}${endpoint}`, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : null
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Request failed');
+      }
+      return await res.json();
+    } catch (err) {
+      console.error(`[Manufacturing API Error] ${endpoint}:`, err);
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    if (!token || !backendUrl) return;
+
+    const loadData = async () => {
+      try {
+        const dbBoms = await apiRequest('/api/store/mfg_boms');
+        if (dbBoms && dbBoms.length > 0) setBoms(dbBoms);
+        else await apiRequest('/api/store/mfg_boms/bulk', 'POST', boms);
+
+        const dbOrders = await apiRequest('/api/store/mfg_orders');
+        if (dbOrders && dbOrders.length > 0) setProductionOrders(dbOrders);
+        else await apiRequest('/api/store/mfg_orders/bulk', 'POST', productionOrders);
+
+        const dbWorkorders = await apiRequest('/api/store/mfg_workorders');
+        if (dbWorkorders && dbWorkorders.length > 0) setWorkOrders(dbWorkorders);
+        else await apiRequest('/api/store/mfg_workorders/bulk', 'POST', workOrders);
+
+        const dbConsumption = await apiRequest('/api/store/mfg_consumption');
+        if (dbConsumption && dbConsumption.length > 0) setConsumptionLedger(dbConsumption);
+        else await apiRequest('/api/store/mfg_consumption/bulk', 'POST', consumptionLedger);
+
+        const dbMachinery = await apiRequest('/api/store/mfg_machinery');
+        if (dbMachinery && dbMachinery.length > 0) setMachinery(dbMachinery);
+        else await apiRequest('/api/store/mfg_machinery/bulk', 'POST', machinery);
+
+        const dbShifts = await apiRequest('/api/store/mfg_shifts');
+        if (dbShifts && dbShifts.length > 0) setShifts(dbShifts);
+        else await apiRequest('/api/store/mfg_shifts/bulk', 'POST', shifts);
+
+        const dbQc = await apiRequest('/api/store/mfg_qc');
+        if (dbQc && dbQc.length > 0) setQcInspections(dbQc);
+        else await apiRequest('/api/store/mfg_qc/bulk', 'POST', qcInspections);
+
+        const dbCosting = await apiRequest('/api/store/mfg_costing');
+        if (dbCosting && dbCosting.length > 0) setCostingDetails(dbCosting);
+        else await apiRequest('/api/store/mfg_costing/bulk', 'POST', costingDetails);
+
+        const dbScrap = await apiRequest('/api/store/mfg_scrap');
+        if (dbScrap && dbScrap.length > 0) setScrapLogs(dbScrap);
+        else await apiRequest('/api/store/mfg_scrap/bulk', 'POST', scrapLogs);
+
+        const dbFinished = await apiRequest('/api/store/mfg_finished');
+        if (dbFinished && dbFinished.length > 0) setFinishedGoods(dbFinished);
+        else await apiRequest('/api/store/mfg_finished/bulk', 'POST', finishedGoods);
+
+        setIsLoaded(true);
+      } catch (err) {
+        console.error('Error loading Manufacturing data from backend:', err);
+        setIsLoaded(true);
+      }
+    };
+
+    loadData();
+  }, [token, backendUrl]);
+
+  // Synchronizers to write state changes to the SQLite database
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/mfg_boms/bulk', 'POST', boms);
+  }, [boms, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/mfg_orders/bulk', 'POST', productionOrders);
+  }, [productionOrders, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/mfg_workorders/bulk', 'POST', workOrders);
+  }, [workOrders, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/mfg_consumption/bulk', 'POST', consumptionLedger);
+  }, [consumptionLedger, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/mfg_machinery/bulk', 'POST', machinery);
+  }, [machinery, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/mfg_shifts/bulk', 'POST', shifts);
+  }, [shifts, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/mfg_qc/bulk', 'POST', qcInspections);
+  }, [qcInspections, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/mfg_costing/bulk', 'POST', costingDetails);
+  }, [costingDetails, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/mfg_scrap/bulk', 'POST', scrapLogs);
+  }, [scrapLogs, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/mfg_finished/bulk', 'POST', finishedGoods);
+  }, [finishedGoods, isLoaded, token, backendUrl]);
 
   // --- ACTIONS HANDLERS ---
   const handleSaveBom = (e: React.FormEvent) => {

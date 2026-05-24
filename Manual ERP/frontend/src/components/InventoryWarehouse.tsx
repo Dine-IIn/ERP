@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Box, MapPin, ArrowRightLeft, SlidersHorizontal, FileText, 
   Truck, BarChart3, Plus, Search, Filter, Download, ArrowUpRight, 
@@ -9,9 +9,11 @@ import {
 interface Props {
   activeTab?: string;
   user: any;
+  token?: string;
+  backendUrl?: string;
 }
 
-const InventoryWarehouse: React.FC<Props> = ({ user: _user, activeTab }) => {
+const InventoryWarehouse: React.FC<Props> = ({ user: _user, activeTab, token, backendUrl }) => {
   const mapping: Record<string, string> = {
     'INVENTORY_TRACKING': 'ledger',
     'INVENTORY_MULTI_WH': 'locations',
@@ -58,68 +60,206 @@ const InventoryWarehouse: React.FC<Props> = ({ user: _user, activeTab }) => {
   };
 
   // --- MOCK DATABASES ---
-  const stockItems = [
+  const [stockItems, setStockItems] = useState([
     { id: 'STK-001', name: 'Premium Office Chair', sku: 'POC-992', warehouse: 'Main Hub', qty: 245, status: 'Healthy', val: '$24,500' },
     { id: 'STK-002', name: 'Ergonomic Desk', sku: 'ED-104', warehouse: 'Main Hub', qty: 12, status: 'Low Stock', val: '$3,600' },
     { id: 'STK-003', name: 'Wireless Mouse', sku: 'WM-009', warehouse: 'East Wing', qty: 890, status: 'Healthy', val: '$13,350' },
     { id: 'STK-004', name: 'Mechanical Keyboard', sku: 'MK-111', warehouse: 'West Wing', qty: 0, status: 'Out of Stock', val: '$0' }
-  ];
+  ]);
 
-  const locationsData = [
+  const [locationsData, setLocationsData] = useState([
     { id: 'WH-01', name: 'Main Hub', type: 'Central Warehouse', capacity: '85%', zones: 12, manager: 'John Doe', status: 'Active' },
     { id: 'WH-02', name: 'East Wing', type: 'Fulfillment Center', capacity: '45%', zones: 8, manager: 'Jane Smith', status: 'Active' },
     { id: 'WH-03', name: 'West Wing', type: 'Storage Facility', capacity: '92%', zones: 5, manager: 'Bob Wilson', status: 'Near Full' },
-  ];
+  ]);
 
-  const transfersData = [
+  const [transfersData, setTransfersData] = useState([
     { id: 'TRF-1021', date: 'Today, 10:30 AM', from: 'Main Hub', to: 'East Wing', items: 45, status: 'In Transit', ref: 'REQ-992' },
     { id: 'TRF-1022', date: 'Yesterday', from: 'West Wing', to: 'Main Hub', items: 120, status: 'Completed', ref: 'REQ-985' },
     { id: 'TRF-1023', date: 'Oct 20, 2026', from: 'Supplier A', to: 'Main Hub', items: 500, status: 'Pending', ref: 'PO-4552' },
-  ];
+  ]);
 
-  const adjustmentsData = [
+  const [adjustmentsData, setAdjustmentsData] = useState([
     { id: 'ADJ-881', date: 'Today', type: 'Stock Write-off', item: 'Ergonomic Desk', qty: '-2', reason: 'Damaged in transit', value: '-$600', status: 'Approved' },
     { id: 'ADJ-882', date: 'Yesterday', type: 'Cycle Count', item: 'Wireless Mouse', qty: '+5', reason: 'Found in bin 4B', value: '+$75', status: 'Pending Review' },
-  ];
+  ]);
 
-  const grnData = [
+  const [grnData, setGrnData] = useState([
     { id: 'GRN-5041', poRef: 'PO-9921', supplier: 'Tech Corp', receivedDate: 'Today', items: 4, totalQty: 1200, status: 'Inspected' },
     { id: 'GRN-5042', poRef: 'PO-9905', supplier: 'Office Supplies Inc', receivedDate: 'Yesterday', items: 12, totalQty: 450, status: 'Quarantine' },
-  ];
+  ]);
 
-  const dispatchData = [
+  const [dispatchData, setDispatchData] = useState([
     { id: 'DSP-221', orderRef: 'SO-1045', customer: 'Acme Corp', method: 'FedEx Ground', items: 3, status: 'Packed' },
     { id: 'DSP-222', orderRef: 'SO-1048', customer: 'Global Tech', method: 'UPS Next Day', items: 15, status: 'Shipped' },
-  ];
+  ]);
 
-  const batchData = [
+  const [batchData, setBatchData] = useState([
     { code: 'LOT-2026-001', product: 'Premium Office Chair', mfgDate: '2026-01-10', expDate: '2029-01-10', qty: 150, status: 'Active' },
     { code: 'LOT-2026-002', product: 'Wireless Mouse', mfgDate: '2026-03-12', expDate: '2028-03-12', qty: 450, status: 'Active' },
     { code: 'LOT-2025-092', product: 'Ergonomic Desk', mfgDate: '2025-05-15', expDate: '2026-05-15', qty: 10, status: 'Expired' }
-  ];
+  ]);
 
-  const serialData = [
+  const [serialData, setSerialData] = useState([
     { sn: 'SN-ED-288301', product: 'Ergonomic Desk', warranty: 'Active (24 Months)', status: 'In Warehouse', order: 'GRN-5042' },
     { sn: 'SN-POC-900212', product: 'Premium Office Chair', warranty: 'Active (12 Months)', status: 'Sold / Dispatched', order: 'SO-1045' },
     { sn: 'SN-MK-399120', product: 'Mechanical Keyboard', warranty: 'Active (36 Months)', status: 'In Warehouse', order: 'GRN-5041' }
-  ];
+  ]);
 
-  const valuationData = [
+  const [valuationData, setValuationData] = useState([
     { sku: 'POC-992', name: 'Premium Office Chair', qty: 245, unitCost: '$100.00', fifoVal: '$24,500', lifoVal: '$24,500', wacVal: '$24,500' },
     { sku: 'ED-104', name: 'Ergonomic Desk', qty: 12, unitCost: '$300.00', fifoVal: '$3,600', lifoVal: '$3,480', wacVal: '$3,550' },
     { sku: 'WM-009', name: 'Wireless Mouse', qty: 890, unitCost: '$15.00', fifoVal: '$13,350', lifoVal: '$13,350', wacVal: '$13,350' }
-  ];
+  ]);
 
-  const rackBinData = [
+  const [rackBinData, setRackBinData] = useState([
     { warehouse: 'Main Hub', aisle: 'Aisle A', rack: 'Rack A3', bin: 'Bin 4', item: 'Premium Office Chair', fill: '90%' },
     { warehouse: 'Main Hub', aisle: 'Aisle B', rack: 'Rack B1', bin: 'Bin 2', item: 'Ergonomic Desk', fill: '35%' },
     { warehouse: 'East Wing', aisle: 'Aisle D', rack: 'Rack D2', bin: 'Bin 5', item: 'Wireless Mouse', fill: '78%' }
-  ];
+  ]);
 
-  const cycleCountData = [
+  const [cycleCountData, setCycleCountData] = useState([
     { id: 'CYC-0091', date: '2026-05-20', zone: 'Zone A (Main Hub)', items: 5, expectedQty: 300, countedQty: 298, status: 'Reconciled', variance: '-2' },
     { id: 'CYC-0092', date: '2026-05-23', zone: 'Zone B (East Wing)', items: 12, expectedQty: 890, countedQty: 895, status: 'Pending Approval', variance: '+5' }
-  ];
+  ]);
+
+  // --- DATABASE SYNC & BACKEND CONNECTIVITY ---
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  const apiRequest = async (endpoint: string, method = 'GET', body: any = null) => {
+    if (!token || !backendUrl) return null;
+    try {
+      const headers: any = { 'Authorization': `Bearer ${token}` };
+      if (body) headers['Content-Type'] = 'application/json';
+      const res = await fetch(`${backendUrl}${endpoint}`, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : null
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Request failed');
+      }
+      return await res.json();
+    } catch (err) {
+      console.error(`[Inventory API Error] ${endpoint}:`, err);
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    if (!token || !backendUrl) return;
+
+    const loadData = async () => {
+      try {
+        const dbStock = await apiRequest('/api/store/inv_stock');
+        if (dbStock && dbStock.length > 0) setStockItems(dbStock);
+        else await apiRequest('/api/store/inv_stock/bulk', 'POST', stockItems);
+
+        const dbLocs = await apiRequest('/api/store/inv_locations');
+        if (dbLocs && dbLocs.length > 0) setLocationsData(dbLocs);
+        else await apiRequest('/api/store/inv_locations/bulk', 'POST', locationsData);
+
+        const dbTransfers = await apiRequest('/api/store/inv_transfers');
+        if (dbTransfers && dbTransfers.length > 0) setTransfersData(dbTransfers);
+        else await apiRequest('/api/store/inv_transfers/bulk', 'POST', transfersData);
+
+        const dbAdjustments = await apiRequest('/api/store/inv_adjustments');
+        if (dbAdjustments && dbAdjustments.length > 0) setAdjustmentsData(dbAdjustments);
+        else await apiRequest('/api/store/inv_adjustments/bulk', 'POST', adjustmentsData);
+
+        const dbGrn = await apiRequest('/api/store/inv_grn');
+        if (dbGrn && dbGrn.length > 0) setGrnData(dbGrn);
+        else await apiRequest('/api/store/inv_grn/bulk', 'POST', grnData);
+
+        const dbDispatch = await apiRequest('/api/store/inv_dispatch');
+        if (dbDispatch && dbDispatch.length > 0) setDispatchData(dbDispatch);
+        else await apiRequest('/api/store/inv_dispatch/bulk', 'POST', dispatchData);
+
+        const dbBatch = await apiRequest('/api/store/inv_batches');
+        if (dbBatch && dbBatch.length > 0) setBatchData(dbBatch);
+        else await apiRequest('/api/store/inv_batches/bulk', 'POST', batchData);
+
+        const dbSerials = await apiRequest('/api/store/inv_serials');
+        if (dbSerials && dbSerials.length > 0) setSerialData(dbSerials);
+        else await apiRequest('/api/store/inv_serials/bulk', 'POST', serialData);
+
+        const dbValuation = await apiRequest('/api/store/inv_valuation');
+        if (dbValuation && dbValuation.length > 0) setValuationData(dbValuation);
+        else await apiRequest('/api/store/inv_valuation/bulk', 'POST', valuationData);
+
+        const dbRackBin = await apiRequest('/api/store/inv_rackbin');
+        if (dbRackBin && dbRackBin.length > 0) setRackBinData(dbRackBin);
+        else await apiRequest('/api/store/inv_rackbin/bulk', 'POST', rackBinData);
+
+        const dbCycle = await apiRequest('/api/store/inv_cyclecount');
+        if (dbCycle && dbCycle.length > 0) setCycleCountData(dbCycle);
+        else await apiRequest('/api/store/inv_cyclecount/bulk', 'POST', cycleCountData);
+
+        setIsLoaded(true);
+      } catch (err) {
+        console.error('Error loading Inventory data from backend:', err);
+        setIsLoaded(true);
+      }
+    };
+
+    loadData();
+  }, [token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/inv_stock/bulk', 'POST', stockItems);
+  }, [stockItems, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/inv_locations/bulk', 'POST', locationsData);
+  }, [locationsData, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/inv_transfers/bulk', 'POST', transfersData);
+  }, [transfersData, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/inv_adjustments/bulk', 'POST', adjustmentsData);
+  }, [adjustmentsData, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/inv_grn/bulk', 'POST', grnData);
+  }, [grnData, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/inv_dispatch/bulk', 'POST', dispatchData);
+  }, [dispatchData, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/inv_batches/bulk', 'POST', batchData);
+  }, [batchData, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/inv_serials/bulk', 'POST', serialData);
+  }, [serialData, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/inv_valuation/bulk', 'POST', valuationData);
+  }, [valuationData, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/inv_rackbin/bulk', 'POST', rackBinData);
+  }, [rackBinData, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/inv_cyclecount/bulk', 'POST', cycleCountData);
+  }, [cycleCountData, isLoaded, token, backendUrl]);
 
   // --- ACTIONS HANDLERS ---
   const handleSaveTransfer = (e: React.FormEvent) => {
@@ -128,7 +268,18 @@ const InventoryWarehouse: React.FC<Props> = ({ user: _user, activeTab }) => {
       showToast('Please fill all required transfer scheduler fields', 'warning');
       return;
     }
-    showToast(`Inter-warehouse Transfer ${newTransfer.ref || 'TRF-1024'} scheduled successfully`, 'success');
+    const nextId = newTransfer.ref || `TRF-102${transfersData.length + 1}`;
+    const nTrf = {
+      id: nextId,
+      date: 'Today, 10:30 AM',
+      from: newTransfer.from,
+      to: newTransfer.to,
+      items: Number(newTransfer.qty),
+      status: 'In Transit',
+      ref: newTransfer.ref || 'Manual Req'
+    };
+    setTransfersData([nTrf, ...transfersData]);
+    showToast(`Inter-warehouse Transfer ${nextId} scheduled successfully`, 'success');
     setShowTransferModal(false);
     setNewTransfer({ item: '', from: '', to: '', qty: '', ref: '' });
   };
@@ -139,6 +290,18 @@ const InventoryWarehouse: React.FC<Props> = ({ user: _user, activeTab }) => {
       showToast('Please fill all required adjustment fields', 'warning');
       return;
     }
+    const nextId = `ADJ-88${adjustmentsData.length + 1}`;
+    const nAdj = {
+      id: nextId,
+      date: 'Today',
+      type: `Stock ${newAdjustment.type}`,
+      item: newAdjustment.item,
+      qty: newAdjustment.qty,
+      reason: newAdjustment.reason,
+      value: '-$100',
+      status: 'Approved'
+    };
+    setAdjustmentsData([nAdj, ...adjustmentsData]);
     showToast(`Stock Adjustment ${newAdjustment.type} recorded and ledger updated`, 'success');
     setShowAdjustmentModal(false);
     setNewAdjustment({ item: '', type: 'Write-off', qty: '', reason: '' });
@@ -152,7 +315,8 @@ const InventoryWarehouse: React.FC<Props> = ({ user: _user, activeTab }) => {
   };
 
   const generateBarcode = () => {
-    setBarcodePreview(`EAN-${Math.floor(1000000000000 + Math.random() * 9000000000000)}`);
+    const sn = `EAN-${Math.floor(1000000000000 + Math.random() * 9000000000000)}`;
+    setBarcodePreview(sn);
     showToast('Product EAN-13 barcode generated successfully', 'success');
   };
 

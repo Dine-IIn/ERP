@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Mail, Settings, LayoutTemplate, Send, Inbox, 
   Plus, Search, Filter, Download, RefreshCw, CheckCircle2, 
@@ -9,9 +9,11 @@ import {
 interface Props {
   activeTab?: string;
   user: any;
+  token?: string;
+  backendUrl?: string;
 }
 
-const GlobalEmailSystem: React.FC<Props> = ({ user: _user, activeTab }) => {
+const GlobalEmailSystem: React.FC<Props> = ({ user: _user, activeTab, token, backendUrl }) => {
   const mapping: Record<string, string> = {
     'EMAIL_SMTP': 'smtp',
     'EMAIL_TEMPLATES': 'templates',
@@ -120,6 +122,118 @@ const GlobalEmailSystem: React.FC<Props> = ({ user: _user, activeTab }) => {
     otpBypass: false,
     retryFailedQueue: true
   });
+
+  // --- DATABASE SYNC & BACKEND CONNECTIVITY ---
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  const apiRequest = async (endpoint: string, method = 'GET', body: any = null) => {
+    if (!token || !backendUrl) return null;
+    try {
+      const headers: any = { 'Authorization': `Bearer ${token}` };
+      if (body) headers['Content-Type'] = 'application/json';
+      const res = await fetch(`${backendUrl}${endpoint}`, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : null
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Request failed');
+      }
+      return await res.json();
+    } catch (err) {
+      console.error(`[Email API Error] ${endpoint}:`, err);
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    if (!token || !backendUrl) return;
+
+    const loadData = async () => {
+      try {
+        const dbSmtp = await apiRequest('/api/store/eml_smtp');
+        if (dbSmtp && dbSmtp.length > 0) setSmtpConfigs(dbSmtp);
+        else await apiRequest('/api/store/eml_smtp/bulk', 'POST', smtpConfigs);
+
+        const dbTpls = await apiRequest('/api/store/eml_templates');
+        if (dbTpls && dbTpls.length > 0) setEmailTemplates(dbTpls);
+        else await apiRequest('/api/store/eml_templates/bulk', 'POST', emailTemplates);
+
+        const dbLogs = await apiRequest('/api/store/eml_logs');
+        if (dbLogs && dbLogs.length > 0) setOutboxLogs(dbLogs);
+        else await apiRequest('/api/store/eml_logs/bulk', 'POST', outboxLogs);
+
+        const dbQueue = await apiRequest('/api/store/eml_queue');
+        if (dbQueue && dbQueue.length > 0) setEmailQueue(dbQueue);
+        else await apiRequest('/api/store/eml_queue/bulk', 'POST', emailQueue);
+
+        const dbAtts = await apiRequest('/api/store/eml_attachments');
+        if (dbAtts && dbAtts.length > 0) setAttachmentsData(dbAtts);
+        else await apiRequest('/api/store/eml_attachments/bulk', 'POST', attachmentsData);
+
+        const dbToggles = await apiRequest('/api/store/eml_toggles');
+        if (dbToggles && dbToggles.length > 0) setCompanyToggles(dbToggles);
+        else await apiRequest('/api/store/eml_toggles/bulk', 'POST', companyToggles);
+
+        const dbQuotas = await apiRequest('/api/store/eml_quotas');
+        if (dbQuotas && dbQuotas.length > 0) setUsageQuotas(dbQuotas);
+        else await apiRequest('/api/store/eml_quotas/bulk', 'POST', usageQuotas);
+
+        const dbSwitches = await apiRequest('/api/store/eml_switches');
+        if (dbSwitches) setSystemSwitches(dbSwitches);
+        else await apiRequest('/api/store/eml_switches', 'POST', systemSwitches);
+
+        setIsLoaded(true);
+      } catch (err) {
+        console.error('Error loading Email data from backend:', err);
+        setIsLoaded(true);
+      }
+    };
+
+    loadData();
+  }, [token, backendUrl]);
+
+  // Synchronizers to write state changes to the SQLite database
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/eml_smtp/bulk', 'POST', smtpConfigs);
+  }, [smtpConfigs, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/eml_templates/bulk', 'POST', emailTemplates);
+  }, [emailTemplates, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/eml_logs/bulk', 'POST', outboxLogs);
+  }, [outboxLogs, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/eml_queue/bulk', 'POST', emailQueue);
+  }, [emailQueue, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/eml_attachments/bulk', 'POST', attachmentsData);
+  }, [attachmentsData, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/eml_toggles/bulk', 'POST', companyToggles);
+  }, [companyToggles, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/eml_quotas/bulk', 'POST', usageQuotas);
+  }, [usageQuotas, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/eml_switches', 'POST', systemSwitches);
+  }, [systemSwitches, isLoaded, token, backendUrl]);
 
   // --- ACTIONS HANDLERS ---
   const handleSaveSmtp = (e: React.FormEvent) => {

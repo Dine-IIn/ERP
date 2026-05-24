@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ShieldCheck, Wrench, AlertOctagon, FileText, 
   Settings, BarChart3, Plus, Search, Filter, Download, 
@@ -9,9 +9,11 @@ import {
 interface Props {
   activeTab?: string;
   user: any;
+  token?: string;
+  backendUrl?: string;
 }
 
-const QualityMaintenance: React.FC<Props> = ({ user: _user, activeTab }) => {
+const QualityMaintenance: React.FC<Props> = ({ user: _user, activeTab, token, backendUrl }) => {
   const mapping: Record<string, string> = {
     'QUALITY_INSPECTION': 'inspections',
     'QUALITY_DEFECTS': 'defects',
@@ -124,6 +126,145 @@ const QualityMaintenance: React.FC<Props> = ({ user: _user, activeTab }) => {
     { id: 'HIST-501', machine: 'Precision CNC Molder', action: 'Complete spindle replacement', cost: 1200, resolvedDate: 'May 10, 2026', technician: 'Alice Cooper' },
     { id: 'HIST-502', machine: 'Wave Solderer', action: 'Core thermostat element replacement', cost: 250, resolvedDate: 'May 14, 2026', technician: 'Charlie Ward' }
   ]);
+
+  // --- DATABASE SYNC & BACKEND CONNECTIVITY ---
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  const apiRequest = async (endpoint: string, method = 'GET', body: any = null) => {
+    if (!token || !backendUrl) return null;
+    try {
+      const headers: any = { 'Authorization': `Bearer ${token}` };
+      if (body) headers['Content-Type'] = 'application/json';
+      const res = await fetch(`${backendUrl}${endpoint}`, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : null
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Request failed');
+      }
+      return await res.json();
+    } catch (err) {
+      console.error(`[Quality API Error] ${endpoint}:`, err);
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    if (!token || !backendUrl) return;
+
+    const loadData = async () => {
+      try {
+        const dbInspections = await apiRequest('/api/store/qms_inspections');
+        if (dbInspections && dbInspections.length > 0) setInspections(dbInspections);
+        else await apiRequest('/api/store/qms_inspections/bulk', 'POST', inspections);
+
+        const dbDefects = await apiRequest('/api/store/qms_defects');
+        if (dbDefects && dbDefects.length > 0) setDefectsData(dbDefects);
+        else await apiRequest('/api/store/qms_defects/bulk', 'POST', defectsData);
+
+        const dbCapa = await apiRequest('/api/store/qms_capa');
+        if (dbCapa && dbCapa.length > 0) setCapaData(dbCapa);
+        else await apiRequest('/api/store/qms_capa/bulk', 'POST', capaData);
+
+        const dbAudits = await apiRequest('/api/store/qms_audits');
+        if (dbAudits && dbAudits.length > 0) setAudits(dbAudits);
+        else await apiRequest('/api/store/qms_audits/bulk', 'POST', audits);
+
+        const dbTesting = await apiRequest('/api/store/qms_testing');
+        if (dbTesting && dbTesting.length > 0) setTestingRuns(dbTesting);
+        else await apiRequest('/api/store/qms_testing/bulk', 'POST', testingRuns);
+
+        const dbPreventive = await apiRequest('/api/store/qms_preventive');
+        if (dbPreventive && dbPreventive.length > 0) setPreventiveData(dbPreventive);
+        else await apiRequest('/api/store/qms_preventive/bulk', 'POST', preventiveData);
+
+        const dbBreakdowns = await apiRequest('/api/store/qms_breakdowns');
+        if (dbBreakdowns && dbBreakdowns.length > 0) setBreakdownLogs(dbBreakdowns);
+        else await apiRequest('/api/store/qms_breakdowns/bulk', 'POST', breakdownLogs);
+
+        const dbSchedules = await apiRequest('/api/store/qms_schedules');
+        if (dbSchedules && dbSchedules.length > 0) setSchedulesData(dbSchedules);
+        else await apiRequest('/api/store/qms_schedules/bulk', 'POST', schedulesData);
+
+        const dbSpares = await apiRequest('/api/store/qms_spares');
+        if (dbSpares && dbSpares.length > 0) setSpareParts(dbSpares);
+        else await apiRequest('/api/store/qms_spares/bulk', 'POST', spareParts);
+
+        const dbTechs = await apiRequest('/api/store/qms_technicians');
+        if (dbTechs && dbTechs.length > 0) setTechnicians(dbTechs);
+        else await apiRequest('/api/store/qms_technicians/bulk', 'POST', technicians);
+
+        const dbHistory = await apiRequest('/api/store/qms_history');
+        if (dbHistory && dbHistory.length > 0) setMaintenanceHistory(dbHistory);
+        else await apiRequest('/api/store/qms_history/bulk', 'POST', maintenanceHistory);
+
+        setIsLoaded(true);
+      } catch (err) {
+        console.error('Error loading Quality data from backend:', err);
+        setIsLoaded(true);
+      }
+    };
+
+    loadData();
+  }, [token, backendUrl]);
+
+  // Synchronizers to write state changes to the SQLite database
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/qms_inspections/bulk', 'POST', inspections);
+  }, [inspections, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/qms_defects/bulk', 'POST', defectsData);
+  }, [defectsData, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/qms_capa/bulk', 'POST', capaData);
+  }, [capaData, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/qms_audits/bulk', 'POST', audits);
+  }, [audits, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/qms_testing/bulk', 'POST', testingRuns);
+  }, [testingRuns, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/qms_preventive/bulk', 'POST', preventiveData);
+  }, [preventiveData, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/qms_breakdowns/bulk', 'POST', breakdownLogs);
+  }, [breakdownLogs, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/qms_schedules/bulk', 'POST', schedulesData);
+  }, [schedulesData, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/qms_spares/bulk', 'POST', spareParts);
+  }, [spareParts, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/qms_technicians/bulk', 'POST', technicians);
+  }, [technicians, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/qms_history/bulk', 'POST', maintenanceHistory);
+  }, [maintenanceHistory, isLoaded, token, backendUrl]);
 
   // --- ACTIONS HANDLERS ---
   const handleSaveInspection = (e: React.FormEvent) => {

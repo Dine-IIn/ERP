@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Users, Activity, PhoneCall, Calendar, Target, 
   BarChart3, Plus, Search, Filter, Download, MoreHorizontal, 
@@ -9,6 +9,8 @@ import {
 interface Props {
   activeTab?: string;
   user: any;
+  token?: string;
+  backendUrl?: string;
 }
 
 // Simple Clock icon component
@@ -19,7 +21,7 @@ const Clock = (props: any) => (
   </svg>
 );
 
-const CrmModule: React.FC<Props> = ({ user: _user, activeTab }) => {
+const CrmModule: React.FC<Props> = ({ user: _user, activeTab, token, backendUrl }) => {
   const mapping: Record<string, string> = {
     'CRM_DASHBOARD': 'dashboard', 
     'CRM_LEADS': 'leads', 
@@ -106,6 +108,124 @@ const CrmModule: React.FC<Props> = ({ user: _user, activeTab }) => {
     { id: 'proposal', name: 'Proposal Sent', color: 'bg-purple-500', items: [] },
     { id: 'won', name: 'Closed Won', color: 'bg-emerald-500', items: [] }
   ]);
+
+  // --- DATABASE SYNC & BACKEND CONNECTIVITY ---
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  const apiRequest = async (endpoint: string, method = 'GET', body: any = null) => {
+    if (!token || !backendUrl) return null;
+    try {
+      const headers: any = { 'Authorization': `Bearer ${token}` };
+      if (body) headers['Content-Type'] = 'application/json';
+      const res = await fetch(`${backendUrl}${endpoint}`, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : null
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Request failed');
+      }
+      return await res.json();
+    } catch (err) {
+      console.error(`[CRM API Error] ${endpoint}:`, err);
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    if (!token || !backendUrl) return;
+
+    const loadData = async () => {
+      try {
+        // 1. Leads
+        const dbLeads = await apiRequest('/api/store/crm_leads');
+        if (dbLeads && dbLeads.length > 0) {
+          setLeads(dbLeads);
+        } else {
+          await apiRequest('/api/store/crm_leads/bulk', 'POST', leads);
+        }
+
+        // 2. Customers
+        const dbCustomers = await apiRequest('/api/store/crm_customers');
+        if (dbCustomers && dbCustomers.length > 0) {
+          setCustomers(dbCustomers);
+        } else {
+          await apiRequest('/api/store/crm_customers/bulk', 'POST', customers);
+        }
+
+        // 3. Followups
+        const dbFollowups = await apiRequest('/api/store/crm_followups');
+        if (dbFollowups && dbFollowups.length > 0) {
+          setFollowups(dbFollowups);
+        } else {
+          await apiRequest('/api/store/crm_followups/bulk', 'POST', followups);
+        }
+
+        // 4. Opportunities
+        const dbOpportunities = await apiRequest('/api/store/crm_opportunities');
+        if (dbOpportunities && dbOpportunities.length > 0) {
+          setOpportunities(dbOpportunities);
+        } else {
+          await apiRequest('/api/store/crm_opportunities/bulk', 'POST', opportunities);
+        }
+
+        // 5. Communications
+        const dbComms = await apiRequest('/api/store/crm_communications');
+        if (dbComms && dbComms.length > 0) {
+          setCommunications(dbComms);
+        } else {
+          await apiRequest('/api/store/crm_communications/bulk', 'POST', communications);
+        }
+
+        // 6. Pipeline stages
+        const dbPipeline = await apiRequest('/api/store/crm_pipeline');
+        if (dbPipeline && dbPipeline.length > 0) {
+          setPipelineStages(dbPipeline);
+        } else {
+          await apiRequest('/api/store/crm_pipeline/bulk', 'POST', pipelineStages);
+        }
+
+        setIsLoaded(true);
+      } catch (err) {
+        console.error('Error loading CRM data from backend:', err);
+        setIsLoaded(true);
+      }
+    };
+
+    loadData();
+  }, [token, backendUrl]);
+
+  // Synchronizers to write state changes to the SQLite database
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/crm_leads/bulk', 'POST', leads);
+  }, [leads, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/crm_customers/bulk', 'POST', customers);
+  }, [customers, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/crm_followups/bulk', 'POST', followups);
+  }, [followups, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/crm_opportunities/bulk', 'POST', opportunities);
+  }, [opportunities, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/crm_communications/bulk', 'POST', communications);
+  }, [communications, isLoaded, token, backendUrl]);
+
+  useEffect(() => {
+    if (!isLoaded || !token || !backendUrl) return;
+    apiRequest('/api/store/crm_pipeline/bulk', 'POST', pipelineStages);
+  }, [pipelineStages, isLoaded, token, backendUrl]);
 
   // --- ACTIONS HANDLERS ---
   const handleSaveLead = (e: React.FormEvent) => {

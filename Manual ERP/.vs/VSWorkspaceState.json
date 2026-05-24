@@ -1,6 +1,10 @@
 {
   "ExpandedNodes": [
-    ""
+    "",
+    "\\frontend",
+    "\\frontend\\src",
+    "\\frontend\\src-tauri"
   ],
+  "SelectedNode": "\\frontend\\src-tauri\\tauri.conf.json",
   "PreviewInSolutionExplorer": false
 }
