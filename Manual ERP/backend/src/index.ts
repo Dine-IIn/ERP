@@ -15,6 +15,8 @@ import {
   requestSignupOTP,
   signup,
   login,
+  updateSelfProfile,
+  resetPassword,
   createCompany,
   updateCompany,
   listCompanyUsers,
@@ -221,6 +223,8 @@ app.get('/health', (req, res) => {
 app.post('/api/auth/otp-request', requestSignupOTP);
 app.post('/api/auth/signup', signup);
 app.post('/api/auth/login', login);
+app.patch('/api/auth/profile', authenticateToken, updateSelfProfile);
+app.post('/api/auth/reset-password', resetPassword);
 
 // 2. Super Admin Routes (Create Companies & Manage Global Tiers)
 app.post('/api/super/company', authenticateToken, requireSuperAdmin, createCompany);

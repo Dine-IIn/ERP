@@ -119,6 +119,35 @@ export default function App() {
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
 
+  // Profile settings state
+  const [showMyProfileModal, setShowMyProfileModal] = useState(false);
+  const [profileEmail, setProfileEmail] = useState('');
+  const [profilePhone, setProfilePhone] = useState('');
+  const [profilePassword, setProfilePassword] = useState('');
+  const [profileConfirmPassword, setProfileConfirmPassword] = useState('');
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileSuccess, setProfileSuccess] = useState<string | null>(null);
+
+  // Forgot password state
+  const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(false);
+  const [forgotCompanyCode, setForgotCompanyCode] = useState('');
+  const [forgotUsername, setForgotUsername] = useState('');
+  const [forgotEmailOrPhone, setForgotEmailOrPhone] = useState('');
+  const [forgotNewPassword, setForgotNewPassword] = useState('');
+  const [forgotConfirmPassword, setForgotConfirmPassword] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotError, setForgotError] = useState<string | null>(null);
+  const [forgotSuccess, setForgotSuccess] = useState<string | null>(null);
+
+  // Sync profile input fields reactively when user caches change
+  useEffect(() => {
+    if (user) {
+      setProfileEmail(user.email || '');
+      setProfilePhone(user.mobileNo || '');
+    }
+  }, [user]);
+
   // Real-time socket reference
   const socketRef = useRef<Socket | null>(null);
   
@@ -658,6 +687,79 @@ export default function App() {
     setSelectedCompany(null);
     setSelectedCompanyUsers([]);
     setShowProfileDropdown(false);
+  };
+
+  const handleProfileUpdateSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (profilePassword && profilePassword !== profileConfirmPassword) {
+      setProfileError("Passwords do not match");
+      return;
+    }
+    setProfileLoading(true);
+    setProfileError(null);
+    setProfileSuccess(null);
+    try {
+      const res = await apiRequest('/api/auth/profile', 'PATCH', {
+        email: profileEmail,
+        mobileNo: profilePhone,
+        ...(profilePassword && { password: profilePassword })
+      });
+      setProfileSuccess("Profile updated successfully!");
+      // Update cached user state
+      const updatedUser = {
+        ...user!,
+        email: res.user.email,
+        mobileNo: res.user.mobileNo
+      };
+      setUser(updatedUser);
+      localStorage.setItem('erp_user', JSON.stringify(updatedUser));
+      
+      // Auto close after 1.5 seconds
+      setTimeout(() => {
+        setShowMyProfileModal(false);
+      }, 1500);
+    } catch (err: any) {
+      setProfileError(err.message || "Failed to update profile settings.");
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
+  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (forgotNewPassword !== forgotConfirmPassword) {
+      setForgotError("Passwords do not match");
+      return;
+    }
+    setForgotLoading(true);
+    setForgotError(null);
+    setForgotSuccess(null);
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/auth/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyCode: forgotCompanyCode,
+          username: forgotUsername,
+          emailOrPhone: forgotEmailOrPhone,
+          newPassword: forgotNewPassword
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Reset password request failed.");
+      }
+      setForgotSuccess("Password reset successful! You can now log in.");
+      
+      // Auto close after 2.5 seconds
+      setTimeout(() => {
+        setShowForgotPasswordModal(false);
+      }, 2500);
+    } catch (err: any) {
+      setForgotError(err.message || "Failed to reset password.");
+    } finally {
+      setForgotLoading(false);
+    }
   };
 
   const fetchNotifications = async () => {
@@ -1267,6 +1369,24 @@ export default function App() {
                       className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2.5 pl-10 pr-4 rounded-lg text-xs focus:outline-none transition-colors"
                     />
                   </div>
+                  <div className="flex justify-end mt-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowForgotPasswordModal(true);
+                        setForgotCompanyCode(loginForm.companyCode);
+                        setForgotUsername(loginForm.username);
+                        setForgotEmailOrPhone('');
+                        setForgotNewPassword('');
+                        setForgotConfirmPassword('');
+                        setForgotError(null);
+                        setForgotSuccess(null);
+                      }}
+                      className="text-indigo-500 hover:text-indigo-400 hover:underline font-semibold text-[10px] cursor-pointer transition-colors"
+                    >
+                      Forgot Password?
+                    </button>
+                  </div>
                 </div>
 
                 <button
@@ -1486,7 +1606,7 @@ export default function App() {
           {/* ==========================================
               FIXED LEFT SIDEBAR MENU
               ========================================== */}
-          <aside ref={sidebarRef} className={`fixed top-0 bottom-0 left-0 bg-[var(--bg-secondary)] border-r border-[var(--border-color)] flex flex-col z-30 transition-all duration-300 ${sidebarCollapsed ? 'w-16 overflow-visible' : 'w-64'}`}>
+          <aside ref={sidebarRef} className={`fixed top-0 bottom-0 left-0 bg-[var(--bg-secondary)] border-r border-[var(--border-color)] flex flex-col z-40 transition-all duration-300 ${sidebarCollapsed ? 'w-16 overflow-visible' : 'w-64'}`}>
             
             {/* Top Left User Profile Card Dropdown */}
             <div className="relative border-b border-[var(--border-color)] p-4 flex justify-center">
@@ -1516,48 +1636,70 @@ export default function App() {
               )}
               
               {showProfileDropdown && (
-                <div className={`absolute bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl shadow-xl z-50 p-2 animate-fade-in text-left ${sidebarCollapsed ? 'left-16 top-4 w-48' : 'left-4 right-4 mt-2'}`}>
-                  <div className="px-3 py-2 border-b border-[var(--border-color)] text-[10px] text-[var(--text-secondary)]">
-                    Logged in as <strong className="text-[var(--text-primary)]">{user.username}</strong>
-                    {!user.isSuperAdmin && <p className="mt-1">Tenant Code: <span className="font-mono text-indigo-500 font-bold">{user.companyCode}</span></p>}
-                  </div>
-                  
-                  {/* Theme Switcher Button */}
-                  <button
-                    onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                    className="w-full text-left px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors flex items-center justify-between cursor-pointer mt-1"
-                  >
-                    <span className="flex items-center gap-2">
-                      {theme === 'dark' ? <Moon className="w-3.5 h-3.5 text-indigo-400" /> : <Sun className="w-3.5 h-3.5 text-amber-500" />}
-                      Theme Mode
-                    </span>
-                    <span className="text-[9px] bg-[var(--bg-tertiary)] px-1.5 py-0.5 rounded text-[var(--text-secondary)] font-bold capitalize">
-                      {theme}
-                    </span>
-                  </button>
+                <>
+                  <div className="fixed inset-0 z-40 bg-transparent cursor-default" onClick={() => setShowProfileDropdown(false)} />
+                  <div className={`absolute bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl shadow-xl z-50 p-2 animate-fade-in text-left ${sidebarCollapsed ? 'left-[72px] top-2 w-52 shadow-[0_8px_30px_rgba(0,0,0,0.35)]' : 'top-full left-4 right-4 mt-1.5'}`}>
+                    {sidebarCollapsed && (
+                      <div className="absolute top-[20px] -left-1.5 w-3 h-3 bg-[var(--bg-card)] border-l border-b border-[var(--border-color)] rotate-45" />
+                    )}
+                    <div className="px-3 py-2 border-b border-[var(--border-color)] text-[10px] text-[var(--text-secondary)]">
+                      Logged in as <strong className="text-[var(--text-primary)]">{user.username}</strong>
+                      {!user.isSuperAdmin && <p className="mt-1">Tenant Code: <span className="font-mono text-indigo-500 font-bold">{user.companyCode}</span></p>}
+                    </div>
+                    
+                    {/* Theme Switcher Button */}
+                    <button
+                      onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                      className="w-full text-left px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors flex items-center justify-between cursor-pointer mt-1"
+                    >
+                      <span className="flex items-center gap-2">
+                        {theme === 'dark' ? <Moon className="w-3.5 h-3.5 text-indigo-400" /> : <Sun className="w-3.5 h-3.5 text-amber-500" />}
+                        Theme Mode
+                      </span>
+                      <span className="text-[9px] bg-[var(--bg-tertiary)] px-1.5 py-0.5 rounded text-[var(--text-secondary)] font-bold capitalize">
+                        {theme}
+                      </span>
+                    </button>
 
-                  {/* Subscription Details (Company Admin only) */}
-                  {!user.isSuperAdmin && user.role === 'Admin' && (
+                    {/* My Profile Button */}
                     <button
                       onClick={() => {
                         setShowProfileDropdown(false);
-                        setShowSubscriptionModal(true);
+                        setShowMyProfileModal(true);
+                        setProfilePassword('');
+                        setProfileConfirmPassword('');
+                        setProfileError(null);
+                        setProfileSuccess(null);
                       }}
                       className="w-full text-left px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors flex items-center gap-2 cursor-pointer mt-1"
                     >
-                      <Building className="w-3.5 h-3.5 text-indigo-400" />
-                      <span>Subscription Details</span>
+                      <User className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>My Profile Settings</span>
                     </button>
-                  )}
 
-                  <button
-                    onClick={handleLogout}
-                    className="w-full text-left px-3 py-2 text-xs font-bold text-red-500 hover:bg-red-500/10 rounded-lg transition-colors flex items-center gap-2 cursor-pointer mt-1"
-                  >
-                    <LogOut className="w-3.5 h-3.5 text-red-500" />
-                    <span>Logout</span>
-                  </button>
-                </div>
+                    {/* Subscription Details (Company Admin only) */}
+                    {!user.isSuperAdmin && user.role === 'Admin' && (
+                      <button
+                        onClick={() => {
+                          setShowProfileDropdown(false);
+                          setShowSubscriptionModal(true);
+                        }}
+                        className="w-full text-left px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors flex items-center gap-2 cursor-pointer mt-1"
+                      >
+                        <Building className="w-3.5 h-3.5 text-indigo-400" />
+                        <span>Subscription Details</span>
+                      </button>
+                    )}
+
+                    <button
+                      onClick={handleLogout}
+                      className="w-full text-left px-3 py-2 text-xs font-bold text-red-500 hover:bg-red-500/10 rounded-lg transition-colors flex items-center gap-2 cursor-pointer mt-1"
+                    >
+                      <LogOut className="w-3.5 h-3.5 text-red-500" />
+                      <span>Logout</span>
+                    </button>
+                  </div>
+                </>
               )}
             </div>
 
@@ -4799,6 +4941,307 @@ export default function App() {
                     </button>
                   </>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* ==========================================
+              MODAL: USER - MY PROFILE SETTINGS
+              ========================================== */}
+          {showMyProfileModal && user && (
+            <div className="fixed inset-0 z-55 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 animate-fade-in select-none">
+              <div className="bg-[var(--bg-card)] border border-[var(--border-color)] p-6 rounded-2xl shadow-2xl w-full max-w-md animate-scale-up relative">
+                <button 
+                  onClick={() => setShowMyProfileModal(false)}
+                  className="absolute top-4 right-4 text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+
+                <div className="flex items-center gap-3 pb-3 border-b border-[var(--border-color)]">
+                  <div className="p-2.5 bg-indigo-500/10 rounded-xl text-indigo-400 border border-indigo-500/20">
+                    <UserCircle className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-base text-[var(--text-primary)] font-display">My Profile Settings</h3>
+                    <p className="text-[var(--text-secondary)] text-[10px]">Update your contact details and account security passphrase</p>
+                  </div>
+                </div>
+
+                {(profileError || profileSuccess) && (
+                  <div className="mt-4">
+                    {profileError && (
+                      <div className="bg-red-500/10 border border-red-500/20 p-2.5 rounded-lg flex items-center gap-2 text-red-500 text-xs">
+                        <AlertCircle className="w-4 h-4 shrink-0" />
+                        <span>{profileError}</span>
+                      </div>
+                    )}
+                    {profileSuccess && (
+                      <div className="bg-emerald-500/10 border border-emerald-500/20 p-2.5 rounded-lg flex items-center gap-2 text-emerald-500 text-xs">
+                        <CheckCircle className="w-4 h-4 shrink-0" />
+                        <span>{profileSuccess}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <form onSubmit={handleProfileUpdateSubmit} className="mt-4 flex flex-col gap-4">
+                  <div>
+                    <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Username (Locked)</label>
+                    <div className="mt-1 relative opacity-70">
+                      <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+                      <input
+                        type="text"
+                        disabled
+                        value={user.username}
+                        className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] py-2 pl-10 pr-4 rounded-lg text-xs cursor-not-allowed select-none text-[var(--text-muted)]"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Mobile Phone Number</label>
+                    <div className="mt-1 relative">
+                      <Phone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+                      <input
+                        type="text"
+                        required
+                        placeholder="+919876543210"
+                        value={profilePhone}
+                        onChange={e => setProfilePhone(e.target.value)}
+                        className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 pl-10 pr-4 rounded-lg text-xs focus:outline-none transition-colors"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Email Address ID</label>
+                    <div className="mt-1 relative">
+                      <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+                      <input
+                        type="email"
+                        placeholder="you@company.com"
+                        value={profileEmail}
+                        onChange={e => setProfileEmail(e.target.value)}
+                        className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 pl-10 pr-4 rounded-lg text-xs focus:outline-none transition-colors"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="border-t border-[var(--border-color)] pt-3 mt-1">
+                    <span className="text-[10px] font-bold text-indigo-400 tracking-wider uppercase block mb-3">Change Security Password</span>
+                    
+                    <div className="flex flex-col gap-3">
+                      <div>
+                        <label className="text-[8px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">New Password</label>
+                        <div className="mt-1 relative">
+                          <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+                          <input
+                            type="password"
+                            placeholder="Leave blank to keep current"
+                            value={profilePassword}
+                            onChange={e => setProfilePassword(e.target.value)}
+                            className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 pl-10 pr-4 rounded-lg text-xs focus:outline-none transition-colors"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[8px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Confirm New Password</label>
+                        <div className="mt-1 relative">
+                          <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+                          <input
+                            type="password"
+                            placeholder="Re-type new password"
+                            value={profileConfirmPassword}
+                            onChange={e => setProfileConfirmPassword(e.target.value)}
+                            className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 pl-10 pr-4 rounded-lg text-xs focus:outline-none transition-colors"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-[var(--border-color)]/50 flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowMyProfileModal(false)}
+                      className="px-4 py-2 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-[11px] font-bold transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={profileLoading}
+                      className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold shadow-md shadow-indigo-600/10 transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      {profileLoading ? (
+                        <>
+                          <svg className="animate-spin h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          <span>Saving...</span>
+                        </>
+                      ) : (
+                        <span>Save Changes</span>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* ==========================================
+              MODAL: USER - FORGOT PASSWORD RECOVERY
+              ========================================== */}
+          {showForgotPasswordModal && (
+            <div className="fixed inset-0 z-55 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 animate-fade-in select-none">
+              <div className="bg-[var(--bg-card)] border border-[var(--border-color)] p-6 rounded-2xl shadow-2xl w-full max-w-md animate-scale-up relative">
+                <button 
+                  onClick={() => setShowForgotPasswordModal(false)}
+                  className="absolute top-4 right-4 text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+
+                <div className="flex items-center gap-3 pb-3 border-b border-[var(--border-color)]">
+                  <div className="p-2.5 bg-indigo-500/10 rounded-xl text-indigo-400 border border-indigo-500/20">
+                    <Key className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-base text-[var(--text-primary)] font-display">Credentials Recovery</h3>
+                    <p className="text-[var(--text-secondary)] text-[10px]">Provide your workstation markers to authorize password override</p>
+                  </div>
+                </div>
+
+                {(forgotError || forgotSuccess) && (
+                  <div className="mt-4">
+                    {forgotError && (
+                      <div className="bg-red-500/10 border border-red-500/20 p-2.5 rounded-lg flex items-center gap-2 text-red-500 text-xs">
+                        <AlertCircle className="w-4 h-4 shrink-0" />
+                        <span>{forgotError}</span>
+                      </div>
+                    )}
+                    {forgotSuccess && (
+                      <div className="bg-emerald-500/10 border border-emerald-500/20 p-2.5 rounded-lg flex items-center gap-2 text-emerald-500 text-xs">
+                        <CheckCircle className="w-4 h-4 shrink-0" />
+                        <span>{forgotSuccess}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <form onSubmit={handleForgotPasswordSubmit} className="mt-4 flex flex-col gap-4">
+                  <div>
+                    <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Company Tenant Code</label>
+                    <div className="mt-1 relative">
+                      <Building className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. APPLE, DINEIN"
+                        value={forgotCompanyCode}
+                        onChange={e => setForgotCompanyCode(e.target.value)}
+                        className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 pl-10 pr-4 rounded-lg text-xs focus:outline-none transition-colors"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Username</label>
+                    <div className="mt-1 relative">
+                      <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+                      <input
+                        type="text"
+                        required
+                        placeholder="Enter username"
+                        value={forgotUsername}
+                        onChange={e => setForgotUsername(e.target.value)}
+                        className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 pl-10 pr-4 rounded-lg text-xs focus:outline-none transition-colors"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Registered Phone or Email</label>
+                    <div className="mt-1 relative">
+                      <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+                      <input
+                        type="text"
+                        required
+                        placeholder="Registered email address or phone number"
+                        value={forgotEmailOrPhone}
+                        onChange={e => setForgotEmailOrPhone(e.target.value)}
+                        className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 pl-10 pr-4 rounded-lg text-xs focus:outline-none transition-colors"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="border-t border-[var(--border-color)] pt-3 mt-1">
+                    <span className="text-[10px] font-bold text-indigo-400 tracking-wider uppercase block mb-3">Define New Passphrase</span>
+                    
+                    <div className="flex flex-col gap-3">
+                      <div>
+                        <label className="text-[8px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">New Password</label>
+                        <div className="mt-1 relative">
+                          <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+                          <input
+                            type="password"
+                            required
+                            placeholder="Minimum 6 characters"
+                            value={forgotNewPassword}
+                            onChange={e => setForgotNewPassword(e.target.value)}
+                            className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 pl-10 pr-4 rounded-lg text-xs focus:outline-none transition-colors"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[8px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Confirm New Password</label>
+                        <div className="mt-1 relative">
+                          <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+                          <input
+                            type="password"
+                            required
+                            placeholder="Confirm password"
+                            value={forgotConfirmPassword}
+                            onChange={e => setForgotConfirmPassword(e.target.value)}
+                            className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 pl-10 pr-4 rounded-lg text-xs focus:outline-none transition-colors"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-[var(--border-color)]/50 flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowForgotPasswordModal(false)}
+                      className="px-4 py-2 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-[11px] font-bold transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={forgotLoading}
+                      className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold shadow-md shadow-indigo-600/10 transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      {forgotLoading ? (
+                        <>
+                          <svg className="animate-spin h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          <span>Processing...</span>
+                        </>
+                      ) : (
+                        <span>Reset Account Password</span>
+                      )}
+                    </button>
+                  </div>
+                </form>
               </div>
             </div>
           )}

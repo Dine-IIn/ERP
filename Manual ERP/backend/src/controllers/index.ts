@@ -1,4 +1,4 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import prisma from '../services/db';
 import {
@@ -421,7 +421,9 @@ export async function login(req: AuthenticatedRequest, res: Response) {
         role: user.role?.name || null,
         isSuperAdmin: false,
         hasBackupAccess: user.hasBackupAccess,
-        backupAccess: company.backupAccess
+        backupAccess: company.backupAccess,
+        email: user.email,
+        mobileNo: user.mobileNo
       }
     });
   } catch (error: any) {
@@ -1091,5 +1093,145 @@ export async function registerPushToken(req: AuthenticatedRequest, res: Response
 // Export all General Administration Controllers
 export * from './admin';
 export * from './store';
+
+// ==========================================
+// 5. USER PROFILE & PASSWORD RESET CONTROLLERS
+// ==========================================
+
+export async function updateSelfProfile(req: AuthenticatedRequest, res: Response) {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized: User ID missing" });
+    }
+
+    const { email, mobileNo, password } = req.body;
+
+    // Check if user exists
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const updatedData: any = {};
+
+    // Validate and check uniqueness of mobile number if provided
+    if (mobileNo && mobileNo !== user.mobileNo) {
+      if (!/^\+?[1-9]\d{9,14}$/.test(mobileNo)) {
+        return res.status(400).json({ error: "Invalid mobile number format" });
+      }
+
+      const existingMobile = await prisma.user.findFirst({
+        where: {
+          mobileNo,
+          id: { not: userId }
+        }
+      });
+      if (existingMobile) {
+        return res.status(409).json({ error: "Mobile number is already registered to another user." });
+      }
+      updatedData.mobileNo = mobileNo;
+    }
+
+    // Validate email format if provided
+    if (email !== undefined) {
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ error: "Invalid email format" });
+      }
+      updatedData.email = email || null;
+    }
+
+    // Hash password if provided
+    if (password) {
+      if (password.length < 6) {
+        return res.status(400).json({ error: "Password must be at least 6 characters long" });
+      }
+      updatedData.passwordHash = await hashPassword(password);
+    }
+
+    // Perform database update
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: updatedData
+    });
+
+    return res.json({
+      message: "Profile updated successfully",
+      user: {
+        id: updatedUser.id,
+        username: updatedUser.username,
+        email: updatedUser.email,
+        mobileNo: updatedUser.mobileNo,
+        status: updatedUser.status
+      }
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function resetPassword(req: Request, res: Response) {
+  try {
+    const { companyCode, username, emailOrPhone, newPassword } = req.body;
+
+    if (!companyCode || !username || !emailOrPhone || !newPassword) {
+      return res.status(400).json({ error: "All fields are required to reset your password" });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: "New password must be at least 6 characters long" });
+    }
+
+    // Find Company
+    const company = await prisma.company.findUnique({
+      where: { companyCode: companyCode.toUpperCase() }
+    });
+    if (!company) {
+      return res.status(404).json({ error: "Company code does not exist" });
+    }
+
+    // Find User
+    const user = await prisma.user.findFirst({
+      where: {
+        companyId: company.id,
+        username
+      }
+    });
+    if (!user) {
+      return res.status(404).json({ error: "Username not found in the selected company" });
+    }
+
+    // Enforce suspension check
+    if (user.status === "SUSPENDED") {
+      return res.status(403).json({
+        error: "Your user account has been suspended. Please contact your company administrator or system superadmin."
+      });
+    }
+
+    // Verify email or phone matches registered user details
+    const matchedEmail = user.email && user.email.toLowerCase().trim() === emailOrPhone.toLowerCase().trim();
+    const matchedPhone = user.mobileNo.trim() === emailOrPhone.trim();
+
+    if (!matchedEmail && !matchedPhone) {
+      return res.status(400).json({ error: "The provided email or mobile number does not match our records." });
+    }
+
+    // Hash new password and save
+    const passwordHash = await hashPassword(newPassword);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash }
+    });
+
+    return res.json({
+      message: "Password has been reset successfully. You can now log in with your new password."
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
 
 
