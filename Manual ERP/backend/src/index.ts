@@ -104,6 +104,11 @@ const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:5000',
   'http://localhost:3000',
+  'tauri://localhost',
+  'http://tauri.localhost',
+  'capacitor://localhost',
+  'http://localhost',
+  'https://localhost',
 ];
 
 if (process.env.FRONTEND_URL) {
@@ -117,7 +122,9 @@ const corsOptions: cors.CorsOptions = {
     
     const isAllowed = allowedOrigins.includes(origin) || 
                       origin.endsWith('.vercel.app') || 
-                      /^http:\/\/localhost:\d+$/.test(origin);
+                      /^http:\/\/localhost:\d+$/.test(origin) ||
+                      origin.startsWith('tauri://') ||
+                      origin.startsWith('capacitor://');
                       
     if (isAllowed) {
       callback(null, true);
@@ -156,7 +163,9 @@ const io = new Server(server, {
       if (!origin) return callback(null, true);
       const isAllowed = allowedOrigins.includes(origin) || 
                         origin.endsWith('.vercel.app') || 
-                        /^http:\/\/localhost:\d+$/.test(origin);
+                        /^http:\/\/localhost:\d+$/.test(origin) ||
+                        origin.startsWith('tauri://') ||
+                        origin.startsWith('capacitor://');
       if (isAllowed) {
         callback(null, true);
       } else {
