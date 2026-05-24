@@ -1,3 +1,4 @@
+import { apiClient } from '../utils/apiService';
 import React, { useState, useEffect } from 'react';
 import { MASTER_FEATURES_HIERARCHY } from '../features';
 import {
@@ -324,26 +325,24 @@ export default function GeneralAdmin({
   }, [socket, activeTab]);
 
   // API Call Helpers
-  async function apiRequest(endpoint: string, method = 'GET', body: any = null) {
-    const headers: any = {
-      'Authorization': `Bearer ${token}`
-    };
-    if (body) {
-      headers['Content-Type'] = 'application/json';
+  const apiRequest = async (endpoint: string, method = 'GET', body: any = null): Promise<any> => {
+    try {
+      if (method === 'GET') {
+        return await apiClient.get<any>(endpoint);
+      } else if (method === 'POST') {
+        return await apiClient.post<any>(endpoint, body);
+      } else if (method === 'PUT') {
+        return await apiClient.put<any>(endpoint, body);
+      } else if (method === 'PATCH') {
+        return await apiClient.patch<any>(endpoint, body);
+      } else if (method === 'DELETE') {
+        return await apiClient.delete<any>(endpoint);
+      }
+    } catch (err) {
+      console.error(`[API Error] ${endpoint}:`, err);
+      return null;
     }
-
-    const res = await fetch(`${backendUrl}${endpoint}`, {
-      method,
-      headers,
-      body: body ? JSON.stringify(body) : null
-    });
-
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.error || 'Something went wrong');
-    }
-    return data;
-  }
+  };
 
   // File Upload to Base64 Helper
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, fieldName: string, formSetter: any) => {

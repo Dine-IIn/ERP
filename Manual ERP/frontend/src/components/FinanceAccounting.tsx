@@ -1,3 +1,26 @@
+import { apiClient } from '../utils/apiService';
+
+const fetchProxy = async (input: RequestInfo | URL, init?: RequestInit) => {
+  const token = localStorage.getItem('erp_token');
+  const headers = new Headers(init?.headers);
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  
+  const res = await window.fetch(input, {
+    ...init,
+    headers
+  });
+  
+  if (res.status === 401 || res.status === 403) {
+    localStorage.removeItem('erp_token');
+    localStorage.removeItem('erp_user');
+    window.dispatchEvent(new Event('auth-expired'));
+  }
+  
+  return res;
+};
+
 import { useState, useEffect } from 'react';
 import {
   DollarSign,
@@ -249,14 +272,14 @@ export default function FinanceAccounting({
     setLoading(true);
     try {
       // 1. Fetch Accounts
-      const accRes = await fetch(`${backendUrl}/api/finance/accounts`, {
+      const accRes = await fetchProxy(`${backendUrl}/api/finance/accounts`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const accData = await accRes.json();
       if (accRes.ok) setAccounts(accData.accounts);
 
       // 2. Fetch Fiscal Years
-      const fyRes = await fetch(`${backendUrl}/api/finance/fiscal-years`, {
+      const fyRes = await fetchProxy(`${backendUrl}/api/finance/fiscal-years`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const fyData = await fyRes.json();
@@ -267,20 +290,20 @@ export default function FinanceAccounting({
       }
 
       // 3. Fetch Customers & Vendors for subledger selection mapping
-      const custRes = await fetch(`${backendUrl}/api/mdm/customer`, {
+      const custRes = await fetchProxy(`${backendUrl}/api/mdm/customer`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const custData = await custRes.json();
       if (custRes.ok) setCustomers(custData.data || []);
 
-      const vendRes = await fetch(`${backendUrl}/api/mdm/vendor`, {
+      const vendRes = await fetchProxy(`${backendUrl}/api/mdm/vendor`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const vendData = await vendRes.json();
       if (vendRes.ok) setVendors(vendData.data || []);
 
       // 4. Fetch Journal Entries
-      const jeRes = await fetch(`${backendUrl}/api/finance/journal-entries`, {
+      const jeRes = await fetchProxy(`${backendUrl}/api/finance/journal-entries`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const jeData = await jeRes.json();
@@ -301,7 +324,7 @@ export default function FinanceAccounting({
   const loadLedgerStatement = async (accountId: string) => {
     if (!accountId) return;
     try {
-      const res = await fetch(`${backendUrl}/api/finance/account/${accountId}/ledger`, {
+      const res = await fetchProxy(`${backendUrl}/api/finance/account/${accountId}/ledger`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
@@ -321,25 +344,25 @@ export default function FinanceAccounting({
   const loadStatements = async () => {
     try {
       if (statementSubTab === 'trial_balance') {
-        const res = await fetch(`${backendUrl}/api/finance/reports/trial-balance`, {
+        const res = await fetchProxy(`${backendUrl}/api/finance/reports/trial-balance`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         const data = await res.json();
         if (res.ok) setTrialBalanceData(data);
       } else if (statementSubTab === 'profit_loss') {
-        const res = await fetch(`${backendUrl}/api/finance/reports/profit-loss`, {
+        const res = await fetchProxy(`${backendUrl}/api/finance/reports/profit-loss`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         const data = await res.json();
         if (res.ok) setProfitLossData(data);
       } else if (statementSubTab === 'balance_sheet') {
-        const res = await fetch(`${backendUrl}/api/finance/reports/balance-sheet`, {
+        const res = await fetchProxy(`${backendUrl}/api/finance/reports/balance-sheet`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         const data = await res.json();
         if (res.ok) setBalanceSheetData(data);
       } else if (statementSubTab === 'cash_flow') {
-        const res = await fetch(`${backendUrl}/api/finance/reports/cash-flow`, {
+        const res = await fetchProxy(`${backendUrl}/api/finance/reports/cash-flow`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         const data = await res.json();
@@ -358,13 +381,13 @@ export default function FinanceAccounting({
   const loadSubledgers = async () => {
     try {
       if (subledgerSubTab === 'receivables') {
-        const res = await fetch(`${backendUrl}/api/finance/reports/aging/customer`, {
+        const res = await fetchProxy(`${backendUrl}/api/finance/reports/aging/customer`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         const data = await res.json();
         if (res.ok) setCustomerAging(data.aging);
       } else {
-        const res = await fetch(`${backendUrl}/api/finance/reports/aging/vendor`, {
+        const res = await fetchProxy(`${backendUrl}/api/finance/reports/aging/vendor`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         const data = await res.json();
@@ -382,7 +405,7 @@ export default function FinanceAccounting({
   // Load Fixed Assets
   const loadAssets = async () => {
     try {
-      const res = await fetch(`${backendUrl}/api/finance/assets`, {
+      const res = await fetchProxy(`${backendUrl}/api/finance/assets`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
@@ -404,13 +427,13 @@ export default function FinanceAccounting({
   // Load Budgets & Bank Accounts
   const loadBudgetsAndBank = async () => {
     try {
-      const budRes = await fetch(`${backendUrl}/api/finance/budgets`, {
+      const budRes = await fetchProxy(`${backendUrl}/api/finance/budgets`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const budData = await budRes.json();
       if (budRes.ok) setBudgets(budData.budgets);
 
-      const bankRes = await fetch(`${backendUrl}/api/finance/bank-accounts`, {
+      const bankRes = await fetchProxy(`${backendUrl}/api/finance/bank-accounts`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const bankData = await bankRes.json();
@@ -433,7 +456,7 @@ export default function FinanceAccounting({
   const loadReconciliationConsole = async () => {
     if (!selectedBankAccount) return;
     try {
-      const res = await fetch(`${backendUrl}/api/finance/bank-account/${selectedBankAccount}/unreconciled`, {
+      const res = await fetchProxy(`${backendUrl}/api/finance/bank-account/${selectedBankAccount}/unreconciled`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
@@ -476,7 +499,7 @@ export default function FinanceAccounting({
 
     setLoading(true);
     try {
-      const res = await fetch(`${backendUrl}/api/finance/journal-entry`, {
+      const res = await fetchProxy(`${backendUrl}/api/finance/journal-entry`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -523,7 +546,7 @@ export default function FinanceAccounting({
     }
     setLoading(true);
     try {
-      const res = await fetch(`${backendUrl}/api/finance/asset`, {
+      const res = await fetchProxy(`${backendUrl}/api/finance/asset`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -559,7 +582,7 @@ export default function FinanceAccounting({
   const handlePostDepreciation = async (scheduleId: string) => {
     setLoading(true);
     try {
-      const res = await fetch(`${backendUrl}/api/finance/asset/depreciate`, {
+      const res = await fetchProxy(`${backendUrl}/api/finance/asset/depreciate`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -590,7 +613,7 @@ export default function FinanceAccounting({
     }
     setLoading(true);
     try {
-      const res = await fetch(`${backendUrl}/api/finance/budget`, {
+      const res = await fetchProxy(`${backendUrl}/api/finance/budget`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -622,7 +645,7 @@ export default function FinanceAccounting({
     }
     setLoading(true);
     try {
-      const res = await fetch(`${backendUrl}/api/finance/bank-account`, {
+      const res = await fetchProxy(`${backendUrl}/api/finance/bank-account`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -675,7 +698,7 @@ export default function FinanceAccounting({
 
     setLoading(true);
     try {
-      const res = await fetch(`${backendUrl}/api/finance/bank-account/${selectedBankAccount}/statement`, {
+      const res = await fetchProxy(`${backendUrl}/api/finance/bank-account/${selectedBankAccount}/statement`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -712,7 +735,7 @@ export default function FinanceAccounting({
   const handleReconcileBank = async (bankLineId: string, glEntryId: string) => {
     setLoading(true);
     try {
-      const res = await fetch(`${backendUrl}/api/finance/bank-reconcile`, {
+      const res = await fetchProxy(`${backendUrl}/api/finance/bank-reconcile`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -745,7 +768,7 @@ export default function FinanceAccounting({
     }
     setLoading(true);
     try {
-      const res = await fetch(`${backendUrl}/api/finance/fiscal-year`, {
+      const res = await fetchProxy(`${backendUrl}/api/finance/fiscal-year`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -776,7 +799,7 @@ export default function FinanceAccounting({
     }
     setLoading(true);
     try {
-      const res = await fetch(`${backendUrl}/api/finance/fiscal-year/${id}/close`, {
+      const res = await fetchProxy(`${backendUrl}/api/finance/fiscal-year/${id}/close`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` }
       });

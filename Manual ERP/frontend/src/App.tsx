@@ -69,8 +69,9 @@ import QualityMaintenance from './components/QualityMaintenance';
 import GlobalEmailSystem from './components/GlobalEmailSystem';
 import CrmModule from './components/CrmModule';
 import HumanResources from './components/HumanResources';
+import { apiClient } from './utils/apiService';
 
-const BACKEND_URL = 'http://localhost:5000';
+const BACKEND_URL = import.meta.env.VITE_API_URL || 'https://erp.anbindustries.com';
 
 interface UserProfile {
   id?: string;
@@ -360,11 +361,19 @@ export default function App() {
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
+    const handleAuthExpired = () => {
+      setToken(null);
+      setUser(null);
+      setView('login');
+      setErrorMsg('Session expired. Please log in again.');
+    };
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
+    window.addEventListener('auth-expired', handleAuthExpired);
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('auth-expired', handleAuthExpired);
     };
   }, []);
 
@@ -451,7 +460,14 @@ export default function App() {
   const connectWebSockets = () => {
     if (!user || !user.id) return;
     
-    socketRef.current = io(BACKEND_URL);
+    socketRef.current = io(BACKEND_URL, {
+      transports: ['websocket'],
+      upgrade: false,
+      secure: true,
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000
+    });
     
     socketRef.current.on('connect', () => {
       console.log('🔌 Connected to real-time notification socket.');
@@ -525,31 +541,22 @@ export default function App() {
   // 2. HTTP API REQUEST AGENT
   // ==========================================
   
-  const apiRequest = async (url: string, method: 'GET' | 'POST' | 'PATCH' | 'DELETE' = 'GET', body?: any) => {
+  const apiRequest = async (url: string, method: 'GET' | 'POST' | 'PATCH' | 'DELETE' = 'GET', body?: any): Promise<any> => {
     setErrorMsg(null);
     setSuccessMsg(null);
     setLoading(true);
 
     try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json'
-      };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
+      let data;
+      if (method === 'GET') {
+        data = await apiClient.get<any>(url);
+      } else if (method === 'POST') {
+        data = await apiClient.post<any>(url, body);
+      } else if (method === 'PATCH') {
+        data = await apiClient.patch<any>(url, body);
+      } else if (method === 'DELETE') {
+        data = await apiClient.delete<any>(url);
       }
-
-      const res = await fetch(`${BACKEND_URL}${url}`, {
-        method,
-        headers,
-        body: body ? JSON.stringify(body) : undefined
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Request processing failed.');
-      }
-
       setLoading(false);
       return data;
     } catch (err: any) {

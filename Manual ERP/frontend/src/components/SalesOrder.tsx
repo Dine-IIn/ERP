@@ -1,3 +1,4 @@
+import { apiClient } from '../utils/apiService';
 import React, { useState, useEffect } from 'react';
 import { 
   ShoppingBag, Users, FileText, Receipt, 
@@ -129,23 +130,21 @@ const SalesOrder: React.FC<Props> = ({ user: _user, activeTab, token, backendUrl
   // --- DATABASE SYNC & BACKEND CONNECTIVITY ---
   const [isLoaded, setIsLoaded] = useState(false);
 
-  const apiRequest = async (endpoint: string, method = 'GET', body: any = null) => {
-    if (!token || !backendUrl) return null;
+    const apiRequest = async (endpoint: string, method = 'GET', body: any = null): Promise<any> => {
     try {
-      const headers: any = { 'Authorization': `Bearer ${token}` };
-      if (body) headers['Content-Type'] = 'application/json';
-      const res = await fetch(`${backendUrl}${endpoint}`, {
-        method,
-        headers,
-        body: body ? JSON.stringify(body) : null
-      });
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || 'Request failed');
+      if (method === 'GET') {
+        return await apiClient.get<any>(endpoint);
+      } else if (method === 'POST') {
+        return await apiClient.post<any>(endpoint, body);
+      } else if (method === 'PUT') {
+        return await apiClient.put<any>(endpoint, body);
+      } else if (method === 'PATCH') {
+        return await apiClient.patch<any>(endpoint, body);
+      } else if (method === 'DELETE') {
+        return await apiClient.delete<any>(endpoint);
       }
-      return await res.json();
     } catch (err) {
-      console.error(`[Sales API Error] ${endpoint}:`, err);
+      console.error(`[API Error] ${endpoint}:`, err);
       return null;
     }
   };
@@ -489,7 +488,7 @@ const SalesOrder: React.FC<Props> = ({ user: _user, activeTab, token, backendUrl
           toast.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' :
           'bg-amber-500/10 border-amber-500/30 text-amber-400'
         }`}>
-          <CheckCircle className="w-4 h-4" />
+          <CheckCircle2 className="w-4 h-4" />
           <span className="text-xs font-semibold">{toast.message}</span>
         </div>
       )}

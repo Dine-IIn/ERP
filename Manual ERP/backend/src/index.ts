@@ -4,6 +4,9 @@ import http from 'http';
 import { Server } from 'socket.io';
 import dotenv from 'dotenv';
 import path from 'path';
+import helmet from 'helmet';
+import compression from 'compression';
+import rateLimit from 'express-rate-limit';
 import {
   authenticateToken,
   requireSuperAdmin
@@ -88,13 +91,58 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 5000;
 
-// Enable CORS and JSON parsing middleware
-app.use(cors({
-  origin: "*", // Enable connection from any dev client port
-  methods: ["GET", "POST", "PATCH", "DELETE"],
-  allowedHeaders: ["Content-Type", "Authorization"]
+// Production security and performance middlewares
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  contentSecurityPolicy: false // standard API server does not serve HTML pages that need CSP
 }));
+app.use(compression());
+
+// Define whitelisted production origins for CORS
+const allowedOrigins = [
+  'https://erp.anbindustries.com',
+  'http://localhost:5173',
+  'http://localhost:5000',
+  'http://localhost:3000',
+];
+
+if (process.env.FRONTEND_URL) {
+  allowedOrigins.push(process.env.FRONTEND_URL);
+}
+
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+    
+    const isAllowed = allowedOrigins.includes(origin) || 
+                      origin.endsWith('.vercel.app') || 
+                      /^http:\/\/localhost:\d+$/.test(origin);
+                      
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ["GET", "POST", "PATCH", "DELETE", "PUT"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true
+};
+
+// Enable CORS and JSON parsing middleware
+app.use(cors(corsOptions));
 app.use(express.json());
+
+// Set up rate limiter for authentication routes
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per 15 minutes
+  message: { error: 'Too many authentication attempts from this IP, please try again after 15 minutes' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/auth/', authLimiter);
 
 // Serve static assets for uploads and backups
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
@@ -104,9 +152,21 @@ app.use('/backups', express.static(path.join(process.cwd(), 'backups')));
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  }
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      const isAllowed = allowedOrigins.includes(origin) || 
+                        origin.endsWith('.vercel.app') || 
+                        /^http:\/\/localhost:\d+$/.test(origin);
+      if (isAllowed) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    methods: ["GET", "POST"],
+    credentials: true
+  },
+  transports: ['websocket']
 });
 
 // Share Socket.io instance with controllers

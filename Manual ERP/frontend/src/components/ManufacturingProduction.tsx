@@ -1,3 +1,4 @@
+import { apiClient } from '../utils/apiService';
 import React, { useState, useEffect } from 'react';
 import { 
   Factory, Settings, Layers, Box, 
@@ -141,23 +142,21 @@ const ManufacturingProduction: React.FC<Props> = ({ user: _user, activeTab, toke
   // --- DATABASE SYNC & BACKEND CONNECTIVITY ---
   const [isLoaded, setIsLoaded] = useState(false);
 
-  const apiRequest = async (endpoint: string, method = 'GET', body: any = null) => {
-    if (!token || !backendUrl) return null;
+    const apiRequest = async (endpoint: string, method = 'GET', body: any = null): Promise<any> => {
     try {
-      const headers: any = { 'Authorization': `Bearer ${token}` };
-      if (body) headers['Content-Type'] = 'application/json';
-      const res = await fetch(`${backendUrl}${endpoint}`, {
-        method,
-        headers,
-        body: body ? JSON.stringify(body) : null
-      });
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || 'Request failed');
+      if (method === 'GET') {
+        return await apiClient.get<any>(endpoint);
+      } else if (method === 'POST') {
+        return await apiClient.post<any>(endpoint, body);
+      } else if (method === 'PUT') {
+        return await apiClient.put<any>(endpoint, body);
+      } else if (method === 'PATCH') {
+        return await apiClient.patch<any>(endpoint, body);
+      } else if (method === 'DELETE') {
+        return await apiClient.delete<any>(endpoint);
       }
-      return await res.json();
     } catch (err) {
-      console.error(`[Manufacturing API Error] ${endpoint}:`, err);
+      console.error(`[API Error] ${endpoint}:`, err);
       return null;
     }
   };
