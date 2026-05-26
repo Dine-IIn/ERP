@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { MASTER_FEATURES_HIERARCHY, getCategoryKeys, getChildKeys, getParentKey } from './features';
+import Login from './components/auth/Login';
+import Signup from './components/auth/Signup';
+import ForgotPasswordModal from './components/auth/ForgotPasswordModal';
 import {
   Wrench,
   Factory,
@@ -51,25 +54,7 @@ import {
   Warehouse
 } from 'lucide-react';
 
-import GeneralAdmin from './components/GeneralAdmin';
-import ProductMasterUI from './components/masters/ProductMasterUI';
-import CustomerMasterUI from './components/masters/CustomerMasterUI';
-import VendorMasterUI from './components/masters/VendorMasterUI';
-import EmployeeMasterUI from './components/masters/EmployeeMasterUI';
-import WarehouseMasterUI from './components/masters/WarehouseMasterUI';
-import FinanceMastersUI from './components/masters/FinanceMastersUI';
-import ClassificationMastersUI from './components/masters/ClassificationMastersUI';
-import FinanceAccounting from './components/FinanceAccounting';
-import CustomDashboard from './components/CustomDashboard';
-import InventoryWarehouse from './components/InventoryWarehouse';
-import PurchaseProcurement from './components/PurchaseProcurement';
-import SalesOrder from './components/SalesOrder';
-import ManufacturingProduction from './components/ManufacturingProduction';
-import QualityMaintenance from './components/QualityMaintenance';
-import GlobalEmailSystem from './components/GlobalEmailSystem';
-import CrmModule from './components/CrmModule';
-import HumanResources from './components/HumanResources';
-import { apiClient } from './utils/apiService';
+import { apiClient, ApiError } from './utils/apiService';
 
 const BACKEND_URL = import.meta.env.VITE_API_URL || 'https://erp.anbindustries.com';
 
@@ -90,6 +75,40 @@ interface NotificationItem {
   isRead: boolean;
   createdAt: string;
 }
+
+const getDeviceDetails = () => {
+  const userAgent = navigator.userAgent;
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+  
+  // Extract browser name/OS for display (deviceModel)
+  let model = "Web Browser";
+  if (userAgent.indexOf("Chrome") > -1) {
+    model = "Chrome Browser";
+  } else if (userAgent.indexOf("Safari") > -1) {
+    model = "Safari Browser";
+  } else if (userAgent.indexOf("Firefox") > -1) {
+    model = "Firefox Browser";
+  } else if (userAgent.indexOf("MSIE") > -1 || !!(document as any).documentMode) {
+    model = "IE Browser";
+  } else if (userAgent.indexOf("Edge") > -1) {
+    model = "Edge Browser";
+  }
+  
+  // OS details
+  let os = "Unknown OS";
+  if (userAgent.indexOf("Windows NT 10.0") > -1) os = "Windows 10/11";
+  else if (userAgent.indexOf("Windows NT 6.2") > -1) os = "Windows 8";
+  else if (userAgent.indexOf("Windows NT 6.1") > -1) os = "Windows 7";
+  else if (userAgent.indexOf("Macintosh") > -1) os = "macOS";
+  else if (userAgent.indexOf("Android") > -1) os = "Android";
+  else if (userAgent.indexOf("iPhone") > -1 || userAgent.indexOf("iPad") > -1) os = "iOS";
+  else if (userAgent.indexOf("Linux") > -1) os = "Linux";
+  
+  return {
+    deviceType: isMobile ? 'MOBILE' : 'DESKTOP',
+    deviceModel: `${os} - ${model}`
+  };
+};
 
 export default function App() {
   // --- CORE SYSTEM STATES ---
@@ -131,14 +150,6 @@ export default function App() {
 
   // Forgot password state
   const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(false);
-  const [forgotCompanyCode, setForgotCompanyCode] = useState('');
-  const [forgotUsername, setForgotUsername] = useState('');
-  const [forgotEmailOrPhone, setForgotEmailOrPhone] = useState('');
-  const [forgotNewPassword, setForgotNewPassword] = useState('');
-  const [forgotConfirmPassword, setForgotConfirmPassword] = useState('');
-  const [forgotLoading, setForgotLoading] = useState(false);
-  const [forgotError, setForgotError] = useState<string | null>(null);
-  const [forgotSuccess, setForgotSuccess] = useState<string | null>(null);
 
   // Sync profile input fields reactively when user caches change
   useEffect(() => {
@@ -250,6 +261,7 @@ export default function App() {
   const [loginForm, setLoginForm] = useState({ companyCode: '', username: '', password: '' });
   // Signup Workflow Forms
   const [signupStep, setSignupStep] = useState<1 | 2 | 3>(1); // 1 = Details, 2 = OTP, 3 = Pending Approval
+  const [signupVerificationMethod, setSignupVerificationMethod] = useState<'SMS' | 'EMAIL'>('SMS');
   const [signupForm, setSignupForm] = useState({
     companyCode: '',
     username: '',
@@ -291,6 +303,11 @@ export default function App() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [approveSelectedRole, setApproveSelectedRole] = useState<Record<string, string>>({}); // Maps pending userId to roleId
+
+  // --- CONCURRENT SESSION OVERRIDE STATES ---
+  const [conflictModalOpen, setConflictModalOpen] = useState(false);
+  const [conflictDeviceModel, setConflictDeviceModel] = useState('');
+  const [conflictDeviceType, setConflictDeviceType] = useState('');
 
   // --- PLATFORM STATUS & ADVANCED EDIT MODAL STATES ---
   const [showPlatformStatusModal, setShowPlatformStatusModal] = useState(false);
@@ -419,11 +436,21 @@ export default function App() {
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
-    const handleAuthExpired = () => {
+    const handleAuthExpired = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const detail = customEvent.detail;
+
       setToken(null);
       setUser(null);
       setView('login');
-      setErrorMsg('Session expired. Please log in again.');
+
+      if (detail === 'inactive') {
+        setErrorMsg('Session expired due to inactivity.');
+      } else if (detail === 'overridden') {
+        setErrorMsg('You have been logged out because your session was overridden by another login.');
+      } else {
+        setErrorMsg('Session expired or logged out. Please log in again.');
+      }
     };
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
@@ -434,6 +461,58 @@ export default function App() {
       window.removeEventListener('auth-expired', handleAuthExpired);
     };
   }, []);
+
+  // Client-side inactivity timer for desktop sessions (15 minutes)
+  useEffect(() => {
+    if (!token || !user || getDeviceDetails().deviceType !== 'DESKTOP') {
+      return;
+    }
+
+    const INACTIVITY_TIMEOUT = 15 * 60 * 1000; // 15 minutes
+    let timeoutId: NodeJS.Timeout;
+
+    const resetTimer = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(handleInactivityTimeout, INACTIVITY_TIMEOUT);
+    };
+
+    const handleInactivityTimeout = async () => {
+      console.log("⏱️ User inactive for 15 minutes. Logging out...");
+      
+      // Call backend logout to delete session in DB
+      try {
+        await apiClient.post('/api/auth/logout');
+      } catch (e) {
+        console.error("Inactivity logout API error:", e);
+      }
+      
+      // Perform frontend logout
+      localStorage.removeItem('erp_token');
+      localStorage.removeItem('erp_user');
+      setToken(null);
+      setUser(null);
+      setNotifications([]);
+      setView('login');
+      setSelectedCompany(null);
+      setSelectedCompanyUsers([]);
+      setShowProfileDropdown(false);
+      
+      setErrorMsg("Session expired due to inactivity.");
+    };
+
+    // User activity listeners
+    const events = ['mousemove', 'keydown', 'mousedown', 'scroll', 'touchstart', 'click'];
+    const handler = () => resetTimer();
+    events.forEach(event => window.addEventListener(event, handler));
+
+    // Initialize timer
+    resetTimer();
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      events.forEach(event => window.removeEventListener(event, handler));
+    };
+  }, [token, user]);
 
   // Refs for tracking active group and auto-scrolling
   const selectedGroupIdRef = useRef<string | null>(null);
@@ -645,13 +724,32 @@ export default function App() {
   // ==========================================
 
   const triggerOtpRequest = async () => {
-    if (!signupForm.mobileNo) {
-      setErrorMsg("Please enter your mobile number to send OTP.");
+    const targetValue = signupVerificationMethod === 'SMS' ? signupForm.mobileNo : signupForm.email;
+    if (!targetValue) {
+      setErrorMsg(`Please enter your ${signupVerificationMethod === 'SMS' ? 'mobile number' : 'email address'} to send OTP.`);
       return;
     }
+    
+    // Quick validation
+    if (signupVerificationMethod === 'SMS') {
+      if (!/^\+?[1-9]\d{9,14}$/.test(targetValue)) {
+        setErrorMsg("Invalid mobile number format. Format: +919876543210");
+        return;
+      }
+    } else {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(targetValue)) {
+        setErrorMsg("Invalid email format. E.g. user@example.com");
+        return;
+      }
+    }
+
     try {
-      await apiRequest('/api/auth/otp-request', 'POST', { mobileNo: signupForm.mobileNo });
-      setSuccessMsg("SMS OTP simulated! Check the backend server console log for your 6-digit code.");
+      const res = await apiRequest('/api/auth/otp-request', 'POST', { 
+        target: targetValue,
+        companyCode: signupForm.companyCode
+      });
+      const codeSuffix = res.otpCode ? ` (Developer Mode Code: ${res.otpCode})` : "";
+      setSuccessMsg(`Real-time OTP dispatched successfully via ${signupVerificationMethod === 'SMS' ? 'SMS' : 'Email'}! Please check your device.${codeSuffix}`);
       setSignupStep(2);
     } catch (e) {}
   };
@@ -659,22 +757,56 @@ export default function App() {
   const handleSignupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const data = await apiRequest('/api/auth/signup', 'POST', signupForm);
+      const targetValue = signupVerificationMethod === 'SMS' ? signupForm.mobileNo : signupForm.email;
+      const data = await apiRequest('/api/auth/signup', 'POST', {
+        ...signupForm,
+        otpTarget: targetValue
+      });
       setSuccessMsg(data.message);
       setSignupStep(3);
     } catch (e) {}
   };
 
-  const handleLoginSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleLoginSubmit = async (e?: React.FormEvent, force: boolean = false) => {
+    if (e) e.preventDefault();
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    const deviceDetails = getDeviceDetails();
+    const payload = {
+      ...loginForm,
+      deviceType: deviceDetails.deviceType,
+      deviceModel: deviceDetails.deviceModel,
+      force
+    };
+
     try {
-      const data = await apiRequest('/api/auth/login', 'POST', loginForm);
+      const data = await apiRequest('/api/auth/login', 'POST', payload);
       localStorage.setItem('erp_token', data.token);
       localStorage.setItem('erp_user', JSON.stringify(data.user));
       setToken(data.token);
       setUser(data.user);
       setSuccessMsg(data.message);
-    } catch (e) {}
+      
+      // Close session conflict modal on success
+      setConflictModalOpen(false);
+      setConflictDeviceModel('');
+      setConflictDeviceType('');
+    } catch (err: any) {
+      if (err instanceof ApiError && err.status === 409 && err.data?.sessionConflict) {
+        // Active concurrent session detected
+        setConflictDeviceModel(err.data.deviceModel || 'Unknown Device');
+        setConflictDeviceType(err.data.deviceType || 'DESKTOP');
+        setConflictModalOpen(true);
+      } else {
+        // Other errors are already captured by apiRequest inside setErrorMsg
+        console.error("Login request error:", err);
+      }
+    }
+  };
+
+  const handleForceLogin = () => {
+    handleLoginSubmit(undefined, true);
   };
 
   const handleLogout = () => {
@@ -722,43 +854,6 @@ export default function App() {
       setProfileError(err.message || "Failed to update profile settings.");
     } finally {
       setProfileLoading(false);
-    }
-  };
-
-  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (forgotNewPassword !== forgotConfirmPassword) {
-      setForgotError("Passwords do not match");
-      return;
-    }
-    setForgotLoading(true);
-    setForgotError(null);
-    setForgotSuccess(null);
-    try {
-      const response = await fetch(`${BACKEND_URL}/api/auth/reset-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          companyCode: forgotCompanyCode,
-          username: forgotUsername,
-          emailOrPhone: forgotEmailOrPhone,
-          newPassword: forgotNewPassword
-        })
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Reset password request failed.");
-      }
-      setForgotSuccess("Password reset successful! You can now log in.");
-      
-      // Auto close after 2.5 seconds
-      setTimeout(() => {
-        setShowForgotPasswordModal(false);
-      }, 2500);
-    } catch (err: any) {
-      setForgotError(err.message || "Failed to reset password.");
-    } finally {
-      setForgotLoading(false);
     }
   };
 
@@ -1295,305 +1390,41 @@ export default function App() {
           <div className="absolute bottom-[20%] right-[20%] w-[300px] h-[300px] bg-purple-500/5 rounded-full blur-[80px] pointer-events-none" />
 
           {view === 'login' && (
-            <div className="w-full max-w-md bg-[var(--bg-card)] border border-[var(--border-color)] p-8 rounded-2xl shadow-xl relative">
-              <div className="flex justify-center mb-6">
-                <div className="p-3.5 bg-indigo-500/10 rounded-xl border border-indigo-500/20 text-indigo-500">
-                  <Shield className="w-8 h-8" />
-                </div>
-              </div>
-
-              <div className="text-center">
-                <span className="text-[10px] font-bold text-indigo-500 tracking-wider uppercase">Manual ERP Platform</span>
-                <h2 className="text-xl font-bold text-[var(--text-primary)] mt-1 font-display">Sign In to Console</h2>
-                <p className="text-[var(--text-secondary)] text-xs mt-1.5">Provide credentials to enter your company workstation.</p>
-              </div>
-
-              {(errorMsg || successMsg) && (
-                <div className="mt-4">
-                  {errorMsg && (
-                    <div className="bg-red-500/10 border border-red-500/20 p-2.5 rounded-lg flex items-center gap-2 text-red-500 text-xs leading-normal">
-                      <AlertCircle className="w-4 h-4 shrink-0" />
-                      <span>{errorMsg}</span>
-                    </div>
-                  )}
-                  {successMsg && (
-                    <div className="bg-emerald-500/10 border border-emerald-500/20 p-2.5 rounded-lg flex items-center gap-2 text-emerald-500 text-xs leading-normal">
-                      <CheckCircle className="w-4 h-4 shrink-0" />
-                      <span>{successMsg}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <form onSubmit={handleLoginSubmit} className="mt-6 flex flex-col gap-4">
-                <div>
-                  <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Company Tenant Code</label>
-                  <div className="mt-1 relative">
-                    <Building className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. APPLE, DINEIN, SUPERADMIN"
-                      value={loginForm.companyCode}
-                      onChange={e => setLoginForm({ ...loginForm, companyCode: e.target.value })}
-                      className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2.5 pl-10 pr-4 rounded-lg text-xs focus:outline-none transition-colors"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Username</label>
-                  <div className="mt-1 relative">
-                    <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-                    <input
-                      type="text"
-                      required
-                      placeholder="Enter username"
-                      value={loginForm.username}
-                      onChange={e => setLoginForm({ ...loginForm, username: e.target.value })}
-                      className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2.5 pl-10 pr-4 rounded-lg text-xs focus:outline-none transition-colors"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Password</label>
-                  <div className="mt-1 relative">
-                    <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-                    <input
-                      type="password"
-                      required
-                      placeholder="••••••••"
-                      value={loginForm.password}
-                      onChange={e => setLoginForm({ ...loginForm, password: e.target.value })}
-                      className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2.5 pl-10 pr-4 rounded-lg text-xs focus:outline-none transition-colors"
-                    />
-                  </div>
-                  <div className="flex justify-end mt-1.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowForgotPasswordModal(true);
-                        setForgotCompanyCode(loginForm.companyCode);
-                        setForgotUsername(loginForm.username);
-                        setForgotEmailOrPhone('');
-                        setForgotNewPassword('');
-                        setForgotConfirmPassword('');
-                        setForgotError(null);
-                        setForgotSuccess(null);
-                      }}
-                      className="text-indigo-500 hover:text-indigo-400 hover:underline font-semibold text-[10px] cursor-pointer transition-colors"
-                    >
-                      Forgot Password?
-                    </button>
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full mt-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-lg transition-colors cursor-pointer text-xs shadow-md shadow-indigo-600/10"
-                >
-                  {loading ? 'Authenticating...' : 'Secure Workspace Login'}
-                </button>
-              </form>
-
-              <div className="mt-5 text-center border-t border-[var(--border-color)] pt-4">
-                <span className="text-[var(--text-muted)] text-xs">New user on the platform?</span>
-                <button 
-                  onClick={() => { setView('signup'); setSignupStep(1); setErrorMsg(null); setSuccessMsg(null); }} 
-                  className="text-indigo-500 hover:underline font-bold text-xs ml-1 cursor-pointer font-display"
-                >
-                  Join Tenant Company
-                </button>
-              </div>
-            </div>
+            <Login
+              loginForm={loginForm}
+              setLoginForm={setLoginForm}
+              handleLoginSubmit={handleLoginSubmit}
+              loading={loading}
+              errorMsg={errorMsg}
+              successMsg={successMsg}
+              onRegisterClick={() => { setView('signup'); setSignupStep(1); setErrorMsg(null); setSuccessMsg(null); }}
+              onForgotPasswordClick={() => {
+                setShowForgotPasswordModal(true);
+                setErrorMsg(null);
+                setSuccessMsg(null);
+              }}
+              conflictModalOpen={conflictModalOpen}
+              setConflictModalOpen={setConflictModalOpen}
+              conflictDeviceModel={conflictDeviceModel}
+              handleForceLogin={handleForceLogin}
+            />
           )}
 
           {view === 'signup' && (
-            <div className="w-full max-w-md bg-[var(--bg-card)] border border-[var(--border-color)] p-8 rounded-2xl shadow-xl">
-              
-              {/* Step indicator */}
-              <div className="flex items-center justify-center gap-3 text-[10px] font-bold text-[var(--text-secondary)] mb-6">
-                <span className={`px-2 py-0.5 rounded-full ${signupStep >= 1 ? 'bg-indigo-500/10 text-indigo-500 border border-indigo-500/20' : 'bg-[var(--bg-tertiary)]'}`}>1. Info</span>
-                <div className="w-6 h-px bg-[var(--border-color)]" />
-                <span className={`px-2 py-0.5 rounded-full ${signupStep >= 2 ? 'bg-indigo-500/10 text-indigo-500 border border-indigo-500/20' : 'bg-[var(--bg-tertiary)]'}`}>2. OTP</span>
-                <div className="w-6 h-px bg-[var(--border-color)]" />
-                <span className={`px-2 py-0.5 rounded-full ${signupStep === 3 ? 'bg-indigo-500/10 text-indigo-500 border border-indigo-500/20' : 'bg-[var(--bg-tertiary)]'}`}>3. Wait</span>
-              </div>
-
-              {(errorMsg || successMsg) && (
-                <div className="mb-4">
-                  {errorMsg && (
-                    <div className="bg-red-500/10 border border-red-500/20 p-2.5 rounded-lg flex items-center gap-2 text-red-500 text-xs">
-                      <AlertCircle className="w-4 h-4 shrink-0" />
-                      <span>{errorMsg}</span>
-                    </div>
-                  )}
-                  {successMsg && (
-                    <div className="bg-emerald-500/10 border border-emerald-500/20 p-2.5 rounded-lg flex items-center gap-2 text-emerald-500 text-xs">
-                      <CheckCircle className="w-4 h-4 shrink-0" />
-                      <span>{successMsg}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {signupStep === 1 && (
-                <div>
-                  <div className="text-center">
-                    <h2 className="text-xl font-bold text-[var(--text-primary)] font-display">Create Employee Account</h2>
-                    <p className="text-[var(--text-secondary)] text-xs mt-1">Submit registration details under your tenant code.</p>
-                  </div>
-
-                  <div className="mt-5 flex flex-col gap-4">
-                    <div>
-                      <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Target Company Code</label>
-                      <div className="mt-1 relative">
-                        <Building className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-                        <input
-                          type="text"
-                          placeholder="e.g. APPLE, DINEIN"
-                          value={signupForm.companyCode}
-                          onChange={e => setSignupForm({ ...signupForm, companyCode: e.target.value.toUpperCase() })}
-                          className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2.5 pl-10 pr-4 rounded-lg text-xs focus:outline-none"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Desired Username</label>
-                      <div className="mt-1 relative">
-                        <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-                        <input
-                          type="text"
-                          placeholder="Choose username"
-                          value={signupForm.username}
-                          onChange={e => setSignupForm({ ...signupForm, username: e.target.value })}
-                          className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2.5 pl-10 pr-4 rounded-lg text-xs focus:outline-none"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Mobile No (Compulsory OTP)</label>
-                      <div className="mt-1 relative">
-                        <Phone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-                        <input
-                          type="text"
-                          placeholder="e.g. +919876543210"
-                          value={signupForm.mobileNo}
-                          onChange={e => setSignupForm({ ...signupForm, mobileNo: e.target.value })}
-                          className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2.5 pl-10 pr-4 rounded-lg text-xs focus:outline-none"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Email (Optional)</label>
-                      <div className="mt-1 relative">
-                        <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-                        <input
-                          type="email"
-                          placeholder="Enter email address"
-                          value={signupForm.email}
-                          onChange={e => setSignupForm({ ...signupForm, email: e.target.value })}
-                          className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2.5 pl-10 pr-4 rounded-lg text-xs focus:outline-none"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Password</label>
-                      <div className="mt-1 relative">
-                        <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-                        <input
-                          type="password"
-                          placeholder="Minimum 6 characters"
-                          value={signupForm.password}
-                          onChange={e => setSignupForm({ ...signupForm, password: e.target.value })}
-                          className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2.5 pl-10 pr-4 rounded-lg text-xs focus:outline-none"
-                        />
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={triggerOtpRequest}
-                      disabled={loading}
-                      className="w-full mt-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-lg transition-colors cursor-pointer text-xs"
-                    >
-                      {loading ? 'Processing...' : 'Send Verification OTP'}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {signupStep === 2 && (
-                <form onSubmit={handleSignupSubmit} className="text-center">
-                  <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 text-indigo-500 rounded-xl w-fit mx-auto mb-4">
-                    <Key className="w-6 h-6" />
-                  </div>
-                  <h2 className="text-xl font-bold text-[var(--text-primary)] font-display">Verify Phone Number</h2>
-                  <p className="text-[var(--text-secondary)] text-xs mt-1.5 leading-normal">
-                    Enter the simulated SMS code dispatched to <span className="font-semibold text-[var(--text-primary)]">{signupForm.mobileNo}</span>.
-                  </p>
-                  
-                  <div className="mt-3 text-[10px] bg-indigo-500/5 border border-indigo-500/20 p-2.5 rounded-lg text-indigo-400 text-left leading-normal flex items-start gap-1.5">
-                    <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                    <span>Retrieve your 6-digit OTP code from the **backend server console log** window.</span>
-                  </div>
-
-                  <div className="mt-5 text-left">
-                    <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Verification Code</label>
-                    <input
-                      type="text"
-                      required
-                      maxLength={6}
-                      placeholder="Enter code"
-                      value={signupForm.otpCode}
-                      onChange={e => setSignupForm({ ...signupForm, otpCode: e.target.value })}
-                      className="w-full mt-1 text-center text-lg tracking-[8px] font-mono bg-[var(--bg-tertiary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2.5 rounded-lg text-[var(--text-primary)] placeholder-slate-600 focus:outline-none"
-                    />
-                  </div>
-
-                  <div className="mt-6 flex flex-col gap-2">
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-lg transition-colors cursor-pointer text-xs"
-                    >
-                      {loading ? 'Submitting...' : 'Verify OTP & Finish Registration'}
-                    </button>
-                    <button 
-                      type="button" 
-                      onClick={() => setSignupStep(1)} 
-                      className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] font-bold py-2.5 rounded-lg transition-colors text-xs cursor-pointer"
-                    >
-                      Back to Info
-                    </button>
-                  </div>
-                </form>
-              )}
-
-              {signupStep === 3 && (
-                <div className="text-center py-4">
-                  <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 text-indigo-500 rounded-full w-fit mx-auto mb-4 animate-pulse">
-                    <Clock className="w-10 h-10" />
-                  </div>
-                  <h2 className="text-xl font-bold text-[var(--text-primary)] font-display">Holding for Admin Approval</h2>
-                  <p className="text-[var(--text-secondary)] text-xs mt-3 leading-normal">
-                    Your verification was <span className="text-emerald-500 font-semibold">approved</span>. Your account is on hold pending Administrator security vetting.
-                  </p>
-                  
-                  <button
-                    onClick={() => { setView('login'); setErrorMsg(null); setSuccessMsg(null); }}
-                    className="w-full mt-6 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-lg transition-colors cursor-pointer text-xs"
-                  >
-                    Return to Sign In
-                  </button>
-                </div>
-              )}
-            </div>
+            <Signup
+              signupForm={signupForm}
+              setSignupForm={setSignupForm}
+              signupStep={signupStep}
+              setSignupStep={setSignupStep}
+              signupVerificationMethod={signupVerificationMethod}
+              setSignupVerificationMethod={setSignupVerificationMethod}
+              triggerOtpRequest={triggerOtpRequest}
+              handleSignupSubmit={handleSignupSubmit}
+              loading={loading}
+              errorMsg={errorMsg}
+              successMsg={successMsg}
+              onBackToLoginClick={() => { setView('login'); setErrorMsg(null); setSuccessMsg(null); }}
+            />
           )}
         </div>
       ) : (
@@ -1677,19 +1508,7 @@ export default function App() {
                       <span>My Profile Settings</span>
                     </button>
 
-                    {/* Subscription Details (Company Admin only) */}
-                    {!user.isSuperAdmin && user.role === 'Admin' && (
-                      <button
-                        onClick={() => {
-                          setShowProfileDropdown(false);
-                          setShowSubscriptionModal(true);
-                        }}
-                        className="w-full text-left px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors flex items-center gap-2 cursor-pointer mt-1"
-                      >
-                        <Building className="w-3.5 h-3.5 text-indigo-400" />
-                        <span>Subscription Details</span>
-                      </button>
-                    )}
+
 
                     <button
                       onClick={handleLogout}
@@ -1800,642 +1619,17 @@ export default function App() {
                 <>
                   {!sidebarCollapsed && <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-widest uppercase px-3 block my-1">Menu Navigator</span>}
 
-                  {/* Dashboard / Home option */}
-                  <button
-                    onClick={() => setActiveWorkspaceModule('dashboard')}
-                    className={`w-full py-2 px-3 rounded-lg text-left text-xs font-semibold transition-colors flex items-center gap-2 ${
-                      activeWorkspaceModule === 'dashboard'
-                        ? 'bg-[var(--bg-tertiary)] text-indigo-500 font-bold border-l-2 border-indigo-500'
-                        : 'text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]'
-                    }`}
-                    title={sidebarCollapsed ? "Console Home" : ""}
-                  >
-                    <Layers className="w-4 h-4" style={{ flexShrink: 0 }} />
-                    {!sidebarCollapsed && <span>Console Home</span>}
-                  </button>
 
-                  {/* Dynamic Sidebar Modules */}
-                  {['MDM', 'FINANCE', 'INVENTORY', 'PURCHASE', 'SALES', 'MANUFACTURING', 'QUALITY', 'EMAIL', 'CRM', 'HR'].map((modKey) => {
-                    if (!companyFeatures.includes(modKey)) return null;
-                    const catData = MASTER_FEATURES_HIERARCHY.find(c => c.key === modKey);
-                    if (!catData) return null;
-                    
-                    const moduleKeyMap: Record<string, string> = {
-                        'INVENTORY': 'inventory',
-                        'PURCHASE': 'purchase',
-                        'SALES': 'sales',
-                        'MANUFACTURING': 'manufacturing',
-                        'QUALITY': 'quality',
-                        'EMAIL': 'email',
-                        'CRM': 'crm',
-                        'HR': 'hr',
-                        'FINANCE': 'finance',
-                        'MDM': 'master_data'
-                    };
-                    const mKey = moduleKeyMap[modKey];
-                    
-                    const iconMap: Record<string, any> = {
-                        'INVENTORY': Box,
-                        'PURCHASE': ShoppingCart,
-                        'SALES': Tag,
-                        'MANUFACTURING': Factory,
-                        'QUALITY': Shield,
-                        'EMAIL': Mail,
-                        'CRM': MessageSquare,
-                        'HR': Users,
-                        'FINANCE': BarChart3,
-                        'MDM': Layers
-                    };
-                    const Icon = iconMap[modKey] || Folder;
-                    
-                    // Tailwind requires full class names
-                    const colors: Record<string, any> = {
-                        'INVENTORY': { text: 'text-blue-400', bgHover: 'bg-blue-500/10', textHover: 'text-blue-500', activeBg: 'bg-blue-500/5' },
-                        'PURCHASE': { text: 'text-teal-400', bgHover: 'bg-teal-500/10', textHover: 'text-teal-500', activeBg: 'bg-teal-500/5' },
-                        'SALES': { text: 'text-pink-400', bgHover: 'bg-pink-500/10', textHover: 'text-pink-500', activeBg: 'bg-pink-500/5' },
-                        'MANUFACTURING': { text: 'text-orange-400', bgHover: 'bg-orange-500/10', textHover: 'text-orange-500', activeBg: 'bg-orange-500/5' },
-                        'QUALITY': { text: 'text-rose-400', bgHover: 'bg-rose-500/10', textHover: 'text-rose-500', activeBg: 'bg-rose-500/5' },
-                        'EMAIL': { text: 'text-amber-400', bgHover: 'bg-amber-500/10', textHover: 'text-amber-500', activeBg: 'bg-amber-500/5' },
-                        'CRM': { text: 'text-purple-400', bgHover: 'bg-purple-500/10', textHover: 'text-purple-500', activeBg: 'bg-purple-500/5' },
-                        'HR': { text: 'text-cyan-400', bgHover: 'bg-cyan-500/10', textHover: 'text-cyan-500', activeBg: 'bg-cyan-500/5' },
-                        'FINANCE': { text: 'text-emerald-400', bgHover: 'bg-emerald-500/10', textHover: 'text-emerald-500', activeBg: 'bg-emerald-500/5' },
-                        'MDM': { text: 'text-indigo-400', bgHover: 'bg-indigo-500/10', textHover: 'text-indigo-500', activeBg: 'bg-indigo-500/5' }
-                    };
-                    const theme = colors[modKey];
 
-                    return (
-                    <div key={modKey} className="flex flex-col mt-1 relative">
-                      {sidebarCollapsed ? (
-                        <div className="flex justify-center">
-                          <button
-                            onClick={() => setActivePopoverCategory(activePopoverCategory === mKey ? null : mKey)}
-                            className={`p-2.5 rounded-xl hover:bg-[var(--bg-tertiary)] transition-colors cursor-pointer ${activeWorkspaceModule === mKey ? `${theme.bgHover} ${theme.textHover}` : theme.text}`}
-                            title={catData.name}
-                          >
-                            <Icon className="w-4 h-4" />
-                          </button>
-                          {activePopoverCategory === mKey && (
-                            <div className="absolute left-14 top-0 z-50 w-52 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl shadow-2xl p-2 animate-scale-up text-left flex flex-col gap-1 max-h-[360px] overflow-y-auto">
-                              <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-widest uppercase px-2 block mb-1">{catData.name}</span>
-                              {mKey === 'master_data' ? (
-                                [
-                                  { id: 'MDM_PRODUCT', label: 'Product Master', icon: <Package className="w-3.5 h-3.5" />, color: 'text-indigo-400' },
-                                  { id: 'MDM_CUSTOMER', label: 'Customer Master', icon: <Users className="w-3.5 h-3.5" />, color: 'text-emerald-400' },
-                                  { id: 'MDM_VENDOR', label: 'Vendor Master', icon: <Truck className="w-3.5 h-3.5" />, color: 'text-amber-500' },
-                                  { id: 'MDM_EMPLOYEE', label: 'Employee Master', icon: <UserCircle className="w-3.5 h-3.5" />, color: 'text-purple-400' },
-                                  { id: 'MDM_WAREHOUSE', label: 'Warehouse Master', icon: <Warehouse className="w-3.5 h-3.5" />, color: 'text-cyan-400' },
-                                  { id: 'MDM_FINANCE', label: 'Finance & Tax', icon: <Receipt className="w-3.5 h-3.5" />, color: 'text-rose-400', reqs: ['MDM_TAX', 'MDM_COA'] },
-                                  { id: 'MDM_CLASSIFICATION', label: 'Classifications', icon: <Tag className="w-3.5 h-3.5" />, color: 'text-orange-400', reqs: ['MDM_UNIT', 'MDM_CATEGORY', 'MDM_BRAND'] }
-                                ].map(uiItem => {
-                                  const reqs = uiItem.reqs || [uiItem.id];
-                                  if (!reqs.some(f => companyFeatures.includes(f))) return null;
-                                  const isActive = activeWorkspaceModule === mKey && activeWorkspaceSubModule === uiItem.id;
-                                  return (
-                                    <button
-                                      key={uiItem.id}
-                                      onClick={() => { setActiveWorkspaceModule(mKey); setActiveWorkspaceSubModule(uiItem.id); setActivePopoverCategory(null); }}
-                                      className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${isActive ? `${uiItem.color} font-bold ${theme.activeBg}` : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
-                                    >
-                                      {uiItem.icon} <span>{uiItem.label}</span>
-                                    </button>
-                                  );
-                                })
-                              ) : (
-                                catData.children.map((child: any) => {
-                                  if (!companyFeatures.includes(child.key)) return null;
-                                  const isActive = activeWorkspaceModule === mKey && activeWorkspaceSubModule === child.key;
-                                  return (
-                                    <button
-                                      key={child.key}
-                                      onClick={() => { setActiveWorkspaceModule(mKey); setActiveWorkspaceSubModule(child.key); setActivePopoverCategory(null); }}
-                                      className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${isActive ? `${theme.textHover} font-bold ${theme.activeBg}` : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
-                                    >
-                                      <Folder className="w-3.5 h-3.5" /> <span>{child.name}</span>
-                                    </button>
-                                  );
-                                })
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <>
-                          <button
-                            onClick={() => toggleSidebarCategory(mKey)}
-                            className="w-full py-2 px-3 rounded-lg text-left text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] flex items-center justify-between transition-colors cursor-pointer"
-                          >
-                            <span className="flex items-center gap-2">
-                              <Icon className={`w-4 h-4 ${theme.text}`} style={{ flexShrink: 0 }} />
-                              <span>{catData.name}</span>
-                            </span>
-                            {expandedCategories[mKey] ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                          </button>
-                          
-                          {expandedCategories[mKey] && (
-                            <div className="pl-6 flex flex-col gap-1 mt-1 border-l border-[var(--border-color)] ml-4">
-                              {mKey === 'master_data' ? (
-                                [
-                                  { id: 'MDM_PRODUCT', label: 'Product Master', icon: <Package className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />, color: 'text-indigo-400' },
-                                  { id: 'MDM_CUSTOMER', label: 'Customer Master', icon: <Users className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />, color: 'text-emerald-400' },
-                                  { id: 'MDM_VENDOR', label: 'Vendor Master', icon: <Truck className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />, color: 'text-amber-500' },
-                                  { id: 'MDM_EMPLOYEE', label: 'Employee Master', icon: <UserCircle className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />, color: 'text-purple-400' },
-                                  { id: 'MDM_WAREHOUSE', label: 'Warehouse Master', icon: <Warehouse className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />, color: 'text-cyan-400' },
-                                  { id: 'MDM_FINANCE', label: 'Finance & Tax', icon: <Receipt className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />, color: 'text-rose-400', reqs: ['MDM_TAX', 'MDM_COA'] },
-                                  { id: 'MDM_CLASSIFICATION', label: 'Classifications', icon: <Tag className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />, color: 'text-orange-400', reqs: ['MDM_UNIT', 'MDM_CATEGORY', 'MDM_BRAND'] }
-                                ].map(uiItem => {
-                                  const reqs = uiItem.reqs || [uiItem.id];
-                                  if (!reqs.some(f => companyFeatures.includes(f))) return null;
-                                  const isActive = activeWorkspaceModule === mKey && activeWorkspaceSubModule === uiItem.id;
-                                  return (
-                                    <button
-                                      key={uiItem.id}
-                                      onClick={() => { setActiveWorkspaceModule(mKey); setActiveWorkspaceSubModule(uiItem.id); }}
-                                      className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${isActive ? `${uiItem.color} font-bold ${theme.activeBg}` : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
-                                    >
-                                      {uiItem.icon}
-                                      <span>{uiItem.label}</span>
-                                    </button>
-                                  );
-                                })
-                              ) : (
-                                catData.children.map((child: any) => {
-                                  if (!companyFeatures.includes(child.key)) return null;
-                                  const isActive = activeWorkspaceModule === mKey && activeWorkspaceSubModule === child.key;
-                                  return (
-                                    <button
-                                      key={child.key}
-                                      onClick={() => { setActiveWorkspaceModule(mKey); setActiveWorkspaceSubModule(child.key); }}
-                                      className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${isActive ? `${theme.textHover} font-bold ${theme.activeBg}` : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
-                                    >
-                                      <Folder className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                      <span>{child.name}</span>
-                                    </button>
-                                  );
-                                })
-                              )}
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  );
-                  })}
+                                    {/* Dynamic Sidebar Modules Cleared */}
+                  <div className="px-3 py-4 mt-6 text-center select-none animate-fade-in">
+                    <span className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-widest border border-dashed border-[var(--border-color)] rounded-xl py-3 px-2 block leading-relaxed bg-[var(--bg-secondary)]/30">
+                      Empty Console<br/>
+                      <span className="text-[8px] font-normal text-[var(--text-muted)]/70 lowercase">ready for implementation</span>
+                    </span>
+                  </div>
 
-                  {/* Category E: System Administration (Admin Role Only) */}
-                  {user.role === 'Admin' && companyFeatures.includes('ADMIN') && (
-                    <div className="flex flex-col mt-2 relative">
-                      {sidebarCollapsed ? (
-                        <div className="flex justify-center border-t border-[var(--border-color)] pt-2">
-                          <button
-                            onClick={() => setActivePopoverCategory(activePopoverCategory === 'admin' ? null : 'admin')}
-                            className={`p-2.5 rounded-xl hover:bg-[var(--bg-tertiary)] transition-colors cursor-pointer ${['general_admin', 'approvals', 'employee_directory', 'dashboard'].includes(activeWorkspaceModule) ? 'bg-indigo-500/10 text-indigo-500' : 'text-slate-400'}`}
-                            title="Administration"
-                          >
-                            <Settings className="w-4 h-4" />
-                          </button>
-                          {activePopoverCategory === 'admin' && (
-                            <div className="absolute left-14 top-0 z-50 w-52 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl shadow-2xl p-2 animate-scale-up text-left flex flex-col gap-1 max-h-[360px] overflow-y-auto">
-                              <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-widest uppercase px-2 block mb-1">Administration</span>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('general_admin');
-                                  setAdminTab('email');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'general_admin' && adminTab === 'email' ? 'text-indigo-400 font-bold bg-indigo-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Mail className="w-3.5 h-3.5" />
-                                <span>SMTP Email Settings</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('general_admin');
-                                  setAdminTab('org');
-                                  setAdminOrgSubTab('dept_crud');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'general_admin' && adminTab === 'org' && adminOrgSubTab === 'dept_crud' ? 'text-indigo-400 font-bold bg-indigo-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Folder className="w-3.5 h-3.5" />
-                                <span>Department Tree</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('general_admin');
-                                  setAdminTab('org');
-                                  setAdminOrgSubTab('org_chart');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'general_admin' && adminTab === 'org' && adminOrgSubTab === 'org_chart' ? 'text-indigo-400 font-bold bg-indigo-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Users className="w-3.5 h-3.5" />
-                                <span>Employee Org Chart</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('general_admin');
-                                  setAdminTab('features');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'general_admin' && adminTab === 'features' ? 'text-indigo-400 font-bold bg-indigo-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Shield className="w-3.5 h-3.5" />
-                                <span>Role Designer</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('general_admin');
-                                  setAdminTab('workflow');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'general_admin' && adminTab === 'workflow' ? 'text-indigo-400 font-bold bg-indigo-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <CheckCircle className="w-3.5 h-3.5" />
-                                <span>Approval Engine</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('general_admin');
-                                  setAdminTab('notifications');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'general_admin' && adminTab === 'notifications' ? 'text-indigo-400 font-bold bg-indigo-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Bell className="w-3.5 h-3.5" />
-                                <span>Notification Hub</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('general_admin');
-                                  setAdminTab('dms');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'general_admin' && adminTab === 'dms' ? 'text-indigo-400 font-bold bg-indigo-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Layers className="w-3.5 h-3.5" />
-                                <span>Document Management (DMS)</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('general_admin');
-                                  setAdminTab('audit');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'general_admin' && adminTab === 'audit' ? 'text-indigo-400 font-bold bg-indigo-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Activity className="w-3.5 h-3.5" />
-                                <span>Audit Trail Logs</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('general_admin');
-                                  setAdminTab('backup');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'general_admin' && adminTab === 'backup' ? 'text-indigo-400 font-bold bg-indigo-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Database className="w-3.5 h-3.5" />
-                                <span>Backups</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('general_admin');
-                                  setAdminTab('profile');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'general_admin' && adminTab === 'profile' ? 'text-indigo-400 font-bold bg-indigo-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Building className="w-3.5 h-3.5" />
-                                <span>Company Profile</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('general_admin');
-                                  setAdminTab('tax');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'general_admin' && adminTab === 'tax' ? 'text-indigo-400 font-bold bg-indigo-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Percent className="w-3.5 h-3.5" />
-                                <span>Tax Settings</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('general_admin');
-                                  setAdminTab('currency');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'general_admin' && adminTab === 'currency' ? 'text-indigo-400 font-bold bg-indigo-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <DollarSign className="w-3.5 h-3.5" />
-                                <span>Currencies</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('approvals');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'approvals' ? 'text-indigo-400 font-bold bg-indigo-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <UserPlus className="w-3.5 h-3.5" />
-                                <span>User Security Approvals {pendingUsers.length > 0 && `(${pendingUsers.length})`}</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('employee_directory');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'employee_directory' ? 'text-indigo-400 font-bold bg-indigo-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Briefcase className="w-3.5 h-3.5" />
-                                <span>System Employee Directory</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('dashboard');
-                                  setActivePopoverCategory(null);
-                                }}
-                                className={`w-full py-1.5 px-2 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'dashboard' ? 'text-indigo-400 font-bold bg-indigo-500/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Layers className="w-3.5 h-3.5" />
-                                <span>Customizable Dashboard</span>
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="border-t border-[var(--border-color)] pt-2">
-                          <button
-                            onClick={() => toggleSidebarCategory('admin')}
-                            className="w-full py-2 px-3 rounded-lg text-left text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] flex items-center justify-between transition-colors cursor-pointer"
-                          >
-                            <span className="flex items-center gap-2">
-                              <Settings className="w-4 h-4 text-slate-400" style={{ flexShrink: 0 }} />
-                              <span>Administration</span>
-                            </span>
-                            {expandedCategories.admin ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                          </button>
-
-                          {expandedCategories.admin && (
-                            <div className="pl-6 flex flex-col gap-1 mt-1 border-l border-[var(--border-color)] ml-4">
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('general_admin');
-                                  setAdminTab('email');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'general_admin' && adminTab === 'email'
-                                    ? 'text-indigo-400 font-bold bg-indigo-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Mail className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>SMTP Email Settings</span>
-                              </button>
-
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('general_admin');
-                                  setAdminTab('org');
-                                  setAdminOrgSubTab('dept_crud');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'general_admin' && adminTab === 'org' && adminOrgSubTab === 'dept_crud'
-                                    ? 'text-indigo-400 font-bold bg-indigo-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Folder className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Department Tree</span>
-                              </button>
-
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('general_admin');
-                                  setAdminTab('org');
-                                  setAdminOrgSubTab('org_chart');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'general_admin' && adminTab === 'org' && adminOrgSubTab === 'org_chart'
-                                    ? 'text-indigo-400 font-bold bg-indigo-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Users className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Employee Org Chart</span>
-                              </button>
-
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('general_admin');
-                                  setAdminTab('features');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'general_admin' && adminTab === 'features'
-                                    ? 'text-indigo-400 font-bold bg-indigo-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Shield className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Role Designer</span>
-                              </button>
-
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('general_admin');
-                                  setAdminTab('workflow');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'general_admin' && adminTab === 'workflow'
-                                    ? 'text-indigo-400 font-bold bg-indigo-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <CheckCircle className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Approval Engine</span>
-                              </button>
-
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('general_admin');
-                                  setAdminTab('notifications');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'general_admin' && adminTab === 'notifications'
-                                    ? 'text-indigo-400 font-bold bg-indigo-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Bell className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Notification Hub</span>
-                              </button>
-
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('general_admin');
-                                  setAdminTab('dms');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'general_admin' && adminTab === 'dms'
-                                    ? 'text-indigo-400 font-bold bg-indigo-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Layers className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Document Management (DMS)</span>
-                              </button>
-
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('general_admin');
-                                  setAdminTab('audit');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'general_admin' && adminTab === 'audit'
-                                    ? 'text-indigo-400 font-bold bg-indigo-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Activity className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Audit Trail Logs</span>
-                              </button>
-
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('general_admin');
-                                  setAdminTab('backup');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'general_admin' && adminTab === 'backup'
-                                    ? 'text-indigo-400 font-bold bg-indigo-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Database className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Backups</span>
-                              </button>
-
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('general_admin');
-                                  setAdminTab('profile');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'general_admin' && adminTab === 'profile'
-                                    ? 'text-indigo-400 font-bold bg-indigo-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Building className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Company Profile</span>
-                              </button>
-
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('general_admin');
-                                  setAdminTab('tax');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'general_admin' && adminTab === 'tax'
-                                    ? 'text-indigo-400 font-bold bg-indigo-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Percent className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Tax Settings</span>
-                              </button>
-
-                              <button
-                                onClick={() => {
-                                  setActiveWorkspaceModule('general_admin');
-                                  setAdminTab('currency');
-                                }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'general_admin' && adminTab === 'currency'
-                                    ? 'text-indigo-400 font-bold bg-indigo-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <DollarSign className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Currencies</span>
-                              </button>
-
-                              <button
-                                onClick={() => { setActiveWorkspaceModule('approvals'); }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center justify-between gap-2 ${
-                                  activeWorkspaceModule === 'approvals'
-                                    ? 'text-indigo-400 font-bold bg-indigo-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <span className="flex items-center gap-2">
-                                  <UserPlus className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                  <span>User Security Approvals</span>
-                                </span>
-                                {pendingUsers.length > 0 && (
-                                  <span className="bg-indigo-500 text-white font-extrabold text-[8px] px-1.5 py-0.5 rounded-full leading-none">{pendingUsers.length}</span>
-                                )}
-                              </button>
-
-                              <button
-                                onClick={() => { setActiveWorkspaceModule('employee_directory'); }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'employee_directory'
-                                    ? 'text-indigo-400 font-bold bg-indigo-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Briefcase className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>System Employee Directory</span>
-                              </button>
-
-                              <button
-                                onClick={() => { setActiveWorkspaceModule('dashboard'); }}
-                                className={`w-full py-1.5 px-3 rounded-md text-left text-[11px] font-semibold transition-colors flex items-center gap-2 ${
-                                  activeWorkspaceModule === 'dashboard'
-                                    ? 'text-indigo-400 font-bold bg-indigo-500/5'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <Layers className="w-3.5 h-3.5" style={{ flexShrink: 0 }} />
-                                <span>Customizable Dashboard</span>
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  
 
 
                 </>
@@ -2615,21 +1809,20 @@ export default function App() {
                     </div>
                   </div>
                 ) : (
-                  <CustomDashboard
-                    user={user!}
-                    token={token || ''}
-                    backendUrl={BACKEND_URL}
-                    socket={socketRef.current}
-                    workspaceStats={workspaceStats}
-                    onNavigate={(module) => {
-                      if (module === 'general_admin') {
-                        setActiveWorkspaceModule('general_admin');
-                        setAdminTab('profile');
-                      } else {
-                        setActiveWorkspaceModule(module);
-                      }
-                    }}
-                  />
+                  <div className="max-w-4xl mx-auto my-12 text-center select-none animate-fade-in">
+                    <div className="p-4 bg-[var(--bg-secondary)] text-indigo-500 border border-[var(--border-color)] rounded-2xl w-fit mx-auto mb-6 shadow-sm">
+                      <Activity className="w-12 h-12 animate-pulse" />
+                    </div>
+                    <h2 className="text-xl font-bold text-[var(--text-primary)] font-display">
+                      ERP Reimplementation Console
+                    </h2>
+                    <p className="text-[var(--text-secondary)] text-xs mt-2 max-w-md mx-auto leading-relaxed">
+                      All default dashboard views and modular features have been completely removed.
+                    </p>
+                    <p className="text-[var(--text-muted)] text-[11px] mt-2 max-w-md mx-auto leading-relaxed border-t border-dashed border-[var(--border-color)] pt-2">
+                      Ready to implement new features one category and one feature at a time!
+                    </p>
+                  </div>
                 )
               )}
 
@@ -3203,53 +2396,7 @@ export default function App() {
                 </div>
               )}
 
-              {/* ==========================================
-                  STANDARD USER VIEW A: CRM PIPELINES Mock
-                  ========================================== */}
-              {activeWorkspaceModule === 'crm' && !selectedCompany && (
-                  <CrmModule user={user!} activeTab={activeWorkspaceSubModule} token={token || ''} backendUrl={BACKEND_URL} />
-                )}
-  
-                {activeWorkspaceModule === 'hr' && !selectedCompany && (
-                  <HumanResources user={user!} activeTab={activeWorkspaceSubModule} token={token || ''} backendUrl={BACKEND_URL} />
-                )}
-  
-                {activeWorkspaceModule === 'finance' && !selectedCompany && (
-                <FinanceAccounting
-                  user={user!}
-                  token={token || ''}
-                  backendUrl={BACKEND_URL}
-                  activeSubModule={activeWorkspaceSubModule}
-                  initialTab={financeDeepTab as any}
-                  initialSubTab={financeDeepSubTab}
-                />
-              )}
 
-              {activeWorkspaceModule === 'master_data' && !selectedCompany && (
-                <div className="flex-1 w-full bg-[var(--bg-primary)] overflow-hidden flex flex-col">
-                  {(!activeWorkspaceSubModule || activeWorkspaceSubModule === 'MDM_PRODUCT') && <ProductMasterUI token={token || ''} backendUrl={BACKEND_URL} />}
-                  {activeWorkspaceSubModule === 'MDM_CUSTOMER' && <CustomerMasterUI token={token || ''} backendUrl={BACKEND_URL} />}
-                  {activeWorkspaceSubModule === 'MDM_VENDOR' && <VendorMasterUI token={token || ''} backendUrl={BACKEND_URL} />}
-                  {activeWorkspaceSubModule === 'MDM_EMPLOYEE' && <EmployeeMasterUI token={token || ''} backendUrl={BACKEND_URL} />}
-                  {activeWorkspaceSubModule === 'MDM_WAREHOUSE' && <WarehouseMasterUI token={token || ''} backendUrl={BACKEND_URL} />}
-                  {activeWorkspaceSubModule === 'MDM_FINANCE' && <FinanceMastersUI token={token || ''} backendUrl={BACKEND_URL} />}
-                  {activeWorkspaceSubModule === 'MDM_CLASSIFICATION' && <ClassificationMastersUI token={token || ''} backendUrl={BACKEND_URL} />}
-                </div>
-              )}
-
-              {activeWorkspaceModule === 'general_admin' && !selectedCompany && (
-                <GeneralAdmin
-                  user={user as any}
-                  token={token || ''}
-                  backendUrl={BACKEND_URL}
-                  socket={socketRef.current}
-                  companyFeatures={companyFeatures}
-                  onUpdateFeatures={setCompanyFeatures}
-                  initialTab={adminTab as any}
-                  initialOrgSubTab={adminOrgSubTab as any}
-                  activeTab={activeWorkspaceSubModule}
-                />
-              )}
 
               {/* ==========================================
                   COMPANY ADMIN VIEW A: USER APPROVALS
@@ -3329,39 +2476,7 @@ export default function App() {
                         />
                       </div>
 
-                      <div>
-                        <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-2">RBAC Scope Authorization</label>
-                        
-                        <div className="flex flex-col gap-3">
-                          {['CRM', 'HR', 'FINANCE'].map(module => {
-                            const isEnabled = companyFeatures.includes(module);
-                            return (
-                              <div 
-                                key={module} 
-                                className={`p-2.5 border rounded-xl text-left ${
-                                  isEnabled ? 'bg-[var(--bg-primary)] border-[var(--border-color)]' : 'bg-red-500/5 border-red-500/10 opacity-60'
-                                }`}
-                              >
-                                <span className="font-bold text-[10px] text-[var(--text-primary)] block font-display">{module} Module</span>
-                                <div className="flex gap-3 mt-1.5">
-                                  {['read', 'write', 'delete'].map(action => (
-                                    <label key={action} className="flex items-center gap-1 text-[10px] text-[var(--text-secondary)] cursor-pointer hover:text-[var(--text-primary)]">
-                                      <input
-                                        type="checkbox"
-                                        disabled={!isEnabled}
-                                        checked={newRole.permissions[module as 'CRM' | 'HR' | 'FINANCE'].includes(action)}
-                                        onChange={() => togglePermission(module as 'CRM' | 'HR' | 'FINANCE', action)}
-                                        className="w-3.5 h-3.5 rounded text-indigo-600 bg-gray-900 border-gray-800"
-                                      />
-                                      <span className="capitalize">{action}</span>
-                                    </label>
-                                  ))}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
+
 
                       <button
                         type="submit"
@@ -3453,24 +2568,7 @@ export default function App() {
                   IN-APP ALERTS / NOTIFICATIONS FEED MODULE
                   ========================================== */}
 
-              {activeWorkspaceModule === 'inventory' && !selectedCompany && (
-                <InventoryWarehouse user={user!} activeTab={activeWorkspaceSubModule} token={token || ''} backendUrl={BACKEND_URL} />
-              )}
-              {activeWorkspaceModule === 'purchase' && !selectedCompany && (
-                <PurchaseProcurement user={user!} activeTab={activeWorkspaceSubModule} token={token || ''} backendUrl={BACKEND_URL} />
-              )}
-              {activeWorkspaceModule === 'sales' && !selectedCompany && (
-                <SalesOrder user={user!} activeTab={activeWorkspaceSubModule} token={token || ''} backendUrl={BACKEND_URL} />
-              )}
-              {activeWorkspaceModule === 'manufacturing' && !selectedCompany && (
-                <ManufacturingProduction user={user!} activeTab={activeWorkspaceSubModule} token={token || ''} backendUrl={BACKEND_URL} />
-              )}
-              {activeWorkspaceModule === 'quality' && !selectedCompany && (
-                <QualityMaintenance user={user!} activeTab={activeWorkspaceSubModule} token={token || ''} backendUrl={BACKEND_URL} />
-              )}
-              {activeWorkspaceModule === 'email' && !selectedCompany && (
-                <GlobalEmailSystem user={user!} activeTab={activeWorkspaceSubModule} token={token || ''} backendUrl={BACKEND_URL} />
-              )}
+
 
               {activeWorkspaceModule === 'alerts' && !selectedCompany && (
                 <div className="max-w-3xl mx-auto select-none animate-fade-in">
@@ -3581,69 +2679,7 @@ export default function App() {
             </main>
           </div>
 
-          {/* ==========================================
-              MODAL: USER SUBSCRIPTION DETAILS (Admin only)
-              ========================================== */}
-          {showSubscriptionModal && (
-            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 animate-fade-in">
-              <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl w-full max-w-md p-6 relative shadow-2xl text-left select-none">
-                <button 
-                  onClick={() => setShowSubscriptionModal(false)}
-                  className="absolute top-4 right-4 text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
 
-                <div className="flex items-center gap-3 pb-3 border-b border-[var(--border-color)]">
-                  <div className="p-2.5 bg-indigo-500/10 rounded-xl text-indigo-400 border border-indigo-500/20">
-                    <Building className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-base text-[var(--text-primary)] font-display">Corporate Subscription Details</h3>
-                    <p className="text-[var(--text-secondary)] text-[10px]">Active modular scopes for company workspace</p>
-                  </div>
-                </div>
-
-                <div className="mt-4 flex flex-col gap-3.5">
-                  <div className="bg-[var(--bg-tertiary)] p-3 rounded-lg border border-[var(--border-color)]">
-                    <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-wider uppercase">Licensed Corporate Tenant</span>
-                    <p className="text-xs font-bold text-[var(--text-primary)] mt-1 font-display">{user.companyName}</p>
-                    <span className="text-[10px] text-[var(--text-secondary)] block mt-0.5">Corporate Code: <span className="font-mono text-indigo-400 font-bold">{user.companyCode}</span></span>
-                  </div>
-
-                  <div>
-                    <span className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-2">Licensed Features & Modules</span>
-                    <div className="flex flex-col gap-1.5">
-                      {['CRM', 'HR', 'FINANCE', 'NOTIFICATIONS'].map(modKey => {
-                        const isLicensed = companyFeatures.includes(modKey);
-                        return (
-                          <div key={modKey} className="flex items-center justify-between text-xs py-1 px-2.5 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg">
-                            <span className="font-bold text-[11px] font-display">{modKey} Module</span>
-                            {isLicensed ? (
-                              <span className="px-2 py-0.5 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-extrabold text-[8px] rounded uppercase flex items-center gap-1">
-                                <CheckCircle className="w-3 h-3" /> ACTIVE
-                              </span>
-                            ) : (
-                              <span className="px-2 py-0.5 bg-red-500/10 border border-red-500/20 text-red-500 font-extrabold text-[8px] rounded uppercase">
-                                LOCKED
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => setShowSubscriptionModal(false)}
-                  className="w-full mt-6 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 rounded-lg text-xs cursor-pointer"
-                >
-                  Close Scope Panel
-                </button>
-              </div>
-            </div>
-          )}
 
           {/* ==========================================
               MODAL: PLATFORM HEALTH STATUS DETAILS
@@ -5061,7 +4097,6 @@ export default function App() {
                       </div>
                     </div>
                   </div>
-
                   <div className="mt-4 pt-3 border-t border-[var(--border-color)]/50 flex justify-end gap-2">
                     <button
                       type="button"
@@ -5092,161 +4127,17 @@ export default function App() {
               </div>
             </div>
           )}
-
-          {/* ==========================================
-              MODAL: USER - FORGOT PASSWORD RECOVERY
-              ========================================== */}
-          {showForgotPasswordModal && (
-            <div className="fixed inset-0 z-55 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 animate-fade-in select-none">
-              <div className="bg-[var(--bg-card)] border border-[var(--border-color)] p-6 rounded-2xl shadow-2xl w-full max-w-md animate-scale-up relative">
-                <button 
-                  onClick={() => setShowForgotPasswordModal(false)}
-                  className="absolute top-4 right-4 text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-
-                <div className="flex items-center gap-3 pb-3 border-b border-[var(--border-color)]">
-                  <div className="p-2.5 bg-indigo-500/10 rounded-xl text-indigo-400 border border-indigo-500/20">
-                    <Key className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-base text-[var(--text-primary)] font-display">Credentials Recovery</h3>
-                    <p className="text-[var(--text-secondary)] text-[10px]">Provide your workstation markers to authorize password override</p>
-                  </div>
-                </div>
-
-                {(forgotError || forgotSuccess) && (
-                  <div className="mt-4">
-                    {forgotError && (
-                      <div className="bg-red-500/10 border border-red-500/20 p-2.5 rounded-lg flex items-center gap-2 text-red-500 text-xs">
-                        <AlertCircle className="w-4 h-4 shrink-0" />
-                        <span>{forgotError}</span>
-                      </div>
-                    )}
-                    {forgotSuccess && (
-                      <div className="bg-emerald-500/10 border border-emerald-500/20 p-2.5 rounded-lg flex items-center gap-2 text-emerald-500 text-xs">
-                        <CheckCircle className="w-4 h-4 shrink-0" />
-                        <span>{forgotSuccess}</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <form onSubmit={handleForgotPasswordSubmit} className="mt-4 flex flex-col gap-4">
-                  <div>
-                    <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Company Tenant Code</label>
-                    <div className="mt-1 relative">
-                      <Building className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-                      <input
-                        type="text"
-                        required
-                        placeholder="e.g. APPLE, DINEIN"
-                        value={forgotCompanyCode}
-                        onChange={e => setForgotCompanyCode(e.target.value)}
-                        className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 pl-10 pr-4 rounded-lg text-xs focus:outline-none transition-colors"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Username</label>
-                    <div className="mt-1 relative">
-                      <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-                      <input
-                        type="text"
-                        required
-                        placeholder="Enter username"
-                        value={forgotUsername}
-                        onChange={e => setForgotUsername(e.target.value)}
-                        className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 pl-10 pr-4 rounded-lg text-xs focus:outline-none transition-colors"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Registered Phone or Email</label>
-                    <div className="mt-1 relative">
-                      <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-                      <input
-                        type="text"
-                        required
-                        placeholder="Registered email address or phone number"
-                        value={forgotEmailOrPhone}
-                        onChange={e => setForgotEmailOrPhone(e.target.value)}
-                        className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 pl-10 pr-4 rounded-lg text-xs focus:outline-none transition-colors"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="border-t border-[var(--border-color)] pt-3 mt-1">
-                    <span className="text-[10px] font-bold text-indigo-400 tracking-wider uppercase block mb-3">Define New Passphrase</span>
-                    
-                    <div className="flex flex-col gap-3">
-                      <div>
-                        <label className="text-[8px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">New Password</label>
-                        <div className="mt-1 relative">
-                          <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-                          <input
-                            type="password"
-                            required
-                            placeholder="Minimum 6 characters"
-                            value={forgotNewPassword}
-                            onChange={e => setForgotNewPassword(e.target.value)}
-                            className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 pl-10 pr-4 rounded-lg text-xs focus:outline-none transition-colors"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="text-[8px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Confirm New Password</label>
-                        <div className="mt-1 relative">
-                          <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-                          <input
-                            type="password"
-                            required
-                            placeholder="Confirm password"
-                            value={forgotConfirmPassword}
-                            onChange={e => setForgotConfirmPassword(e.target.value)}
-                            className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 pl-10 pr-4 rounded-lg text-xs focus:outline-none transition-colors"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 pt-3 border-t border-[var(--border-color)]/50 flex justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowForgotPasswordModal(false)}
-                      className="px-4 py-2 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-[11px] font-bold transition-colors cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={forgotLoading}
-                      className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold shadow-md shadow-indigo-600/10 transition-colors cursor-pointer flex items-center gap-1.5"
-                    >
-                      {forgotLoading ? (
-                        <>
-                          <svg className="animate-spin h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          <span>Processing...</span>
-                        </>
-                      ) : (
-                        <span>Reset Account Password</span>
-                      )}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          )}
+          
         </div>
       )}
+
+      <ForgotPasswordModal
+        isOpen={showForgotPasswordModal}
+        onClose={() => setShowForgotPasswordModal(false)}
+        BACKEND_URL={BACKEND_URL}
+        initialCompanyCode={loginForm.companyCode}
+        initialUsername={loginForm.username}
+      />
     </div>
   );
 }

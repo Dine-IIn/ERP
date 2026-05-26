@@ -19,6 +19,32 @@ async function authenticateToken(req, res, next) {
     try {
         const decoded = (0, utils_1.verifyToken)(token);
         req.user = decoded;
+        // Load session from database to ensure it's still active and not logged out
+        const session = await db_1.default.userSession.findUnique({
+            where: { token }
+        });
+        if (!session) {
+            return res.status(401).json({ error: "Session expired or logged out from another device", sessionConflict: false });
+        }
+        // Check desktop inactivity timeout (15 minutes = 900,000 ms)
+        if (session.deviceType === 'DESKTOP') {
+            const INACTIVITY_TIMEOUT = 15 * 60 * 1000;
+            const timeDiff = Date.now() - session.lastActiveAt.getTime();
+            if (timeDiff > INACTIVITY_TIMEOUT) {
+                // Terminate session due to inactivity
+                await db_1.default.userSession.delete({
+                    where: { id: session.id }
+                });
+                return res.status(401).json({ error: "Session logged out due to inactivity", inactiveLogout: true });
+            }
+            // Update lastActiveAt in DB (throttled to at most once per minute to optimize write performance)
+            if (timeDiff > 60 * 1000) {
+                await db_1.default.userSession.update({
+                    where: { id: session.id },
+                    data: { lastActiveAt: new Date() }
+                });
+            }
+        }
         // Skip database active check for Super Admin
         if (decoded.isSuperAdmin) {
             return next();

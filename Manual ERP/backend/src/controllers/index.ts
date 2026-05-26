@@ -20,188 +20,7 @@ import {
 } from '../utils';
 
 export const HIERARCHICAL_FEATURES = [
-  { key: "ADMIN", name: "GENERAL / ADMINISTRATION MODULE", description: "System administration configuration" },
-  { key: "ADMIN_PROFILE", name: "Company profile management", description: "Company profile management" },
-  { key: "ADMIN_TAX", name: "GST/VAT/TAX settings", description: "GST/VAT/TAX settings" },
-  { key: "ADMIN_CURRENCY", name: "Currency settings", description: "Currency settings" },
-  { key: "ADMIN_AUDIT", name: "Audit logs", description: "Audit logs" },
-  { key: "ADMIN_APPROVALS", name: "Approval workflow engine", description: "Approval workflow engine" },
-  { key: "ADMIN_NOTIFICATIONS", name: "Notification center", description: "Notification center" },
-  { key: "ADMIN_BACKUP", name: "Backup & restore", description: "Backup & restore" },
-  { key: "ADMIN_DOCUMENTS", name: "Document management", description: "Document management" },
-  { key: "ADMIN_EMAIL", name: "Email integration system", description: "Email integration system" },
-  { key: "ADMIN_TOGGLES", name: "Feature toggle system", description: "Feature toggle system" },
-  { key: "ADMIN_DASHBOARD", name: "Customizable dashboard", description: "Customizable dashboard" },
-  { key: "ADMIN_ORG", name: "Organization hierarchy", description: "Organization hierarchy" },
-  { key: "ADMIN_DEPARTMENTS", name: "Department management", description: "Department management" },
-  { key: "ADMIN_ACTIVITY", name: "User activity logs", description: "User activity logs" },
-
-  { key: "MDM", name: "MASTER DATA MANAGEMENT", description: "Master Data Management" },
-  { key: "MDM_PRODUCT", name: "Product master", description: "Product master" },
-  { key: "MDM_CUSTOMER", name: "Customer master", description: "Customer master" },
-  { key: "MDM_VENDOR", name: "Vendor master", description: "Vendor master" },
-  { key: "MDM_EMPLOYEE", name: "Employee master", description: "Employee master" },
-  { key: "MDM_WAREHOUSE", name: "Warehouse master", description: "Warehouse master" },
-  { key: "MDM_TAX", name: "Tax master", description: "Tax master" },
-  { key: "MDM_UNIT", name: "Unit master", description: "Unit master" },
-  { key: "MDM_CATEGORY", name: "Category master", description: "Category master" },
-  { key: "MDM_BRAND", name: "Brand master", description: "Brand master" },
-  { key: "MDM_COA", name: "Chart of accounts", description: "Chart of accounts" },
-  { key: "MDM_DROPDOWNS", name: "Reusable dropdown/master APIs", description: "Reusable dropdown/master APIs" },
-  { key: "MDM_IMPORT_EXPORT", name: "Import/export master data", description: "Import/export master data" },
-
-  { key: "FINANCE", name: "FINANCE & ACCOUNTING MODULE", description: "Finance & Accounting" },
-  { key: "FINANCE_LEDGER", name: "General ledger", description: "General ledger" },
-  { key: "FINANCE_JOURNAL", name: "Journal entries", description: "Journal entries" },
-  { key: "FINANCE_TRIAL_BALANCE", name: "Trial balance", description: "Trial balance" },
-  { key: "FINANCE_BALANCE_SHEET", name: "Balance sheet", description: "Balance sheet" },
-  { key: "FINANCE_PNL", name: "Profit & loss", description: "Profit & loss" },
-  { key: "FINANCE_CASH_FLOW", name: "Cash flow statements", description: "Cash flow statements" },
-  { key: "FINANCE_AP", name: "Accounts payable", description: "Accounts payable" },
-  { key: "FINANCE_AR", name: "Accounts receivable", description: "Accounts receivable" },
-  { key: "FINANCE_EXPENSE", name: "Expense tracking", description: "Expense tracking" },
-  { key: "FINANCE_GST", name: "GST management", description: "GST management" },
-  { key: "FINANCE_TAX", name: "Tax management", description: "Tax management" },
-  { key: "FINANCE_ASSET", name: "Asset management", description: "Asset management" },
-  { key: "FINANCE_DEPRECIATION", name: "Depreciation tracking", description: "Depreciation tracking" },
-  { key: "FINANCE_BUDGET", name: "Budget management", description: "Budget management" },
-  { key: "FINANCE_BANK_RECON", name: "Bank reconciliation", description: "Bank reconciliation" },
-  { key: "FINANCE_REPORTS", name: "Financial reports", description: "Financial reports" },
-  { key: "FINANCE_VOUCHER", name: "Voucher system", description: "Voucher system" },
-  { key: "FINANCE_FISCAL_YEAR", name: "Fiscal year management", description: "Fiscal year management" },
-
-  { key: "INVENTORY", name: "INVENTORY & WAREHOUSE MODULE", description: "Inventory & Warehouse" },
-  { key: "INVENTORY_TRACKING", name: "Real-time stock tracking", description: "Real-time stock tracking" },
-  { key: "INVENTORY_MULTI_WH", name: "Multi-warehouse support", description: "Multi-warehouse support" },
-  { key: "INVENTORY_BATCH", name: "Batch management", description: "Batch management" },
-  { key: "INVENTORY_SERIAL", name: "Serial number tracking", description: "Serial number tracking" },
-  { key: "INVENTORY_TRANSFERS", name: "Stock transfers", description: "Stock transfers" },
-  { key: "INVENTORY_ADJUSTMENTS", name: "Stock adjustments", description: "Stock adjustments" },
-  { key: "INVENTORY_VALUATION", name: "Inventory valuation", description: "Inventory valuation" },
-  { key: "INVENTORY_ALERTS", name: "Low stock alerts", description: "Low stock alerts" },
-  { key: "INVENTORY_BARCODE", name: "Barcode support", description: "Barcode support" },
-  { key: "INVENTORY_RACK_BIN", name: "Rack/bin management", description: "Rack/bin management" },
-  { key: "INVENTORY_DISPATCH", name: "Dispatch management", description: "Dispatch management" },
-  { key: "INVENTORY_GRN", name: "GRN (Goods Receipt Notes)", description: "GRN (Goods Receipt Notes)" },
-  { key: "INVENTORY_REPORTS", name: "Inventory reports", description: "Inventory reports" },
-  { key: "INVENTORY_LEDGER", name: "Stock ledger", description: "Stock ledger" },
-  { key: "INVENTORY_CYCLE_COUNT", name: "Cycle counting", description: "Cycle counting" },
-
-  { key: "PURCHASE", name: "PURCHASE & PROCUREMENT MODULE", description: "Purchase & Procurement" },
-  { key: "PURCHASE_VENDOR_MGT", name: "Vendor management", description: "Vendor management" },
-  { key: "PURCHASE_REQUISITIONS", name: "Purchase requisitions", description: "Purchase requisitions" },
-  { key: "PURCHASE_ORDERS", name: "Purchase orders", description: "Purchase orders" },
-  { key: "PURCHASE_QUOTATIONS", name: "Vendor quotations", description: "Vendor quotations" },
-  { key: "PURCHASE_COMPARISON", name: "Vendor comparison", description: "Vendor comparison" },
-  { key: "PURCHASE_PAYMENTS", name: "Supplier payment tracking", description: "Supplier payment tracking" },
-  { key: "PURCHASE_APPROVALS", name: "Approval workflows", description: "Approval workflows" },
-  { key: "PURCHASE_REORDER", name: "Reorder automation", description: "Reorder automation" },
-  { key: "PURCHASE_GRN", name: "GRN integration", description: "GRN integration" },
-  { key: "PURCHASE_DASHBOARD", name: "Procurement dashboard", description: "Procurement dashboard" },
-  { key: "PURCHASE_PO_PDF", name: "PO PDF generation", description: "PO PDF generation" },
-  { key: "PURCHASE_EMAIL_PO", name: "Email PO sending", description: "Email PO sending" },
-
-  { key: "SALES", name: "SALES & ORDER MANAGEMENT MODULE", description: "Sales & Order Management" },
-  { key: "SALES_QUOTATIONS", name: "Quotations", description: "Quotations" },
-  { key: "SALES_ORDERS", name: "Sales orders", description: "Sales orders" },
-  { key: "SALES_INVOICING", name: "Invoice generation", description: "Invoice generation" },
-  { key: "SALES_TAX_CALC", name: "Tax calculations", description: "Tax calculations" },
-  { key: "SALES_PRICING", name: "Customer-wise pricing", description: "Customer-wise pricing" },
-  { key: "SALES_DISCOUNT", name: "Discount system", description: "Discount system" },
-  { key: "SALES_RETURNS", name: "Returns/refunds", description: "Returns/refunds" },
-  { key: "SALES_CREDIT_NOTES", name: "Credit notes", description: "Credit notes" },
-  { key: "SALES_DELIVERY", name: "Delivery scheduling", description: "Delivery scheduling" },
-  { key: "SALES_PAYMENTS", name: "Payment tracking", description: "Payment tracking" },
-  { key: "SALES_INVOICE_PDF", name: "Invoice PDF generation", description: "Invoice PDF generation" },
-  { key: "SALES_EMAIL_INVOICES", name: "Email invoices", description: "Email invoices" },
-  { key: "SALES_STATEMENTS", name: "Customer statements", description: "Customer statements" },
-  { key: "SALES_ANALYTICS", name: "Sales analytics", description: "Sales analytics" },
-
-  { key: "HR", name: "HRM MODULE", description: "Human Resource Management" },
-  { key: "HR_PROFILES", name: "Employee profiles", description: "Employee profiles" },
-  { key: "HR_ATTENDANCE", name: "Attendance management", description: "Attendance management" },
-  { key: "HR_LEAVE", name: "Leave management", description: "Leave management" },
-  { key: "HR_PAYROLL", name: "Payroll management", description: "Payroll management" },
-  { key: "HR_SALARY_SLIPS", name: "Salary slips", description: "Salary slips" },
-  { key: "HR_REIMBURSEMENTS", name: "Reimbursements", description: "Reimbursements" },
-  { key: "HR_RECRUITMENT", name: "Recruitment management", description: "Recruitment management" },
-  { key: "HR_SHIFT", name: "Shift management", description: "Shift management" },
-  { key: "HR_PERFORMANCE", name: "Performance tracking", description: "Performance tracking" },
-  { key: "HR_REPORTS", name: "Payroll reports", description: "Payroll reports" },
-  { key: "HR_DOCUMENTS", name: "Employee document storage", description: "Employee document storage" },
-
-  { key: "MANUFACTURING", name: "MANUFACTURING / PRODUCTION MODULE", description: "Manufacturing & Production" },
-  { key: "MANUFACTURING_BOM", name: "BOM (Bill of Materials)", description: "BOM (Bill of Materials)" },
-  { key: "MANUFACTURING_ORDERS", name: "Production orders", description: "Production orders" },
-  { key: "MANUFACTURING_WORK_ORDERS", name: "Work orders", description: "Work orders" },
-  { key: "MANUFACTURING_PLANNING", name: "Production planning", description: "Production planning" },
-  { key: "MANUFACTURING_MATERIAL", name: "Raw material consumption", description: "Raw material consumption" },
-  { key: "MANUFACTURING_TRACKING", name: "Production tracking", description: "Production tracking" },
-  { key: "MANUFACTURING_FG", name: "Finished goods tracking", description: "Finished goods tracking" },
-  { key: "MANUFACTURING_MACHINE", name: "Machine allocation", description: "Machine allocation" },
-  { key: "MANUFACTURING_SHIFT", name: "Shift planning", description: "Shift planning" },
-  { key: "MANUFACTURING_QUALITY", name: "Quality inspections", description: "Quality inspections" },
-  { key: "MANUFACTURING_COSTING", name: "Production costing", description: "Production costing" },
-  { key: "MANUFACTURING_SCRAP", name: "Scrap tracking", description: "Scrap tracking" },
-
-  { key: "CRM", name: "CRM MODULE", description: "Customer Relationship Management" },
-  { key: "CRM_LEADS", name: "Lead management", description: "Lead management" },
-  { key: "CRM_CUSTOMER", name: "Customer management", description: "Customer management" },
-  { key: "CRM_PIPELINE", name: "Sales pipeline", description: "Sales pipeline" },
-  { key: "CRM_FOLLOWUP", name: "Follow-up reminders", description: "Follow-up reminders" },
-  { key: "CRM_OPPORTUNITY", name: "Opportunity tracking", description: "Opportunity tracking" },
-  { key: "CRM_STAGES", name: "Lead stages", description: "Lead stages" },
-  { key: "CRM_NOTES", name: "Communication notes", description: "Communication notes" },
-  { key: "CRM_DASHBOARD", name: "Sales funnel dashboard", description: "Sales funnel dashboard" },
-
-  { key: "QUALITY", name: "QUALITY MANAGEMENT + MAINTENANCE MODULE", description: "Quality & Maintenance" },
-  { key: "QUALITY_INSPECTION", name: "Quality inspections", description: "Quality inspections" },
-  { key: "QUALITY_DEFECTS", name: "Defect tracking", description: "Defect tracking" },
-  { key: "QUALITY_CAPA", name: "CAPA management", description: "CAPA management" },
-  { key: "QUALITY_AUDIT", name: "Audit scheduling", description: "Audit scheduling" },
-  { key: "QUALITY_TESTING", name: "Product testing", description: "Product testing" },
-  { key: "QUALITY_REPORTS", name: "Inspection reports", description: "Inspection reports" },
-  { key: "MAINTENANCE_PREVENTIVE", name: "Preventive maintenance", description: "Preventive maintenance" },
-  { key: "MAINTENANCE_BREAKDOWN", name: "Breakdown logging", description: "Breakdown logging" },
-  { key: "MAINTENANCE_SCHEDULES", name: "Machine maintenance schedules", description: "Machine maintenance schedules" },
-  { key: "MAINTENANCE_SPARES", name: "Spare part tracking", description: "Spare part tracking" },
-  { key: "MAINTENANCE_TECHNICIAN", name: "Technician assignments", description: "Technician assignments" },
-  { key: "MAINTENANCE_HISTORY", name: "Maintenance history", description: "Maintenance history" },
-
-  { key: "EMAIL", name: "GENERAL EMAIL SYSTEM", description: "Global Email System" },
-  { key: "EMAIL_SMTP", name: "SMTP configuration", description: "SMTP configuration" },
-  { key: "EMAIL_TEMPLATES", name: "Email templates", description: "Email templates" },
-  { key: "EMAIL_INVOICE", name: "Invoice emails", description: "Invoice emails" },
-  { key: "EMAIL_PO", name: "PO emails", description: "PO emails" },
-  { key: "EMAIL_APPROVAL", name: "Approval emails", description: "Approval emails" },
-  { key: "EMAIL_OTP", name: "OTP emails", description: "OTP emails" },
-  { key: "EMAIL_PAYROLL", name: "Payroll emails", description: "Payroll emails" },
-  { key: "EMAIL_REPORT", name: "Report emails", description: "Report emails" },
-  { key: "EMAIL_QUEUE", name: "Email queue system", description: "Email queue system" },
-  { key: "EMAIL_RETRY", name: "Retry mechanism", description: "Retry mechanism" },
-  { key: "EMAIL_ATTACHMENT", name: "Attachment support", description: "Attachment support" },
-  { key: "EMAIL_LOGS", name: "Email logs/history", description: "Email logs/history" },
-  { key: "EMAIL_EDITOR", name: "Template editor", description: "Template editor" },
-  { key: "EMAIL_TOGGLE", name: "Super admin feature toggle", description: "Super admin feature toggle" },
-  { key: "EMAIL_ENABLE", name: "Company-wise email enable/disable", description: "Company-wise email enable/disable" },
-  { key: "EMAIL_QUOTA", name: "SMTP quota management", description: "SMTP quota management" },
-
-  { key: "DASHBOARD", name: "CUSTOMIZABLE DASHBOARD FEATURES", description: "Customizable Dashboards" },
-  { key: "DASHBOARD_DRAG_DROP", name: "Drag/drop widgets", description: "Drag/drop widgets" },
-  { key: "DASHBOARD_RESIZE", name: "Resize widgets", description: "Resize widgets" },
-  { key: "DASHBOARD_HIDE_SHOW", name: "Hide/show widgets", description: "Hide/show widgets" },
-  { key: "DASHBOARD_SAVE", name: "Save layouts", description: "Save layouts" },
-  { key: "DASHBOARD_RESTORE", name: "Restore layouts", description: "Restore layouts" },
-  { key: "DASHBOARD_PIN", name: "Pin shortcuts", description: "Pin shortcuts" },
-  { key: "DASHBOARD_KPI", name: "KPI cards", description: "KPI cards" },
-  { key: "DASHBOARD_ANALYTICS", name: "Analytics cards", description: "Analytics cards" },
-  { key: "DASHBOARD_APPROVALS", name: "Pending approvals widget", description: "Pending approvals widget" },
-  { key: "DASHBOARD_NOTIFICATIONS", name: "Notifications widget", description: "Notifications widget" },
-  { key: "DASHBOARD_REVENUE", name: "Revenue charts", description: "Revenue charts" },
-  { key: "DASHBOARD_ALERTS", name: "Inventory alerts", description: "Inventory alerts" },
-  { key: "DASHBOARD_REALTIME", name: "Realtime dashboard updates", description: "Realtime dashboard updates" },
-
-    { key: "GENERAL", name: "GENERAL CONFIGURATION", description: "General Chat & Expenses" },
+  { key: "GENERAL", name: "GENERAL CONFIGURATION", description: "General Chat & Expenses" },
   { key: "GENERAL_CHAT", name: "General Chat", description: "General Chat" },
   { key: "GENERAL_EXPENSE_CHAT", name: "Expense Chat", description: "Expense Chat" },
 
@@ -230,13 +49,28 @@ function triggerRealtimeAlert(userId: string, notification: any) {
 
 export async function requestSignupOTP(req: AuthenticatedRequest, res: Response) {
   try {
-    const { mobileNo } = req.body;
-    if (!mobileNo) {
-      return res.status(400).json({ error: "Mobile number is required to send OTP" });
+    const { target, mobileNo, email, companyCode } = req.body;
+    const finalTarget = target || mobileNo || email;
+    if (!finalTarget) {
+      return res.status(400).json({ error: "Mobile number or Email address is required to send OTP" });
+    }
+
+    const isEmail = finalTarget.includes('@');
+    if (isEmail) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(finalTarget)) {
+        return res.status(400).json({ error: "Invalid email format" });
+      }
+    } else {
+      if (!/^\+?[1-9]\d{9,14}$/.test(finalTarget)) {
+        return res.status(400).json({ error: "Invalid mobile number format" });
+      }
     }
     
-    await sendSimulatedOTP(mobileNo);
-    return res.json({ message: "Simulated OTP sent successfully! Check server logs." });
+    const code = await sendSimulatedOTP(finalTarget, companyCode);
+    return res.json({ 
+      message: `Real-time verification OTP sent successfully via ${isEmail ? 'Email' : 'SMS'}!`,
+      otpCode: process.env.NODE_ENV !== 'production' ? code : undefined
+    });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }
@@ -249,13 +83,30 @@ export async function signup(req: AuthenticatedRequest, res: Response) {
       return res.status(400).json({ error: parsed.error.issues[0].message });
     }
 
-    const { companyCode, username, password, mobileNo, email, otpCode } = req.body;
+    const { companyCode, username, password, mobileNo, email, otpCode, otpTarget } = req.body;
 
     // Verify OTP
     if (!otpCode) {
       return res.status(400).json({ error: "OTP code is required for verification" });
     }
-    const isOtpValid = await verifySimulatedOTP(mobileNo, otpCode);
+
+    const targetToVerify = otpTarget || mobileNo;
+    if (!targetToVerify) {
+      return res.status(400).json({ error: "Verification target is required" });
+    }
+
+    const isEmailTarget = targetToVerify.includes('@');
+    if (isEmailTarget) {
+      if (!email || email.toLowerCase().trim() !== targetToVerify.toLowerCase().trim()) {
+        return res.status(400).json({ error: "Verified email does not match the registration email" });
+      }
+    } else {
+      if (mobileNo.trim() !== targetToVerify.trim()) {
+        return res.status(400).json({ error: "Verified mobile number does not match the registration mobile number" });
+      }
+    }
+
+    const isOtpValid = await verifySimulatedOTP(targetToVerify, otpCode);
     if (!isOtpValid) {
       return res.status(400).json({ error: "Invalid or expired OTP code" });
     }
@@ -401,6 +252,51 @@ export async function login(req: AuthenticatedRequest, res: Response) {
       return res.status(403).json({ error: "Your user account has been suspended by the administrator." });
     }
 
+    // --- CONCURRENT SESSION CONTROLS ---
+    const { deviceType, deviceModel, force } = req.body;
+    const finalDeviceType = (deviceType === 'MOBILE' || deviceType === 'DESKTOP') ? deviceType : 'DESKTOP';
+
+    // Clean up stale, inactive desktop sessions first (desktop sessions inactive for > 15 minutes)
+    if (finalDeviceType === 'DESKTOP') {
+      const INACTIVITY_TIMEOUT = 15 * 60 * 1000;
+      const staleCutoff = new Date(Date.now() - INACTIVITY_TIMEOUT);
+      await prisma.userSession.deleteMany({
+        where: {
+          userId: user.id,
+          deviceType: 'DESKTOP',
+          lastActiveAt: { lt: staleCutoff }
+        }
+      });
+    }
+
+    // Check if there is an active session for the same device type
+    const activeSessions = await prisma.userSession.findMany({
+      where: {
+        userId: user.id,
+        deviceType: finalDeviceType
+      }
+    });
+
+    if (activeSessions.length > 0 && force !== true) {
+      const otherDeviceModel = activeSessions[0].deviceModel || "Unknown Device";
+      return res.status(409).json({
+        error: `Active session already exists on another ${finalDeviceType.toLowerCase()} device (${otherDeviceModel}).`,
+        sessionConflict: true,
+        deviceType: finalDeviceType,
+        deviceModel: otherDeviceModel
+      });
+    }
+
+    // If force is true or no active sessions exist, terminate previous sessions of this device type
+    if (activeSessions.length > 0) {
+      await prisma.userSession.deleteMany({
+        where: {
+          userId: user.id,
+          deviceType: finalDeviceType
+        }
+      });
+    }
+
     const token = generateToken({
       userId: user.id,
       username: user.username,
@@ -408,6 +304,21 @@ export async function login(req: AuthenticatedRequest, res: Response) {
       companyCode: company.companyCode,
       role: user.role?.name || null,
       isSuperAdmin: false
+    });
+
+    // Create a new session in database
+    const sessionDuration = finalDeviceType === 'MOBILE'
+      ? 30 * 24 * 60 * 60 * 1000  // 30 days for mobile devices
+      : 24 * 60 * 60 * 1000;      // 24 hours for desktop laptops
+
+    await prisma.userSession.create({
+      data: {
+        userId: user.id,
+        deviceType: finalDeviceType,
+        deviceModel: deviceModel || (finalDeviceType === 'DESKTOP' ? 'Desktop Browser' : 'Mobile App'),
+        token,
+        expiresAt: new Date(Date.now() + sessionDuration)
+      }
     });
 
     return res.json({
@@ -426,6 +337,23 @@ export async function login(req: AuthenticatedRequest, res: Response) {
         mobileNo: user.mobileNo
       }
     });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function logout(req: AuthenticatedRequest, res: Response) {
+  try {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (token) {
+      await prisma.userSession.deleteMany({
+        where: { token }
+      });
+    }
+
+    return res.json({ message: "Logged out successfully" });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }
@@ -1092,7 +1020,6 @@ export async function registerPushToken(req: AuthenticatedRequest, res: Response
 
 // Export all General Administration Controllers
 export * from './admin';
-export * from './store';
 
 // ==========================================
 // 5. USER PROFILE & PASSWORD RESET CONTROLLERS
@@ -1172,12 +1099,64 @@ export async function updateSelfProfile(req: AuthenticatedRequest, res: Response
   }
 }
 
+export async function requestForgotPasswordOTP(req: Request, res: Response) {
+  try {
+    const { companyCode, username, emailOrPhone } = req.body;
+
+    if (!companyCode || !username || !emailOrPhone) {
+      return res.status(400).json({ error: "Company Code, Username, and Email/Phone are required" });
+    }
+
+    // Find Company
+    const company = await prisma.company.findUnique({
+      where: { companyCode: companyCode.toUpperCase() }
+    });
+    if (!company) {
+      return res.status(404).json({ error: "Company code does not exist" });
+    }
+
+    // Find User
+    const user = await prisma.user.findFirst({
+      where: {
+        companyId: company.id,
+        username
+      }
+    });
+    if (!user) {
+      return res.status(404).json({ error: "Username not found in the selected company" });
+    }
+
+    // Check if user is suspended
+    if (user.status === "SUSPENDED") {
+      return res.status(403).json({ error: "Your user account has been suspended" });
+    }
+
+    // Verify email or phone matches registered user details
+    const matchedEmail = user.email && user.email.toLowerCase().trim() === emailOrPhone.toLowerCase().trim();
+    const matchedPhone = user.mobileNo.trim() === emailOrPhone.trim();
+
+    if (!matchedEmail && !matchedPhone) {
+      return res.status(400).json({ error: "The provided email or mobile number does not match our records." });
+    }
+
+    // Send real OTP to emailOrPhone
+    const code = await sendSimulatedOTP(emailOrPhone, companyCode);
+
+    return res.json({
+      message: `Real-time verification OTP code sent to your registered ${matchedEmail ? 'email' : 'mobile number'} successfully!`,
+      otpCode: process.env.NODE_ENV !== 'production' ? code : undefined
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
 export async function resetPassword(req: Request, res: Response) {
   try {
-    const { companyCode, username, emailOrPhone, newPassword } = req.body;
+    const { companyCode, username, emailOrPhone, newPassword, otpCode } = req.body;
 
-    if (!companyCode || !username || !emailOrPhone || !newPassword) {
-      return res.status(400).json({ error: "All fields are required to reset your password" });
+    if (!companyCode || !username || !emailOrPhone || !newPassword || !otpCode) {
+      return res.status(400).json({ error: "All fields, including the OTP code, are required to reset your password" });
     }
 
     if (newPassword.length < 6) {
@@ -1216,6 +1195,12 @@ export async function resetPassword(req: Request, res: Response) {
 
     if (!matchedEmail && !matchedPhone) {
       return res.status(400).json({ error: "The provided email or mobile number does not match our records." });
+    }
+
+    // Verify OTP
+    const isOtpValid = await verifySimulatedOTP(emailOrPhone, otpCode);
+    if (!isOtpValid) {
+      return res.status(400).json({ error: "Invalid or expired OTP verification code" });
     }
 
     // Hash new password and save

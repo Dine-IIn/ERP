@@ -28,37 +28,21 @@ const InventoryWarehouse: React.FC<Props> = ({ user, activeTab }) => {
 
   // --- DUMMY DATA ---
   const stockItems = [
-    { id: 'STK-001', name: 'Premium Office Chair', sku: 'POC-992', warehouse: 'Main Hub', qty: 245, minStock: 50, status: 'Healthy', val: '$24,500' },
-    { id: 'STK-002', name: 'Ergonomic Desk', sku: 'ED-104', warehouse: 'Main Hub', qty: 12, minStock: 20, status: 'Low Stock', val: '$3,600' },
-    { id: 'STK-003', name: 'Wireless Mouse', sku: 'WM-009', warehouse: 'East Wing', qty: 890, minStock: 100, status: 'Healthy', val: '$13,350' },
-    { id: 'STK-004', name: 'Mechanical Keyboard', sku: 'MK-111', warehouse: 'West Wing', qty: 0, minStock: 30, status: 'Out of Stock', val: '$0' }
   ];
 
   const locationsData = [
-    { id: 'WH-01', name: 'Main Hub', type: 'Central Warehouse', capacity: '85%', zones: 12, manager: 'John Doe', status: 'Active' },
-    { id: 'WH-02', name: 'East Wing', type: 'Fulfillment Center', capacity: '45%', zones: 8, manager: 'Jane Smith', status: 'Active' },
-    { id: 'WH-03', name: 'West Wing', type: 'Storage Facility', capacity: '92%', zones: 5, manager: 'Bob Wilson', status: 'Near Full' },
   ];
 
   const transfersData = [
-    { id: 'TRF-1021', date: 'Today, 10:30 AM', from: 'Main Hub', to: 'East Wing', items: 45, status: 'In Transit', ref: 'REQ-992' },
-    { id: 'TRF-1022', date: 'Yesterday', from: 'West Wing', to: 'Main Hub', items: 120, status: 'Completed', ref: 'REQ-985' },
-    { id: 'TRF-1023', date: 'Oct 20, 2026', from: 'Supplier A', to: 'Main Hub', items: 500, status: 'Pending', ref: 'PO-4552' },
   ];
 
   const adjustmentsData = [
-    { id: 'ADJ-881', date: 'Today', type: 'Stock Write-off', item: 'Ergonomic Desk', qty: '-2', reason: 'Damaged in transit', value: '-$600', status: 'Approved' },
-    { id: 'ADJ-882', date: 'Yesterday', type: 'Cycle Count', item: 'Wireless Mouse', qty: '+5', reason: 'Found in bin 4B', value: '+$75', status: 'Pending Review' },
   ];
 
   const grnData = [
-    { id: 'GRN-5041', poRef: 'PO-9921', supplier: 'Tech Corp', receivedDate: 'Today', items: 4, totalQty: 1200, status: 'Inspected' },
-    { id: 'GRN-5042', poRef: 'PO-9905', supplier: 'Office Supplies Inc', receivedDate: 'Yesterday', items: 12, totalQty: 450, status: 'Quarantine' },
   ];
 
   const dispatchData = [
-    { id: 'DSP-221', orderRef: 'SO-1045', customer: 'Acme Corp', method: 'FedEx Ground', items: 3, status: 'Packed' },
-    { id: 'DSP-222', orderRef: 'SO-1048', customer: 'Global Tech', method: 'UPS Next Day', items: 15, status: 'Shipped' },
   ];
 
   // --- RENDER HELPERS ---

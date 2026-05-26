@@ -7,6 +7,7 @@ import path from 'path';
 import helmet from 'helmet';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
+import jwt from 'jsonwebtoken';
 import {
   authenticateToken,
   requireSuperAdmin
@@ -15,8 +16,10 @@ import {
   requestSignupOTP,
   signup,
   login,
+  logout,
   updateSelfProfile,
   resetPassword,
+  requestForgotPasswordOTP,
   createCompany,
   updateCompany,
   listCompanyUsers,
@@ -34,40 +37,9 @@ import {
   setIoInstance,
   getCompanyProfile,
   updateCompanyProfile,
-  listTaxSettings,
-  createTaxSetting,
-  updateTaxSetting,
-  deleteTaxSetting,
-  calculateTax,
-  listCurrencies,
-  createCurrency,
-  updateCurrency,
-  deleteCurrency,
-  getAuditLogs,
-  listWorkflows,
-  createWorkflow,
-  updateWorkflow,
-  deleteWorkflow,
-  listApprovalRequests,
-  createApprovalRequest,
-  submitApprovalAction,
   archiveNotification,
-  listDocuments,
-  uploadDocument,
-  addDocumentVersion,
-  getBackupLogs,
-  triggerBackup,
-  restoreBackup,
   getCompanyFeatures,
-  toggleCompanyFeature,
-  getDashboardLayout,
-  saveDashboardLayout,
-  toggleUserBackupAccess,
-  testEmailConnection,
-  listDepartments,
-  createDepartment,
-  updateDepartment,
-  deleteDepartment
+  toggleCompanyFeature
 } from './controllers';
 import {
   listChatGroups,
@@ -78,39 +50,26 @@ import {
   updateChatGroupSettings,
   getCompanyChatStats
 } from './controllers/chat';
-import mdmRouter from './controllers/mdm';
-import financeRouter, { setFinanceIo } from './controllers/finance';
-import {
-  listStoreDocs,
-  createStoreDoc,
-  bulkCreateStoreDocs,
-  updateStoreDoc,
-  deleteStoreDoc
-} from './controllers';
 
 dotenv.config();
-
+if (!process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET is missing in environment variables');
+}
 const app = express();
 const port = process.env.PORT || 5000;
 
 // Production security and performance middlewares
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
-  contentSecurityPolicy: false // standard API server does not serve HTML pages that need CSP
+  contentSecurityPolicy: false
 }));
 app.use(compression());
 
 // Define whitelisted production origins for CORS
 const allowedOrigins = [
-  'https://erp.anbindustries.com',
   'http://localhost:5173',
-  'http://localhost:5000',
-  'http://localhost:3000',
-  'tauri://localhost',
-  'http://tauri.localhost',
-  'capacitor://localhost',
-  'http://localhost',
-  'https://localhost',
+  'https://erp.anbindustries.com',
+  'https://yourfrontend.vercel.app'
 ];
 
 if (process.env.FRONTEND_URL) {
@@ -119,11 +78,9 @@ if (process.env.FRONTEND_URL) {
 
 const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps, curl, etc.)
     if (!origin) return callback(null, true);
     
-    const isAllowed = allowedOrigins.includes(origin) || 
-                      origin.endsWith('.vercel.app') || 
+    const isAllowed = allowedOrigins.includes(origin) ||
                       /^http:\/\/localhost:\d+$/.test(origin) ||
                       origin.startsWith('tauri://') ||
                       origin.startsWith('capacitor://');
@@ -141,21 +98,21 @@ const corsOptions: cors.CorsOptions = {
 
 // Enable CORS and JSON parsing middleware
 app.use(cors(corsOptions));
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Set up rate limiter for authentication routes
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per 15 minutes
+  windowMs: 15 * 60 * 1000,
+  max: 10,
   message: { error: 'Too many authentication attempts from this IP, please try again after 15 minutes' },
   standardHeaders: true,
   legacyHeaders: false,
 });
 app.use('/api/auth/', authLimiter);
 
-// Serve static assets for uploads and backups
+// Serve static assets for uploads
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
-app.use('/backups', express.static(path.join(process.cwd(), 'backups')));
 
 // Setup HTTP and WebSockets
 const server = http.createServer(app);
@@ -164,7 +121,6 @@ const io = new Server(server, {
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
       const isAllowed = allowedOrigins.includes(origin) || 
-                        origin.endsWith('.vercel.app') || 
                         /^http:\/\/localhost:\d+$/.test(origin) ||
                         origin.startsWith('tauri://') ||
                         origin.startsWith('capacitor://');
@@ -182,31 +138,31 @@ const io = new Server(server, {
 
 // Share Socket.io instance with controllers
 setIoInstance(io);
-setFinanceIo(io);
 
-// WebSocket Connection Handler for Realtime Dashboard Popups
+io.use((socket, next) => {
+  const token = socket.handshake.auth.token;
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET as string);
+    socket.data.user = decoded;
+    next();
+  } catch {
+    next(new Error("Unauthorized"));
+  }
+});
+
+// WebSocket Connection Handler
 io.on('connection', (socket) => {
-  console.log(`🔌 [WebSocket] Client connected: ${socket.id}`);
-
-  // When a user authenticates on the client, they join their personal private room
-  socket.on('join', (userId: string) => {
-    socket.join(userId);
-    console.log(`👤 [WebSocket] User ${userId} joined their private notification room.`);
-  });
-
-  // When a user enters a chat room, they join its Socket.io channel
   socket.on('join_group', (groupId: string) => {
     socket.join(`group_${groupId}`);
-    console.log(`💬 [WebSocket] Client ${socket.id} joined Chat Group room: group_${groupId}`);
   });
 
   socket.on('leave_group', (groupId: string) => {
     socket.leave(`group_${groupId}`);
-    console.log(`💬 [WebSocket] Client ${socket.id} left Chat Group room: group_${groupId}`);
   });
 
   socket.on('disconnect', () => {
-    console.log(`🔌 [WebSocket] Client disconnected: ${socket.id}`);
+    // Client disconnected
   });
 });
 
@@ -223,8 +179,10 @@ app.get('/health', (req, res) => {
 app.post('/api/auth/otp-request', requestSignupOTP);
 app.post('/api/auth/signup', signup);
 app.post('/api/auth/login', login);
+app.post('/api/auth/logout', authenticateToken, logout);
 app.patch('/api/auth/profile', authenticateToken, updateSelfProfile);
 app.post('/api/auth/reset-password', resetPassword);
+app.post('/api/auth/forgot-password-otp', requestForgotPasswordOTP);
 
 // 2. Super Admin Routes (Create Companies & Manage Global Tiers)
 app.post('/api/super/company', authenticateToken, requireSuperAdmin, createCompany);
@@ -245,6 +203,7 @@ app.get('/api/admin/dashboard', authenticateToken, getCompanyRolesAndUsers);
 app.get('/api/notifications', authenticateToken, listNotifications);
 app.patch('/api/notifications/:id/read', authenticateToken, markAsRead);
 app.post('/api/notifications/register-token', authenticateToken, registerPushToken);
+app.patch('/api/notifications/:id/archive', authenticateToken, archiveNotification);
 
 // 5. Enterprise Real-time Chat & Expense Spaces Routes
 app.get('/api/chat/groups', authenticateToken, listChatGroups);
@@ -254,88 +213,18 @@ app.get('/api/chat/group/:groupId/messages', authenticateToken, getChatGroupMess
 app.post('/api/chat/group/:groupId/message', authenticateToken, sendChatGroupMessage);
 app.post('/api/chat/group/:groupId/members', authenticateToken, manageChatGroupMembers);
 app.patch('/api/chat/group/:groupId/settings', authenticateToken, updateChatGroupSettings);
-// 6. General Administration Module Routes
 
-// Company Profile Management
+// 6. General Administration Module Routes (Company Profile & Features Only)
 app.get('/api/admin/company/profile', authenticateToken, getCompanyProfile);
 app.patch('/api/admin/company/profile', authenticateToken, updateCompanyProfile);
-
-// GST / Tax Settings
-app.get('/api/admin/tax/settings', authenticateToken, listTaxSettings);
-app.post('/api/admin/tax/setting', authenticateToken, createTaxSetting);
-app.patch('/api/admin/tax/setting/:id', authenticateToken, updateTaxSetting);
-app.delete('/api/admin/tax/setting/:id', authenticateToken, deleteTaxSetting);
-app.post('/api/admin/tax/calculate', authenticateToken, calculateTax);
-
-// Currency Management
-app.get('/api/admin/currencies', authenticateToken, listCurrencies);
-app.post('/api/admin/currency', authenticateToken, createCurrency);
-app.patch('/api/admin/currency/:id', authenticateToken, updateCurrency);
-app.delete('/api/admin/currency/:id', authenticateToken, deleteCurrency);
-
-// Audit Log System
-app.get('/api/admin/audit-logs', authenticateToken, getAuditLogs);
-
-// Approval Workflow Engine
-app.get('/api/admin/workflows', authenticateToken, listWorkflows);
-app.post('/api/admin/workflow', authenticateToken, createWorkflow);
-app.patch('/api/admin/workflow/:id', authenticateToken, updateWorkflow);
-app.delete('/api/admin/workflow/:id', authenticateToken, deleteWorkflow);
-app.get('/api/admin/approvals', authenticateToken, listApprovalRequests);
-app.post('/api/admin/approval/request', authenticateToken, createApprovalRequest);
-app.post('/api/admin/approval/action', authenticateToken, submitApprovalAction);
-
-// Notification Center (Extended)
-app.patch('/api/notifications/:id/archive', authenticateToken, archiveNotification);
-
-// Document Management System
-app.get('/api/admin/documents', authenticateToken, listDocuments);
-app.post('/api/admin/document/upload', authenticateToken, uploadDocument);
-app.post('/api/admin/document/:id/version', authenticateToken, addDocumentVersion);
-
-// Backup & Restore
-app.get('/api/admin/backups', authenticateToken, getBackupLogs);
-app.post('/api/admin/backup/trigger', authenticateToken, triggerBackup);
-app.post('/api/admin/backup/restore', authenticateToken, restoreBackup);
-app.patch('/api/admin/users/:userId/backup-access', authenticateToken, toggleUserBackupAccess);
-
-// Email Integration Connection Diagnostics
-app.post('/api/admin/email/test', authenticateToken, testEmailConnection);
-
-// Department Management CRUD
-app.get('/api/admin/departments', authenticateToken, listDepartments);
-app.post('/api/admin/departments', authenticateToken, createDepartment);
-app.patch('/api/admin/departments/:id', authenticateToken, updateDepartment);
-app.delete('/api/admin/departments/:id', authenticateToken, deleteDepartment);
-
-// Feature Toggles (Subscription Control)
 app.get('/api/admin/features', authenticateToken, getCompanyFeatures);
 app.post('/api/super/feature/toggle', authenticateToken, requireSuperAdmin, toggleCompanyFeature);
-
-// Dashboard Layout Customization
-app.get('/api/admin/dashboard/layout', authenticateToken, getDashboardLayout);
-app.post('/api/admin/dashboard/layout', authenticateToken, saveDashboardLayout);
-
-// Master Data Management Module Routes
-app.use('/api/mdm', authenticateToken, mdmRouter);
-
-// Finance & Accounting Module Routes
-app.use('/api/finance', authenticateToken, financeRouter);
-
-// Generic System Document Store Routes (for CRM, HR, operations, email, etc.)
-app.get('/api/store/:collection', authenticateToken, listStoreDocs);
-app.post('/api/store/:collection', authenticateToken, createStoreDoc);
-app.post('/api/store/:collection/bulk', authenticateToken, bulkCreateStoreDocs);
-app.put('/api/store/:collection/:id', authenticateToken, updateStoreDoc);
-app.patch('/api/store/:collection/:id', authenticateToken, updateStoreDoc);
-app.delete('/api/store/:collection/:id', authenticateToken, deleteStoreDoc);
-
 
 // Start the Integrated Express + HTTP + WebSockets Server
 server.listen(port, () => {
   console.log(`\n🚀 ========================================================`);
   console.log(`   ERP backend monolith running on http://localhost:${port}`);
   console.log(`   Realtime WebSockets ready for notifications.`);
-  console.log(`   SQLite database connection: ACTIVE.`);
+  console.log(`   PostgreSQL database connection: ACTIVE.`);
   console.log(`========================================================\n`);
 });

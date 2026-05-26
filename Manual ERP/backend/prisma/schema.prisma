@@ -7,13 +7,12 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// Enforced via application level validation: "PENDING" | "ACTIVE" | "SUSPENDED"
 model Company {
   id               String           @id @default(uuid())
   companyCode      String           @unique
   name             String
   status           String           @default("ACTIVE")
-  subscriptionTier String           @default("BASIC") // "BASIC" | "PREMIUM" | "ENTERPRISE"
+  subscriptionTier String           @default("BASIC")
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
   users            User[]
@@ -23,9 +22,9 @@ model Company {
   // --- EXTENSION: COMPANY PROFILE & SETTINGS ---
   legalCompanyName    String?
   companyLogo         String?
-  fileSizeLimit       Int?    @default(50) // MB default per company
-  backupAccess        Boolean @default(false) // admin can give backup access
-  backupRetentionDays Int?    @default(60) // days
+  fileSizeLimit       Int?    @default(50)
+  backupAccess        Boolean @default(false)
+  backupRetentionDays Int?    @default(60)
   companyEmail        String?
   companyPhone        String?
   alternatePhone      String?
@@ -75,42 +74,15 @@ model Company {
   favicon         String?
   invoiceTemplate String? @default("STANDARD")
 
-  // Core Module Relations
-  taxSettings      TaxSetting[]
-  currencies       Currency[]
-  auditLogs        AuditLog[]
-  workflows        ApprovalWorkflow[]
-  approvalRequests ApprovalRequest[]
-  documents        Document[]
-  dashboardLayouts DashboardLayout[]
-  backupLogs       BackupLog[]
-  departments      Department[]
-
-  // Master Data Relations
-  productMasters   ProductMaster[]
-  customerMasters  CustomerMaster[]
-  vendorMasters    VendorMaster[]
-  employeeMasters  EmployeeMaster[]
-  warehouseMasters WarehouseMaster[]
-  taxMasters       TaxMaster[]
-  unitMasters      UnitMaster[]
-  categoryMasters  CategoryMaster[]
-  brandMasters     BrandMaster[]
-  chartOfAccounts  ChartOfAccounts[]
-
-  // Finance Module Relations
-  fiscalYears    FiscalYear[]
-  journalEntries JournalEntry[]
-  assetMasters   AssetMaster[]
-  bankAccounts   BankAccount[]
-  budgets        Budget[]
+  // Relations
+  auditLogs AuditLog[]
 
   @@map("companies")
 }
 
 model Feature {
   id          String           @id @default(uuid())
-  key         String           @unique // e.g., "CRM", "HR", "FINANCE", "NOTIFICATIONS"
+  key         String           @unique
   name        String
   description String?
   companies   CompanyFeature[]
@@ -130,10 +102,10 @@ model CompanyFeature {
 
 model Role {
   id          String   @id @default(uuid())
-  companyId   String? // Nullable for system-wide global roles
+  companyId   String?
   company     Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
   name        String
-  permissions String // JSON stringified permissions mapping, e.g. '{"CRM": ["read", "write"]}'
+  permissions String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   users       User[]
@@ -142,35 +114,45 @@ model Role {
   @@map("roles")
 }
 
-// Status enforced via validation: "PENDING_APPROVAL" | "ACTIVE" | "SUSPENDED"
 model User {
-  id               String            @id @default(uuid())
-  companyId        String
-  company          Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  username         String
-  passwordHash     String
-  mobileNo         String            @unique
-  email            String?
-  status           String            @default("PENDING_APPROVAL")
-  hasBackupAccess  Boolean           @default(false)
-  roleId           String?
-  role             Role?             @relation(fields: [roleId], references: [id], onDelete: SetNull)
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  pushTokens       PushToken[]
-  notifications    Notification[]
-  approvalComments ApprovalComment[]
-  approvalRequests ApprovalRequest[]
-  uploadedDocs     Document[]
-  dashboardLayouts DashboardLayout[]
+  id              String         @id @default(uuid())
+  companyId       String
+  company         Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  username        String
+  passwordHash    String
+  mobileNo        String         @unique
+  email           String?
+  status          String         @default("PENDING_APPROVAL")
+  hasBackupAccess Boolean        @default(false)
+  roleId          String?
+  role            Role?          @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  pushTokens      PushToken[]
+  notifications   Notification[]
+  sessions        UserSession[]
 
   @@unique([companyId, username])
   @@map("users")
 }
 
+model UserSession {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceType   String   // "DESKTOP" or "MOBILE"
+  deviceModel  String?  // e.g. "Chrome Browser", "Android Phone"
+  token        String   @unique
+  lastActiveAt DateTime @default(now())
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  @@map("user_sessions")
+}
+
 model OTPVerification {
   id        String   @id @default(uuid())
-  mobileNo  String
+  target    String
   otpCode   String
   expiresAt DateTime
   verified  Boolean  @default(false)
@@ -184,7 +166,7 @@ model PushToken {
   userId      String
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   deviceToken String   @unique
-  platform    String // "ios" | "android" | "web" | "desktop"
+  platform    String
   updatedAt   DateTime @updatedAt
 
   @@map("push_tokens")
@@ -196,15 +178,14 @@ model Notification {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   title     String
   message   String
-  category  String // "system" | "CRM" | "hr" | "finance"
-  channels  String // comma-separated e.g. "in_app,push"
+  category  String
+  channels  String
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
 
-  // --- EXTENSION: NOTIFICATION CENTER ---
   description String?
-  type        String? // "APPROVAL" | "INVOICE" | "STOCK" | "LOGIN" | "PAYMENT" | "EMPLOYEE" | "MAINTENANCE"
-  priority    String? @default("MEDIUM") // "LOW" | "MEDIUM" | "HIGH"
+  type        String?
+  priority    String? @default("MEDIUM")
   module      String?
   redirectUrl String?
   companyId   String?
@@ -217,9 +198,9 @@ model ChatGroup {
   id          String   @id @default(uuid())
   companyId   String
   name        String
-  type        String // "GENERAL" | "EXPENSE" | "DIRECT"
+  type        String
   createdById String
-  settings    String   @default("{}") // JSON stringified settings
+  settings    String   @default("{}")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -230,7 +211,7 @@ model GroupMember {
   id        String   @id @default(uuid())
   groupId   String
   userId    String
-  role      String   @default("MEMBER") // "ADMIN" | "MEMBER"
+  role      String   @default("MEMBER")
   createdAt DateTime @default(now())
 
   @@unique([groupId, userId])
@@ -243,780 +224,26 @@ model ChatMessage {
   senderId    String
   senderName  String
   message     String
-  type        String   @default("TEXT") // "TEXT" | "EXPENSE" | "TRANSFER"
-  expenseData String? // JSON stringified expense/transfer logs
+  type        String   @default("TEXT")
+  expenseData String?
   createdAt   DateTime @default(now())
 
   @@map("chat_messages")
 }
 
-// --- EXTENSION: TAX CONFIGURATION ---
-model TaxSetting {
-  id              String   @id @default(uuid())
-  companyId       String
-  company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  taxName         String
-  taxCode         String
-  taxPercentage   Float
-  taxType         String // "GST" | "CGST" | "SGST" | "IGST" | "VAT" | "TDS"
-  effectiveDate   DateTime
-  taxStatus       String   @default("ACTIVE") // "ACTIVE" | "INACTIVE"
-  hsnSacCode      String?
-  category        String?
-  isReverseCharge Boolean  @default(false)
-  description     String?
-  createdAt       DateTime @default(now())
-
-  @@map("tax_settings")
-}
-
-// --- EXTENSION: CURRENCY MANAGEMENT ---
-model Currency {
-  id            String   @id @default(uuid())
-  companyId     String
-  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  currencyCode  String
-  currencyName  String
-  symbol        String
-  decimalPlaces Int      @default(2)
-  exchangeRate  Float    @default(1.0)
-  activeStatus  String   @default("ACTIVE") // "ACTIVE" | "INACTIVE"
-  isBase        Boolean  @default(false)
-  createdAt     DateTime @default(now())
-
-  @@unique([companyId, currencyCode])
-  @@map("currencies")
-}
-
-// --- EXTENSION: AUDIT LOG SYSTEM ---
 model AuditLog {
   id         String   @id @default(uuid())
   companyId  String
   company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   userId     String?
   username   String?
-  moduleName String // "auth" | "company" | "tax" | "currency" | "approvals" | "documents" | "backup" | "chats"
-  actionType String // "CREATE" | "READ" | "UPDATE" | "DELETE" | "LOGIN" | "LOGOUT" | "FAILED_LOGIN" | "APPROVAL" | "PERMISSION_CHANGE"
-  oldValue   String? // JSON string
-  newValue   String? // JSON string
+  moduleName String
+  actionType String
+  oldValue   String?
+  newValue   String?
   ipAddress  String?
   deviceInfo String?
   timestamp  DateTime @default(now())
 
   @@map("audit_logs")
-}
-
-// --- EXTENSION: APPROVAL WORKFLOW ENGINE ---
-model ApprovalWorkflow {
-  id             String            @id @default(uuid())
-  companyId      String
-  company        Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  workflowName   String
-  module         String // "purchase" | "expenses" | "sales" | "HR" | "finance"
-  conditions     String? // JSON description of conditions
-  minAmount      Float?
-  maxAmount      Float?
-  autoApprove    Boolean           @default(false)
-  escalationTime Int? // in hours
-  isActive       Boolean           @default(true)
-  steps          ApprovalStep[]
-  requests       ApprovalRequest[]
-  createdAt      DateTime          @default(now())
-
-  @@map("approval_workflows")
-}
-
-model ApprovalStep {
-  id             String           @id @default(uuid())
-  workflowId     String
-  workflow       ApprovalWorkflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
-  approverRole   String? // e.g. "Manager" or "Director"
-  approverRoleId String?
-  approverUserId String?
-  stepOrder      Int              @default(1)
-
-  @@map("approval_steps")
-}
-
-model ApprovalRequest {
-  id               String            @id @default(uuid())
-  companyId        String
-  company          Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  workflowId       String
-  workflow         ApprovalWorkflow  @relation(fields: [workflowId], references: [id], onDelete: Cascade)
-  requesterId      String
-  requester        User              @relation(fields: [requesterId], references: [id], onDelete: Cascade)
-  requesterName    String
-  module           String // "purchase" | "expenses" | "sales" | "HR" | "finance"
-  entityId         String // References the specific record in chat or elsewhere
-  amount           Float?
-  status           String            @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED" | "ESCALATED"
-  currentStepOrder Int               @default(1)
-  comments         ApprovalComment[]
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-
-  @@map("approval_requests")
-}
-
-model ApprovalComment {
-  id        String          @id @default(uuid())
-  requestId String
-  request   ApprovalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  username  String
-  comment   String
-  action    String // "COMMENT" | "APPROVE" | "REJECT" | "ESCALATE"
-  createdAt DateTime        @default(now())
-
-  @@map("approval_comments")
-}
-
-// --- EXTENSION: DOCUMENT MANAGEMENT SYSTEM ---
-model Document {
-  id              String            @id @default(uuid())
-  companyId       String
-  company         Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  documentName    String
-  filePath        String
-  fileType        String // "PDF" | "EXCEL" | "IMAGE" | "WORD"
-  fileSize        Int
-  uploadedById    String
-  uploadedBy      User              @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
-  uploadedByName  String
-  module          String? // e.g. "purchase" | "expenses" | "general"
-  relatedEntityId String?
-  isPublic        Boolean           @default(false)
-  versions        DocumentVersion[]
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-
-  @@map("documents")
-}
-
-model DocumentVersion {
-  id             String   @id @default(uuid())
-  documentId     String
-  document       Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  version        Int      @default(1)
-  filePath       String
-  fileSize       Int
-  uploadedById   String
-  uploadedByName String
-  description    String?
-  createdAt      DateTime @default(now())
-
-  @@map("document_versions")
-}
-
-// --- EXTENSION: BACKUP & RESTORE ---
-model BackupLog {
-  id            String   @id @default(uuid())
-  companyId     String? // Nullable for system-wide backups
-  company       Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  backupName    String
-  backupType    String // "MANUAL" | "SCHEDULED"
-  fileSize      Int
-  createdById   String
-  createdByName String
-  restoreStatus String   @default("PENDING") // "SUCCESS" | "FAILED" | "PENDING"
-  filePath      String
-  createdAt     DateTime @default(now())
-
-  @@map("backup_logs")
-}
-
-// --- EXTENSION: DASHBOARD LAYOUTS ---
-model DashboardLayout {
-  id             String   @id @default(uuid())
-  userId         String
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  companyId      String
-  company        Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  layoutSettings String // JSON string of widget layout states
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  @@unique([userId, companyId])
-  @@map("dashboard_layouts")
-}
-
-// --- EXTENSION: MASTER DATA MANAGEMENT ---
-
-model ProductMaster {
-  id                   String   @id @default(uuid())
-  companyId            String
-  company              Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  productCode          String
-  sku                  String?
-  barcode              String?
-  qrCode               String?
-  productName          String
-  productType          String   @default("FINISHED_GOODS") // "RAW_MATERIAL" | "FINISHED_GOODS" | "SEMI_FINISHED" | "SERVICE" | "CONSUMABLES" | "SPARE_PARTS"
-  shortDescription     String?
-  description          String?
-  images               String? // JSON stringified array of URLs
-  categoryId           String?
-  subcategoryId        String?
-  brandId              String?
-  productGroupId       String?
-  productFamilyId      String?
-  tags                 String? // JSON stringified array
-  baseUnitId           String?
-  purchaseUnitId       String?
-  salesUnitId          String?
-  conversionRatio      Float?   @default(1.0)
-  packagingSize        Float?
-  gstSlab              String?
-  hsnSacCode           String?
-  taxCategoryId        String?
-  exportEligible       Boolean  @default(false)
-  reverseCharge        Boolean  @default(false)
-  costPrice            Float    @default(0.0)
-  sellingPrice         Float    @default(0.0)
-  mrp                  Float?
-  dealerPrice          Float?
-  distributorPrice     Float?
-  dynamicPricing       Boolean  @default(false)
-  trackInventory       Boolean  @default(true)
-  batchTracking        Boolean  @default(false)
-  serialTracking       Boolean  @default(false)
-  expiryTracking       Boolean  @default(false)
-  reorderLevel         Float?   @default(0.0)
-  minStock             Float?   @default(0.0)
-  maxStock             Float?   @default(0.0)
-  safetyStock          Float?   @default(0.0)
-  defaultWarehouseId   String?
-  storageRack          String?
-  binLocation          String?
-  productionDetails    String? // JSON
-  bomLink              String?
-  rawMaterialMapping   String? // JSON
-  productionCost       Float?
-  machineMapping       String? // JSON
-  preferredVendorId    String?
-  alternateVendors     String? // JSON
-  leadTimeDays         Int?
-  vendorPricing        String? // JSON
-  customerPricing      String? // JSON
-  customerCatalogCodes String? // JSON
-  attachments          String? // JSON
-  approvalStatus       String   @default("APPROVED") // "PENDING" | "APPROVED" | "REJECTED"
-  isVersioned          Boolean  @default(false)
-  revision             Int      @default(1)
-  isTemplate           Boolean  @default(false)
-  templateId           String?
-  isVariant            Boolean  @default(false)
-  status               String   @default("ACTIVE") // "ACTIVE" | "INACTIVE" | "DRAFT"
-  isDeleted            Boolean  @default(false)
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
-
-  @@unique([companyId, productCode])
-  @@map("product_masters")
-}
-
-model CustomerMaster {
-  id                 String   @id @default(uuid())
-  companyId          String
-  company            Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customerCode       String
-  customerName       String
-  companyName        String?
-  customerType       String   @default("RETAIL") // "RETAIL" | "DISTRIBUTOR" | "DEALER" | "CORPORATE" | "EXPORT"
-  gstin              String?
-  pan                String?
-  website            String?
-  industry           String?
-  annualRevenue      Float?
-  phone              String?
-  email              String?
-  creditLimit        Float    @default(0.0)
-  outstandingAmount  Float    @default(0.0)
-  paymentTerms       String?
-  currencyId         String?
-  taxCategoryId      String?
-  customerPricingId  String?
-  discountPercentage Float?   @default(0.0)
-  preferredProducts  String? // JSON
-  salesTerritory     String?
-  crmLeads           String? // JSON
-  crmOpportunities   String? // JSON
-  attachments        String? // JSON
-  status             String   @default("ACTIVE") // "ACTIVE" | "INACTIVE"
-  isDeleted          Boolean  @default(false)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-
-  journalLines JournalEntryLine[]
-  contacts     CustomerContact[]
-  addresses    CustomerAddress[]
-
-  @@unique([companyId, customerCode])
-  @@map("customer_masters")
-}
-
-model CustomerContact {
-  id               String         @id @default(uuid())
-  customerMasterId String
-  customerMaster   CustomerMaster @relation(fields: [customerMasterId], references: [id], onDelete: Cascade)
-  contactName      String
-  designation      String?
-  email            String?
-  mobileNo         String?
-  isPrimary        Boolean        @default(false)
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-
-  @@map("customer_contacts")
-}
-
-model CustomerAddress {
-  id               String         @id @default(uuid())
-  customerMasterId String
-  customerMaster   CustomerMaster @relation(fields: [customerMasterId], references: [id], onDelete: Cascade)
-  addressType      String         @default("BILLING") // "BILLING" | "SHIPPING" | "BRANCH"
-  addressLine1     String
-  addressLine2     String?
-  city             String?
-  state            String?
-  pincode          String?
-  country          String?
-  isPrimary        Boolean        @default(false)
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-
-  @@map("customer_addresses")
-}
-
-model VendorMaster {
-  id                  String   @id @default(uuid())
-  companyId           String
-  company             Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  vendorCode          String
-  vendorName          String
-  gstin               String?
-  pan                 String?
-  supplierType        String? // e.g. "MANUFACTURER", "WHOLESALER", "SERVICE_PROVIDER"
-  vendorCategory      String?
-  contactPerson       String?
-  email               String?
-  phone               String?
-  paymentTerms        String?
-  preferredCurrencyId String?
-  leadTimeDays        Int?
-  minOrderQuantity    Float?
-  bankDetails         String? // JSON containing Bank, UPI, Swift Code
-  rating              Float?   @default(5.0)
-  deliveryPerformance Float? // Percentage 0-100
-  qualityPerformance  Float? // Percentage 0-100
-  status              String   @default("ACTIVE")
-  isDeleted           Boolean  @default(false)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  journalLines JournalEntryLine[]
-
-  @@unique([companyId, vendorCode])
-  @@map("vendor_masters")
-}
-
-model EmployeeMaster {
-  id              String    @id @default(uuid())
-  companyId       String
-  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  employeeCode    String
-  employeeName    String
-  email           String?
-  phone           String?
-  department      String?
-  designation     String?
-  dateOfJoining   DateTime?
-  salaryStructure String? // JSON
-  shiftAssignment String? // JSON
-  documents       String? // JSON linking to Aadhaar, PAN, Resume, etc.
-  salary          Float?    @default(0.0)
-  status          String    @default("ACTIVE")
-  isDeleted       Boolean   @default(false)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  // Structured Relations for Enterprise Org Hierarchy
-  departmentId  String?
-  departmentRef Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-
-  managerId    String?
-  manager      EmployeeMaster?  @relation("EmployeeHierarchy", fields: [managerId], references: [id], onDelete: SetNull)
-  subordinates EmployeeMaster[] @relation("EmployeeHierarchy")
-
-  @@unique([companyId, employeeCode])
-  @@map("employee_masters")
-}
-
-model WarehouseMaster {
-  id             String   @id @default(uuid())
-  companyId      String
-  company        Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  warehouseCode  String
-  warehouseName  String
-  warehouseType  String? // e.g. "MAIN", "TRANSIT", "COLD_STORAGE"
-  location       String?
-  capacity       Float?
-  dispatchRules  String? // JSON
-  receivingRules String? // JSON
-  pickingRules   String? // JSON
-  status         String   @default("ACTIVE")
-  isDeleted      Boolean  @default(false)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  zones WarehouseZone[]
-
-  @@unique([companyId, warehouseCode])
-  @@map("warehouse_masters")
-}
-
-model WarehouseZone {
-  id                String          @id @default(uuid())
-  warehouseMasterId String
-  warehouseMaster   WarehouseMaster @relation(fields: [warehouseMasterId], references: [id], onDelete: Cascade)
-  zoneCode          String
-  zoneName          String
-  racks             WarehouseRack[]
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-
-  @@map("warehouse_zones")
-}
-
-model WarehouseRack {
-  id              String           @id @default(uuid())
-  warehouseZoneId String
-  warehouseZone   WarehouseZone    @relation(fields: [warehouseZoneId], references: [id], onDelete: Cascade)
-  rackCode        String
-  shelves         WarehouseShelf[]
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-
-  @@map("warehouse_racks")
-}
-
-model WarehouseShelf {
-  id              String         @id @default(uuid())
-  warehouseRackId String
-  warehouseRack   WarehouseRack  @relation(fields: [warehouseRackId], references: [id], onDelete: Cascade)
-  shelfCode       String
-  bins            WarehouseBin[]
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-
-  @@map("warehouse_shelves")
-}
-
-model WarehouseBin {
-  id               String         @id @default(uuid())
-  warehouseShelfId String
-  warehouseShelf   WarehouseShelf @relation(fields: [warehouseShelfId], references: [id], onDelete: Cascade)
-  binCode          String
-  capacity         Float?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-
-  @@map("warehouse_bins")
-}
-
-model TaxMaster {
-  id              String    @id @default(uuid())
-  companyId       String
-  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  taxCode         String
-  taxName         String
-  taxRate         Float     @default(0.0)
-  taxType         String // "GST" | "CGST" | "SGST" | "IGST" | "VAT" | "TDS"
-  effectiveFrom   DateTime?
-  effectiveTo     DateTime?
-  regionalMapping String? // JSON
-  productMapping  String? // JSON
-  status          String    @default("ACTIVE")
-  isDeleted       Boolean   @default(false)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  @@unique([companyId, taxCode])
-  @@map("tax_masters")
-}
-
-model UnitMaster {
-  id              String   @id @default(uuid())
-  companyId       String
-  company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  unitCode        String
-  unitName        String
-  baseUnitId      String?
-  conversionRatio Float?   @default(1.0)
-  isPurchaseUnit  Boolean  @default(true)
-  isSalesUnit     Boolean  @default(true)
-  status          String   @default("ACTIVE")
-  isDeleted       Boolean  @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@unique([companyId, unitCode])
-  @@map("unit_masters")
-}
-
-model CategoryMaster {
-  id                  String           @id @default(uuid())
-  companyId           String
-  company             Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  categoryCode        String
-  categoryName        String
-  parentCategoryId    String?
-  parentCategory      CategoryMaster?  @relation("CategoryHierarchy", fields: [parentCategoryId], references: [id], onDelete: SetNull)
-  subcategories       CategoryMaster[] @relation("CategoryHierarchy")
-  dynamicAttributes   String? // JSON
-  categoryPermissions String? // JSON
-  status              String           @default("ACTIVE")
-  isDeleted           Boolean          @default(false)
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
-
-  @@unique([companyId, categoryCode])
-  @@map("category_masters")
-}
-
-model ChartOfAccounts {
-  id                  String            @id @default(uuid())
-  companyId           String
-  company             Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  accountCode         String
-  accountName         String
-  accountType         String // "ASSET" | "LIABILITY" | "EQUITY" | "REVENUE" | "EXPENSE"
-  parentAccountId     String?
-  parentAccount       ChartOfAccounts?  @relation("COAHierarchy", fields: [parentAccountId], references: [id], onDelete: SetNull)
-  subAccounts         ChartOfAccounts[] @relation("COAHierarchy")
-  costCenterId        String?
-  financialDimensions String? // JSON
-  ledgerMapping       String? // JSON
-  balance             Float             @default(0.0)
-  status              String            @default("ACTIVE")
-  isDeleted           Boolean           @default(false)
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
-
-  journalLines JournalEntryLine[]
-  budgets      Budget[]
-  bankAccounts BankAccount[]
-
-  @@unique([companyId, accountCode])
-  @@map("chart_of_accounts")
-}
-
-model Department {
-  id                 String           @id @default(uuid())
-  companyId          String
-  company            Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  departmentCode     String
-  departmentName     String
-  managerId          String? // references EmployeeMaster
-  parentDepartmentId String? // self-referencing for hierarchical departments
-  isDeleted          Boolean          @default(false)
-  createdAt          DateTime         @default(now())
-  updatedAt          DateTime         @updatedAt
-  employees          EmployeeMaster[]
-
-  @@unique([companyId, departmentCode])
-  @@map("departments")
-}
-
-model BrandMaster {
-  id              String   @id @default(uuid())
-  companyId       String
-  company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  brandCode       String
-  brandName       String
-  logoUrl         String?
-  brandPricing    String? // JSON
-  brandCategories String? // JSON
-  brandAnalytics  String? // JSON
-  status          String   @default("ACTIVE") // "ACTIVE" | "INACTIVE"
-  isDeleted       Boolean  @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@unique([companyId, brandCode])
-  @@map("brand_masters")
-}
-
-model FiscalYear {
-  id             String         @id @default(uuid())
-  companyId      String
-  company        Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  yearName       String // e.g. "FY2026"
-  startDate      DateTime
-  endDate        DateTime
-  status         String         @default("ACTIVE") // "ACTIVE" | "CLOSED"
-  journalEntries JournalEntry[]
-  budgets        Budget[]
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-
-  @@unique([companyId, yearName])
-  @@map("fiscal_years")
-}
-
-model JournalEntry {
-  id           String             @id @default(uuid())
-  companyId    String
-  company      Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  fiscalYearId String
-  fiscalYear   FiscalYear         @relation(fields: [fiscalYearId], references: [id], onDelete: Cascade)
-  entryNumber  String // e.g. "JV-2026-0001"
-  entryDate    DateTime
-  postingDate  DateTime
-  reference    String?
-  narration    String
-  status       String             @default("POSTED") // "DRAFT" | "POSTED" | "VOID"
-  lines        JournalEntryLine[]
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
-
-  @@unique([companyId, entryNumber])
-  @@map("journal_entries")
-}
-
-model JournalEntryLine {
-  id             String          @id @default(uuid())
-  journalEntryId String
-  journalEntry   JournalEntry    @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
-  accountId      String
-  account        ChartOfAccounts @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  debit          Float           @default(0.0)
-  credit         Float           @default(0.0)
-  narration      String?
-
-  customerId String?
-  customer   CustomerMaster? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  vendorId   String?
-  vendor     VendorMaster?   @relation(fields: [vendorId], references: [id], onDelete: SetNull)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@map("journal_entry_lines")
-}
-
-model AssetMaster {
-  id                      String                      @id @default(uuid())
-  companyId               String
-  company                 Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  assetCode               String
-  assetName               String
-  purchaseDate            DateTime
-  purchaseCost            Float
-  depreciationMethod      String // "STRAIGHT_LINE" | "WRITTEN_DOWN_VALUE"
-  usefulLifeYears         Int
-  salvageValue            Float                       @default(0.0)
-  accumulatedDepreciation Float                       @default(0.0)
-  bookValue               Float
-  status                  String                      @default("ACTIVE") // "ACTIVE" | "DISPOSED"
-  depreciations           AssetDepreciationSchedule[]
-  createdAt               DateTime                    @default(now())
-  updatedAt               DateTime                    @updatedAt
-
-  @@unique([companyId, assetCode])
-  @@map("asset_masters")
-}
-
-model AssetDepreciationSchedule {
-  id                 String      @id @default(uuid())
-  assetId            String
-  asset              AssetMaster @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  depreciationDate   DateTime
-  depreciationAmount Float
-  bookValueAfter     Float
-  isPosted           Boolean     @default(false)
-  journalEntryId     String?
-  createdAt          DateTime    @default(now())
-
-  @@map("asset_depreciation_schedules")
-}
-
-model Budget {
-  id              String          @id @default(uuid())
-  companyId       String
-  company         Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  fiscalYearId    String
-  fiscalYear      FiscalYear      @relation(fields: [fiscalYearId], references: [id], onDelete: Cascade)
-  accountId       String
-  account         ChartOfAccounts @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  allocatedAmount Float
-  utilizedAmount  Float           @default(0.0)
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-
-  @@unique([companyId, fiscalYearId, accountId])
-  @@map("budgets")
-}
-
-model BankAccount {
-  id            String          @id @default(uuid())
-  companyId     String
-  company       Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  accountName   String
-  accountNumber String
-  bankName      String
-  glAccountId   String
-  glAccount     ChartOfAccounts @relation(fields: [glAccountId], references: [id], onDelete: Cascade)
-  status        String          @default("ACTIVE")
-  statements    BankStatement[]
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-
-  @@unique([companyId, accountNumber])
-  @@map("bank_accounts")
-}
-
-model BankStatement {
-  id             String              @id @default(uuid())
-  bankAccountId  String
-  bankAccount    BankAccount         @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
-  statementDate  DateTime
-  openingBalance Float
-  closingBalance Float
-  status         String              @default("DRAFT") // "DRAFT" | "RECONCILED"
-  lines          BankStatementLine[]
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
-
-  @@map("bank_statements")
-}
-
-model BankStatementLine {
-  id                    String        @id @default(uuid())
-  bankStatementId       String
-  bankStatement         BankStatement @relation(fields: [bankStatementId], references: [id], onDelete: Cascade)
-  transactionDate       DateTime
-  description           String
-  amount                Float // positive=deposit, negative=withdrawal
-  reference             String?
-  isReconciled          Boolean       @default(false)
-  matchedJournalEntryId String?
-  reconciledAt          DateTime?
-  createdAt             DateTime      @default(now())
-
-  @@map("bank_statement_lines")
-}
-
-model SystemDocumentStore {
-  id         String   @id @default(uuid())
-  companyId  String
-  collection String
-  data       String
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  @@index([companyId, collection])
-  @@map("system_document_store")
 }

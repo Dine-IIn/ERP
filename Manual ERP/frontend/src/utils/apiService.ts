@@ -4,6 +4,17 @@ interface RequestOptions extends RequestInit {
   params?: Record<string, string>;
 }
 
+export class ApiError extends Error {
+  status: number;
+  data: any;
+  constructor(status: number, data: any) {
+    super(data.error || data.message || `Request failed with status ${status}`);
+    this.status = status;
+    this.data = data;
+    Object.setPrototypeOf(this, ApiError.prototype);
+  }
+}
+
 async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
   const token = localStorage.getItem('erp_token');
   
@@ -32,16 +43,20 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
 
     // If unauthorized or forbidden, handle automatic logout/redirect
     if (response.status === 401 || response.status === 403) {
+      const errorData = await response.json().catch(() => ({}));
       localStorage.removeItem('erp_token');
       localStorage.removeItem('erp_user');
       // Dispatch a custom event to notify App.tsx or components about auth expiry
-      window.dispatchEvent(new Event('auth-expired'));
-      throw new Error('Session expired. Please log in again.');
+      const detail = errorData.inactiveLogout 
+        ? 'inactive' 
+        : (errorData.error === 'Session expired or logged out from another device' ? 'overridden' : 'expired');
+      window.dispatchEvent(new CustomEvent('auth-expired', { detail }));
+      throw new ApiError(response.status, errorData.error ? errorData : { error: 'Session expired or logged out. Please log in again.' });
     }
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || errorData.message || `Request failed with status ${response.status}`);
+      throw new ApiError(response.status, errorData);
     }
 
     // Return JSON or empty if 204 No Content
