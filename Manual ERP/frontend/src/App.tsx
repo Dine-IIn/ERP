@@ -4,6 +4,12 @@ import { MASTER_FEATURES_HIERARCHY, getCategoryKeys, getChildKeys, getParentKey 
 import Login from './components/auth/Login';
 import Signup from './components/auth/Signup';
 import ForgotPasswordModal from './components/auth/ForgotPasswordModal';
+import CompanyProfile from './components/administration/CompanyProfile';
+import RolesPermissions from './components/administration/RolesPermissions';
+import AuditLogs from './components/administration/AuditLogs';
+import SnapshotBackups from './components/administration/SnapshotBackups';
+import EmployeeRegistry from './components/administration/EmployeeRegistry';
+import CorporateDepartments from './components/administration/CorporateDepartments';
 import {
   Wrench,
   Factory,
@@ -108,6 +114,36 @@ const getDeviceDetails = () => {
     deviceType: isMobile ? 'MOBILE' : 'DESKTOP',
     deviceModel: `${os} - ${model}`
   };
+};
+
+const getFeatureIcon = (key: string) => {
+  switch (key) {
+    case 'GENERAL':
+    case 'GENERAL_CHAT':
+      return <MessageSquare className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'GENERAL_EXPENSE_CHAT':
+      return <DollarSign className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'NOTIFICATIONS':
+    case 'NOTIFICATIONS_PUSH':
+      return <Bell className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'NOTIFICATIONS_AUDIT':
+    case 'ADMIN_AUDIT':
+      return <Activity className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'ADMINISTRATION':
+      return <Settings className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'ADMIN_PROFILE':
+      return <Building className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'ADMIN_ROLES':
+      return <Shield className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'ADMIN_BACKUP':
+      return <Database className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'ADMIN_USERS':
+      return <Users className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'ADMIN_DEPARTMENTS':
+      return <Briefcase className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    default:
+      return <Layers className="w-4 h-4" style={{ flexShrink: 0 }} />;
+  }
 };
 
 export default function App() {
@@ -308,6 +344,61 @@ export default function App() {
   const [conflictModalOpen, setConflictModalOpen] = useState(false);
   const [conflictDeviceModel, setConflictDeviceModel] = useState('');
   const [conflictDeviceType, setConflictDeviceType] = useState('');
+
+  // --- ADMINISTRATION DETAILED STATE MANAGEMENT ---
+  const [adminProfileData, setAdminProfileData] = useState<any>(null);
+  const [adminProfileForm, setAdminProfileForm] = useState({
+    legalCompanyName: '',
+    companyEmail: '',
+    companyPhone: '',
+    website: '',
+    industryType: '',
+    businessType: '',
+    gstin: '',
+    pan: '',
+    country: '',
+    state: '',
+    city: '',
+    addressLine1: '',
+    primaryColor: '',
+    secondaryColor: '',
+    smtpHost: '',
+    smtpPort: '',
+    smtpUser: '',
+    smtpPassword: ''
+  });
+
+  const [auditTrailLogs, setAuditTrailLogs] = useState<any[]>([]);
+  const [auditTotal, setAuditTotal] = useState(0);
+  const [auditFilterModule, setAuditFilterModule] = useState('');
+  const [auditSearchActor, setAuditSearchActor] = useState('');
+
+  const [backupList, setBackupList] = useState<any[]>([]);
+  const [backupRetentionDays, setBackupRetentionDays] = useState(60);
+
+  const [departmentList, setDepartmentList] = useState<any[]>([]);
+  const [deptForm, setDeptForm] = useState({
+    name: '',
+    description: '',
+    features: [] as string[],
+    managerId: ''
+  });
+  const [isEditingDept, setIsEditingDept] = useState(false);
+  const [editingDeptId, setEditingDeptId] = useState<string | null>(null);
+
+  const [isEditingAdminUser, setIsEditingAdminUser] = useState(false);
+  const [editingAdminUserId, setEditingAdminUserId] = useState<string | null>(null);
+  const [adminUserForm, setAdminUserForm] = useState({
+    username: '',
+    mobileNo: '',
+    email: '',
+    password: '',
+    roleId: '',
+    departmentId: '',
+    status: 'ACTIVE'
+  });
+
+
 
   // --- PLATFORM STATUS & ADVANCED EDIT MODAL STATES ---
   const [showPlatformStatusModal, setShowPlatformStatusModal] = useState(false);
@@ -1156,6 +1247,224 @@ export default function App() {
     } catch (e) {}
   };
 
+  // --- CORE SYSTEM DATA FETCHERS FOR ADMIN CONSOLE ---
+
+  const fetchDepartments = async () => {
+    try {
+      const res = await apiRequest('/api/admin/departments', 'GET');
+      setDepartmentList(res.departments || []);
+    } catch (e) {
+      console.error("Error fetching departments:", e);
+    }
+  };
+
+  const fetchBackups = async () => {
+    try {
+      const res = await apiRequest('/api/admin/backups', 'GET');
+      setBackupList(res.backups || []);
+    } catch (e) {
+      console.error("Error fetching backups:", e);
+    }
+  };
+
+  const fetchAuditLogs = async () => {
+    try {
+      const params: any = {};
+      if (auditFilterModule) params.moduleName = auditFilterModule;
+      if (auditSearchActor) params.username = auditSearchActor;
+
+      const res = await apiClient.get<any>('/api/admin/audit-logs', { params });
+      setAuditTrailLogs(res.logs || []);
+      setAuditTotal(res.total || 0);
+    } catch (e) {
+      console.error("Error fetching audit logs:", e);
+    }
+  };
+
+  const fetchAdminConsoleData = async () => {
+    if (!token || user?.role !== 'Admin') return;
+    try {
+      // 1. Load profile data
+      const profileRes = await apiRequest('/api/admin/company/profile', 'GET');
+      if (profileRes?.company) {
+        setAdminProfileData(profileRes.company);
+        setAdminProfileForm({
+          legalCompanyName: profileRes.company.legalCompanyName || '',
+          companyEmail: profileRes.company.companyEmail || '',
+          companyPhone: profileRes.company.companyPhone || '',
+          website: profileRes.company.website || '',
+          industryType: profileRes.company.industryType || '',
+          businessType: profileRes.company.businessType || '',
+          gstin: profileRes.company.gstin || '',
+          pan: profileRes.company.pan || '',
+          country: profileRes.company.country || '',
+          state: profileRes.company.state || '',
+          city: profileRes.company.city || '',
+          addressLine1: profileRes.company.addressLine1 || '',
+          primaryColor: profileRes.company.primaryColor || '',
+          secondaryColor: profileRes.company.secondaryColor || '',
+          smtpHost: profileRes.company.smtpHost || '',
+          smtpPort: profileRes.company.smtpPort ? String(profileRes.company.smtpPort) : '',
+          smtpUser: profileRes.company.smtpUser || '',
+          smtpPassword: profileRes.company.smtpPassword || ''
+        });
+        setBackupRetentionDays(profileRes.company.backupRetentionDays || 60);
+      }
+
+      // 2. Load dashboard (users, roles, features)
+      await fetchCompanyAdminData();
+
+      // 3. Load departments
+      await fetchDepartments();
+
+      // 4. Load backups list
+      await fetchBackups();
+
+      // 5. Load audit trail
+      await fetchAuditLogs();
+    } catch (e) {
+      console.error("Error loading administration data:", e);
+    }
+  };
+
+  // Reactively sync data when admin workspace parameters change
+  useEffect(() => {
+    if (activeWorkspaceModule === 'administration') {
+      fetchAdminConsoleData();
+    }
+  }, [activeWorkspaceModule, activeWorkspaceSubModule, auditFilterModule, auditSearchActor]);
+
+  // --- CONTROLLER ACTION HANDLERS ---
+
+  const handleUpdateAdminProfileSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const payload = {
+        ...adminProfileForm,
+        smtpPort: adminProfileForm.smtpPort ? parseInt(adminProfileForm.smtpPort) : null
+      };
+      await apiRequest('/api/admin/company/profile', 'PATCH', payload);
+      setSuccessMsg("Company Profile updated successfully!");
+      fetchAdminConsoleData();
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to update profile details.");
+    }
+  };
+
+  const handleTriggerBackup = async () => {
+    try {
+      setSuccessMsg("Compiling database entities and creating snapshot...");
+      const res = await apiRequest('/api/admin/backups', 'POST');
+      setSuccessMsg(res.message || "Manual backup generated successfully!");
+      fetchBackups();
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to generate backup.");
+    }
+  };
+
+  const handleUpdateBackupRetention = async (days: number) => {
+    try {
+      await apiRequest('/api/admin/backups/settings', 'PATCH', { backupRetentionDays: days });
+      setBackupRetentionDays(days);
+      setSuccessMsg(`Backup policy set to: retain files for ${days} days.`);
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to update retention policy.");
+    }
+  };
+
+  const handleCreateOrUpdateDeptSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      if (isEditingDept && editingDeptId) {
+        await apiRequest(`/api/admin/departments/${editingDeptId}`, 'PATCH', deptForm);
+        setSuccessMsg("Department updated successfully!");
+      } else {
+        await apiRequest('/api/admin/departments', 'POST', deptForm);
+        setSuccessMsg(`Department "${deptForm.name}" created successfully.`);
+      }
+      setIsEditingDept(false);
+      setEditingDeptId(null);
+      setDeptForm({ name: '', description: '', features: [], managerId: '' });
+      fetchDepartments();
+      fetchCompanyAdminData(); // Refresh employee list department choices
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to save department.");
+    }
+  };
+
+  const handleDeleteDept = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this department?")) return;
+    try {
+      await apiRequest(`/api/admin/departments/${id}`, 'DELETE');
+      setSuccessMsg("Department successfully removed.");
+      fetchDepartments();
+      fetchCompanyAdminData();
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to delete department.");
+    }
+  };
+
+  const handleCreateOrUpdateAdminUserSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      if (isEditingAdminUser && editingAdminUserId) {
+        const payload = { ...adminUserForm };
+        if (!payload.password) delete (payload as any).password;
+        await apiRequest(`/api/admin/users/${editingAdminUserId}`, 'PATCH', payload);
+        setSuccessMsg("Employee credentials and role updated.");
+      } else {
+        if (!adminUserForm.password) {
+          setErrorMsg("Password is required for onboarding new colleagues.");
+          return;
+        }
+        await apiRequest('/api/admin/users', 'POST', adminUserForm);
+        setSuccessMsg(`New colleague "${adminUserForm.username}" successfully onboarded!`);
+      }
+      setIsEditingAdminUser(false);
+      setEditingAdminUserId(null);
+      setAdminUserForm({ username: '', mobileNo: '', email: '', password: '', roleId: '', departmentId: '', status: 'ACTIVE' });
+      fetchCompanyAdminData();
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to save user.");
+    }
+  };
+
+  const handleDeleteAdminUser = async (id: string) => {
+    if (id === user?.id) {
+      setErrorMsg("Self-deletion is locked for administrative system protection.");
+      return;
+    }
+    if (!window.confirm("Are you sure you want to permanently delete this user? This action cannot be undone.")) return;
+    try {
+      await apiRequest(`/api/admin/users/${id}`, 'DELETE');
+      setSuccessMsg("Employee has been permanently offboarded.");
+      fetchCompanyAdminData();
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to delete user.");
+    }
+  };
+
+  const handleUpdateRolePermissionsSubmit = async (roleId: string, permissions: any) => {
+    try {
+      await apiRequest(`/api/admin/roles/${roleId}`, 'PATCH', { permissions });
+      setSuccessMsg("Role permission boundaries updated!");
+      fetchCompanyAdminData();
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to modify role boundaries.");
+    }
+  };
+
+  const handleDeleteRole = async (id: string) => {
+    if (!window.confirm("Are you sure you want to permanently remove this role?")) return;
+    try {
+      await apiRequest(`/api/admin/roles/${id}`, 'DELETE');
+      setSuccessMsg("Custom role successfully deleted.");
+      fetchCompanyAdminData();
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to delete role.");
+    }
+  };
+
   const toggleSidebarCategory = (cat: string) => {
     setExpandedCategories(prev => ({ ...prev, [cat]: !prev[cat] }));
   };
@@ -1619,19 +1928,155 @@ export default function App() {
                 <>
                   {!sidebarCollapsed && <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-widest uppercase px-3 block my-1">Menu Navigator</span>}
 
+                  {companyFeatures.length === 0 ? (
+                    <div className="px-3 py-4 mt-6 text-center select-none animate-fade-in">
+                      <span className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-widest border border-dashed border-[var(--border-color)] rounded-xl py-3 px-2 block leading-relaxed bg-[var(--bg-secondary)]/30">
+                        Empty Console<br/>
+                        <span className="text-[8px] font-normal text-[var(--text-muted)]/70 lowercase">ready for implementation</span>
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-1 mt-2">
+                      {MASTER_FEATURES_HIERARCHY.map(cat => {
+                        // ADMINISTRATION category is restricted strictly to company admins
+                        if (cat.key === 'ADMINISTRATION' && user.role !== 'Admin') {
+                          return null;
+                        }
 
+                        // Filter children by what features are granted to the company
+                        const activeChildren = cat.children.filter(child => companyFeatures.includes(child.key));
+                        if (activeChildren.length === 0) {
+                          return null;
+                        }
 
-                                    {/* Dynamic Sidebar Modules Cleared */}
-                  <div className="px-3 py-4 mt-6 text-center select-none animate-fade-in">
-                    <span className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-widest border border-dashed border-[var(--border-color)] rounded-xl py-3 px-2 block leading-relaxed bg-[var(--bg-secondary)]/30">
-                      Empty Console<br/>
-                      <span className="text-[8px] font-normal text-[var(--text-muted)]/70 lowercase">ready for implementation</span>
-                    </span>
-                  </div>
+                        // Render direct button if only 1 feature enabled in the category
+                        if (activeChildren.length === 1) {
+                          const child = activeChildren[0];
+                          const isActive = activeWorkspaceModule === cat.key.toLowerCase() && activeWorkspaceSubModule === child.key;
 
-                  
+                          return (
+                            <button
+                              key={child.key}
+                              type="button"
+                              onClick={() => {
+                                setActiveWorkspaceModule(cat.key.toLowerCase());
+                                setActiveWorkspaceSubModule(child.key);
+                                setSelectedCompany(null); // Clear superadmin company focus
+                              }}
+                              className={`w-full py-2 px-3 rounded-lg text-left text-xs font-semibold transition-colors flex items-center gap-2 cursor-pointer border-0 bg-transparent ${
+                                isActive
+                                  ? 'bg-[var(--bg-tertiary)] text-indigo-500 font-bold border-l-2 border-indigo-500'
+                                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]'
+                              }`}
+                              title={sidebarCollapsed ? child.name : ""}
+                            >
+                              {getFeatureIcon(child.key)}
+                              {!sidebarCollapsed && <span>{child.name}</span>}
+                            </button>
+                          );
+                        }
 
+                        // Render dropdown accordion if multiple features enabled in the category
+                        const isExpanded = expandedCategories[cat.key.toLowerCase()] || false;
+                        const isAnyChildActive = activeWorkspaceModule === cat.key.toLowerCase();
 
+                        return (
+                          <div key={cat.key} className="flex flex-col gap-0.5">
+                            {sidebarCollapsed ? (
+                              // Collapsed popover view
+                              <div className="relative flex justify-center animate-fade-in">
+                                <button
+                                  type="button"
+                                  onClick={() => setActivePopoverCategory(activePopoverCategory === cat.key.toLowerCase() ? null : cat.key.toLowerCase())}
+                                  className={`p-2.5 rounded-xl hover:bg-[var(--bg-tertiary)] transition-colors cursor-pointer border-0 bg-transparent ${
+                                    isAnyChildActive ? 'bg-indigo-500/10 text-indigo-500' : 'text-[var(--text-secondary)]'
+                                  }`}
+                                  title={cat.name}
+                                >
+                                  {getFeatureIcon(cat.key)}
+                                </button>
+                                
+                                {activePopoverCategory === cat.key.toLowerCase() && (
+                                  <div className="absolute left-14 top-0 z-50 w-48 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl shadow-2xl p-2 animate-scale-up text-left">
+                                    <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-widest uppercase px-2 block mb-1.5">{cat.name}</span>
+                                    {activeChildren.map(child => {
+                                      const isChildActive = activeWorkspaceSubModule === child.key;
+                                      return (
+                                        <button
+                                          key={child.key}
+                                          type="button"
+                                          onClick={() => {
+                                            setActiveWorkspaceModule(cat.key.toLowerCase());
+                                            setActiveWorkspaceSubModule(child.key);
+                                            setActivePopoverCategory(null);
+                                            setSelectedCompany(null);
+                                          }}
+                                          className={`w-full text-left py-1.5 px-2 rounded-lg text-[11px] font-medium transition-colors flex items-center gap-2 cursor-pointer border-0 bg-transparent ${
+                                            isChildActive
+                                              ? 'bg-indigo-500/10 text-indigo-400 font-bold'
+                                              : 'text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]'
+                                          }`}
+                                        >
+                                          {getFeatureIcon(child.key)}
+                                          <span className="truncate">{child.name}</span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              // Expanded accordion view
+                              <div className="animate-fade-in flex flex-col gap-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleSidebarCategory(cat.key.toLowerCase())}
+                                  className={`w-full py-2 px-3 rounded-lg text-left text-xs font-semibold transition-colors flex items-center justify-between cursor-pointer border-0 bg-transparent ${
+                                    isAnyChildActive
+                                      ? 'text-indigo-500 font-bold'
+                                      : 'text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]'
+                                  }`}
+                                >
+                                  <span className="flex items-center gap-2">
+                                    {getFeatureIcon(cat.key)}
+                                    <span>{cat.name}</span>
+                                  </span>
+                                  {isExpanded ? <ChevronDown className="w-3 h-3 text-indigo-500 shrink-0" /> : <ChevronRight className="w-3 h-3 text-slate-400 shrink-0" />}
+                                </button>
+                                
+                                {isExpanded && (
+                                  <div className="flex flex-col gap-0.5 pl-4 border-l border-[var(--border-color)] ml-5 mt-0.5">
+                                    {activeChildren.map(child => {
+                                      const isChildActive = activeWorkspaceSubModule === child.key;
+                                      return (
+                                        <button
+                                          key={child.key}
+                                          type="button"
+                                          onClick={() => {
+                                            setActiveWorkspaceModule(cat.key.toLowerCase());
+                                            setActiveWorkspaceSubModule(child.key);
+                                            setSelectedCompany(null);
+                                          }}
+                                          className={`w-full text-left py-1.5 px-2.5 rounded-lg text-[11px] font-medium transition-colors flex items-center gap-2 cursor-pointer border-0 bg-transparent ${
+                                            isChildActive
+                                              ? 'bg-indigo-500/10 text-indigo-400 font-bold'
+                                              : 'text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]'
+                                          }`}
+                                        >
+                                          {getFeatureIcon(child.key)}
+                                          <span className="truncate">{child.name}</span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -1824,6 +2269,168 @@ export default function App() {
                     </p>
                   </div>
                 )
+              )}
+
+              {/* ==========================================
+                  COMPANY ADMINISTRATION WORKSPACE
+                  ========================================== */}
+              {activeWorkspaceModule === 'administration' && user?.role === 'Admin' && (
+                <div className="max-w-6xl mx-auto animate-fade-in text-left select-none">
+                  {/* Console Header Bar */}
+                  <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl p-6 mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-sm relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-[200px] h-[200px] bg-indigo-600/5 rounded-full blur-[50px] pointer-events-none" />
+                    
+                    <div className="flex items-center gap-3">
+                      <div className="p-3 bg-indigo-500/10 rounded-xl text-indigo-400 border border-indigo-500/20 shrink-0">
+                        <Settings className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h2 className="text-lg font-bold text-[var(--text-primary)] font-display uppercase tracking-wider flex items-center gap-2">
+                          Company Administration Console
+                        </h2>
+                        <p className="text-[var(--text-secondary)] text-xs mt-0.5">Manage profile settings, custom roles, employee registers, backup policies, and audit trails</p>
+                      </div>
+                    </div>
+                    
+                    {/* Brief Stats counters */}
+                    <div className="flex gap-4 border-l border-[var(--border-color)] pl-4">
+                      <div className="text-left">
+                        <span className="text-[8px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Active Employees</span>
+                        <p className="text-base font-bold text-indigo-500 font-display leading-tight">{companyUsers.length}</p>
+                      </div>
+                      <div className="text-left">
+                        <span className="text-[8px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Departments</span>
+                        <p className="text-base font-bold text-emerald-500 font-display leading-tight">{departmentList.length}</p>
+                      </div>
+                      <div className="text-left">
+                        <span className="text-[8px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Custom Roles</span>
+                        <p className="text-base font-bold text-purple-500 font-display leading-tight">{companyRoles.length}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col lg:flex-row gap-6 items-start">
+                    {/* Sub-tabs Left Navigation */}
+                    <aside className="w-full lg:w-60 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl p-3 shrink-0 shadow-sm flex flex-col gap-1">
+                      <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-widest uppercase px-3.5 py-1 block mb-1">Admin Tools</span>
+                      {[
+                        { key: 'ADMIN_PROFILE', label: 'Company Profile', icon: <Building className="w-4 h-4" /> },
+                        { key: 'ADMIN_ROLES', label: 'Roles & Access', icon: <Shield className="w-4 h-4" /> },
+                        { key: 'ADMIN_AUDIT', label: 'Audit Trail Logs', icon: <Activity className="w-4 h-4" /> },
+                        { key: 'ADMIN_BACKUP', label: 'Snapshot Backups', icon: <Database className="w-4 h-4" /> },
+                        { key: 'ADMIN_USERS', label: 'Employee Registry', icon: <Users className="w-4 h-4" /> },
+                        { key: 'ADMIN_DEPARTMENTS', label: 'Corporate Divisions', icon: <Briefcase className="w-4 h-4" /> }
+                      ].map(tab => {
+                        const isTabActive = activeWorkspaceSubModule === tab.key;
+                        const isGranted = companyFeatures.includes(tab.key);
+                        if (!isGranted) return null;
+
+                        return (
+                          <button
+                            key={tab.key}
+                            type="button"
+                            onClick={() => {
+                              setActiveWorkspaceSubModule(tab.key);
+                              setErrorMsg(null);
+                              setSuccessMsg(null);
+                            }}
+                            className={`w-full py-2 px-3.5 rounded-xl text-left text-xs font-semibold transition-all flex items-center gap-2.5 cursor-pointer border-0 bg-transparent ${
+                              isTabActive
+                                ? 'bg-indigo-600/10 text-indigo-400 font-bold border-l-2 border-indigo-500 shadow-sm'
+                                : 'text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]'
+                            }`}
+                          >
+                            {tab.icon}
+                            <span>{tab.label}</span>
+                          </button>
+                        );
+                      })}
+                    </aside>
+
+                    {/* Active Work Tool Panel */}
+                    <div className="flex-1 w-full bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl p-6 shadow-sm min-h-[480px]">
+                      
+                      {activeWorkspaceSubModule === 'ADMIN_PROFILE' && (
+                        <CompanyProfile
+                          adminProfileForm={adminProfileForm}
+                          setAdminProfileForm={setAdminProfileForm}
+                          handleUpdateAdminProfileSubmit={handleUpdateAdminProfileSubmit}
+                          loading={loading}
+                        />
+                      )}
+
+                      {activeWorkspaceSubModule === 'ADMIN_ROLES' && (
+                        <RolesPermissions
+                          companyRoles={companyRoles}
+                          companyFeatures={companyFeatures}
+                          newRole={newRole}
+                          setNewRole={setNewRole}
+                          handleCreateRoleSubmit={handleCreateRoleSubmit}
+                          handleUpdateRolePermissionsSubmit={handleUpdateRolePermissionsSubmit}
+                          handleDeleteRole={handleDeleteRole}
+                        />
+                      )}
+
+                      {activeWorkspaceSubModule === 'ADMIN_AUDIT' && (
+                        <AuditLogs
+                          auditTrailLogs={auditTrailLogs}
+                          auditTotal={auditTotal}
+                          auditFilterModule={auditFilterModule}
+                          setAuditFilterModule={setAuditFilterModule}
+                          auditSearchActor={auditSearchActor}
+                          setAuditSearchActor={setAuditSearchActor}
+                        />
+                      )}
+
+                      {activeWorkspaceSubModule === 'ADMIN_BACKUP' && (
+                        <SnapshotBackups
+                          backupList={backupList}
+                          backupRetentionDays={backupRetentionDays}
+                          handleTriggerBackup={handleTriggerBackup}
+                          handleUpdateBackupRetention={handleUpdateBackupRetention}
+                          BACKEND_URL={BACKEND_URL}
+                        />
+                      )}
+
+                      {activeWorkspaceSubModule === 'ADMIN_USERS' && (
+                        <EmployeeRegistry
+                          companyUsers={companyUsers}
+                          companyRoles={companyRoles}
+                          departmentList={departmentList}
+                          pendingUsers={pendingUsers}
+                          approveSelectedRole={approveSelectedRole}
+                          setApproveSelectedRole={setApproveSelectedRole}
+                          handleApproveUser={handleApproveUser}
+                          isEditingAdminUser={isEditingAdminUser}
+                          setIsEditingAdminUser={setIsEditingAdminUser}
+                          editingAdminUserId={editingAdminUserId}
+                          setEditingAdminUserId={setEditingAdminUserId}
+                          adminUserForm={adminUserForm}
+                          setAdminUserForm={setAdminUserForm}
+                          handleCreateOrUpdateAdminUserSubmit={handleCreateOrUpdateAdminUserSubmit}
+                          handleDeleteAdminUser={handleDeleteAdminUser}
+                          currentUser={user}
+                        />
+                      )}
+
+                      {activeWorkspaceSubModule === 'ADMIN_DEPARTMENTS' && (
+                        <CorporateDepartments
+                          departmentList={departmentList}
+                          companyUsers={companyUsers}
+                          companyFeatures={companyFeatures}
+                          deptForm={deptForm}
+                          setDeptForm={setDeptForm}
+                          isEditingDept={isEditingDept}
+                          setIsEditingDept={setIsEditingDept}
+                          editingDeptId={editingDeptId}
+                          setEditingDeptId={setEditingDeptId}
+                          handleCreateOrUpdateDeptSubmit={handleCreateOrUpdateDeptSubmit}
+                          handleDeleteDept={handleDeleteDept}
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
               )}
 
               {/* ==========================================

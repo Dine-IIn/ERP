@@ -26,7 +26,15 @@ export const HIERARCHICAL_FEATURES = [
 
   { key: "NOTIFICATIONS", name: "NOTIFICATIONS & ALERTS", description: "Enable system alerts and logs" },
   { key: "NOTIFICATIONS_PUSH", name: "Push Notifications", description: "Receive real-time push events on devices" },
-  { key: "NOTIFICATIONS_AUDIT", name: "System Audit Logs", description: "View secure administrative history trails" }
+  { key: "NOTIFICATIONS_AUDIT", name: "System Audit Logs", description: "View secure administrative history trails" },
+
+  { key: "ADMINISTRATION", name: "COMPANY ADMINISTRATION", description: "Manage profile, roles, users, departments, and backups" },
+  { key: "ADMIN_PROFILE", name: "Company Profile Management", description: "Update tenant brandings, logos, and contacts" },
+  { key: "ADMIN_ROLES", name: "Roles & Permissions Management", description: "Create and customize permissions for corporate roles" },
+  { key: "ADMIN_AUDIT", name: "System Audit Logs", description: "Track secure historical action logs" },
+  { key: "ADMIN_BACKUP", name: "Snapshots Backup & Restores", description: "Schedule and execute local tenant backups" },
+  { key: "ADMIN_USERS", name: "Employee Users & Approvals", description: "Approve signups and manage employee profiles" },
+  { key: "ADMIN_DEPARTMENTS", name: "Corporate Departments Settings", description: "Map structures and delegate managers" }
 ];
 
 // Global reference to the WebSockets emitter
@@ -191,7 +199,7 @@ export async function login(req: AuthenticatedRequest, res: Response) {
     const { companyCode, username, password } = req.body;
 
     // Check if user is trying to log in as Super Admin
-    if (companyCode.toUpperCase() === "SUPERADMIN" && username === "superadmin") {
+    if (companyCode.toUpperCase() === "SUPERADMIN" && username.toLowerCase() === "superadmin") {
       // For local demo, we have a default static SuperAdmin account
       const superAdminPass = "superadmin123";
       if (password !== superAdminPass) {

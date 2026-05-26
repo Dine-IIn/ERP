@@ -214,17 +214,131 @@ app.post('/api/chat/group/:groupId/message', authenticateToken, sendChatGroupMes
 app.post('/api/chat/group/:groupId/members', authenticateToken, manageChatGroupMembers);
 app.patch('/api/chat/group/:groupId/settings', authenticateToken, updateChatGroupSettings);
 
+import prisma from './services/db';
+import { HIERARCHICAL_FEATURES } from './controllers';
+import {
+  listAuditLogs,
+  listBackups,
+  triggerBackup,
+  downloadBackup,
+  updateBackupSettings,
+  createUserForAdmin,
+  updateUserForAdmin,
+  deleteUserForAdmin,
+  listDepartments,
+  createDepartment,
+  updateDepartment,
+  deleteDepartment,
+  updateRolePermissions,
+  deleteRoleForAdmin
+} from './controllers/admin_endpoints';
+
 // 6. General Administration Module Routes (Company Profile & Features Only)
 app.get('/api/admin/company/profile', authenticateToken, getCompanyProfile);
 app.patch('/api/admin/company/profile', authenticateToken, updateCompanyProfile);
 app.get('/api/admin/features', authenticateToken, getCompanyFeatures);
 app.post('/api/super/feature/toggle', authenticateToken, requireSuperAdmin, toggleCompanyFeature);
 
+// 7. Advanced Company Administration Console REST APIs (Company Admin Scoped)
+app.get('/api/admin/audit-logs', authenticateToken, listAuditLogs);
+app.get('/api/admin/backups', authenticateToken, listBackups);
+app.post('/api/admin/backups', authenticateToken, triggerBackup);
+app.patch('/api/admin/backups/settings', authenticateToken, updateBackupSettings);
+app.get('/api/admin/backups/download/:filename', authenticateToken, downloadBackup);
+
+app.post('/api/admin/users', authenticateToken, createUserForAdmin);
+app.patch('/api/admin/users/:userId', authenticateToken, updateUserForAdmin);
+app.delete('/api/admin/users/:userId', authenticateToken, deleteUserForAdmin);
+
+app.get('/api/admin/departments', authenticateToken, listDepartments);
+app.post('/api/admin/departments', authenticateToken, createDepartment);
+app.patch('/api/admin/departments/:deptId', authenticateToken, updateDepartment);
+app.delete('/api/admin/departments/:deptId', authenticateToken, deleteDepartment);
+
+app.patch('/api/admin/roles/:roleId', authenticateToken, updateRolePermissions);
+app.delete('/api/admin/roles/:roleId', authenticateToken, deleteRoleForAdmin);
+
+// Automated Seeding Function to ensure feature keys exist and are mapped to companies
+async function seedDatabase() {
+  try {
+    console.log("🌱 [Database Seeding] Ensuring all feature keys exist...");
+    for (const item of HIERARCHICAL_FEATURES) {
+      await prisma.feature.upsert({
+        where: { key: item.key },
+        update: { name: item.name, description: item.description },
+        create: { key: item.key, name: item.name, description: item.description }
+      });
+    }
+
+    console.log("🌱 [Database Seeding] Mapping new administration features to existing companies...");
+    const adminFeatures = await prisma.feature.findMany({
+      where: {
+        key: {
+          in: [
+            "ADMINISTRATION",
+            "ADMIN_PROFILE",
+            "ADMIN_ROLES",
+            "ADMIN_AUDIT",
+            "ADMIN_BACKUP",
+            "ADMIN_USERS",
+            "ADMIN_DEPARTMENTS"
+          ]
+        }
+      }
+    });
+
+    const companies = await prisma.company.findMany();
+    for (const company of companies) {
+      for (const feature of adminFeatures) {
+        const exists = await prisma.companyFeature.findFirst({
+          where: { companyId: company.id, featureId: feature.id }
+        });
+        if (!exists) {
+          await prisma.companyFeature.create({
+            data: { companyId: company.id, featureId: feature.id }
+          });
+        }
+      }
+
+      // Automatically grant default read/write/delete permissions inside "Admin" role
+      const adminRole = await prisma.role.findFirst({
+        where: { companyId: company.id, name: "Admin" }
+      });
+      if (adminRole) {
+        let permissions: any = {};
+        try {
+          permissions = JSON.parse(adminRole.permissions);
+        } catch {
+          permissions = {};
+        }
+
+        permissions.ADMINISTRATION = ["read", "write", "delete"];
+        permissions.ADMIN_PROFILE = ["read", "write", "delete"];
+        permissions.ADMIN_ROLES = ["read", "write", "delete"];
+        permissions.ADMIN_AUDIT = ["read", "write", "delete"];
+        permissions.ADMIN_BACKUP = ["read", "write", "delete"];
+        permissions.ADMIN_USERS = ["read", "write", "delete"];
+        permissions.ADMIN_DEPARTMENTS = ["read", "write", "delete"];
+
+        await prisma.role.update({
+          where: { id: adminRole.id },
+          data: { permissions: JSON.stringify(permissions) }
+        });
+      }
+    }
+    console.log("🌱 [Database Seeding] Seeding completed successfully!");
+  } catch (error) {
+    console.error("❌ [Database Seeding Error] Seeding failed:", error);
+  }
+}
+
 // Start the Integrated Express + HTTP + WebSockets Server
-server.listen(port, () => {
-  console.log(`\n🚀 ========================================================`);
-  console.log(`   ERP backend monolith running on http://localhost:${port}`);
-  console.log(`   Realtime WebSockets ready for notifications.`);
-  console.log(`   PostgreSQL database connection: ACTIVE.`);
-  console.log(`========================================================\n`);
+seedDatabase().then(() => {
+  server.listen(port, () => {
+    console.log(`\n🚀 ========================================================`);
+    console.log(`   ERP backend monolith running on http://localhost:${port}`);
+    console.log(`   Realtime WebSockets ready for notifications.`);
+    console.log(`   PostgreSQL database connection: ACTIVE.`);
+    console.log(`========================================================\n`);
+  });
 });

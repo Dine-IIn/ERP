@@ -75,7 +75,8 @@ model Company {
   invoiceTemplate String? @default("STANDARD")
 
   // Relations
-  auditLogs AuditLog[]
+  auditLogs   AuditLog[]
+  departments Department[]
 
   @@map("companies")
 }
@@ -115,22 +116,25 @@ model Role {
 }
 
 model User {
-  id              String         @id @default(uuid())
-  companyId       String
-  company         Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  username        String
-  passwordHash    String
-  mobileNo        String         @unique
-  email           String?
-  status          String         @default("PENDING_APPROVAL")
-  hasBackupAccess Boolean        @default(false)
-  roleId          String?
-  role            Role?          @relation(fields: [roleId], references: [id], onDelete: SetNull)
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  pushTokens      PushToken[]
-  notifications   Notification[]
-  sessions        UserSession[]
+  id                String         @id @default(uuid())
+  companyId         String
+  company           Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  username          String
+  passwordHash      String
+  mobileNo          String         @unique
+  email             String?
+  status            String         @default("PENDING_APPROVAL")
+  hasBackupAccess   Boolean        @default(false)
+  roleId            String?
+  role              Role?          @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  departmentId      String?
+  department        Department?    @relation("DepartmentUsers", fields: [departmentId], references: [id], onDelete: SetNull)
+  managedDepartment Department?    @relation("DepartmentManager")
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  pushTokens        PushToken[]
+  notifications     Notification[]
+  sessions          UserSession[]
 
   @@unique([companyId, username])
   @@map("users")
@@ -246,4 +250,21 @@ model AuditLog {
   timestamp  DateTime @default(now())
 
   @@map("audit_logs")
+}
+
+model Department {
+  id          String   @id @default(uuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  features    String   @default("[]") // JSON stringified array of feature keys
+  managerId   String?  @unique
+  manager     User?    @relation("DepartmentManager", fields: [managerId], references: [id], onDelete: SetNull)
+  users       User[]   @relation("DepartmentUsers")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([companyId, name])
+  @@map("departments")
 }

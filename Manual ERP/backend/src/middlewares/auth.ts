@@ -19,6 +19,11 @@ export async function authenticateToken(req: AuthenticatedRequest, res: Response
     const decoded = verifyToken(token);
     req.user = decoded;
 
+    // Skip database active check for Super Admin
+    if (decoded.isSuperAdmin) {
+      return next();
+    }
+
     // Load session from database to ensure it's still active and not logged out
     const session = await prisma.userSession.findUnique({
       where: { token }
@@ -50,10 +55,7 @@ export async function authenticateToken(req: AuthenticatedRequest, res: Response
       }
     }
 
-    // Skip database active check for Super Admin
-    if (decoded.isSuperAdmin) {
-      return next();
-    }
+
 
     // Load user and company status from DB to ensure they are active
     const userFromDb = await prisma.user.findUnique({

@@ -16,6 +16,19 @@ export const MASTER_FEATURES_HIERARCHY = [
       { key: 'NOTIFICATIONS_PUSH', name: 'Push Notifications', desc: 'Receive real-time push events on devices' },
       { key: 'NOTIFICATIONS_AUDIT', name: 'System Audit Logs', desc: 'View secure administrative history trails' }
     ]
+  },
+  {
+    key: 'ADMINISTRATION',
+    name: 'COMPANY ADMINISTRATION',
+    desc: 'Manage profile, roles, users, departments, and backups',
+    children: [
+      { key: 'ADMIN_PROFILE', name: 'Company Profile', desc: 'Update tenant branding logo, details, and color schemes' },
+      { key: 'ADMIN_ROLES', name: 'Roles & Permissions', desc: 'Configure granular features access controls for corporate roles' },
+      { key: 'ADMIN_AUDIT', name: 'Audit Trail Logs', desc: 'Track administrative action logs and trails' },
+      { key: 'ADMIN_BACKUP', name: 'snapshots Backups', desc: 'Schedule, trigger, or download JSON data snapshots' },
+      { key: 'ADMIN_USERS', name: 'Employee Users', desc: 'Approve registrations, modify profiles, and assign roles' },
+      { key: 'ADMIN_DEPARTMENTS', name: 'Corporate Departments', desc: 'Map divisions, assign specific features, and delegate managers' }
+    ]
   }
 ];
 
