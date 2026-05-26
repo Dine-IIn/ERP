@@ -29,6 +29,17 @@ export const MASTER_FEATURES_HIERARCHY = [
       { key: 'ADMIN_USERS', name: 'Employee Users', desc: 'Approve registrations, modify profiles, and assign roles' },
       { key: 'ADMIN_DEPARTMENTS', name: 'Corporate Departments', desc: 'Map divisions, assign specific features, and delegate managers' }
     ]
+  },
+  {
+    key: 'MASTER_DATA',
+    name: 'MASTER DATA HUB',
+    desc: 'Manage Employees, Customers, Vendors and Products profiles',
+    children: [
+      { key: 'MASTER_EMPLOYEE', name: 'Employee Master', desc: 'Manage hierarchies, timing shifts, and secure documents' },
+      { key: 'MASTER_CUSTOMER', name: 'Customer Master', desc: 'Administer sales accounts, billing destinations, and credit ratings' },
+      { key: 'MASTER_VENDOR', name: 'Vendor / Supplier Master', desc: 'Handle supply registers, GST details, bank parameters, and payments' },
+      { key: 'MASTER_PRODUCT', name: 'Product / Item Master', desc: 'Configure inventory catalog, variants, pricing, and HSN codes' }
+    ]
   }
 ];
 

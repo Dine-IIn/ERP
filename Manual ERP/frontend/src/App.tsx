@@ -10,6 +10,10 @@ import AuditLogs from './components/administration/AuditLogs';
 import SnapshotBackups from './components/administration/SnapshotBackups';
 import EmployeeRegistry from './components/administration/EmployeeRegistry';
 import CorporateDepartments from './components/administration/CorporateDepartments';
+import EmployeeMaster from './components/master_data_management/EmployeeMaster';
+import CustomerMaster from './components/master_data_management/CustomerMaster';
+import VendorMaster from './components/master_data_management/VendorMaster';
+import ProductMaster from './components/master_data_management/ProductMaster';
 import {
   Wrench,
   Factory,
@@ -141,6 +145,16 @@ const getFeatureIcon = (key: string) => {
       return <Users className="w-4 h-4" style={{ flexShrink: 0 }} />;
     case 'ADMIN_DEPARTMENTS':
       return <Briefcase className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'MASTER_DATA':
+      return <Database className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'MASTER_EMPLOYEE':
+      return <Users className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'MASTER_CUSTOMER':
+      return <UserCircle className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'MASTER_VENDOR':
+      return <Truck className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'MASTER_PRODUCT':
+      return <Package className="w-4 h-4" style={{ flexShrink: 0 }} />;
     default:
       return <Layers className="w-4 h-4" style={{ flexShrink: 0 }} />;
   }
@@ -216,6 +230,13 @@ export default function App() {
   const [companyFeatures, setCompanyFeatures] = useState<string[]>([]); // Mapped workspace modules
   const [activeWorkspaceModule, setActiveWorkspaceModule] = useState<string>('dashboard');
   const [activeWorkspaceSubModule, setActiveWorkspaceSubModule] = useState<string>('');
+
+  // --- MASTER DATA HUB STATES ---
+  const [customersList, setCustomersList] = useState<any[]>([]);
+  const [vendorsList, setVendorsList] = useState<any[]>([]);
+  const [productsList, setProductsList] = useState<any[]>([]);
+  const [categoriesList, setCategoriesList] = useState<any[]>([]);
+  const [brandsList, setBrandsList] = useState<any[]>([]);
 
   // --- WORKSPACE SUB-TAB STATES ---
   const [crmSubTab, setCrmSubTab] = useState<'leads' | 'customer_logs'>('leads');
@@ -397,7 +418,12 @@ export default function App() {
     password: '',
     roleId: '',
     departmentId: '',
-    status: 'ACTIVE'
+    status: 'ACTIVE',
+    reportsToId: '',
+    shiftStart: '09:00',
+    shiftEnd: '17:00',
+    shiftName: 'General Morning Shift',
+    documents: ''
   });
 
 
@@ -555,13 +581,16 @@ export default function App() {
     };
   }, []);
 
-  // Client-side inactivity timer for desktop sessions (15 minutes)
+  // Client-side inactivity timer for desktop sessions (configurable via VITE_INACTIVITY_TIMEOUT_MINUTES env)
   useEffect(() => {
     if (!token || !user || getDeviceDetails().deviceType !== 'DESKTOP') {
       return;
     }
 
-    const INACTIVITY_TIMEOUT = 15 * 60 * 1000; // 15 minutes
+    const timeoutMinutes = import.meta.env.VITE_INACTIVITY_TIMEOUT_MINUTES 
+      ? parseInt(import.meta.env.VITE_INACTIVITY_TIMEOUT_MINUTES, 10) 
+      : 15;
+    const INACTIVITY_TIMEOUT = timeoutMinutes * 60 * 1000;
     let timeoutId: NodeJS.Timeout;
 
     const resetTimer = () => {
@@ -570,7 +599,7 @@ export default function App() {
     };
 
     const handleInactivityTimeout = async () => {
-      console.log("⏱️ User inactive for 15 minutes. Logging out...");
+      console.log(`⏱️ User inactive for ${timeoutMinutes} minutes. Logging out...`);
       
       // Call backend logout to delete session in DB
       try {
@@ -590,7 +619,7 @@ export default function App() {
       setSelectedCompanyUsers([]);
       setShowProfileDropdown(false);
       
-      setErrorMsg("Session expired due to inactivity.");
+      setErrorMsg(`Session expired due to inactivity of ${timeoutMinutes} minutes.`);
     };
 
     // User activity listeners
@@ -1185,6 +1214,8 @@ export default function App() {
       setCompanyUsers(dashboardData.users);
       setCompanyRoles(dashboardData.roles);
       setCompanyFeatures(dashboardData.features);
+      
+      fetchMasterData();
     } catch (e) {}
   };
 
@@ -1246,7 +1277,108 @@ export default function App() {
       setCompanyFeatures(dashboardData.features || []);
       setCompanyUsers(dashboardData.users || []);
       setCompanyRoles(dashboardData.roles || []);
+      
+      fetchMasterData();
     } catch (e) {}
+  };
+
+  const fetchMasterData = async () => {
+    try {
+      const customersRes = await apiRequest('/api/master/customers', 'GET');
+      setCustomersList(customersRes.customers || []);
+
+      const vendorsRes = await apiRequest('/api/master/vendors', 'GET');
+      setVendorsList(vendorsRes.vendors || []);
+
+      const productsRes = await apiRequest('/api/master/products', 'GET');
+      setProductsList(productsRes.products || []);
+
+      const categoriesRes = await apiRequest('/api/master/categories', 'GET');
+      setCategoriesList(categoriesRes.categories || []);
+
+      const brandsRes = await apiRequest('/api/master/brands', 'GET');
+      setBrandsList(brandsRes.brands || []);
+    } catch (e) {
+      console.error("Error fetching master data:", e);
+    }
+  };
+
+  // --- CUSTOMER MASTER OPERATIONS ---
+  const handleCreateCustomer = async (cust: any) => {
+    const res = await apiRequest('/api/master/customers', 'POST', cust);
+    setSuccessMsg(res.message || "Customer onboarded successfully");
+    fetchMasterData();
+  };
+
+  const handleUpdateCustomer = async (id: string, cust: any) => {
+    const res = await apiRequest(`/api/master/customers/${id}`, 'PATCH', cust);
+    setSuccessMsg(res.message || "Customer updated successfully");
+    fetchMasterData();
+  };
+
+  const handleDeleteCustomer = async (id: string) => {
+    const res = await apiRequest(`/api/master/customers/${id}`, 'DELETE');
+    setSuccessMsg(res.message || "Customer deleted successfully");
+    fetchMasterData();
+  };
+
+  // --- VENDOR MASTER OPERATIONS ---
+  const handleCreateVendor = async (vend: any) => {
+    const res = await apiRequest('/api/master/vendors', 'POST', vend);
+    setSuccessMsg(res.message || "Vendor onboarded successfully");
+    fetchMasterData();
+  };
+
+  const handleUpdateVendor = async (id: string, vend: any) => {
+    const res = await apiRequest(`/api/master/vendors/${id}`, 'PATCH', vend);
+    setSuccessMsg(res.message || "Vendor updated successfully");
+    fetchMasterData();
+  };
+
+  const handleDeleteVendor = async (id: string) => {
+    const res = await apiRequest(`/api/master/vendors/${id}`, 'DELETE');
+    setSuccessMsg(res.message || "Vendor deleted successfully");
+    fetchMasterData();
+  };
+
+  // --- PRODUCT CATEGORY & BRAND OPERATIONS ---
+  const handleCreateCategory = async (name: string) => {
+    const res = await apiRequest('/api/master/categories', 'POST', { name });
+    fetchMasterData();
+  };
+
+  const handleDeleteCategory = async (id: string) => {
+    const res = await apiRequest(`/api/master/categories/${id}`, 'DELETE');
+    fetchMasterData();
+  };
+
+  const handleCreateBrand = async (name: string) => {
+    const res = await apiRequest('/api/master/brands', 'POST', { name });
+    fetchMasterData();
+  };
+
+  const handleDeleteBrand = async (id: string) => {
+    const res = await apiRequest(`/api/master/brands/${id}`, 'DELETE');
+    fetchMasterData();
+  };
+
+  // --- PRODUCT MASTER OPERATIONS ---
+  const handleCreateProduct = async (prod: any) => {
+    const res = await apiRequest('/api/master/products', 'POST', prod);
+    setSuccessMsg(res.message || "Product created successfully");
+    fetchMasterData();
+  };
+
+  const handleUpdateProduct = async (id: string, prod: any) => {
+    const res = await apiRequest(`/api/master/products/${id}`, 'PATCH', prod);
+    setSuccessMsg(res.message || "Product updated successfully");
+    fetchMasterData();
+  };
+
+  const handleDeleteProduct = async (id: string) => {
+    const res = await apiRequest(`/api/master/products/${id}`, 'DELETE');
+    setSuccessMsg(res.message || "Product deleted successfully");
+    fetchMasterData();
   };
 
   // --- CORE SYSTEM DATA FETCHERS FOR ADMIN CONSOLE ---
@@ -1443,7 +1575,20 @@ export default function App() {
       }
       setIsEditingAdminUser(false);
       setEditingAdminUserId(null);
-      setAdminUserForm({ username: '', mobileNo: '', email: '', password: '', roleId: '', departmentId: '', status: 'ACTIVE' });
+      setAdminUserForm({
+        username: '',
+        mobileNo: '',
+        email: '',
+        password: '',
+        roleId: '',
+        departmentId: '',
+        status: 'ACTIVE',
+        reportsToId: '',
+        shiftStart: '09:00',
+        shiftEnd: '17:00',
+        shiftName: 'General Morning Shift',
+        documents: ''
+      });
       fetchCompanyAdminData();
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to save user.");
@@ -2383,6 +2528,67 @@ export default function App() {
                         handleDeleteDept={handleDeleteDept}
                       />
                     )}
+                  </div>
+                </div>
+              )}
+
+              {/* ==========================================
+                  MASTER DATA HUB WORKSPACE
+                  ========================================== */}
+              {activeWorkspaceModule === 'master_data' && user?.role === 'Admin' && (
+                <div className="max-w-6xl mx-auto animate-fade-in text-left select-none">
+                  <div className="w-full bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl p-6 shadow-sm min-h-[480px]">
+                    
+                    {activeWorkspaceSubModule === 'MASTER_EMPLOYEE' && (
+                      <EmployeeMaster
+                        companyUsers={companyUsers}
+                        companyRoles={companyRoles}
+                        departmentList={departmentList}
+                        handleCreateOrUpdateAdminUserSubmit={handleCreateOrUpdateAdminUserSubmit}
+                        handleDeleteAdminUser={handleDeleteAdminUser}
+                        adminUserForm={adminUserForm}
+                        setAdminUserForm={setAdminUserForm}
+                        isEditingAdminUser={isEditingAdminUser}
+                        setIsEditingAdminUser={setIsEditingAdminUser}
+                        editingAdminUserId={editingAdminUserId}
+                        setEditingAdminUserId={setEditingAdminUserId}
+                        currentUser={user}
+                      />
+                    )}
+
+                    {activeWorkspaceSubModule === 'MASTER_CUSTOMER' && (
+                      <CustomerMaster
+                        customers={customersList}
+                        onCreateCustomer={handleCreateCustomer}
+                        onUpdateCustomer={handleUpdateCustomer}
+                        onDeleteCustomer={handleDeleteCustomer}
+                      />
+                    )}
+
+                    {activeWorkspaceSubModule === 'MASTER_VENDOR' && (
+                      <VendorMaster
+                        vendors={vendorsList}
+                        onCreateVendor={handleCreateVendor}
+                        onUpdateVendor={handleUpdateVendor}
+                        onDeleteVendor={handleDeleteVendor}
+                      />
+                    )}
+
+                    {activeWorkspaceSubModule === 'MASTER_PRODUCT' && (
+                      <ProductMaster
+                        products={productsList}
+                        categories={categoriesList}
+                        brands={brandsList}
+                        onCreateProduct={handleCreateProduct}
+                        onUpdateProduct={handleUpdateProduct}
+                        onDeleteProduct={handleDeleteProduct}
+                        onCreateCategory={handleCreateCategory}
+                        onDeleteCategory={handleDeleteCategory}
+                        onCreateBrand={handleCreateBrand}
+                        onDeleteBrand={handleDeleteBrand}
+                      />
+                    )}
+
                   </div>
                 </div>
               )}

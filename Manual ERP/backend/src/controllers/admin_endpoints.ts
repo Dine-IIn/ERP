@@ -104,12 +104,26 @@ export async function triggerBackup(req: AuthenticatedRequest, res: Response) {
       passwordHash: u.passwordHash, // Backup password hash for complete structural recoveries
       roleId: u.roleId,
       departmentId: u.departmentId,
+      reportsToId: u.reportsToId,
+      shiftStart: u.shiftStart,
+      shiftEnd: u.shiftEnd,
+      shiftName: u.shiftName,
+      documents: u.documents,
       createdAt: u.createdAt
     }));
 
     const roles = await prisma.role.findMany({ where: { companyId } });
     const departments = await prisma.department.findMany({ where: { companyId } });
     const auditLogs = await prisma.auditLog.findMany({ where: { companyId }, take: 100 });
+
+    const customers = await prisma.customer.findMany({ where: { companyId } });
+    const vendors = await prisma.vendor.findMany({ where: { companyId } });
+    const productCategories = await prisma.productCategory.findMany({ where: { companyId } });
+    const brands = await prisma.brand.findMany({ where: { companyId } });
+    const products = await prisma.product.findMany({
+      where: { companyId },
+      include: { variants: true }
+    });
 
     const backupPayload = {
       companyCode: company?.companyCode,
@@ -121,7 +135,12 @@ export async function triggerBackup(req: AuthenticatedRequest, res: Response) {
         users: sanitizedUsers,
         roles,
         departments,
-        auditLogs
+        auditLogs,
+        customers,
+        vendors,
+        productCategories,
+        brands,
+        products
       }
     };
 
@@ -254,7 +273,7 @@ export async function createUserForAdmin(req: AuthenticatedRequest, res: Respons
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { username, mobileNo, email, password, roleId, departmentId } = req.body;
+    const { username, mobileNo, email, password, roleId, departmentId, reportsToId, shiftStart, shiftEnd, shiftName, documents } = req.body;
 
     if (!username || !mobileNo || !password || !roleId) {
       return res.status(400).json({ error: "username, mobileNo, password and roleId are required fields" });
@@ -294,6 +313,16 @@ export async function createUserForAdmin(req: AuthenticatedRequest, res: Respons
       }
     }
 
+    // Verify reporting manager belongs to company if provided
+    if (reportsToId) {
+      const manager = await prisma.user.findFirst({
+        where: { id: reportsToId, companyId }
+      });
+      if (!manager) {
+        return res.status(404).json({ error: "Reporting manager was not found." });
+      }
+    }
+
     const passwordHash = await hashPassword(password);
     const newUser = await prisma.user.create({
       data: {
@@ -304,7 +333,12 @@ export async function createUserForAdmin(req: AuthenticatedRequest, res: Respons
         passwordHash,
         status: "ACTIVE", // Created directly by Admin -> Active!
         roleId: role.id,
-        departmentId: departmentId || null
+        departmentId: departmentId || null,
+        reportsToId: reportsToId || null,
+        shiftStart: shiftStart || null,
+        shiftEnd: shiftEnd || null,
+        shiftName: shiftName || null,
+        documents: documents || null
       }
     });
 
@@ -335,7 +369,7 @@ export async function updateUserForAdmin(req: AuthenticatedRequest, res: Respons
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { userId } = req.params;
-    const { username, mobileNo, email, password, roleId, departmentId, status } = req.body;
+    const { username, mobileNo, email, password, roleId, departmentId, status, reportsToId, shiftStart, shiftEnd, shiftName, documents } = req.body;
 
     // Verify user belongs to same company
     const userToUpdate = await prisma.user.findFirst({
@@ -374,13 +408,26 @@ export async function updateUserForAdmin(req: AuthenticatedRequest, res: Respons
       if (!dept) return res.status(404).json({ error: "Allocated department was not found." });
     }
 
+    // Verify reporting manager belongs to company if provided
+    if (reportsToId) {
+      const manager = await prisma.user.findFirst({
+        where: { id: reportsToId, companyId }
+      });
+      if (!manager) return res.status(404).json({ error: "Reporting manager not found." });
+    }
+
     const data: any = {
       ...(username && { username }),
       ...(mobileNo && { mobileNo }),
       ...(email !== undefined && { email: email || null }),
       ...(roleId && { roleId }),
       ...(departmentId !== undefined && { departmentId: departmentId || null }),
-      ...(status && { status })
+      ...(status && { status }),
+      ...(reportsToId !== undefined && { reportsToId: reportsToId || null }),
+      ...(shiftStart !== undefined && { shiftStart: shiftStart || null }),
+      ...(shiftEnd !== undefined && { shiftEnd: shiftEnd || null }),
+      ...(shiftName !== undefined && { shiftName: shiftName || null }),
+      ...(documents !== undefined && { documents: documents || null })
     };
 
     if (password) {
@@ -926,6 +973,14 @@ export async function restoreBackup(req: AuthenticatedRequest, res: Response) {
       // 2. Wipe audit logs
       await tx.auditLog.deleteMany({ where: { companyId } });
 
+      // Wipe new master data tables
+      await tx.productVariant.deleteMany({});
+      await tx.product.deleteMany({ where: { companyId } });
+      await tx.productCategory.deleteMany({ where: { companyId } });
+      await tx.brand.deleteMany({ where: { companyId } });
+      await tx.customer.deleteMany({ where: { companyId } });
+      await tx.vendor.deleteMany({ where: { companyId } });
+
       // 3. Wipe users other than the active restoring admin user itself (to keep session active)
       await tx.userSession.deleteMany({
         where: {
@@ -998,7 +1053,12 @@ export async function restoreBackup(req: AuthenticatedRequest, res: Response) {
             where: { id: userId },
             data: {
               roleId: adminRole?.id || u.roleId || undefined,
-              departmentId: u.departmentId || null
+              departmentId: u.departmentId || null,
+              reportsToId: u.reportsToId || null,
+              shiftStart: u.shiftStart || null,
+              shiftEnd: u.shiftEnd || null,
+              shiftName: u.shiftName || null,
+              documents: u.documents || null
             }
           });
         } else {
@@ -1023,7 +1083,108 @@ export async function restoreBackup(req: AuthenticatedRequest, res: Response) {
               status: u.status || 'ACTIVE',
               roleId: matchingRoleId || undefined,
               departmentId: u.departmentId || null,
+              reportsToId: u.reportsToId || null,
+              shiftStart: u.shiftStart || null,
+              shiftEnd: u.shiftEnd || null,
+              shiftName: u.shiftName || null,
+              documents: u.documents || null,
               createdAt: new Date(u.createdAt)
+            }
+          });
+        }
+      }
+
+      // Restore product categories
+      const snapshotCats = snapshot.data.productCategories || [];
+      for (const cat of snapshotCats) {
+        await tx.productCategory.create({
+          data: { id: cat.id, companyId, name: cat.name, createdAt: new Date(cat.createdAt) }
+        });
+      }
+
+      // Restore brands
+      const snapshotBrands = snapshot.data.brands || [];
+      for (const br of snapshotBrands) {
+        await tx.brand.create({
+          data: { id: br.id, companyId, name: br.name, createdAt: new Date(br.createdAt) }
+        });
+      }
+
+      // Restore customers
+      const snapshotCustomers = snapshot.data.customers || [];
+      for (const c of snapshotCustomers) {
+        await tx.customer.create({
+          data: {
+            id: c.id,
+            companyId,
+            name: c.name,
+            customerType: c.customerType,
+            customerGroup: c.customerGroup || null,
+            contactPerson: c.contactPerson || null,
+            contactNo: c.contactNo,
+            email: c.email || null,
+            billingAddress: c.billingAddress || null,
+            shippingAddress: c.shippingAddress || null,
+            creditLimit: c.creditLimit ?? 0.0,
+            creditTime: c.creditTime ?? 0,
+            createdAt: new Date(c.createdAt),
+            updatedAt: new Date(c.updatedAt)
+          }
+        });
+      }
+
+      // Restore vendors
+      const snapshotVendors = snapshot.data.vendors || [];
+      for (const v of snapshotVendors) {
+        await tx.vendor.create({
+          data: {
+            id: v.id,
+            companyId,
+            name: v.name,
+            isVendor: v.isVendor ?? true,
+            contactNo: v.contactNo,
+            email: v.email || null,
+            bankDetails: v.bankDetails || null,
+            paymentTerms: v.paymentTerms || null,
+            gstDetails: v.gstDetails || null,
+            creditTime: v.creditTime ?? 0,
+            createdAt: new Date(v.createdAt),
+            updatedAt: new Date(v.updatedAt)
+          }
+        });
+      }
+
+      // Restore products
+      const snapshotProducts = snapshot.data.products || [];
+      for (const p of snapshotProducts) {
+        const createdProduct = await tx.product.create({
+          data: {
+            id: p.id,
+            companyId,
+            name: p.name,
+            categoryId: p.categoryId || null,
+            brandId: p.brandId || null,
+            uom: p.uom,
+            pricing: p.pricing ?? 0.0,
+            hsnSacCode: p.hsnSacCode || null,
+            imageUrl: p.imageUrl || null,
+            bomReference: p.bomReference || null,
+            moq: p.moq ?? 1.0,
+            createdAt: new Date(p.createdAt),
+            updatedAt: new Date(p.updatedAt)
+          }
+        });
+
+        const variants = p.variants || [];
+        for (const vr of variants) {
+          await tx.productVariant.create({
+            data: {
+              id: vr.id,
+              productId: createdProduct.id,
+              name: vr.name,
+              sku: vr.sku || null,
+              priceAddon: vr.priceAddon ?? 0.0,
+              createdAt: new Date(vr.createdAt)
             }
           });
         }

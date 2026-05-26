@@ -1,0 +1,666 @@
+import { Response } from 'express';
+import { AuthenticatedRequest } from '../middlewares/auth';
+import prisma from '../services/db';
+import { logAudit } from '../utils/audit';
+
+// ==========================================
+// 1. CUSTOMER MASTER MANAGEMENT API
+// ==========================================
+
+export async function listCustomers(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { query } = req.query;
+
+    const whereClause: any = { companyId };
+    if (query) {
+      whereClause.OR = [
+        { name: { contains: String(query), mode: 'insensitive' } },
+        { contactNo: { contains: String(query), mode: 'insensitive' } },
+        { email: { contains: String(query), mode: 'insensitive' } }
+      ];
+    }
+
+    const customers = await prisma.customer.findMany({
+      where: whereClause,
+      orderBy: { name: 'asc' }
+    });
+
+    return res.json({ customers });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function createCustomer(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { name, customerType, customerGroup, contactPerson, contactNo, email, billingAddress, shippingAddress, creditLimit, creditTime } = req.body;
+
+    if (!name || !customerType || !contactNo) {
+      return res.status(400).json({ error: "Name, customerType, and contactNo are required fields" });
+    }
+
+    // Check unique customer name in company
+    const existing = await prisma.customer.findFirst({
+      where: { companyId, name }
+    });
+    if (existing) {
+      return res.status(409).json({ error: `Customer '${name}' is already registered.` });
+    }
+
+    const customer = await prisma.customer.create({
+      data: {
+        companyId,
+        name,
+        customerType,
+        customerGroup: customerGroup || null,
+        contactPerson: contactPerson || null,
+        contactNo,
+        email: email || null,
+        billingAddress: billingAddress || null,
+        shippingAddress: shippingAddress || billingAddress || null,
+        creditLimit: creditLimit ? parseFloat(creditLimit) : 0.0,
+        creditTime: creditTime ? parseInt(creditTime) : 0
+      }
+    });
+
+    await logAudit(
+      companyId,
+      req.user?.userId || null,
+      req.user?.username || null,
+      'customer_master',
+      'CREATE',
+      null,
+      { id: customer.id, name: customer.name },
+      req.ip,
+      req.headers['user-agent']
+    );
+
+    return res.status(201).json({ message: "Customer created successfully", customer });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function updateCustomer(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { id } = req.params;
+    const { name, customerType, customerGroup, contactPerson, contactNo, email, billingAddress, shippingAddress, creditLimit, creditTime } = req.body;
+
+    const customerToUpdate = await prisma.customer.findFirst({
+      where: { id, companyId }
+    });
+    if (!customerToUpdate) {
+      return res.status(404).json({ error: "Customer profile not found" });
+    }
+
+    if (name && name !== customerToUpdate.name) {
+      const exist = await prisma.customer.findFirst({
+        where: { companyId, name }
+      });
+      if (exist) return res.status(409).json({ error: `Customer name '${name}' already exists.` });
+    }
+
+    const updated = await prisma.customer.update({
+      where: { id },
+      data: {
+        ...(name && { name }),
+        ...(customerType && { customerType }),
+        ...(customerGroup !== undefined && { customerGroup: customerGroup || null }),
+        ...(contactPerson !== undefined && { contactPerson: contactPerson || null }),
+        ...(contactNo && { contactNo }),
+        ...(email !== undefined && { email: email || null }),
+        ...(billingAddress !== undefined && { billingAddress: billingAddress || null }),
+        ...(shippingAddress !== undefined && { shippingAddress: shippingAddress || billingAddress || null }),
+        ...(creditLimit !== undefined && { creditLimit: parseFloat(creditLimit) || 0.0 }),
+        ...(creditTime !== undefined && { creditTime: parseInt(creditTime) || 0 })
+      }
+    });
+
+    await logAudit(
+      companyId,
+      req.user?.userId || null,
+      req.user?.username || null,
+      'customer_master',
+      'UPDATE',
+      customerToUpdate,
+      updated,
+      req.ip,
+      req.headers['user-agent']
+    );
+
+    return res.json({ message: "Customer updated successfully", customer: updated });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function deleteCustomer(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { id } = req.params;
+
+    const customer = await prisma.customer.findFirst({
+      where: { id, companyId }
+    });
+    if (!customer) {
+      return res.status(404).json({ error: "Customer not found" });
+    }
+
+    await prisma.customer.delete({
+      where: { id }
+    });
+
+    await logAudit(
+      companyId,
+      req.user?.userId || null,
+      req.user?.username || null,
+      'customer_master',
+      'DELETE',
+      { id: customer.id, name: customer.name },
+      null,
+      req.ip,
+      req.headers['user-agent']
+    );
+
+    return res.json({ message: `Customer '${customer.name}' permanently deleted.` });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+// ==========================================
+// 2. VENDOR MASTER MANAGEMENT API
+// ==========================================
+
+export async function listVendors(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { query } = req.query;
+
+    const whereClause: any = { companyId };
+    if (query) {
+      whereClause.OR = [
+        { name: { contains: String(query), mode: 'insensitive' } },
+        { contactNo: { contains: String(query), mode: 'insensitive' } },
+        { email: { contains: String(query), mode: 'insensitive' } }
+      ];
+    }
+
+    const vendors = await prisma.vendor.findMany({
+      where: whereClause,
+      orderBy: { name: 'asc' }
+    });
+
+    return res.json({ vendors });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function createVendor(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { name, isVendor, contactNo, email, bankDetails, paymentTerms, gstDetails, creditTime } = req.body;
+
+    if (!name || !contactNo) {
+      return res.status(400).json({ error: "Name and contactNo are required fields" });
+    }
+
+    const existing = await prisma.vendor.findFirst({
+      where: { companyId, name }
+    });
+    if (existing) {
+      return res.status(409).json({ error: `Supplier/Vendor '${name}' is already registered.` });
+    }
+
+    const vendor = await prisma.vendor.create({
+      data: {
+        companyId,
+        name,
+        isVendor: isVendor !== undefined ? isVendor : true,
+        contactNo,
+        email: email || null,
+        bankDetails: bankDetails || null,
+        paymentTerms: paymentTerms || null,
+        gstDetails: gstDetails || null,
+        creditTime: creditTime ? parseInt(creditTime) : 0
+      }
+    });
+
+    await logAudit(
+      companyId,
+      req.user?.userId || null,
+      req.user?.username || null,
+      'vendor_master',
+      'CREATE',
+      null,
+      { id: vendor.id, name: vendor.name },
+      req.ip,
+      req.headers['user-agent']
+    );
+
+    return res.status(201).json({ message: "Vendor/Supplier onboarded successfully", vendor });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function updateVendor(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { id } = req.params;
+    const { name, isVendor, contactNo, email, bankDetails, paymentTerms, gstDetails, creditTime } = req.body;
+
+    const vendorToUpdate = await prisma.vendor.findFirst({
+      where: { id, companyId }
+    });
+    if (!vendorToUpdate) {
+      return res.status(404).json({ error: "Vendor/Supplier record not found" });
+    }
+
+    if (name && name !== vendorToUpdate.name) {
+      const exist = await prisma.vendor.findFirst({
+        where: { companyId, name }
+      });
+      if (exist) return res.status(409).json({ error: `Vendor name '${name}' already registered.` });
+    }
+
+    const updated = await prisma.vendor.update({
+      where: { id },
+      data: {
+        ...(name && { name }),
+        ...(isVendor !== undefined && { isVendor }),
+        ...(contactNo && { contactNo }),
+        ...(email !== undefined && { email: email || null }),
+        ...(bankDetails !== undefined && { bankDetails: bankDetails || null }),
+        ...(paymentTerms !== undefined && { paymentTerms: paymentTerms || null }),
+        ...(gstDetails !== undefined && { gstDetails: gstDetails || null }),
+        ...(creditTime !== undefined && { creditTime: parseInt(creditTime) || 0 })
+      }
+    });
+
+    await logAudit(
+      companyId,
+      req.user?.userId || null,
+      req.user?.username || null,
+      'vendor_master',
+      'UPDATE',
+      vendorToUpdate,
+      updated,
+      req.ip,
+      req.headers['user-agent']
+    );
+
+    return res.json({ message: "Vendor/Supplier details updated", vendor: updated });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function deleteVendor(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { id } = req.params;
+
+    const vendor = await prisma.vendor.findFirst({
+      where: { id, companyId }
+    });
+    if (!vendor) return res.status(404).json({ error: "Vendor/Supplier record not found" });
+
+    await prisma.vendor.delete({
+      where: { id }
+    });
+
+    await logAudit(
+      companyId,
+      req.user?.userId || null,
+      req.user?.username || null,
+      'vendor_master',
+      'DELETE',
+      { id: vendor.id, name: vendor.name },
+      null,
+      req.ip,
+      req.headers['user-agent']
+    );
+
+    return res.json({ message: `Vendor/Supplier '${vendor.name}' permanently deleted.` });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+// ==========================================
+// 3. PRODUCT & CATALOG MASTER MANAGEMENT API
+// ==========================================
+
+// CATEGORIES HELPERS
+export async function listCategories(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const categories = await prisma.productCategory.findMany({
+      where: { companyId },
+      orderBy: { name: 'asc' }
+    });
+    return res.json({ categories });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function createCategory(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ error: "Category name is required" });
+
+    const exist = await prisma.productCategory.findFirst({ where: { companyId, name } });
+    if (exist) return res.status(409).json({ error: "Category already exists" });
+
+    const category = await prisma.productCategory.create({
+      data: { companyId, name }
+    });
+    return res.status(201).json({ category });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function deleteCategory(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { id } = req.params;
+    await prisma.productCategory.delete({ where: { id } });
+    return res.json({ message: "Category deleted successfully" });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+// BRANDS HELPERS
+export async function listBrands(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const brands = await prisma.brand.findMany({
+      where: { companyId },
+      orderBy: { name: 'asc' }
+    });
+    return res.json({ brands });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function createBrand(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ error: "Brand name is required" });
+
+    const exist = await prisma.brand.findFirst({ where: { companyId, name } });
+    if (exist) return res.status(409).json({ error: "Brand already exists" });
+
+    const brand = await prisma.brand.create({
+      data: { companyId, name }
+    });
+    return res.status(201).json({ brand });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function deleteBrand(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { id } = req.params;
+    await prisma.brand.delete({ where: { id } });
+    return res.json({ message: "Brand deleted successfully" });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+// PRODUCT CRUDS
+export async function listProducts(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { query } = req.query;
+
+    const whereClause: any = { companyId };
+    if (query) {
+      whereClause.OR = [
+        { name: { contains: String(query), mode: 'insensitive' } },
+        { hsnSacCode: { contains: String(query), mode: 'insensitive' } }
+      ];
+    }
+
+    const products = await prisma.product.findMany({
+      where: whereClause,
+      include: {
+        category: true,
+        brand: true,
+        variants: true
+      },
+      orderBy: { name: 'asc' }
+    });
+
+    return res.json({ products });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function createProduct(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { name, categoryId, brandId, uom, pricing, hsnSacCode, imageUrl, bomReference, moq, variants } = req.body;
+
+    if (!name || !uom) {
+      return res.status(400).json({ error: "Product name and UOM are required fields" });
+    }
+
+    const existing = await prisma.product.findFirst({
+      where: { companyId, name }
+    });
+    if (existing) {
+      return res.status(409).json({ error: `Product '${name}' already exists in your inventory.` });
+    }
+
+    // Save product record
+    const product = await prisma.product.create({
+      data: {
+        companyId,
+        name,
+        categoryId: categoryId || null,
+        brandId: brandId || null,
+        uom,
+        pricing: pricing ? parseFloat(pricing) : 0.0,
+        hsnSacCode: hsnSacCode || null,
+        imageUrl: imageUrl || null,
+        bomReference: bomReference || null,
+        moq: moq ? parseFloat(moq) : 1.0
+      }
+    });
+
+    // Create variants if any
+    const createdVariants: any[] = [];
+    if (variants && Array.isArray(variants)) {
+      for (const v of variants) {
+        if (!v.name) continue;
+        const variant = await prisma.productVariant.create({
+          data: {
+            productId: product.id,
+            name: v.name,
+            sku: v.sku || null,
+            priceAddon: v.priceAddon ? parseFloat(v.priceAddon) : 0.0
+          }
+        });
+        createdVariants.push(variant);
+      }
+    }
+
+    await logAudit(
+      companyId,
+      req.user?.userId || null,
+      req.user?.username || null,
+      'product_master',
+      'CREATE',
+      null,
+      { id: product.id, name: product.name, variantsCount: createdVariants.length },
+      req.ip,
+      req.headers['user-agent']
+    );
+
+    return res.status(201).json({
+      message: "Product catalog entry created successfully",
+      product: { ...product, variants: createdVariants }
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function updateProduct(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { id } = req.params;
+    const { name, categoryId, brandId, uom, pricing, hsnSacCode, imageUrl, bomReference, moq, variants } = req.body;
+
+    const productToUpdate = await prisma.product.findFirst({
+      where: { id, companyId },
+      include: { variants: true }
+    });
+    if (!productToUpdate) {
+      return res.status(404).json({ error: "Product not found" });
+    }
+
+    if (name && name !== productToUpdate.name) {
+      const exist = await prisma.product.findFirst({
+        where: { companyId, name }
+      });
+      if (exist) return res.status(409).json({ error: `Product name '${name}' already exists.` });
+    }
+
+    const updated = await prisma.product.update({
+      where: { id },
+      data: {
+        ...(name && { name }),
+        ...(categoryId !== undefined && { categoryId: categoryId || null }),
+        ...(brandId !== undefined && { brandId: brandId || null }),
+        ...(uom && { uom }),
+        ...(pricing !== undefined && { pricing: parseFloat(pricing) || 0.0 }),
+        ...(hsnSacCode !== undefined && { hsnSacCode: hsnSacCode || null }),
+        ...(imageUrl !== undefined && { imageUrl: imageUrl || null }),
+        ...(bomReference !== undefined && { bomReference: bomReference || null }),
+        ...(moq !== undefined && { moq: parseFloat(moq) || 1.0 })
+      }
+    });
+
+    // Handle variant replacements (simpler transaction: wipe and recreate)
+    if (variants && Array.isArray(variants)) {
+      await prisma.productVariant.deleteMany({ where: { productId: id } });
+      for (const v of variants) {
+        if (!v.name) continue;
+        await prisma.productVariant.create({
+          data: {
+            productId: id,
+            name: v.name,
+            sku: v.sku || null,
+            priceAddon: v.priceAddon ? parseFloat(v.priceAddon) : 0.0
+          }
+        });
+      }
+    }
+
+    const finalProduct = await prisma.product.findUnique({
+      where: { id },
+      include: { category: true, brand: true, variants: true }
+    });
+
+    await logAudit(
+      companyId,
+      req.user?.userId || null,
+      req.user?.username || null,
+      'product_master',
+      'UPDATE',
+      productToUpdate,
+      finalProduct,
+      req.ip,
+      req.headers['user-agent']
+    );
+
+    return res.json({ message: "Product details updated successfully", product: finalProduct });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function deleteProduct(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { id } = req.params;
+
+    const product = await prisma.product.findFirst({
+      where: { id, companyId }
+    });
+    if (!product) return res.status(404).json({ error: "Product not found" });
+
+    await prisma.product.delete({
+      where: { id }
+    });
+
+    await logAudit(
+      companyId,
+      req.user?.userId || null,
+      req.user?.username || null,
+      'product_master',
+      'DELETE',
+      { id: product.id, name: product.name },
+      null,
+      req.ip,
+      req.headers['user-agent']
+    );
+
+    return res.json({ message: `Product '${product.name}' permanently deleted.` });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}

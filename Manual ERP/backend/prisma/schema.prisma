@@ -78,6 +78,11 @@ model Company {
   // Relations
   auditLogs   AuditLog[]
   departments Department[]
+  customers         Customer[]
+  vendors           Vendor[]
+  productCategories ProductCategory[]
+  brands            Brand[]
+  products          Product[]
 
   @@map("companies")
 }
@@ -136,6 +141,15 @@ model User {
   pushTokens        PushToken[]
   notifications     Notification[]
   sessions          UserSession[]
+
+  // Employee Master Extensions
+  reportsToId       String?
+  reportsTo         User?         @relation("UserHierarchy", fields: [reportsToId], references: [id])
+  subordinates      User[]        @relation("UserHierarchy")
+  shiftStart        String?
+  shiftEnd          String?
+  shiftName         String?
+  documents         String?
 
   @@unique([companyId, username])
   @@map("users")
@@ -268,4 +282,103 @@ model Department {
 
   @@unique([companyId, name])
   @@map("departments")
+}
+
+model Customer {
+  id              String   @id @default(uuid())
+  companyId       String
+  company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name            String
+  customerType    String   // "INDIVIDUAL" or "COMPANY"
+  customerGroup   String?  // e.g. "RETAILER", "WHOLESALER"
+  contactPerson   String?
+  contactNo       String
+  email           String?
+  billingAddress  String?
+  shippingAddress String?
+  creditLimit     Float    @default(0.0)
+  creditTime      Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([companyId, name])
+  @@map("customers")
+}
+
+model Vendor {
+  id           String   @id @default(uuid())
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name         String
+  isVendor     Boolean  @default(true) // true = Vendor, false = Supplier
+  contactNo    String
+  email        String?
+  bankDetails  String?
+  paymentTerms String?
+  gstDetails   String?
+  creditTime   Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([companyId, name])
+  @@map("vendors")
+}
+
+model ProductCategory {
+  id        String    @id @default(uuid())
+  companyId String
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name      String
+  products  Product[]
+  createdAt DateTime  @default(now())
+
+  @@unique([companyId, name])
+  @@map("product_categories")
+}
+
+model Brand {
+  id        String    @id @default(uuid())
+  companyId String
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name      String
+  products  Product[]
+  createdAt DateTime  @default(now())
+
+  @@unique([companyId, name])
+  @@map("brands")
+}
+
+model Product {
+  id           String           @id @default(uuid())
+  companyId    String
+  company      Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name         String
+  categoryId   String?
+  category     ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  brandId      String?
+  brand        Brand?           @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  uom          String
+  pricing      Float            @default(0.0)
+  hsnSacCode   String?
+  imageUrl     String?
+  bomReference String?
+  moq          Float            @default(1.0)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  variants     ProductVariant[]
+
+  @@unique([companyId, name])
+  @@map("products")
+}
+
+model ProductVariant {
+  id         String   @id @default(uuid())
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name       String
+  sku        String?  @unique
+  priceAddon Float    @default(0.0)
+  createdAt  DateTime @default(now())
+
+  @@map("product_variants")
 }

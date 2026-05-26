@@ -34,7 +34,13 @@ export const HIERARCHICAL_FEATURES = [
   { key: "ADMIN_AUDIT", name: "System Audit Logs", description: "Track secure historical action logs" },
   { key: "ADMIN_BACKUP", name: "Snapshots Backup & Restores", description: "Schedule and execute local tenant backups" },
   { key: "ADMIN_USERS", name: "Employee Users & Approvals", description: "Approve signups and manage employee profiles" },
-  { key: "ADMIN_DEPARTMENTS", name: "Corporate Departments Settings", description: "Map structures and delegate managers" }
+  { key: "ADMIN_DEPARTMENTS", name: "Corporate Departments Settings", description: "Map structures and delegate managers" },
+
+  { key: "MASTER_DATA", name: "MASTER DATA HUB", description: "Manage Employees, Customers, Vendors and Products profiles" },
+  { key: "MASTER_EMPLOYEE", name: "Employee Master", description: "Manage hierarchies, timing shifts, and secure documents" },
+  { key: "MASTER_CUSTOMER", name: "Customer Master", description: "Administer sales accounts, billing destinations, and credit ratings" },
+  { key: "MASTER_VENDOR", name: "Vendor / Supplier Master", description: "Handle supply registers, GST details, bank parameters, and payments" },
+  { key: "MASTER_PRODUCT", name: "Product / Item Master", description: "Configure inventory catalog, variants, pricing, and HSN codes" }
 ];
 
 // Global reference to the WebSockets emitter

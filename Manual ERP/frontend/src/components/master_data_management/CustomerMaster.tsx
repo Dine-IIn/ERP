@@ -1,0 +1,424 @@
+import React, { useState } from 'react';
+import { UserCheck, Search, Plus, Edit, Trash2, X, AlertCircle, MapPin, DollarSign, Clock } from 'lucide-react';
+
+interface CustomerMasterProps {
+  customers: any[];
+  onCreateCustomer: (customer: any) => Promise<void>;
+  onUpdateCustomer: (id: string, customer: any) => Promise<void>;
+  onDeleteCustomer: (id: string) => Promise<void>;
+}
+
+export default function CustomerMaster({
+  customers,
+  onCreateCustomer,
+  onUpdateCustomer,
+  onDeleteCustomer,
+}: CustomerMasterProps) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  
+  const [form, setForm] = useState({
+    name: '',
+    customerType: 'INDIVIDUAL',
+    customerGroup: '',
+    contactPerson: '',
+    contactNo: '',
+    email: '',
+    billingAddress: '',
+    shippingAddress: '',
+    creditLimit: '0',
+    creditTime: '0'
+  });
+  
+  const [localErr, setLocalErr] = useState<string | null>(null);
+  const [localSuccess, setLocalSuccess] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const openAddModal = () => {
+    setForm({
+      name: '',
+      customerType: 'INDIVIDUAL',
+      customerGroup: '',
+      contactPerson: '',
+      contactNo: '',
+      email: '',
+      billingAddress: '',
+      shippingAddress: '',
+      creditLimit: '0',
+      creditTime: '0'
+    });
+    setIsEditing(false);
+    setEditingId(null);
+    setLocalErr(null);
+    setLocalSuccess(null);
+    setShowModal(true);
+  };
+
+  const openEditModal = (cust: any) => {
+    setForm({
+      name: cust.name,
+      customerType: cust.customerType || 'INDIVIDUAL',
+      customerGroup: cust.customerGroup || '',
+      contactPerson: cust.contactPerson || '',
+      contactNo: cust.contactNo,
+      email: cust.email || '',
+      billingAddress: cust.billingAddress || '',
+      shippingAddress: cust.shippingAddress || '',
+      creditLimit: String(cust.creditLimit || 0),
+      creditTime: String(cust.creditTime || 0)
+    });
+    setIsEditing(true);
+    setEditingId(cust.id);
+    setLocalErr(null);
+    setLocalSuccess(null);
+    setShowModal(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name || !form.contactNo) {
+      setLocalErr("Customer Name and Contact Number are required fields.");
+      return;
+    }
+
+    setLocalErr(null);
+    setLocalSuccess(null);
+    setLoading(true);
+
+    try {
+      if (isEditing && editingId) {
+        await onUpdateCustomer(editingId, form);
+        setLocalSuccess("Customer details updated successfully!");
+      } else {
+        await onCreateCustomer(form);
+        setLocalSuccess("Customer onboarding completed successfully!");
+      }
+      setTimeout(() => {
+        setShowModal(false);
+      }, 1000);
+    } catch (err: any) {
+      setLocalErr(err.message || "Failed to process customer master entry.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (id: string, name: string) => {
+    if (window.confirm(`Are you sure you want to permanently delete customer '${name}'?`)) {
+      try {
+        await onDeleteCustomer(id);
+      } catch (err: any) {
+        alert(err.message || "Failed to delete customer");
+      }
+    }
+  };
+
+  const filtered = customers.filter(c => 
+    c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    c.contactNo.includes(searchTerm) ||
+    (c.email && c.email.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+
+  return (
+    <div className="animate-fade-in flex flex-col gap-4 text-left select-none">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-[var(--border-color)] pb-3">
+        <div>
+          <h3 className="font-bold text-sm text-[var(--text-primary)] font-display flex items-center gap-1.5 uppercase tracking-wide">
+            <UserCheck className="w-4 h-4 text-indigo-400" /> Customer Master Hub
+          </h3>
+          <p className="text-[var(--text-secondary)] text-[10px] mt-0.5">Administer accounts details, billing destinations, and credit ratings for sales clients</p>
+        </div>
+        
+        <div className="flex items-center gap-3 w-full md:w-auto shrink-0">
+          <div className="relative flex-1 md:w-64">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+            <input
+              type="text"
+              placeholder="Search customers..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-3 py-1.5 bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none"
+            />
+          </div>
+          
+          <button
+            type="button"
+            onClick={openAddModal}
+            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-xs cursor-pointer flex items-center gap-1.5 border-0 bg-transparent transition-all shadow-md active:scale-95 shrink-0"
+          >
+            <Plus className="w-3.5 h-3.5" /> Onboard Customer
+          </button>
+        </div>
+      </div>
+
+      {/* Customer log list grid */}
+      <div className="overflow-x-auto border border-[var(--border-color)] rounded-xl mt-2">
+        <table className="w-full text-left text-xs border-collapse">
+          <thead>
+            <tr className="bg-[var(--bg-tertiary)] border-b border-[var(--border-color)] text-[var(--text-secondary)] font-bold">
+              <th className="p-3 text-[10px] uppercase tracking-wider">Customer Name</th>
+              <th className="p-3 text-[10px] uppercase tracking-wider">Type / Group</th>
+              <th className="p-3 text-[10px] uppercase tracking-wider">Contact Info</th>
+              <th className="p-3 text-[10px] uppercase tracking-wider">Credit Limit / Days</th>
+              <th className="p-3 text-[10px] uppercase tracking-wider text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(cust => (
+              <tr key={cust.id} className="border-b border-[var(--border-color)]/40 hover:bg-[var(--bg-tertiary)]/20 transition-colors last:border-b-0 text-left">
+                <td className="p-3 shrink-0">
+                  <span className="font-bold text-[var(--text-primary)] block">{cust.name}</span>
+                  <span className="text-[10px] text-[var(--text-muted)] mt-0.5">{cust.contactPerson ? `Contact Person: ${cust.contactPerson}` : 'No contact person'}</span>
+                </td>
+                <td className="p-3 shrink-0">
+                  <span className={`px-2 py-0.5 rounded text-[8px] font-bold tracking-wider inline-block uppercase ${
+                    cust.customerType === 'COMPANY' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                  }`}>
+                    {cust.customerType}
+                  </span>
+                  {cust.customerGroup && (
+                    <span className="text-[10px] text-[var(--text-secondary)] block mt-1 font-mono uppercase">
+                      Group: {cust.customerGroup}
+                    </span>
+                  )}
+                </td>
+                <td className="p-3 shrink-0 font-mono">
+                  <span className="text-[var(--text-primary)] block">{cust.contactNo}</span>
+                  <span className="text-[10px] text-[var(--text-muted)] block mt-0.5">{cust.email || 'No email id'}</span>
+                </td>
+                <td className="p-3 shrink-0">
+                  <span className="text-[var(--text-primary)] font-bold flex items-center gap-0.5 font-mono">
+                    <DollarSign className="w-3.5 h-3.5 text-indigo-400" /> {cust.creditLimit ? cust.creditLimit.toLocaleString() : '0.00'}
+                  </span>
+                  <span className="text-[10px] text-[var(--text-secondary)] flex items-center gap-1 mt-0.5 font-mono">
+                    <Clock className="w-3 h-3 text-emerald-400" /> Credit Cycle: {cust.creditTime || 0} Days
+                  </span>
+                </td>
+                <td className="p-3 text-right">
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openEditModal(cust)}
+                      className="px-2 py-1 bg-indigo-600/10 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded transition-all cursor-pointer border-0 bg-transparent flex items-center gap-1 text-[9px] uppercase font-bold"
+                      title="Edit Master Settings"
+                    >
+                      <Edit className="w-3.5 h-3.5" /> Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(cust.id, cust.name)}
+                      className="px-2 py-1 bg-rose-600/10 hover:bg-rose-600 text-rose-400 hover:text-white rounded transition-all cursor-pointer border-0 bg-transparent flex items-center gap-1 text-[9px] uppercase font-bold"
+                      title="Delete Customer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> Delete
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={5} className="text-center py-8 text-[var(--text-muted)] italic">No customer accounts onboarded yet</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* ==========================================
+          MODAL: CREATOR & MODIFIER FORM
+          ========================================== */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 animate-fade-in">
+          <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl w-full max-w-lg p-6 relative shadow-2xl text-left select-none animate-scale-up max-h-[90vh] overflow-y-auto">
+            <button 
+              onClick={() => setShowModal(false)}
+              className="absolute top-4 right-4 text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer bg-transparent border-0"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 pb-3 border-b border-[var(--border-color)]">
+              <div className="p-2.5 bg-indigo-500/10 rounded-xl text-indigo-400 border border-indigo-500/20">
+                <UserCheck className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-[var(--text-primary)] font-display">
+                  {isEditing ? 'Modify Customer Profile' : 'Onboard Sales Customer'}
+                </h3>
+                <p className="text-[var(--text-secondary)] text-[10px]">Setup billing routes, accounts groups, and allowed credit margins</p>
+              </div>
+            </div>
+
+            {localErr && (
+              <div className="p-3 mt-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-lg text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{localErr}</span>
+              </div>
+            )}
+
+            {localSuccess && (
+              <div className="p-3 mt-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-lg text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{localSuccess}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              
+              {/* Customer Name */}
+              <div>
+                <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Customer / Company Name</label>
+                <input
+                  type="text"
+                  required
+                  value={form.name}
+                  onChange={e => setForm({ ...form, name: e.target.value })}
+                  className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none"
+                  placeholder="e.g. Acme Corp"
+                />
+              </div>
+
+              {/* Customer Type select */}
+              <div>
+                <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Account Category Type</label>
+                <select
+                  value={form.customerType}
+                  onChange={e => setForm({ ...form, customerType: e.target.value })}
+                  className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none cursor-pointer"
+                >
+                  <option value="INDIVIDUAL">INDIVIDUAL (Single Client)</option>
+                  <option value="COMPANY">COMPANY (Enterprise Client)</option>
+                </select>
+              </div>
+
+              {/* Contact Person */}
+              <div>
+                <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Contact Person (Optional)</label>
+                <input
+                  type="text"
+                  value={form.contactPerson}
+                  onChange={e => setForm({ ...form, contactPerson: e.target.value })}
+                  className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none"
+                  placeholder="e.g. John Doe"
+                />
+              </div>
+
+              {/* Contact Number */}
+              <div>
+                <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Contact Phone Number</label>
+                <input
+                  type="text"
+                  required
+                  value={form.contactNo}
+                  onChange={e => setForm({ ...form, contactNo: e.target.value })}
+                  className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none"
+                  placeholder="e.g. +91XXXXXXXXXX"
+                />
+              </div>
+
+              {/* Email Address */}
+              <div>
+                <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Company Email Address (Optional)</label>
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={e => setForm({ ...form, email: e.target.value })}
+                  className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none"
+                  placeholder="e.g. billing@client.com"
+                />
+              </div>
+
+              {/* Customer Group */}
+              <div>
+                <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Customer Group (Optional)</label>
+                <input
+                  type="text"
+                  value={form.customerGroup}
+                  onChange={e => setForm({ ...form, customerGroup: e.target.value })}
+                  className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none"
+                  placeholder="e.g. Wholesale, Retail, Tier 1"
+                />
+              </div>
+
+              {/* Credit Limit & Days */}
+              <div className="md:col-span-2 border-t border-[var(--border-color)] pt-3 mt-1">
+                <span className="text-[9px] font-bold text-indigo-400 tracking-wider uppercase block mb-2">Credit Margin Settings</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[8px] font-bold text-[var(--text-secondary)] block mb-1">Credit Limit Amount ($)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={form.creditLimit}
+                      onChange={e => setForm({ ...form, creditLimit: e.target.value })}
+                      className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] py-1.5 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[8px] font-bold text-[var(--text-secondary)] block mb-1">Max Credit Days (Credit Time)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={form.creditTime}
+                      onChange={e => setForm({ ...form, creditTime: e.target.value })}
+                      className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] py-1.5 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Address Section */}
+              <div className="md:col-span-2 border-t border-[var(--border-color)] pt-3">
+                <span className="text-[9px] font-bold text-indigo-400 tracking-wider uppercase block mb-2 flex items-center gap-1">
+                  <MapPin className="w-3.5 h-3.5" /> Destination Addresses
+                </span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[8px] font-bold text-[var(--text-secondary)] block mb-1">Billing Destination Address</label>
+                    <textarea
+                      rows={2}
+                      value={form.billingAddress}
+                      onChange={e => setForm({ ...form, billingAddress: e.target.value })}
+                      className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] py-1.5 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none"
+                      placeholder="Billing street address, country, pincode"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[8px] font-bold text-[var(--text-secondary)] block mb-1">Shipping Destination Address (Same as billing if blank)</label>
+                    <textarea
+                      rows={2}
+                      value={form.shippingAddress}
+                      onChange={e => setForm({ ...form, shippingAddress: e.target.value })}
+                      className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] py-1.5 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none"
+                      placeholder="Leave blank to sync shipping address with billing address"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="md:col-span-2 flex gap-3 mt-3 border-t border-[var(--border-color)] pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="w-1/2 bg-[var(--bg-tertiary)] border border-[var(--border-color)] hover:text-[var(--text-primary)] font-bold py-2 rounded-lg text-xs cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-1/2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 rounded-lg text-xs cursor-pointer transition-colors"
+                >
+                  {loading ? 'Processing...' : isEditing ? 'Apply Master Changes' : 'Complete Onboarding'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -236,6 +236,27 @@ import {
   restoreBackup
 } from './controllers/admin_endpoints';
 
+import {
+  listCustomers,
+  createCustomer,
+  updateCustomer,
+  deleteCustomer,
+  listVendors,
+  createVendor,
+  updateVendor,
+  deleteVendor,
+  listCategories,
+  createCategory,
+  deleteCategory,
+  listBrands,
+  createBrand,
+  deleteBrand,
+  listProducts,
+  createProduct,
+  updateProduct,
+  deleteProduct
+} from './controllers/master_data';
+
 // 6. General Administration Module Routes (Company Profile & Features Only)
 app.get('/api/admin/company/profile', authenticateToken, getCompanyProfile);
 app.patch('/api/admin/company/profile', authenticateToken, updateCompanyProfile);
@@ -254,7 +275,7 @@ app.post('/api/admin/backups/reset', authenticateToken, restoreBackup);
 
 app.post('/api/admin/users', authenticateToken, createUserForAdmin);
 app.patch('/api/admin/users/:userId', authenticateToken, updateUserForAdmin);
-app.delete('/api/admin/users/:userId', authenticateToken, deleteUserForAdmin);
+app.delete('/api/admin/users/:userId', authenticateToken, deleteCompanyUser); // Wipes from session registry
 
 app.get('/api/admin/departments', authenticateToken, listDepartments);
 app.post('/api/admin/departments', authenticateToken, createDepartment);
@@ -263,6 +284,30 @@ app.delete('/api/admin/departments/:deptId', authenticateToken, deleteDepartment
 
 app.patch('/api/admin/roles/:roleId', authenticateToken, updateRolePermissions);
 app.delete('/api/admin/roles/:roleId', authenticateToken, deleteRoleForAdmin);
+
+// 8. Master Data Management Console REST APIs (Company Admin / User Scoped)
+app.get('/api/master/customers', authenticateToken, listCustomers);
+app.post('/api/master/customers', authenticateToken, createCustomer);
+app.patch('/api/master/customers/:id', authenticateToken, updateCustomer);
+app.delete('/api/master/customers/:id', authenticateToken, deleteCustomer);
+
+app.get('/api/master/vendors', authenticateToken, listVendors);
+app.post('/api/master/vendors', authenticateToken, createVendor);
+app.patch('/api/master/vendors/:id', authenticateToken, updateVendor);
+app.delete('/api/master/vendors/:id', authenticateToken, deleteVendor);
+
+app.get('/api/master/categories', authenticateToken, listCategories);
+app.post('/api/master/categories', authenticateToken, createCategory);
+app.delete('/api/master/categories/:id', authenticateToken, deleteCategory);
+
+app.get('/api/master/brands', authenticateToken, listBrands);
+app.post('/api/master/brands', authenticateToken, createBrand);
+app.delete('/api/master/brands/:id', authenticateToken, deleteBrand);
+
+app.get('/api/master/products', authenticateToken, listProducts);
+app.post('/api/master/products', authenticateToken, createProduct);
+app.patch('/api/master/products/:id', authenticateToken, updateProduct);
+app.delete('/api/master/products/:id', authenticateToken, deleteProduct);
 
 // Automated Seeding Function to ensure feature keys exist and are mapped to companies
 async function seedDatabase() {
@@ -276,8 +321,8 @@ async function seedDatabase() {
       });
     }
 
-    console.log("🌱 [Database Seeding] Mapping new administration features to existing companies...");
-    const adminFeatures = await prisma.feature.findMany({
+    console.log("🌱 [Database Seeding] Mapping new administration & master data features to existing companies...");
+    const coreFeatures = await prisma.feature.findMany({
       where: {
         key: {
           in: [
@@ -287,7 +332,12 @@ async function seedDatabase() {
             "ADMIN_AUDIT",
             "ADMIN_BACKUP",
             "ADMIN_USERS",
-            "ADMIN_DEPARTMENTS"
+            "ADMIN_DEPARTMENTS",
+            "MASTER_DATA",
+            "MASTER_EMPLOYEE",
+            "MASTER_CUSTOMER",
+            "MASTER_VENDOR",
+            "MASTER_PRODUCT"
           ]
         }
       }
@@ -295,7 +345,7 @@ async function seedDatabase() {
 
     const companies = await prisma.company.findMany();
     for (const company of companies) {
-      for (const feature of adminFeatures) {
+      for (const feature of coreFeatures) {
         const exists = await prisma.companyFeature.findFirst({
           where: { companyId: company.id, featureId: feature.id }
         });
@@ -325,6 +375,12 @@ async function seedDatabase() {
         permissions.ADMIN_BACKUP = ["read", "write", "delete"];
         permissions.ADMIN_USERS = ["read", "write", "delete"];
         permissions.ADMIN_DEPARTMENTS = ["read", "write", "delete"];
+
+        permissions.MASTER_DATA = ["read", "write", "delete"];
+        permissions.MASTER_EMPLOYEE = ["read", "write", "delete"];
+        permissions.MASTER_CUSTOMER = ["read", "write", "delete"];
+        permissions.MASTER_VENDOR = ["read", "write", "delete"];
+        permissions.MASTER_PRODUCT = ["read", "write", "delete"];
 
         await prisma.role.update({
           where: { id: adminRole.id },
