@@ -375,6 +375,8 @@ export default function App() {
 
   const [backupList, setBackupList] = useState<any[]>([]);
   const [backupRetentionDays, setBackupRetentionDays] = useState(60);
+  const [autoBackupInterval, setAutoBackupInterval] = useState(2);
+  const [showTopBackupModal, setShowTopBackupModal] = useState(false);
 
   const [departmentList, setDepartmentList] = useState<any[]>([]);
   const [deptForm, setDeptForm] = useState({
@@ -1308,7 +1310,8 @@ export default function App() {
           smtpUser: profileRes.company.smtpUser || '',
           smtpPassword: profileRes.company.smtpPassword || ''
         });
-        setBackupRetentionDays(profileRes.company.backupRetentionDays || 60);
+         setBackupRetentionDays(profileRes.company.backupRetentionDays || 60);
+        setAutoBackupInterval(profileRes.company.autoBackupInterval || 2);
       }
 
       // 2. Load dashboard (users, roles, features)
@@ -1370,6 +1373,24 @@ export default function App() {
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to update retention policy.");
     }
+  };
+
+  const handleUpdateAutoBackupInterval = async (interval: number) => {
+    try {
+      await apiRequest('/api/admin/backups/settings', 'PATCH', { autoBackupInterval: interval });
+      setAutoBackupInterval(interval);
+      setSuccessMsg(`Auto-backup interval successfully configured to: every ${interval} days.`);
+      setErrorMsg(null);
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to update auto-backup interval.");
+    }
+  };
+
+  const getLastBackupTimeText = () => {
+    if (!backupList || backupList.length === 0) return "Never";
+    const date = new Date(backupList[0].createdAt);
+    if (isNaN(date.getTime())) return "Never";
+    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   const handleCreateOrUpdateDeptSubmit = async (e: React.FormEvent) => {
@@ -1938,6 +1959,11 @@ export default function App() {
                   ) : (
                     <div className="flex flex-col gap-1 mt-2">
                       {MASTER_FEATURES_HIERARCHY.map(cat => {
+                        // Skip GENERAL and NOTIFICATIONS categories as they are already on the top panel
+                        if (cat.key === 'GENERAL' || cat.key === 'NOTIFICATIONS') {
+                          return null;
+                        }
+
                         // ADMINISTRATION category is restricted strictly to company admins
                         if (cat.key === 'ADMINISTRATION' && user.role !== 'Admin') {
                           return null;
@@ -2169,22 +2195,21 @@ export default function App() {
                 </div>
 
                 {/* Backup Info & Trigger */}
-                <div className="flex items-center gap-2 border-r border-[var(--border-color)] pr-4">
-                  <button
-                    onClick={() => {
-                      setActiveWorkspaceModule('general_admin');
-                      setAdminTab('backup');
-                    }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border border-emerald-500/20 transition-colors text-xs font-bold cursor-pointer"
-                    title="Initiate Backup"
-                  >
-                    <Database className="w-3.5 h-3.5" /> Backup Now
-                  </button>
-                  <div className="text-[9px] text-[var(--text-secondary)] font-mono leading-tight">
-                    <div>Last Backup</div>
-                    <div className="text-[var(--text-primary)] font-bold">Today, 10:30 AM</div>
+                {user?.role === 'Admin' && (
+                  <div className="flex items-center gap-2 border-r border-[var(--border-color)] pr-4">
+                    <button
+                      onClick={() => setShowTopBackupModal(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border border-emerald-500/20 transition-colors text-xs font-bold cursor-pointer"
+                      title="Initiate Backup"
+                    >
+                      <Database className="w-3.5 h-3.5" /> Backup Now
+                    </button>
+                    <div className="text-[9px] text-[var(--text-secondary)] font-mono leading-tight">
+                      <div>Last Backup</div>
+                      <div className="text-[var(--text-primary)] font-bold">{getLastBackupTimeText()}</div>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Online/Offline Status */}
                 <div className="flex items-center gap-1.5">
@@ -2276,159 +2301,88 @@ export default function App() {
                   ========================================== */}
               {activeWorkspaceModule === 'administration' && user?.role === 'Admin' && (
                 <div className="max-w-6xl mx-auto animate-fade-in text-left select-none">
-                  {/* Console Header Bar */}
-                  <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl p-6 mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-sm relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-[200px] h-[200px] bg-indigo-600/5 rounded-full blur-[50px] pointer-events-none" />
+                  {/* Active Work Tool Panel - Full Width Viewport */}
+                  <div className="w-full bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl p-6 shadow-sm min-h-[480px]">
                     
-                    <div className="flex items-center gap-3">
-                      <div className="p-3 bg-indigo-500/10 rounded-xl text-indigo-400 border border-indigo-500/20 shrink-0">
-                        <Settings className="w-6 h-6" />
-                      </div>
-                      <div>
-                        <h2 className="text-lg font-bold text-[var(--text-primary)] font-display uppercase tracking-wider flex items-center gap-2">
-                          Company Administration Console
-                        </h2>
-                        <p className="text-[var(--text-secondary)] text-xs mt-0.5">Manage profile settings, custom roles, employee registers, backup policies, and audit trails</p>
-                      </div>
-                    </div>
-                    
-                    {/* Brief Stats counters */}
-                    <div className="flex gap-4 border-l border-[var(--border-color)] pl-4">
-                      <div className="text-left">
-                        <span className="text-[8px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Active Employees</span>
-                        <p className="text-base font-bold text-indigo-500 font-display leading-tight">{companyUsers.length}</p>
-                      </div>
-                      <div className="text-left">
-                        <span className="text-[8px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Departments</span>
-                        <p className="text-base font-bold text-emerald-500 font-display leading-tight">{departmentList.length}</p>
-                      </div>
-                      <div className="text-left">
-                        <span className="text-[8px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Custom Roles</span>
-                        <p className="text-base font-bold text-purple-500 font-display leading-tight">{companyRoles.length}</p>
-                      </div>
-                    </div>
-                  </div>
+                    {activeWorkspaceSubModule === 'ADMIN_PROFILE' && (
+                      <CompanyProfile
+                        adminProfileForm={adminProfileForm}
+                        setAdminProfileForm={setAdminProfileForm}
+                        handleUpdateAdminProfileSubmit={handleUpdateAdminProfileSubmit}
+                        loading={loading}
+                      />
+                    )}
 
-                  <div className="flex flex-col lg:flex-row gap-6 items-start">
-                    {/* Sub-tabs Left Navigation */}
-                    <aside className="w-full lg:w-60 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl p-3 shrink-0 shadow-sm flex flex-col gap-1">
-                      <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-widest uppercase px-3.5 py-1 block mb-1">Admin Tools</span>
-                      {[
-                        { key: 'ADMIN_PROFILE', label: 'Company Profile', icon: <Building className="w-4 h-4" /> },
-                        { key: 'ADMIN_ROLES', label: 'Roles & Access', icon: <Shield className="w-4 h-4" /> },
-                        { key: 'ADMIN_AUDIT', label: 'Audit Trail Logs', icon: <Activity className="w-4 h-4" /> },
-                        { key: 'ADMIN_BACKUP', label: 'Snapshot Backups', icon: <Database className="w-4 h-4" /> },
-                        { key: 'ADMIN_USERS', label: 'Employee Registry', icon: <Users className="w-4 h-4" /> },
-                        { key: 'ADMIN_DEPARTMENTS', label: 'Corporate Divisions', icon: <Briefcase className="w-4 h-4" /> }
-                      ].map(tab => {
-                        const isTabActive = activeWorkspaceSubModule === tab.key;
-                        const isGranted = companyFeatures.includes(tab.key);
-                        if (!isGranted) return null;
+                    {activeWorkspaceSubModule === 'ADMIN_ROLES' && (
+                      <RolesPermissions
+                        companyRoles={companyRoles}
+                        companyFeatures={companyFeatures}
+                        newRole={newRole}
+                        setNewRole={setNewRole}
+                        handleCreateRoleSubmit={handleCreateRoleSubmit}
+                        handleUpdateRolePermissionsSubmit={handleUpdateRolePermissionsSubmit}
+                        handleDeleteRole={handleDeleteRole}
+                      />
+                    )}
 
-                        return (
-                          <button
-                            key={tab.key}
-                            type="button"
-                            onClick={() => {
-                              setActiveWorkspaceSubModule(tab.key);
-                              setErrorMsg(null);
-                              setSuccessMsg(null);
-                            }}
-                            className={`w-full py-2 px-3.5 rounded-xl text-left text-xs font-semibold transition-all flex items-center gap-2.5 cursor-pointer border-0 bg-transparent ${
-                              isTabActive
-                                ? 'bg-indigo-600/10 text-indigo-400 font-bold border-l-2 border-indigo-500 shadow-sm'
-                                : 'text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]'
-                            }`}
-                          >
-                            {tab.icon}
-                            <span>{tab.label}</span>
-                          </button>
-                        );
-                      })}
-                    </aside>
+                    {activeWorkspaceSubModule === 'ADMIN_AUDIT' && (
+                      <AuditLogs
+                        auditTrailLogs={auditTrailLogs}
+                        auditTotal={auditTotal}
+                        auditFilterModule={auditFilterModule}
+                        setAuditFilterModule={setAuditFilterModule}
+                        auditSearchActor={auditSearchActor}
+                        setAuditSearchActor={setAuditSearchActor}
+                      />
+                    )}
 
-                    {/* Active Work Tool Panel */}
-                    <div className="flex-1 w-full bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl p-6 shadow-sm min-h-[480px]">
-                      
-                      {activeWorkspaceSubModule === 'ADMIN_PROFILE' && (
-                        <CompanyProfile
-                          adminProfileForm={adminProfileForm}
-                          setAdminProfileForm={setAdminProfileForm}
-                          handleUpdateAdminProfileSubmit={handleUpdateAdminProfileSubmit}
-                          loading={loading}
-                        />
-                      )}
+                    {activeWorkspaceSubModule === 'ADMIN_BACKUP' && (
+                      <SnapshotBackups
+                        backupList={backupList}
+                        backupRetentionDays={backupRetentionDays}
+                        handleTriggerBackup={handleTriggerBackup}
+                        handleUpdateBackupRetention={handleUpdateBackupRetention}
+                        BACKEND_URL={BACKEND_URL}
+                        fetchBackups={fetchBackups}
+                      />
+                    )}
 
-                      {activeWorkspaceSubModule === 'ADMIN_ROLES' && (
-                        <RolesPermissions
-                          companyRoles={companyRoles}
-                          companyFeatures={companyFeatures}
-                          newRole={newRole}
-                          setNewRole={setNewRole}
-                          handleCreateRoleSubmit={handleCreateRoleSubmit}
-                          handleUpdateRolePermissionsSubmit={handleUpdateRolePermissionsSubmit}
-                          handleDeleteRole={handleDeleteRole}
-                        />
-                      )}
+                    {activeWorkspaceSubModule === 'ADMIN_USERS' && (
+                      <EmployeeRegistry
+                        companyUsers={companyUsers}
+                        companyRoles={companyRoles}
+                        departmentList={departmentList}
+                        pendingUsers={pendingUsers}
+                        approveSelectedRole={approveSelectedRole}
+                        setApproveSelectedRole={setApproveSelectedRole}
+                        handleApproveUser={handleApproveUser}
+                        isEditingAdminUser={isEditingAdminUser}
+                        setIsEditingAdminUser={setIsEditingAdminUser}
+                        editingAdminUserId={editingAdminUserId}
+                        setEditingAdminUserId={setEditingAdminUserId}
+                        adminUserForm={adminUserForm}
+                        setAdminUserForm={setAdminUserForm}
+                        handleCreateOrUpdateAdminUserSubmit={handleCreateOrUpdateAdminUserSubmit}
+                        handleDeleteAdminUser={handleDeleteAdminUser}
+                        currentUser={user}
+                      />
+                    )}
 
-                      {activeWorkspaceSubModule === 'ADMIN_AUDIT' && (
-                        <AuditLogs
-                          auditTrailLogs={auditTrailLogs}
-                          auditTotal={auditTotal}
-                          auditFilterModule={auditFilterModule}
-                          setAuditFilterModule={setAuditFilterModule}
-                          auditSearchActor={auditSearchActor}
-                          setAuditSearchActor={setAuditSearchActor}
-                        />
-                      )}
-
-                      {activeWorkspaceSubModule === 'ADMIN_BACKUP' && (
-                        <SnapshotBackups
-                          backupList={backupList}
-                          backupRetentionDays={backupRetentionDays}
-                          handleTriggerBackup={handleTriggerBackup}
-                          handleUpdateBackupRetention={handleUpdateBackupRetention}
-                          BACKEND_URL={BACKEND_URL}
-                        />
-                      )}
-
-                      {activeWorkspaceSubModule === 'ADMIN_USERS' && (
-                        <EmployeeRegistry
-                          companyUsers={companyUsers}
-                          companyRoles={companyRoles}
-                          departmentList={departmentList}
-                          pendingUsers={pendingUsers}
-                          approveSelectedRole={approveSelectedRole}
-                          setApproveSelectedRole={setApproveSelectedRole}
-                          handleApproveUser={handleApproveUser}
-                          isEditingAdminUser={isEditingAdminUser}
-                          setIsEditingAdminUser={setIsEditingAdminUser}
-                          editingAdminUserId={editingAdminUserId}
-                          setEditingAdminUserId={setEditingAdminUserId}
-                          adminUserForm={adminUserForm}
-                          setAdminUserForm={setAdminUserForm}
-                          handleCreateOrUpdateAdminUserSubmit={handleCreateOrUpdateAdminUserSubmit}
-                          handleDeleteAdminUser={handleDeleteAdminUser}
-                          currentUser={user}
-                        />
-                      )}
-
-                      {activeWorkspaceSubModule === 'ADMIN_DEPARTMENTS' && (
-                        <CorporateDepartments
-                          departmentList={departmentList}
-                          companyUsers={companyUsers}
-                          companyFeatures={companyFeatures}
-                          deptForm={deptForm}
-                          setDeptForm={setDeptForm}
-                          isEditingDept={isEditingDept}
-                          setIsEditingDept={setIsEditingDept}
-                          editingDeptId={editingDeptId}
-                          setEditingDeptId={setEditingDeptId}
-                          handleCreateOrUpdateDeptSubmit={handleCreateOrUpdateDeptSubmit}
-                          handleDeleteDept={handleDeleteDept}
-                        />
-                      )}
-                    </div>
+                    {activeWorkspaceSubModule === 'ADMIN_DEPARTMENTS' && (
+                      <CorporateDepartments
+                        departmentList={departmentList}
+                        companyUsers={companyUsers}
+                        companyFeatures={companyFeatures}
+                        deptForm={deptForm}
+                        setDeptForm={setDeptForm}
+                        isEditingDept={isEditingDept}
+                        setIsEditingDept={setIsEditingDept}
+                        editingDeptId={editingDeptId}
+                        setEditingDeptId={setEditingDeptId}
+                        handleCreateOrUpdateDeptSubmit={handleCreateOrUpdateDeptSubmit}
+                        handleDeleteDept={handleDeleteDept}
+                      />
+                    )}
                   </div>
                 </div>
               )}
@@ -3475,18 +3429,18 @@ export default function App() {
                       required
                       value={editUserForm.username}
                       onChange={e => setEditUserForm({ ...editUserForm, username: e.target.value })}
-                      className="w-full mt-1 bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs"
+                      className="w-full mt-1 bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none"
                     />
                   </div>
 
                   <div>
-                    <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Mobile No</label>
+                    <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Mobile Number</label>
                     <input
                       type="text"
                       required
                       value={editUserForm.mobileNo}
                       onChange={e => setEditUserForm({ ...editUserForm, mobileNo: e.target.value })}
-                      className="w-full mt-1 bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs font-mono"
+                      className="w-full mt-1 bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none"
                     />
                   </div>
 
@@ -3496,23 +3450,12 @@ export default function App() {
                       type="email"
                       value={editUserForm.email}
                       onChange={e => setEditUserForm({ ...editUserForm, email: e.target.value })}
-                      className="w-full mt-1 bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs"
+                      className="w-full mt-1 bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none"
                     />
                   </div>
 
                   <div>
-                    <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">New Password (Optional)</label>
-                    <input
-                      type="password"
-                      placeholder="Leave blank to keep current"
-                      value={editUserForm.password}
-                      onChange={e => setEditUserForm({ ...editUserForm, password: e.target.value })}
-                      className="w-full mt-1 bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Vetting Status</label>
+                    <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">User Status Role</label>
                     <select
                       value={editUserForm.status}
                       onChange={e => setEditUserForm({ ...editUserForm, status: e.target.value as any })}
@@ -3541,6 +3484,89 @@ export default function App() {
                     </button>
                   </div>
                 </form>
+              </div>
+            </div>
+          )}
+
+          {/* ==========================================
+              MODAL: TOP PANEL BACKUP CONFIGURATION & TRIGGER
+              ========================================== */}
+          {showTopBackupModal && (
+            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 animate-fade-in">
+              <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl w-full max-w-md p-6 relative shadow-2xl text-left select-none animate-scale-up">
+                <button 
+                  onClick={() => setShowTopBackupModal(false)}
+                  className="absolute top-4 right-4 text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer bg-transparent border-0"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+
+                <div className="flex items-center gap-3 pb-3 border-b border-[var(--border-color)]">
+                  <div className="p-2.5 bg-emerald-500/10 rounded-xl text-emerald-400 border border-emerald-500/20">
+                    <Database className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-base text-[var(--text-primary)] font-display">Data Backup Control Center</h3>
+                    <p className="text-[var(--text-secondary)] text-[10px]">Configure policies and compile real-time DB snapshots</p>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex flex-col gap-5">
+                  {/* Dynamic Last Backup Info Card */}
+                  <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] p-4 rounded-xl relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-xl" />
+                    <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-wider uppercase block">Computed Latest Snapshot</span>
+                    <p className="text-sm font-bold text-emerald-400 mt-1 font-mono">{getLastBackupTimeText()}</p>
+                    <p className="text-[10px] text-[var(--text-secondary)] mt-1.5 leading-normal">
+                      Snapshots capture tenant structural details, including corporate departments, customized roles, active employees, and system audit trails.
+                    </p>
+                  </div>
+
+                  {/* Auto-backup settings slider/numeric selector */}
+                  <div className="border-t border-[var(--border-color)] pt-4">
+                    <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-2">
+                      Auto-Backup Execution Cycle
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="number"
+                        min="1"
+                        max="90"
+                        value={autoBackupInterval}
+                        onChange={e => setAutoBackupInterval(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-20 bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs font-mono text-[var(--text-primary)] focus:outline-none"
+                      />
+                      <span className="text-xs text-[var(--text-secondary)]">Days Interval</span>
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateAutoBackupInterval(autoBackupInterval)}
+                        className="ml-auto px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-xs cursor-pointer transition-colors"
+                      >
+                        Apply Cycle
+                      </button>
+                    </div>
+                    <span className="text-[9px] text-[var(--text-muted)] block mt-1">
+                      System automatically executes an isolated backend snapshot export every <span className="font-bold text-indigo-400">{autoBackupInterval}</span> days.
+                    </span>
+                  </div>
+
+                  {/* Manual instant snapshot trigger */}
+                  <div className="border-t border-[var(--border-color)] pt-4 flex flex-col gap-3">
+                    <span className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">
+                      Immediate Export Gateway
+                    </span>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await handleTriggerBackup();
+                        setShowTopBackupModal(false);
+                      }}
+                      className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs cursor-pointer transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/10 active:scale-[0.99]"
+                    >
+                      <Plus className="w-4 h-4" /> Trigger Database Snapshot Now
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}

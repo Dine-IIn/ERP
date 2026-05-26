@@ -230,7 +230,10 @@ import {
   updateDepartment,
   deleteDepartment,
   updateRolePermissions,
-  deleteRoleForAdmin
+  deleteRoleForAdmin,
+  requestBackupOTP,
+  deleteBackup,
+  restoreBackup
 } from './controllers/admin_endpoints';
 
 // 6. General Administration Module Routes (Company Profile & Features Only)
@@ -245,6 +248,9 @@ app.get('/api/admin/backups', authenticateToken, listBackups);
 app.post('/api/admin/backups', authenticateToken, triggerBackup);
 app.patch('/api/admin/backups/settings', authenticateToken, updateBackupSettings);
 app.get('/api/admin/backups/download/:filename', authenticateToken, downloadBackup);
+app.post('/api/admin/backups/request-otp', authenticateToken, requestBackupOTP);
+app.delete('/api/admin/backups/:filename', authenticateToken, deleteBackup);
+app.post('/api/admin/backups/reset', authenticateToken, restoreBackup);
 
 app.post('/api/admin/users', authenticateToken, createUserForAdmin);
 app.patch('/api/admin/users/:userId', authenticateToken, updateUserForAdmin);

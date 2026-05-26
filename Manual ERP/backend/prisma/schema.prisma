@@ -25,6 +25,7 @@ model Company {
   fileSizeLimit       Int?    @default(50)
   backupAccess        Boolean @default(false)
   backupRetentionDays Int?    @default(60)
+  autoBackupInterval  Int?    @default(2)
   companyEmail        String?
   companyPhone        String?
   alternatePhone      String?

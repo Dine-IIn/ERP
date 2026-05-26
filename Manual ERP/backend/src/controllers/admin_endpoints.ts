@@ -1,10 +1,13 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import prisma from '../services/db';
-import { hashPassword } from '../utils';
+import { hashPassword, sendSimulatedOTP, verifySimulatedOTP } from '../utils';
 import { logAudit } from '../utils/audit';
 import fs from 'fs';
 import path from 'path';
+
+// Memory store for backup 2FA OTPs
+export const backupOtps = new Map<string, { code: string, expires: number }>();
 
 // ==========================================
 // 1. AUDIT LOGS TRAIL API
@@ -98,8 +101,9 @@ export async function triggerBackup(req: AuthenticatedRequest, res: Response) {
       mobileNo: u.mobileNo,
       email: u.email,
       status: u.status,
-      role: u.role?.name || null,
-      department: u.department?.name || null,
+      passwordHash: u.passwordHash, // Backup password hash for complete structural recoveries
+      roleId: u.roleId,
+      departmentId: u.departmentId,
       createdAt: u.createdAt
     }));
 
@@ -160,9 +164,24 @@ export async function triggerBackup(req: AuthenticatedRequest, res: Response) {
 export async function downloadBackup(req: AuthenticatedRequest, res: Response) {
   try {
     const companyId = req.user?.companyId;
-    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+    const userId = req.user?.userId;
+    if (!companyId || !userId) return res.status(401).json({ error: "Unauthorized" });
 
     const { filename } = req.params;
+    const { otpCode } = req.query;
+
+    const userDb = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+    if (!userDb) return res.status(404).json({ error: "User profile not found" });
+    const target = userDb.email || userDb.mobileNo;
+    if (!target) return res.status(400).json({ error: "No registered email or mobile number found on your profile to verify" });
+
+    const isOtpValid = await verifySimulatedOTP(target, String(otpCode));
+    if (!isOtpValid) {
+      return res.status(401).json({ error: "Invalid or expired 2FA OTP code" });
+    }
+
     if (!filename || !filename.endsWith('.json') || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
       return res.status(400).json({ error: "Invalid backup filename format" });
     }
@@ -183,14 +202,25 @@ export async function updateBackupSettings(req: AuthenticatedRequest, res: Respo
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { backupRetentionDays } = req.body;
-    if (backupRetentionDays === undefined || isNaN(parseInt(backupRetentionDays))) {
-      return res.status(400).json({ error: "backupRetentionDays is required and must be a valid integer" });
+    const { backupRetentionDays, autoBackupInterval } = req.body;
+    
+    const data: any = {};
+    if (backupRetentionDays !== undefined) {
+      if (isNaN(parseInt(backupRetentionDays))) {
+        return res.status(400).json({ error: "backupRetentionDays must be an integer" });
+      }
+      data.backupRetentionDays = parseInt(backupRetentionDays);
+    }
+    if (autoBackupInterval !== undefined) {
+      if (isNaN(parseInt(autoBackupInterval))) {
+        return res.status(400).json({ error: "autoBackupInterval must be an integer" });
+      }
+      data.autoBackupInterval = parseInt(autoBackupInterval);
     }
 
     const updatedCompany = await prisma.company.update({
       where: { id: companyId },
-      data: { backupRetentionDays: parseInt(backupRetentionDays) }
+      data
     });
 
     await logAudit(
@@ -200,14 +230,15 @@ export async function updateBackupSettings(req: AuthenticatedRequest, res: Respo
       'backup',
       'UPDATE_SETTINGS',
       null,
-      { backupRetentionDays },
+      data,
       req.ip,
       req.headers['user-agent']
     );
 
     return res.json({
       message: "Backup policy settings updated successfully",
-      backupRetentionDays: updatedCompany.backupRetentionDays
+      backupRetentionDays: updatedCompany.backupRetentionDays,
+      autoBackupInterval: updatedCompany.autoBackupInterval
     });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
@@ -753,5 +784,287 @@ export async function deleteRoleForAdmin(req: AuthenticatedRequest, res: Respons
     return res.json({ message: `Role '${role.name}' has been permanently deleted.` });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
+  }
+}
+
+// ==========================================
+// 6. BACKUP SECURE 2FA & ROLLBACK API
+// ==========================================
+
+export async function requestBackupOTP(req: AuthenticatedRequest, res: Response) {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    // Fetch user details including company details
+    const userDb = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { company: true }
+    });
+
+    if (!userDb) {
+      return res.status(404).json({ error: "User profile not found" });
+    }
+
+    const target = userDb.email || userDb.mobileNo;
+    if (!target) {
+      return res.status(400).json({ error: "No registered email or mobile number found on your profile to dispatch OTP" });
+    }
+
+    const isEmail = target.includes('@');
+    
+    // Dispatch real-time OTP via Email/Twilio SMS
+    const code = await sendSimulatedOTP(target, userDb.company.companyCode);
+
+    return res.json({
+      message: `Secure 2FA verification OTP sent successfully to your registered ${isEmail ? 'email' : 'mobile number'}!`,
+      target,
+      otpCode: process.env.NODE_ENV !== 'production' ? code : undefined
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function deleteBackup(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    const userId = req.user?.userId;
+    if (!companyId || !userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const otpHeader = req.headers['x-otp-code'] as string;
+    
+    const userDb = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+    if (!userDb) return res.status(404).json({ error: "User profile not found" });
+    const target = userDb.email || userDb.mobileNo;
+    if (!target) return res.status(400).json({ error: "No registered email or mobile number found on your profile to verify" });
+
+    const isOtpValid = await verifySimulatedOTP(target, String(otpHeader));
+    if (!isOtpValid) {
+      return res.status(401).json({ error: "Invalid or expired 2FA OTP code" });
+    }
+
+    const { filename } = req.params;
+    if (!filename || !filename.endsWith('.json') || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      return res.status(400).json({ error: "Invalid backup filename format" });
+    }
+
+    const filePath = path.join(BACKUPS_ROOT, companyId, filename);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: "Backup file snapshot not found" });
+    }
+
+    fs.unlinkSync(filePath);
+
+    await logAudit(
+      companyId,
+      req.user?.userId || null,
+      req.user?.username || null,
+      'backup',
+      'DELETE',
+      { filename },
+      null,
+      req.ip,
+      req.headers['user-agent']
+    );
+
+    return res.json({ message: "Backup snapshot deleted successfully" });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function restoreBackup(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    const userId = req.user?.userId;
+    const username = req.user?.username;
+    if (!companyId || !userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { filename, otpCode } = req.body;
+    if (!otpCode) {
+      return res.status(400).json({ error: "2FA OTP code is required for database restores" });
+    }
+
+    const userDb = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+    if (!userDb) return res.status(404).json({ error: "User profile not found" });
+    const target = userDb.email || userDb.mobileNo;
+    if (!target) return res.status(400).json({ error: "No registered email or mobile number found on your profile to verify" });
+
+    const isOtpValid = await verifySimulatedOTP(target, String(otpCode));
+    if (!isOtpValid) {
+      return res.status(401).json({ error: "Invalid or expired 2FA OTP code" });
+    }
+
+    if (!filename || !filename.endsWith('.json') || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      return res.status(400).json({ error: "Invalid backup filename format" });
+    }
+
+    const filePath = path.join(BACKUPS_ROOT, companyId, filename);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: "Backup snapshot file not found" });
+    }
+
+    const fileContent = fs.readFileSync(filePath, 'utf-8');
+    const snapshot = JSON.parse(fileContent);
+
+    // Validate that the company code matches
+    const company = await prisma.company.findUnique({ where: { id: companyId } });
+    if (!company || snapshot.companyCode !== company.companyCode) {
+      return res.status(400).json({ error: "Snapshot company code mismatch. Restore aborted." });
+    }
+
+    // Execute secure database transaction to rollback data
+    await prisma.$transaction(async (tx) => {
+      // 1. Wipe departments
+      await tx.department.deleteMany({ where: { companyId } });
+
+      // 2. Wipe audit logs
+      await tx.auditLog.deleteMany({ where: { companyId } });
+
+      // 3. Wipe users other than the active restoring admin user itself (to keep session active)
+      await tx.userSession.deleteMany({
+        where: {
+          user: { companyId },
+          token: { not: req.headers['authorization']?.split(' ')[1] }
+        }
+      });
+      await tx.user.deleteMany({
+        where: {
+          companyId,
+          id: { not: userId }
+        }
+      });
+
+      // 4. Wipe custom roles other than 'Admin' role
+      await tx.role.deleteMany({
+        where: {
+          companyId,
+          name: { not: 'Admin' }
+        }
+      });
+
+      // 5. Restore roles
+      const snapshotRoles = snapshot.data.roles || [];
+      for (const r of snapshotRoles) {
+        if (r.name === 'Admin') {
+          // Update the existing master Admin role permissions in-place
+          await tx.role.updateMany({
+            where: { companyId, name: 'Admin' },
+            data: { permissions: r.permissions }
+          });
+        } else {
+          await tx.role.create({
+            data: {
+              id: r.id,
+              companyId,
+              name: r.name,
+              permissions: r.permissions,
+              createdAt: new Date(r.createdAt),
+              updatedAt: new Date(r.updatedAt || r.createdAt)
+            }
+          });
+        }
+      }
+
+      // 6. Restore departments
+      const snapshotDepts = snapshot.data.departments || [];
+      for (const d of snapshotDepts) {
+        await tx.department.create({
+          data: {
+            id: d.id,
+            companyId,
+            name: d.name,
+            description: d.description,
+            features: d.features,
+            managerId: d.managerId || null,
+            createdAt: new Date(d.createdAt),
+            updatedAt: new Date(d.updatedAt || d.createdAt)
+          }
+        });
+      }
+
+      // 7. Restore users
+      const snapshotUsers = snapshot.data.users || [];
+      for (const u of snapshotUsers) {
+        if (u.id === userId) {
+          // Update the active restoring admin user's role and department relation in-place
+          const adminRole = await tx.role.findFirst({ where: { companyId, name: 'Admin' } });
+          await tx.user.update({
+            where: { id: userId },
+            data: {
+              roleId: adminRole?.id || u.roleId || undefined,
+              departmentId: u.departmentId || null
+            }
+          });
+        } else {
+          // Find matching role in restored DB or fall back to Admin
+          let matchingRoleId = u.roleId;
+          if (matchingRoleId) {
+            const roleExists = await tx.role.findUnique({ where: { id: matchingRoleId } });
+            if (!roleExists) {
+              const fallback = await tx.role.findFirst({ where: { companyId, name: 'Admin' } });
+              matchingRoleId = fallback?.id || '';
+            }
+          }
+
+          await tx.user.create({
+            data: {
+              id: u.id,
+              companyId: companyId,
+              username: u.username,
+              mobileNo: u.mobileNo,
+              email: u.email,
+              passwordHash: u.passwordHash || '$2a$10$fallbackpasswordhashvaluehere',
+              status: u.status || 'ACTIVE',
+              roleId: matchingRoleId || undefined,
+              departmentId: u.departmentId || null,
+              createdAt: new Date(u.createdAt)
+            }
+          });
+        }
+      }
+
+      // 8. Restore audit logs
+      const snapshotLogs = snapshot.data.auditLogs || [];
+      for (const log of snapshotLogs) {
+        await tx.auditLog.create({
+          data: {
+            id: log.id,
+            companyId,
+            userId: log.userId,
+            username: log.username,
+            moduleName: log.moduleName,
+            actionType: log.actionType,
+            oldValue: log.oldValue,
+            newValue: log.newValue,
+            ipAddress: log.ipAddress,
+            deviceInfo: log.deviceInfo || log.userAgent || null,
+            timestamp: new Date(log.timestamp)
+          }
+        });
+      }
+    });
+
+    await logAudit(
+      companyId,
+      userId || null,
+      username || null,
+      'backup',
+      'RESTORE',
+      null,
+      { filename },
+      req.ip,
+      req.headers['user-agent'] as string
+    );
+
+    return res.json({ message: "Database successfully rolled back and restored to selected snapshot." });
+  } catch (error: any) {
+    console.error("Rollback restore error:", error);
+    return res.status(500).json({ error: error.message || "Rollback failed" });
   }
 }
