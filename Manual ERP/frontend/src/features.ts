@@ -40,6 +40,18 @@ export const MASTER_FEATURES_HIERARCHY = [
       { key: 'MASTER_VENDOR', name: 'Vendor / Supplier Master', desc: 'Handle supply registers, GST details, bank parameters, and payments' },
       { key: 'MASTER_PRODUCT', name: 'Product / Item Master', desc: 'Configure inventory catalog, variants, pricing, and HSN codes' }
     ]
+  },
+  {
+    key: 'SALES_DATA',
+    name: 'SALES MANAGEMENT',
+    desc: 'Consolidated Sales, Invoicing and Dispatching Hub',
+    children: [
+      { key: 'SALES_ORDER', name: 'Sales Orders', desc: 'Manage customer orders, quantities, expected delivery dates and discounts' },
+      { key: 'SALES_PROFORMA', name: 'Proforma Invoices', desc: 'Generate, edit, download and email proforma invoices' },
+      { key: 'SALES_INVOICE', name: 'Sales Invoices', desc: 'Manage sales invoices, track collections, and email customers' },
+      { key: 'SALES_CHALLAN', name: 'Delivery Challans', desc: 'Generate transit challans and declarations' },
+      { key: 'SALES_DISPATCH', name: 'Dispatch Management', desc: 'Coordinate shipments, carrier tracking and vehicles details' }
+    ]
   }
 ];
 

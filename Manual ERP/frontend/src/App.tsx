@@ -14,11 +14,17 @@ import EmployeeMaster from './components/master_data_management/EmployeeMaster';
 import CustomerMaster from './components/master_data_management/CustomerMaster';
 import VendorMaster from './components/master_data_management/VendorMaster';
 import ProductMaster from './components/master_data_management/ProductMaster';
+import SalesOrder from './components/sales/SalesOrder';
+import ProformaInvoice from './components/sales/ProformaInvoice';
+import SalesInvoice from './components/sales/SalesInvoice';
+import DeliveryChallan from './components/sales/DeliveryChallan';
+import DispatchManagement from './components/sales/DispatchManagement';
 import {
   Wrench,
   Factory,
   ShoppingCart,
   Box,
+  FileText,
   Shield,
   Users,
   Bell,
@@ -155,9 +161,29 @@ const getFeatureIcon = (key: string) => {
       return <Truck className="w-4 h-4" style={{ flexShrink: 0 }} />;
     case 'MASTER_PRODUCT':
       return <Package className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'SALES_DATA':
+    case 'SALES_ORDER':
+      return <ShoppingCart className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'SALES_PROFORMA':
+      return <FileText className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'SALES_INVOICE':
+      return <Receipt className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'SALES_CHALLAN':
+    case 'SALES_DISPATCH':
+      return <Truck className="w-4 h-4" style={{ flexShrink: 0 }} />;
     default:
       return <Layers className="w-4 h-4" style={{ flexShrink: 0 }} />;
   }
+};
+
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: '$',
+  INR: '₹',
+  EUR: '€',
+  GBP: '£',
+  AED: 'د.إ',
+  CAD: 'C$',
+  AUD: 'A$'
 };
 
 export default function App() {
@@ -166,6 +192,7 @@ export default function App() {
   const [user, setUser] = useState<UserProfile | null>(
     localStorage.getItem('erp_user') ? JSON.parse(localStorage.getItem('erp_user')!) : null
   );
+  
   const [view, setView] = useState<'login' | 'signup' | 'super_admin' | 'company_admin' | 'user_workspace'>('login');
   
   // Stateful Dark/Light theme manager
@@ -180,6 +207,7 @@ export default function App() {
     hr: true,
     finance: true,
     master_data: true,
+    sales_data: true,
     admin: true,
     alerts: true
   });
@@ -237,6 +265,13 @@ export default function App() {
   const [productsList, setProductsList] = useState<any[]>([]);
   const [categoriesList, setCategoriesList] = useState<any[]>([]);
   const [brandsList, setBrandsList] = useState<any[]>([]);
+
+  // --- SALES MANAGEMENT STATES ---
+  const [salesOrdersList, setSalesOrdersList] = useState<any[]>([]);
+  const [proformaInvoicesList, setProformaInvoicesList] = useState<any[]>([]);
+  const [salesInvoicesList, setSalesInvoicesList] = useState<any[]>([]);
+  const [deliveryChallansList, setDeliveryChallansList] = useState<any[]>([]);
+  const [dispatchesList, setDispatchesList] = useState<any[]>([]);
 
   // --- WORKSPACE SUB-TAB STATES ---
   const [crmSubTab, setCrmSubTab] = useState<'leads' | 'customer_logs'>('leads');
@@ -386,8 +421,12 @@ export default function App() {
     smtpHost: '',
     smtpPort: '',
     smtpUser: '',
-    smtpPassword: ''
+    smtpPassword: '',
+    currencyId: 'USD'
   });
+
+  // Compute active currency symbol globally
+  const currencySymbol = CURRENCY_SYMBOLS[adminProfileForm?.currencyId || 'USD'] || '$';
 
   const [auditTrailLogs, setAuditTrailLogs] = useState<any[]>([]);
   const [auditTotal, setAuditTotal] = useState(0);
@@ -1216,6 +1255,7 @@ export default function App() {
       setCompanyFeatures(dashboardData.features);
       
       fetchMasterData();
+      fetchSalesData();
     } catch (e) {}
   };
 
@@ -1279,6 +1319,7 @@ export default function App() {
       setCompanyRoles(dashboardData.roles || []);
       
       fetchMasterData();
+      fetchSalesData();
     } catch (e) {}
   };
 
@@ -1300,6 +1341,27 @@ export default function App() {
       setBrandsList(brandsRes.brands || []);
     } catch (e) {
       console.error("Error fetching master data:", e);
+    }
+  };
+
+  const fetchSalesData = async () => {
+    try {
+      const ordersRes = await apiRequest('/api/sales/orders', 'GET');
+      setSalesOrdersList(ordersRes.orders || []);
+
+      const proformasRes = await apiRequest('/api/sales/proforma', 'GET');
+      setProformaInvoicesList(proformasRes.invoices || []);
+
+      const invoicesRes = await apiRequest('/api/sales/invoices', 'GET');
+      setSalesInvoicesList(invoicesRes.invoices || []);
+
+      const challansRes = await apiRequest('/api/sales/challans', 'GET');
+      setDeliveryChallansList(challansRes.challans || []);
+
+      const dispatchesRes = await apiRequest('/api/sales/dispatches', 'GET');
+      setDispatchesList(dispatchesRes.dispatches || []);
+    } catch (e) {
+      console.error("Error fetching sales data:", e);
     }
   };
 
@@ -1381,6 +1443,113 @@ export default function App() {
     fetchMasterData();
   };
 
+  // --- SALES ORDER OPERATIONS ---
+  const handleCreateSalesOrder = async (order: any) => {
+    const res = await apiRequest('/api/sales/orders', 'POST', order);
+    setSuccessMsg(res.message || "Sales Order created successfully");
+    fetchSalesData();
+  };
+
+  const handleUpdateSalesOrder = async (id: string, order: any) => {
+    const res = await apiRequest(`/api/sales/orders/${id}`, 'PATCH', order);
+    setSuccessMsg(res.message || "Sales Order updated successfully");
+    fetchSalesData();
+  };
+
+  const handleDeleteSalesOrder = async (id: string) => {
+    const res = await apiRequest(`/api/sales/orders/${id}`, 'DELETE');
+    setSuccessMsg(res.message || "Sales Order cancelled and deleted successfully");
+    fetchSalesData();
+  };
+
+  // --- PROFORMA INVOICE OPERATIONS ---
+  const handleCreateProformaInvoice = async (inv: any) => {
+    const res = await apiRequest('/api/sales/proforma', 'POST', inv);
+    setSuccessMsg(res.message || "Proforma Invoice generated successfully");
+    fetchSalesData();
+  };
+
+  const handleUpdateProformaInvoice = async (id: string, inv: any) => {
+    const res = await apiRequest(`/api/sales/proforma/${id}`, 'PATCH', inv);
+    setSuccessMsg(res.message || "Proforma Invoice updated successfully");
+    fetchSalesData();
+  };
+
+  const handleDeleteProformaInvoice = async (id: string) => {
+    const res = await apiRequest(`/api/sales/proforma/${id}`, 'DELETE');
+    setSuccessMsg(res.message || "Proforma Invoice deleted");
+    fetchSalesData();
+  };
+
+  const handleEmailProformaInvoice = async (id: string) => {
+    await apiRequest(`/api/sales/proforma/${id}/email`, 'POST');
+  };
+
+  // --- SALES INVOICE OPERATIONS ---
+  const handleCreateSalesInvoice = async (inv: any) => {
+    const res = await apiRequest('/api/sales/invoices', 'POST', inv);
+    setSuccessMsg(res.message || "Sales Invoice generated successfully");
+    fetchSalesData();
+  };
+
+  const handleUpdateSalesInvoice = async (id: string, inv: any) => {
+    const res = await apiRequest(`/api/sales/invoices/${id}`, 'PATCH', inv);
+    setSuccessMsg(res.message || "Sales Invoice updated successfully");
+    fetchSalesData();
+  };
+
+  const handleDeleteSalesInvoice = async (id: string) => {
+    const res = await apiRequest(`/api/sales/invoices/${id}`, 'DELETE');
+    setSuccessMsg(res.message || "Sales Invoice deleted successfully");
+    fetchSalesData();
+  };
+
+  const handleEmailSalesInvoice = async (id: string) => {
+    await apiRequest(`/api/sales/invoices/${id}/email`, 'POST');
+  };
+
+  // --- DELIVERY CHALLAN OPERATIONS ---
+  const handleCreateDeliveryChallan = async (dc: any) => {
+    const res = await apiRequest('/api/sales/challans', 'POST', dc);
+    setSuccessMsg(res.message || "Delivery Challan issued successfully");
+    fetchSalesData();
+  };
+
+  const handleUpdateDeliveryChallan = async (id: string, dc: any) => {
+    const res = await apiRequest(`/api/sales/challans/${id}`, 'PATCH', dc);
+    setSuccessMsg(res.message || "Delivery Challan updated successfully");
+    fetchSalesData();
+  };
+
+  const handleDeleteDeliveryChallan = async (id: string) => {
+    const res = await apiRequest(`/api/sales/challans/${id}`, 'DELETE');
+    setSuccessMsg(res.message || "Delivery Challan deleted successfully");
+    fetchSalesData();
+  };
+
+  const handleEmailDeliveryChallan = async (id: string) => {
+    await apiRequest(`/api/sales/challans/${id}/email`, 'POST');
+  };
+
+  // --- DISPATCH OPERATIONS ---
+  const handleCreateDispatch = async (disp: any) => {
+    const res = await apiRequest('/api/sales/dispatches', 'POST', disp);
+    setSuccessMsg(res.message || "Dispatch record created successfully");
+    fetchSalesData();
+  };
+
+  const handleUpdateDispatch = async (id: string, disp: any) => {
+    const res = await apiRequest(`/api/sales/dispatches/${id}`, 'PATCH', disp);
+    setSuccessMsg(res.message || "Dispatch details updated successfully");
+    fetchSalesData();
+  };
+
+  const handleDeleteDispatch = async (id: string) => {
+    const res = await apiRequest(`/api/sales/dispatches/${id}`, 'DELETE');
+    setSuccessMsg(res.message || "Dispatch shipment record permanently deleted");
+    fetchSalesData();
+  };
+
   // --- CORE SYSTEM DATA FETCHERS FOR ADMIN CONSOLE ---
 
   const fetchDepartments = async () => {
@@ -1440,7 +1609,8 @@ export default function App() {
           smtpHost: profileRes.company.smtpHost || '',
           smtpPort: profileRes.company.smtpPort ? String(profileRes.company.smtpPort) : '',
           smtpUser: profileRes.company.smtpUser || '',
-          smtpPassword: profileRes.company.smtpPassword || ''
+          smtpPassword: profileRes.company.smtpPassword || '',
+          currencyId: profileRes.company.currencyId || 'USD'
         });
          setBackupRetentionDays(profileRes.company.backupRetentionDays || 60);
         setAutoBackupInterval(profileRes.company.autoBackupInterval || 2);
@@ -2562,6 +2732,7 @@ export default function App() {
                         onCreateCustomer={handleCreateCustomer}
                         onUpdateCustomer={handleUpdateCustomer}
                         onDeleteCustomer={handleDeleteCustomer}
+                        currencySymbol={currencySymbol}
                       />
                     )}
 
@@ -2586,6 +2757,80 @@ export default function App() {
                         onDeleteCategory={handleDeleteCategory}
                         onCreateBrand={handleCreateBrand}
                         onDeleteBrand={handleDeleteBrand}
+                        currencySymbol={currencySymbol}
+                      />
+                    )}
+
+                  </div>
+                </div>
+              )}
+
+              {/* ==========================================
+                  SALES DATA WORKSPACE
+                  ========================================== */}
+              {activeWorkspaceModule === 'sales_data' && user?.role === 'Admin' && (
+                <div className="max-w-6xl mx-auto animate-fade-in text-left select-none">
+                  <div className="w-full bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl p-6 shadow-sm min-h-[480px]">
+                    
+                    {activeWorkspaceSubModule === 'SALES_ORDER' && (
+                      <SalesOrder
+                        orders={salesOrdersList}
+                        customers={customersList}
+                        products={productsList}
+                        onCreateOrder={handleCreateSalesOrder}
+                        onUpdateOrder={handleUpdateSalesOrder}
+                        onDeleteOrder={handleDeleteSalesOrder}
+                        currencySymbol={currencySymbol}
+                      />
+                    )}
+
+                    {activeWorkspaceSubModule === 'SALES_PROFORMA' && (
+                      <ProformaInvoice
+                        invoices={proformaInvoicesList}
+                        customers={customersList}
+                        products={productsList}
+                        onCreateInvoice={handleCreateProformaInvoice}
+                        onUpdateInvoice={handleUpdateProformaInvoice}
+                        onDeleteInvoice={handleDeleteProformaInvoice}
+                        onEmailInvoice={handleEmailProformaInvoice}
+                        currencySymbol={currencySymbol}
+                      />
+                    )}
+
+                    {activeWorkspaceSubModule === 'SALES_INVOICE' && (
+                      <SalesInvoice
+                        invoices={salesInvoicesList}
+                        customers={customersList}
+                        products={productsList}
+                        onCreateInvoice={handleCreateSalesInvoice}
+                        onUpdateInvoice={handleUpdateSalesInvoice}
+                        onDeleteInvoice={handleDeleteSalesInvoice}
+                        onEmailInvoice={handleEmailSalesInvoice}
+                        currencySymbol={currencySymbol}
+                      />
+                    )}
+
+                    {activeWorkspaceSubModule === 'SALES_CHALLAN' && (
+                      <DeliveryChallan
+                        challans={deliveryChallansList}
+                        customers={customersList}
+                        products={productsList}
+                        onCreateChallan={handleCreateDeliveryChallan}
+                        onUpdateChallan={handleUpdateDeliveryChallan}
+                        onDeleteChallan={handleDeleteDeliveryChallan}
+                        onEmailChallan={handleEmailDeliveryChallan}
+                        currencySymbol={currencySymbol}
+                      />
+                    )}
+
+                    {activeWorkspaceSubModule === 'SALES_DISPATCH' && (
+                      <DispatchManagement
+                        dispatches={dispatchesList}
+                        orders={salesOrdersList}
+                        onCreateDispatch={handleCreateDispatch}
+                        onUpdateDispatch={handleUpdateDispatch}
+                        onDeleteDispatch={handleDeleteDispatch}
+                        currencySymbol={currencySymbol}
                       />
                     )}
 

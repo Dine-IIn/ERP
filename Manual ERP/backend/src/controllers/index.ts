@@ -40,7 +40,14 @@ export const HIERARCHICAL_FEATURES = [
   { key: "MASTER_EMPLOYEE", name: "Employee Master", description: "Manage hierarchies, timing shifts, and secure documents" },
   { key: "MASTER_CUSTOMER", name: "Customer Master", description: "Administer sales accounts, billing destinations, and credit ratings" },
   { key: "MASTER_VENDOR", name: "Vendor / Supplier Master", description: "Handle supply registers, GST details, bank parameters, and payments" },
-  { key: "MASTER_PRODUCT", name: "Product / Item Master", description: "Configure inventory catalog, variants, pricing, and HSN codes" }
+  { key: "MASTER_PRODUCT", name: "Product / Item Master", description: "Configure inventory catalog, variants, pricing, and HSN codes" },
+
+  { key: "SALES_DATA", name: "SALES MANAGEMENT", description: "Consolidated Sales, Invoicing and Dispatching Hub" },
+  { key: "SALES_ORDER", name: "Sales Orders Hub", description: "Manage customer orders, quantities, expected delivery dates and discounts" },
+  { key: "SALES_PROFORMA", name: "Proforma Invoices", description: "Generate, edit, download and email proforma invoices" },
+  { key: "SALES_INVOICE", name: "Sales Invoices", description: "Manage sales invoices, track collections, and email customers" },
+  { key: "SALES_CHALLAN", name: "Delivery Challans", description: "Generate transit challans and declarations" },
+  { key: "SALES_DISPATCH", name: "Dispatch Management", description: "Coordinate shipments, carrier tracking and vehicles details" }
 ];
 
 // Global reference to the WebSockets emitter

@@ -18,6 +18,7 @@ interface ProductMasterProps {
   onDeleteCategory: (id: string) => Promise<void>;
   onCreateBrand: (name: string) => Promise<void>;
   onDeleteBrand: (id: string) => Promise<void>;
+  currencySymbol?: string;
 }
 
 export default function ProductMaster({
@@ -31,6 +32,7 @@ export default function ProductMaster({
   onDeleteCategory,
   onCreateBrand,
   onDeleteBrand,
+  currencySymbol = '$',
 }: ProductMasterProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -331,7 +333,7 @@ export default function ProductMaster({
                 {/* UOM & Base Pricing */}
                 <td className="p-3 shrink-0">
                   <span className="text-[var(--text-primary)] font-bold flex items-center gap-0.5 font-mono">
-                    <DollarSign className="w-3.5 h-3.5 text-indigo-400" /> {prod.pricing ? prod.pricing.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
+                    <span className="text-indigo-400 font-bold mr-0.5">{currencySymbol}</span> {prod.pricing ? prod.pricing.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
                   </span>
                   <span className="text-[9px] text-[var(--text-secondary)] block mt-0.5 font-sans font-medium uppercase">
                     Metric: {prod.uom || 'PCS'}
@@ -356,7 +358,7 @@ export default function ProductMaster({
                         <div key={v.id} className="flex items-center gap-1.5 text-[9px] text-[var(--text-secondary)] font-mono">
                           <span className="font-bold text-[var(--text-primary)]">{v.name}</span>
                           {v.sku && <span className="text-[var(--text-muted)]">({v.sku})</span>}
-                          <span className="text-indigo-400 font-semibold ml-auto">+${v.priceAddon || 0}</span>
+                          <span className="text-indigo-400 font-semibold ml-auto">+{currencySymbol}{v.priceAddon || 0}</span>
                         </div>
                       ))}
                     </div>
@@ -498,7 +500,7 @@ export default function ProductMaster({
 
               {/* Pricing amount & HSN compliance */}
               <div>
-                <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Base Price per unit ($)</label>
+                <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Base Price per unit ({currencySymbol})</label>
                 <input
                   type="number"
                   step="0.01"
@@ -601,7 +603,7 @@ export default function ProductMaster({
                       </div>
                       <div className="w-full md:w-3/12 flex items-end gap-2">
                         <div className="flex-1">
-                          <label className="text-[7.5px] font-bold text-[var(--text-secondary)] block mb-0.5 uppercase">Price Addon ($)</label>
+                          <label className="text-[7.5px] font-bold text-[var(--text-secondary)] block mb-0.5 uppercase">Price Addon ({currencySymbol})</label>
                           <input
                             type="number"
                             step="0.01"

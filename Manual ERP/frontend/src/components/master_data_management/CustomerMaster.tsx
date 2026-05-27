@@ -6,6 +6,7 @@ interface CustomerMasterProps {
   onCreateCustomer: (customer: any) => Promise<void>;
   onUpdateCustomer: (id: string, customer: any) => Promise<void>;
   onDeleteCustomer: (id: string) => Promise<void>;
+  currencySymbol?: string;
 }
 
 export default function CustomerMaster({
@@ -13,6 +14,7 @@ export default function CustomerMaster({
   onCreateCustomer,
   onUpdateCustomer,
   onDeleteCustomer,
+  currencySymbol = '$',
 }: CustomerMasterProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -29,7 +31,8 @@ export default function CustomerMaster({
     billingAddress: '',
     shippingAddress: '',
     creditLimit: '0',
-    creditTime: '0'
+    creditTime: '0',
+    clientClassification: 'NATIONAL'
   });
   
   const [localErr, setLocalErr] = useState<string | null>(null);
@@ -47,7 +50,8 @@ export default function CustomerMaster({
       billingAddress: '',
       shippingAddress: '',
       creditLimit: '0',
-      creditTime: '0'
+      creditTime: '0',
+      clientClassification: 'NATIONAL'
     });
     setIsEditing(false);
     setEditingId(null);
@@ -67,7 +71,8 @@ export default function CustomerMaster({
       billingAddress: cust.billingAddress || '',
       shippingAddress: cust.shippingAddress || '',
       creditLimit: String(cust.creditLimit || 0),
-      creditTime: String(cust.creditTime || 0)
+      creditTime: String(cust.creditTime || 0),
+      clientClassification: cust.clientClassification || 'NATIONAL'
     });
     setIsEditing(true);
     setEditingId(cust.id);
@@ -178,6 +183,11 @@ export default function CustomerMaster({
                   }`}>
                     {cust.customerType}
                   </span>
+                  <span className={`px-2 py-0.5 rounded text-[8px] font-bold tracking-wider inline-block uppercase ml-1.5 ${
+                    cust.clientClassification === 'INTERNATIONAL' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-slate-500/10 text-slate-400 border border-slate-500/20'
+                  }`}>
+                    {cust.clientClassification || 'NATIONAL'}
+                  </span>
                   {cust.customerGroup && (
                     <span className="text-[10px] text-[var(--text-secondary)] block mt-1 font-mono uppercase">
                       Group: {cust.customerGroup}
@@ -190,7 +200,7 @@ export default function CustomerMaster({
                 </td>
                 <td className="p-3 shrink-0">
                   <span className="text-[var(--text-primary)] font-bold flex items-center gap-0.5 font-mono">
-                    <DollarSign className="w-3.5 h-3.5 text-indigo-400" /> {cust.creditLimit ? cust.creditLimit.toLocaleString() : '0.00'}
+                    <span className="text-indigo-400 font-bold mr-0.5">{currencySymbol}</span> {cust.creditLimit ? cust.creditLimit.toLocaleString() : '0.00'}
                   </span>
                   <span className="text-[10px] text-[var(--text-secondary)] flex items-center gap-1 mt-0.5 font-mono">
                     <Clock className="w-3 h-3 text-emerald-400" /> Credit Cycle: {cust.creditTime || 0} Days
@@ -294,6 +304,19 @@ export default function CustomerMaster({
                 </select>
               </div>
 
+              {/* Client Classification Selection */}
+              <div>
+                <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Billing Client Classification</label>
+                <select
+                  value={form.clientClassification}
+                  onChange={e => setForm({ ...form, clientClassification: e.target.value })}
+                  className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none cursor-pointer"
+                >
+                  <option value="NATIONAL">NATIONAL (Domestic Billing)</option>
+                  <option value="INTERNATIONAL">INTERNATIONAL (Cross-Border Billing)</option>
+                </select>
+              </div>
+
               {/* Contact Person */}
               <div>
                 <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Contact Person (Optional)</label>
@@ -348,7 +371,7 @@ export default function CustomerMaster({
                 <span className="text-[9px] font-bold text-indigo-400 tracking-wider uppercase block mb-2">Credit Margin Settings</span>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[8px] font-bold text-[var(--text-secondary)] block mb-1">Credit Limit Amount ($)</label>
+                    <label className="text-[8px] font-bold text-[var(--text-secondary)] block mb-1">Credit Limit Amount ({currencySymbol})</label>
                     <input
                       type="number"
                       min="0"

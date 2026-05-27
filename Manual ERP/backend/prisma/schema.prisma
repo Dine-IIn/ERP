@@ -83,6 +83,11 @@ model Company {
   productCategories ProductCategory[]
   brands            Brand[]
   products          Product[]
+  salesOrders       SalesOrder[]
+  proformaInvoices  ProformaInvoice[]
+  salesInvoices     SalesInvoice[]
+  deliveryChallans  DeliveryChallan[]
+  dispatches        Dispatch[]
 
   @@map("companies")
 }
@@ -298,8 +303,13 @@ model Customer {
   shippingAddress String?
   creditLimit     Float    @default(0.0)
   creditTime      Int      @default(0)
+  clientClassification String?  @default("NATIONAL") // "NATIONAL" or "INTERNATIONAL"
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+  salesOrders     SalesOrder[]
+  proformaInvoices ProformaInvoice[]
+  salesInvoices   SalesInvoice[]
+  deliveryChallans DeliveryChallan[]
 
   @@unique([companyId, name])
   @@map("customers")
@@ -366,6 +376,10 @@ model Product {
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
   variants     ProductVariant[]
+  salesOrderItems      SalesOrderItem[]
+  proformaInvoiceItems ProformaInvoiceItem[]
+  salesInvoiceItems    SalesInvoiceItem[]
+  deliveryChallanItems DeliveryChallanItem[]
 
   @@unique([companyId, name])
   @@map("products")
@@ -381,4 +395,158 @@ model ProductVariant {
   createdAt  DateTime @default(now())
 
   @@map("product_variants")
+}
+
+model SalesOrder {
+  id           String           @id @default(uuid())
+  companyId    String
+  company      Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customerId   String
+  customer     Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  orderNo      String
+  orderDate    DateTime         @default(now())
+  deliveryDate DateTime?
+  discount     Float            @default(0.0)
+  status       String           @default("PENDING") // PENDING, DISPATCHED, COMPLETED, CANCELLED
+  items        SalesOrderItem[]
+  dispatches   Dispatch[]
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@unique([companyId, orderNo])
+  @@map("sales_orders")
+}
+
+model SalesOrderItem {
+  id           String     @id @default(uuid())
+  orderId      String
+  order        SalesOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity     Float
+  price        Float
+  deliveryDate DateTime?
+  discount     Float      @default(0.0)
+
+  @@map("sales_order_items")
+}
+
+model ProformaInvoice {
+  id         String               @id @default(uuid())
+  companyId  String
+  company    Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customerId String
+  customer   Customer             @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  invoiceNo  String
+  date       DateTime             @default(now())
+  dueDate    DateTime?
+  subtotal   Float
+  discount   Float                @default(0.0)
+  tax        Float                @default(0.0)
+  total      Float
+  status     String               @default("DRAFT") // DRAFT, SENT, PAID, CANCELLED
+  items      ProformaInvoiceItem[]
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+
+  @@unique([companyId, invoiceNo])
+  @@map("proforma_invoices")
+}
+
+model ProformaInvoiceItem {
+  id         String          @id @default(uuid())
+  invoiceId  String
+  invoice    ProformaInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity   Float
+  price      Float
+  discount   Float           @default(0.0)
+
+  @@map("proforma_invoice_items")
+}
+
+model SalesInvoice {
+  id         String             @id @default(uuid())
+  companyId  String
+  company    Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customerId String
+  customer   Customer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  invoiceNo  String
+  date       DateTime           @default(now())
+  dueDate    DateTime?
+  subtotal   Float
+  discount   Float              @default(0.0)
+  tax        Float              @default(0.0)
+  total      Float
+  status     String             @default("UNPAID") // UNPAID, PARTIAL, PAID, OVERDUE, CANCELLED
+  items      SalesInvoiceItem[]
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  @@unique([companyId, invoiceNo])
+  @@map("sales_invoices")
+}
+
+model SalesInvoiceItem {
+  id        String       @id @default(uuid())
+  invoiceId String
+  invoice   SalesInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity  Float
+  price     Float
+  discount  Float        @default(0.0)
+
+  @@map("sales_invoice_items")
+}
+
+model DeliveryChallan {
+  id         String                 @id @default(uuid())
+  companyId  String
+  company    Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customerId String
+  customer   Customer               @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  challanNo  String
+  date       DateTime               @default(now())
+  status     String                 @default("ISSUED") // ISSUED, RECEIVED, RETURNED, CANCELLED
+  items      DeliveryChallanItem[]
+  createdAt  DateTime               @default(now())
+  updatedAt  DateTime               @updatedAt
+
+  @@unique([companyId, challanNo])
+  @@map("delivery_challans")
+}
+
+model DeliveryChallanItem {
+  id        String          @id @default(uuid())
+  challanId String
+  challan   DeliveryChallan @relation(fields: [challanId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity  Float
+  price     Float           @default(0.0)
+
+  @@map("delivery_challan_items")
+}
+
+model Dispatch {
+  id             String      @id @default(uuid())
+  companyId      String
+  company        Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  orderId        String
+  order          SalesOrder  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  dispatchNo     String
+  dispatchDate   DateTime    @default(now())
+  carrier        String?
+  trackingNo     String?
+  vehicleNo      String?
+  shippingCost   Float       @default(0.0)
+  status         String      @default("SHIPPED") // SHIPPED, IN_TRANSIT, DELIVERED, RETURNED
+  notes          String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@unique([companyId, dispatchNo])
+  @@map("dispatches")
 }

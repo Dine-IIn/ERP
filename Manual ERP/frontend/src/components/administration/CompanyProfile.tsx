@@ -21,6 +21,7 @@ interface CompanyProfileProps {
     smtpPort: string;
     smtpUser: string;
     smtpPassword: string;
+    currencyId?: string;
   };
   setAdminProfileForm: React.Dispatch<React.SetStateAction<any>>;
   handleUpdateAdminProfileSubmit: (e: React.FormEvent) => Promise<void>;
@@ -93,6 +94,22 @@ export default function CompanyProfile({
               onChange={e => setAdminProfileForm({ ...adminProfileForm, industryType: e.target.value })}
               className="w-full mt-1 bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2.5 px-3 rounded-lg text-xs"
             />
+          </div>
+          <div>
+            <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Preferred Corporate Currency</label>
+            <select
+              value={adminProfileForm.currencyId || 'USD'}
+              onChange={e => setAdminProfileForm({ ...adminProfileForm, currencyId: e.target.value })}
+              className="w-full mt-1 bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2.5 px-3 rounded-lg text-xs cursor-pointer text-[var(--text-primary)]"
+            >
+              <option value="USD">USD ($ - United States Dollar)</option>
+              <option value="INR">INR (₹ - Indian Rupee)</option>
+              <option value="EUR">EUR (€ - Euro)</option>
+              <option value="GBP">GBP (£ - British Pound)</option>
+              <option value="AED">AED (د.إ - UAE Dirham)</option>
+              <option value="CAD">CAD (C$ - Canadian Dollar)</option>
+              <option value="AUD">AUD (A$ - Australian Dollar)</option>
+            </select>
           </div>
           <div>
             <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">GSTIN / PAN Tax Registry</label>

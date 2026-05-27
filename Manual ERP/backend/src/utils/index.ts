@@ -58,7 +58,7 @@ interface SmtpOptions {
   text: string;
 }
 
-function sendSmtpEmail(opts: SmtpOptions): Promise<void> {
+export function sendSmtpEmail(opts: SmtpOptions): Promise<void> {
   return new Promise((resolve, reject) => {
     const socket = opts.secure 
       ? tls.connect(opts.port, opts.host, { rejectUnauthorized: false })
@@ -327,4 +327,47 @@ export async function verifySimulatedOTP(target: string, otpCode: string): Promi
   });
 
   return true;
+}
+
+export async function sendEmailNotification(to: string, subject: string, text: string, companyCode?: string): Promise<void> {
+  let host = process.env.SMTP_HOST;
+  let port = Number(process.env.SMTP_PORT) || 465;
+  let secure = process.env.SMTP_SECURE === 'true' || port === 465;
+  let user = process.env.SMTP_USER;
+  let pass = process.env.SMTP_PASS;
+  let sender = process.env.SMTP_SENDER || user || "noreply@erp.anbindustries.com";
+
+  if (!host && companyCode) {
+    const company = await prisma.company.findUnique({
+      where: { companyCode: companyCode.toUpperCase() }
+    });
+    if (company && company.smtpHost) {
+      host = company.smtpHost;
+      port = company.smtpPort || 465;
+      secure = company.smtpSecure || port === 465;
+      user = company.smtpUser || undefined;
+      pass = company.smtpPassword || undefined;
+      sender = company.smtpSender || user || `noreply@${company.companyCode.toLowerCase()}.com`;
+    }
+  }
+
+  if (!host) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn(`⚠️  [SMTP WARNING] SMTP server not configured. Email to ${to} simulated:\nSubject: ${subject}\nText: ${text}`);
+      return;
+    }
+    throw new Error("SMTP server is not configured in environment variables or Tenant Company profile.");
+  }
+
+  await sendSmtpEmail({
+    host,
+    port,
+    secure,
+    user,
+    pass,
+    from: sender,
+    to,
+    subject,
+    text
+  });
 }

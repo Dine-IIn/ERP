@@ -257,6 +257,32 @@ import {
   deleteProduct
 } from './controllers/master_data';
 
+import {
+  listSalesOrders,
+  createSalesOrder,
+  updateSalesOrder,
+  deleteSalesOrder,
+  listProformaInvoices,
+  createProformaInvoice,
+  updateProformaInvoice,
+  deleteProformaInvoice,
+  sendProformaInvoiceEmail,
+  listSalesInvoices,
+  createSalesInvoice,
+  updateSalesInvoice,
+  deleteSalesInvoice,
+  sendSalesInvoiceEmail,
+  listDeliveryChallans,
+  createDeliveryChallan,
+  updateDeliveryChallan,
+  deleteDeliveryChallan,
+  sendDeliveryChallanEmail,
+  listDispatches,
+  createDispatch,
+  updateDispatch,
+  deleteDispatch
+} from './controllers/sales';
+
 // 6. General Administration Module Routes (Company Profile & Features Only)
 app.get('/api/admin/company/profile', authenticateToken, getCompanyProfile);
 app.patch('/api/admin/company/profile', authenticateToken, updateCompanyProfile);
@@ -309,6 +335,35 @@ app.post('/api/master/products', authenticateToken, createProduct);
 app.patch('/api/master/products/:id', authenticateToken, updateProduct);
 app.delete('/api/master/products/:id', authenticateToken, deleteProduct);
 
+// 9. Sales Module Scoped Consolidated APIs
+app.get('/api/sales/orders', authenticateToken, listSalesOrders);
+app.post('/api/sales/orders', authenticateToken, createSalesOrder);
+app.patch('/api/sales/orders/:id', authenticateToken, updateSalesOrder);
+app.delete('/api/sales/orders/:id', authenticateToken, deleteSalesOrder);
+
+app.get('/api/sales/proforma', authenticateToken, listProformaInvoices);
+app.post('/api/sales/proforma', authenticateToken, createProformaInvoice);
+app.patch('/api/sales/proforma/:id', authenticateToken, updateProformaInvoice);
+app.delete('/api/sales/proforma/:id', authenticateToken, deleteProformaInvoice);
+app.post('/api/sales/proforma/:id/email', authenticateToken, sendProformaInvoiceEmail);
+
+app.get('/api/sales/invoices', authenticateToken, listSalesInvoices);
+app.post('/api/sales/invoices', authenticateToken, createSalesInvoice);
+app.patch('/api/sales/invoices/:id', authenticateToken, updateSalesInvoice);
+app.delete('/api/sales/invoices/:id', authenticateToken, deleteSalesInvoice);
+app.post('/api/sales/invoices/:id/email', authenticateToken, sendSalesInvoiceEmail);
+
+app.get('/api/sales/challans', authenticateToken, listDeliveryChallans);
+app.post('/api/sales/challans', authenticateToken, createDeliveryChallan);
+app.patch('/api/sales/challans/:id', authenticateToken, updateDeliveryChallan);
+app.delete('/api/sales/challans/:id', authenticateToken, deleteDeliveryChallan);
+app.post('/api/sales/challans/:id/email', authenticateToken, sendDeliveryChallanEmail);
+
+app.get('/api/sales/dispatches', authenticateToken, listDispatches);
+app.post('/api/sales/dispatches', authenticateToken, createDispatch);
+app.patch('/api/sales/dispatches/:id', authenticateToken, updateDispatch);
+app.delete('/api/sales/dispatches/:id', authenticateToken, deleteDispatch);
+
 // Automated Seeding Function to ensure feature keys exist and are mapped to companies
 async function seedDatabase() {
   try {
@@ -321,7 +376,7 @@ async function seedDatabase() {
       });
     }
 
-    console.log("🌱 [Database Seeding] Mapping new administration & master data features to existing companies...");
+    console.log("🌱 [Database Seeding] Mapping new administration, master data & sales features to existing companies...");
     const coreFeatures = await prisma.feature.findMany({
       where: {
         key: {
@@ -337,7 +392,13 @@ async function seedDatabase() {
             "MASTER_EMPLOYEE",
             "MASTER_CUSTOMER",
             "MASTER_VENDOR",
-            "MASTER_PRODUCT"
+            "MASTER_PRODUCT",
+            "SALES_DATA",
+            "SALES_ORDER",
+            "SALES_PROFORMA",
+            "SALES_INVOICE",
+            "SALES_CHALLAN",
+            "SALES_DISPATCH"
           ]
         }
       }
@@ -381,6 +442,13 @@ async function seedDatabase() {
         permissions.MASTER_CUSTOMER = ["read", "write", "delete"];
         permissions.MASTER_VENDOR = ["read", "write", "delete"];
         permissions.MASTER_PRODUCT = ["read", "write", "delete"];
+
+        permissions.SALES_DATA = ["read", "write", "delete"];
+        permissions.SALES_ORDER = ["read", "write", "delete"];
+        permissions.SALES_PROFORMA = ["read", "write", "delete"];
+        permissions.SALES_INVOICE = ["read", "write", "delete"];
+        permissions.SALES_CHALLAN = ["read", "write", "delete"];
+        permissions.SALES_DISPATCH = ["read", "write", "delete"];
 
         await prisma.role.update({
           where: { id: adminRole.id },

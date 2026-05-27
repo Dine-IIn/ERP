@@ -125,6 +125,26 @@ export async function triggerBackup(req: AuthenticatedRequest, res: Response) {
       include: { variants: true }
     });
 
+    const salesOrders = await prisma.salesOrder.findMany({
+      where: { companyId },
+      include: { items: true }
+    });
+    const proformaInvoices = await prisma.proformaInvoice.findMany({
+      where: { companyId },
+      include: { items: true }
+    });
+    const salesInvoices = await prisma.salesInvoice.findMany({
+      where: { companyId },
+      include: { items: true }
+    });
+    const deliveryChallans = await prisma.deliveryChallan.findMany({
+      where: { companyId },
+      include: { items: true }
+    });
+    const dispatches = await prisma.dispatch.findMany({
+      where: { companyId }
+    });
+
     const backupPayload = {
       companyCode: company?.companyCode,
       companyName: company?.name,
@@ -140,7 +160,12 @@ export async function triggerBackup(req: AuthenticatedRequest, res: Response) {
         vendors,
         productCategories,
         brands,
-        products
+        products,
+        salesOrders,
+        proformaInvoices,
+        salesInvoices,
+        deliveryChallans,
+        dispatches
       }
     };
 
@@ -974,6 +999,15 @@ export async function restoreBackup(req: AuthenticatedRequest, res: Response) {
       await tx.auditLog.deleteMany({ where: { companyId } });
 
       // Wipe new master data tables
+      await tx.dispatch.deleteMany({ where: { companyId } });
+      await tx.deliveryChallanItem.deleteMany({});
+      await tx.deliveryChallan.deleteMany({ where: { companyId } });
+      await tx.salesInvoiceItem.deleteMany({});
+      await tx.salesInvoice.deleteMany({ where: { companyId } });
+      await tx.proformaInvoiceItem.deleteMany({});
+      await tx.proformaInvoice.deleteMany({ where: { companyId } });
+      await tx.salesOrderItem.deleteMany({});
+      await tx.salesOrder.deleteMany({ where: { companyId } });
       await tx.productVariant.deleteMany({});
       await tx.product.deleteMany({ where: { companyId } });
       await tx.productCategory.deleteMany({ where: { companyId } });
@@ -1127,6 +1161,7 @@ export async function restoreBackup(req: AuthenticatedRequest, res: Response) {
             shippingAddress: c.shippingAddress || null,
             creditLimit: c.creditLimit ?? 0.0,
             creditTime: c.creditTime ?? 0,
+            clientClassification: c.clientClassification || "NATIONAL",
             createdAt: new Date(c.createdAt),
             updatedAt: new Date(c.updatedAt)
           }
@@ -1188,6 +1223,150 @@ export async function restoreBackup(req: AuthenticatedRequest, res: Response) {
             }
           });
         }
+      }
+
+      // Restore sales orders
+      const snapshotOrders = snapshot.data.salesOrders || [];
+      for (const so of snapshotOrders) {
+        await tx.salesOrder.create({
+          data: {
+            id: so.id,
+            companyId,
+            customerId: so.customerId,
+            orderNo: so.orderNo,
+            orderDate: new Date(so.orderDate),
+            deliveryDate: so.deliveryDate ? new Date(so.deliveryDate) : null,
+            discount: so.discount ?? 0.0,
+            status: so.status || 'PENDING'
+          }
+        });
+        const items = so.items || [];
+        for (const item of items) {
+          await tx.salesOrderItem.create({
+            data: {
+              id: item.id,
+              orderId: so.id,
+              productId: item.productId,
+              quantity: item.quantity,
+              price: item.price,
+              deliveryDate: item.deliveryDate ? new Date(item.deliveryDate) : null,
+              discount: item.discount ?? 0.0
+            }
+          });
+        }
+      }
+
+      // Restore proforma invoices
+      const snapshotProforma = snapshot.data.proformaInvoices || [];
+      for (const pi of snapshotProforma) {
+        await tx.proformaInvoice.create({
+          data: {
+            id: pi.id,
+            companyId,
+            customerId: pi.customerId,
+            invoiceNo: pi.invoiceNo,
+            date: new Date(pi.date),
+            dueDate: pi.dueDate ? new Date(pi.dueDate) : null,
+            subtotal: pi.subtotal ?? 0.0,
+            discount: pi.discount ?? 0.0,
+            tax: pi.tax ?? 0.0,
+            total: pi.total ?? 0.0,
+            status: pi.status || 'DRAFT'
+          }
+        });
+        const items = pi.items || [];
+        for (const item of items) {
+          await tx.proformaInvoiceItem.create({
+            data: {
+              id: item.id,
+              invoiceId: pi.id,
+              productId: item.productId,
+              quantity: item.quantity,
+              price: item.price,
+              discount: item.discount ?? 0.0
+            }
+          });
+        }
+      }
+
+      // Restore sales invoices
+      const snapshotInvoices = snapshot.data.salesInvoices || [];
+      for (const si of snapshotInvoices) {
+        await tx.salesInvoice.create({
+          data: {
+            id: si.id,
+            companyId,
+            customerId: si.customerId,
+            invoiceNo: si.invoiceNo,
+            date: new Date(si.date),
+            dueDate: si.dueDate ? new Date(si.dueDate) : null,
+            subtotal: si.subtotal ?? 0.0,
+            discount: si.discount ?? 0.0,
+            tax: si.tax ?? 0.0,
+            total: si.total ?? 0.0,
+            status: si.status || 'UNPAID'
+          }
+        });
+        const items = si.items || [];
+        for (const item of items) {
+          await tx.salesInvoiceItem.create({
+            data: {
+              id: item.id,
+              invoiceId: si.id,
+              productId: item.productId,
+              quantity: item.quantity,
+              price: item.price,
+              discount: item.discount ?? 0.0
+            }
+          });
+        }
+      }
+
+      // Restore delivery challans
+      const snapshotChallans = snapshot.data.deliveryChallans || [];
+      for (const dc of snapshotChallans) {
+        await tx.deliveryChallan.create({
+          data: {
+            id: dc.id,
+            companyId,
+            customerId: dc.customerId,
+            challanNo: dc.challanNo,
+            date: new Date(dc.date),
+            status: dc.status || 'ISSUED'
+          }
+        });
+        const items = dc.items || [];
+        for (const item of items) {
+          await tx.deliveryChallanItem.create({
+            data: {
+              id: item.id,
+              challanId: dc.id,
+              productId: item.productId,
+              quantity: item.quantity,
+              price: item.price ?? 0.0
+            }
+          });
+        }
+      }
+
+      // Restore dispatches
+      const snapshotDispatches = snapshot.data.dispatches || [];
+      for (const disp of snapshotDispatches) {
+        await tx.dispatch.create({
+          data: {
+            id: disp.id,
+            companyId,
+            orderId: disp.orderId,
+            dispatchNo: disp.dispatchNo,
+            dispatchDate: new Date(disp.dispatchDate),
+            carrier: disp.carrier || null,
+            trackingNo: disp.trackingNo || null,
+            vehicleNo: disp.vehicleNo || null,
+            shippingCost: disp.shippingCost ?? 0.0,
+            status: disp.status || 'SHIPPED',
+            notes: disp.notes || null
+          }
+        });
       }
 
       // 8. Restore audit logs
