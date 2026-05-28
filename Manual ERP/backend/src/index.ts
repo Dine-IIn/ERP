@@ -163,6 +163,7 @@ app.use(compression());
 // Define whitelisted production origins for CORS
 const allowedOrigins = [
   'http://localhost:5173',
+  'https://localhost',
   'https://erp.anbindustries.com',
   'https://yourfrontend.vercel.app'
 ];
@@ -176,7 +177,7 @@ const corsOptions: cors.CorsOptions = {
     if (!origin) return callback(null, true);
     
     const isAllowed = allowedOrigins.includes(origin) ||
-                      /^http:\/\/localhost:\d+$/.test(origin) ||
+                      /^(http|https):\/\/localhost(:\d+)?$/.test(origin) ||
                       origin.startsWith('tauri://') ||
                       origin.startsWith('capacitor://');
                       
@@ -216,7 +217,7 @@ const io = new Server(server, {
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
       const isAllowed = allowedOrigins.includes(origin) || 
-                        /^http:\/\/localhost:\d+$/.test(origin) ||
+                        /^(http|https):\/\/localhost(:\d+)?$/.test(origin) ||
                         origin.startsWith('tauri://') ||
                         origin.startsWith('capacitor://');
       if (isAllowed) {

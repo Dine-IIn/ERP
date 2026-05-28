@@ -196,7 +196,7 @@ Tauri uses the system's native WebView2 engine, resulting in extremely lightweig
    ```
 2. **Initialize Tauri project specifications:**
    ```powershell
-   corepack pnpm tauri init
+      corepack pnpm tauri init
    ```
    * *When prompted, configure:*
      * **What is your app name?** `Manual ERP`

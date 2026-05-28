@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { MASTER_FEATURES_HIERARCHY, getCategoryKeys, getChildKeys, getParentKey } from './features';
 import Login from './components/auth/Login';
@@ -972,6 +972,14 @@ export default function App() {
   // ==========================================
   
   const apiRequest = async (url: string, method: 'GET' | 'POST' | 'PATCH' | 'DELETE' = 'GET', body?: any): Promise<any> => {
+    console.log('================ API DEBUG ================');
+    console.log('FULL URL:', `${BACKEND_URL}${url}`);
+    console.log('METHOD:', method);
+    console.log('BODY:', body);
+    console.log('window.location.origin:', window.location.origin);
+    console.log('window.location.href:', window.location.href);
+    console.log('navigator.userAgent:', navigator.userAgent);
+    console.log('===========================================');
     setErrorMsg(null);
     setSuccessMsg(null);
     setLoading(true);
