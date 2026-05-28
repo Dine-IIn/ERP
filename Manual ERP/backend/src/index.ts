@@ -110,6 +110,42 @@ import {
   deleteServiceTicket
 } from './controllers/sales';
 
+import {
+  listEmployees,
+  updateEmployee,
+  listAttendance,
+  punchAttendance,
+  listLeaveRequests,
+  createLeaveRequest,
+  updateLeaveRequestStatus,
+  listShiftRosters,
+  createShiftRoster,
+  listPayroll,
+  generatePayroll,
+  disbursePayroll
+} from './controllers/hrms';
+
+import {
+  listExpenses,
+  createExpense,
+  listPayments,
+  createPayment,
+  listReceipts,
+  createReceipt,
+  listCashbookVouchers,
+  getGstWorksheet,
+  listBankAccounts,
+  createBankAccount
+} from './controllers/finance';
+
+import {
+  getSalesReport,
+  getPurchaseReport,
+  getInventoryReport,
+  getHrReport,
+  getFinancialReport
+} from './controllers/reports';
+
 dotenv.config();
 if (!process.env.JWT_SECRET) {
   throw new Error('JWT_SECRET is missing in environment variables');
@@ -485,6 +521,39 @@ app.delete('/api/purchase/payments/:id', authenticateToken, deleteVendorPayment)
 app.get('/api/inventory/adjustments', authenticateToken, listStockAdjustments);
 app.post('/api/inventory/adjust', authenticateToken, adjustStock);
 
+// 9.6 HRMS Module Routes
+app.get('/api/hrms/employees', authenticateToken, listEmployees);
+app.patch('/api/hrms/employees/:id', authenticateToken, updateEmployee);
+app.get('/api/hrms/attendance', authenticateToken, listAttendance);
+app.post('/api/hrms/attendance/punch', authenticateToken, punchAttendance);
+app.get('/api/hrms/leaves', authenticateToken, listLeaveRequests);
+app.post('/api/hrms/leaves', authenticateToken, createLeaveRequest);
+app.patch('/api/hrms/leaves/:id', authenticateToken, updateLeaveRequestStatus);
+app.get('/api/hrms/shifts', authenticateToken, listShiftRosters);
+app.post('/api/hrms/shifts', authenticateToken, createShiftRoster);
+app.get('/api/hrms/payroll', authenticateToken, listPayroll);
+app.post('/api/hrms/payroll/generate', authenticateToken, generatePayroll);
+app.patch('/api/hrms/payroll/disburse/:id', authenticateToken, disbursePayroll);
+
+// 9.7 Finance & Accounting Module Routes
+app.get('/api/finance/expenses', authenticateToken, listExpenses);
+app.post('/api/finance/expenses', authenticateToken, createExpense);
+app.get('/api/finance/payments', authenticateToken, listPayments);
+app.post('/api/finance/payments', authenticateToken, createPayment);
+app.get('/api/finance/receipts', authenticateToken, listReceipts);
+app.post('/api/finance/receipts', authenticateToken, createReceipt);
+app.get('/api/finance/cashbook', authenticateToken, listCashbookVouchers);
+app.get('/api/finance/gst-worksheet', authenticateToken, getGstWorksheet);
+app.get('/api/finance/bank-accounts', authenticateToken, listBankAccounts);
+app.post('/api/finance/bank-accounts', authenticateToken, createBankAccount);
+
+// 9.8 Reports & Analytics Aggregate Routes
+app.get('/api/reports/sales', authenticateToken, getSalesReport);
+app.get('/api/reports/purchase', authenticateToken, getPurchaseReport);
+app.get('/api/reports/inventory', authenticateToken, getInventoryReport);
+app.get('/api/reports/hr', authenticateToken, getHrReport);
+app.get('/api/reports/financial', authenticateToken, getFinancialReport);
+
 // Automated Seeding Function to ensure feature keys exist and are mapped to companies
 async function seedDatabase() {
   try {
@@ -537,7 +606,28 @@ async function seedDatabase() {
             "INVENTORY_DATA",
             "INVENTORY_PRODUCT",
             "INVENTORY_STOCK_OVERVIEW",
-            "INVENTORY_LOW_ALERT"
+            "INVENTORY_LOW_ALERT",
+
+            // Phase 2 Modules
+            "HRMS_DATA",
+            "HRMS_EMPLOYEES",
+            "HRMS_ATTENDANCE",
+            "HRMS_LEAVES",
+            "HRMS_SHIFTS",
+            "HRMS_PAYROLL",
+            "FINANCE_DATA",
+            "FINANCE_EXPENSES",
+            "FINANCE_PAYMENTS",
+            "FINANCE_RECEIPTS",
+            "FINANCE_CASHBOOK",
+            "FINANCE_GST",
+            "FINANCE_BANK",
+            "REPORTS_DATA",
+            "REPORTS_SALES",
+            "REPORTS_PURCHASE",
+            "REPORTS_INVENTORY",
+            "REPORTS_HR",
+            "REPORTS_FINANCE"
           ]
         }
       }
@@ -609,6 +699,29 @@ async function seedDatabase() {
         permissions.INVENTORY_PRODUCT = ["read", "write", "delete"];
         permissions.INVENTORY_STOCK_OVERVIEW = ["read", "write", "delete"];
         permissions.INVENTORY_LOW_ALERT = ["read", "write", "delete"];
+
+        // Phase 2 Modules
+        permissions.HRMS_DATA = ["read", "write", "delete"];
+        permissions.HRMS_EMPLOYEES = ["read", "write", "delete"];
+        permissions.HRMS_ATTENDANCE = ["read", "write", "delete"];
+        permissions.HRMS_LEAVES = ["read", "write", "delete"];
+        permissions.HRMS_SHIFTS = ["read", "write", "delete"];
+        permissions.HRMS_PAYROLL = ["read", "write", "delete"];
+
+        permissions.FINANCE_DATA = ["read", "write", "delete"];
+        permissions.FINANCE_EXPENSES = ["read", "write", "delete"];
+        permissions.FINANCE_PAYMENTS = ["read", "write", "delete"];
+        permissions.FINANCE_RECEIPTS = ["read", "write", "delete"];
+        permissions.FINANCE_CASHBOOK = ["read", "write", "delete"];
+        permissions.FINANCE_GST = ["read", "write", "delete"];
+        permissions.FINANCE_BANK = ["read", "write", "delete"];
+
+        permissions.REPORTS_DATA = ["read", "write", "delete"];
+        permissions.REPORTS_SALES = ["read", "write", "delete"];
+        permissions.REPORTS_PURCHASE = ["read", "write", "delete"];
+        permissions.REPORTS_INVENTORY = ["read", "write", "delete"];
+        permissions.REPORTS_HR = ["read", "write", "delete"];
+        permissions.REPORTS_FINANCE = ["read", "write", "delete"];
 
         await prisma.role.update({
           where: { id: adminRole.id },

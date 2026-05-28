@@ -290,6 +290,54 @@ async function sendChatGroupMessage(req, res) {
                 expenseData: expenseData ? JSON.stringify(expenseData) : null
             }
         });
+        // --- FINANCIAL CASHBOOK & EXPENSE SYNC OPTION ---
+        const parsedSettings = JSON.parse(group.settings || '{}');
+        if (group.type === 'EXPENSE' && type === 'EXPENSE' && parsedSettings.connectToCashbook === true && expenseData) {
+            try {
+                const data = typeof expenseData === 'string' ? JSON.parse(expenseData) : expenseData;
+                const amount = parseFloat(data.amount);
+                const description = data.description || `Expense logged in chat group: ${group.name}`;
+                const category = data.category || 'CHAT_EXPENSE';
+                if (!isNaN(amount) && amount > 0) {
+                    // 1. Create central CompanyExpense record
+                    await db_1.default.companyExpense.create({
+                        data: {
+                            companyId: user.companyId,
+                            amount,
+                            description,
+                            category,
+                            paidById: user.userId,
+                            chatGroupId: groupId,
+                            referenceNo: `CHAT-${newMessage.id.slice(0, 8).toUpperCase()}`
+                        }
+                    });
+                    // 2. Create running CashbookVoucher record
+                    const lastVoucher = await db_1.default.cashbookVoucher.findFirst({
+                        where: { companyId: user.companyId },
+                        orderBy: { createdAt: 'desc' }
+                    });
+                    const previousBal = lastVoucher ? lastVoucher.currentBal : 0.0;
+                    const currentBal = previousBal - amount;
+                    const count = await db_1.default.cashbookVoucher.count({ where: { companyId: user.companyId } });
+                    const voucherNo = `VCH-${new Date().getFullYear()}-${(count + 1).toString().padStart(5, '0')}`;
+                    await db_1.default.cashbookVoucher.create({
+                        data: {
+                            companyId: user.companyId,
+                            voucherNo,
+                            entryType: 'OUTWARD_EXPENSE',
+                            amount,
+                            previousBal,
+                            currentBal,
+                            description: `Chat Sync - ${description}`,
+                            referenceNo: `CHAT-${newMessage.id.slice(0, 8).toUpperCase()}`
+                        }
+                    });
+                }
+            }
+            catch (err) {
+                console.error("⚠️ Failed to auto-sync chat expense to central cashbook ledger:", err);
+            }
+        }
         // Update group timestamp
         await db_1.default.chatGroup.update({
             where: { id: groupId },
@@ -411,7 +459,7 @@ async function updateChatGroupSettings(req, res) {
             return res.status(401).json({ error: "Unauthorized" });
         }
         const { groupId } = req.params;
-        const { isPrivate } = req.body;
+        const { isPrivate, connectToCashbook } = req.body;
         const group = await db_1.default.chatGroup.findFirst({
             where: { id: groupId, companyId: user.companyId }
         });
@@ -431,7 +479,12 @@ async function updateChatGroupSettings(req, res) {
         if (!isAuthorized) {
             return res.status(403).json({ error: "Only group admins can update configurations" });
         }
-        const updatedSettings = { isPrivate: !!isPrivate };
+        const prevSettings = JSON.parse(group.settings || '{}');
+        const updatedSettings = {
+            ...prevSettings,
+            ...(isPrivate !== undefined && { isPrivate: !!isPrivate }),
+            ...(connectToCashbook !== undefined && { connectToCashbook: !!connectToCashbook })
+        };
         const updatedGroup = await db_1.default.chatGroup.update({
             where: { id: groupId },
             data: {

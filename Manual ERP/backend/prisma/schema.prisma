@@ -101,6 +101,16 @@ model Company {
   vendorPayments    VendorPayment[]
   stockAdjustments  StockAdjustment[]
 
+  // HRMS & Finance Extensions
+  attendances       Attendance[]
+  leaveRequests     LeaveRequest[]
+  shiftRosters      ShiftRoster[]
+  payrollPeriods    PayrollPeriod[]
+  companyExpenses   CompanyExpense[]
+  companyReceipts   CompanyReceipt[]
+  cashbookVouchers  CashbookVoucher[]
+  bankAccounts      CompanyBankAccount[]
+
   @@map("companies")
 }
 
@@ -168,6 +178,13 @@ model User {
   shiftName         String?
   documents         String?
   assignedLeads     Lead[]
+
+  // HRMS & Finance Relations
+  attendances       Attendance[]
+  leaveRequests     LeaveRequest[]  @relation("UserLeaves")
+  approvedLeaves    LeaveRequest[]  @relation("ApprovedLeaves")
+  payrollPeriods    PayrollPeriod[]
+  paidExpenses      CompanyExpense[]
 
   @@unique([companyId, username])
   @@map("users")
@@ -887,4 +904,141 @@ model StockAdjustment {
 
   @@unique([companyId, adjustmentNo])
   @@map("stock_adjustments")
+}
+
+model Attendance {
+  id           String   @id @default(uuid())
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date         DateTime @default(now())
+  checkIn      DateTime
+  checkOut     DateTime?
+  duration     Float?   // worked hours
+  status       String   @default("PRESENT") // PRESENT, LATE, HALFDAY, ABSENT
+  createdAt    DateTime @default(now())
+
+  @@map("attendances")
+}
+
+model LeaveRequest {
+  id           String   @id @default(uuid())
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User     @relation("UserLeaves", fields: [userId], references: [id], onDelete: Cascade)
+  type         String   // SICK, CASUAL, ANNUAL, MATERNITY, OTHER
+  startDate    DateTime
+  endDate      DateTime
+  reason       String
+  status       String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  approvedById String?
+  approvedBy   User?    @relation("ApprovedLeaves", fields: [approvedById], references: [id], onDelete: SetNull)
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  @@map("leave_requests")
+}
+
+model ShiftRoster {
+  id           String   @id @default(uuid())
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name         String   // e.g. "Morning Shift", "Night Shift"
+  startTime    String   // e.g. "09:00"
+  endTime      String   // e.g. "17:00"
+  gracePeriod  Int      @default(15) // grace period in minutes
+  createdAt    DateTime @default(now())
+
+  @@map("shift_rosters")
+}
+
+model PayrollPeriod {
+  id           String   @id @default(uuid())
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  month        Int      // 1 to 12
+  year         Int
+  basicSalary  Float
+  allowances   Float    @default(0.0)
+  deductions   Float    @default(0.0)
+  netSalary    Float
+  status       String   @default("PENDING") // PENDING, PROCESSING, DISBURSED
+  paymentDate  DateTime?
+  referenceNo  String?
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  @@unique([companyId, userId, month, year])
+  @@map("payroll_periods")
+}
+
+model CompanyExpense {
+  id           String   @id @default(uuid())
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  amount       Float
+  description  String
+  category     String   // e.g. "TRAVEL", "OFFICE", "MARKETING"
+  date         DateTime @default(now())
+  paidById     String?
+  paidBy       User?    @relation(fields: [paidById], references: [id], onDelete: SetNull)
+  chatGroupId  String?  // Reference if logged from chat room expense
+  referenceNo  String?
+  createdAt    DateTime @default(now())
+
+  @@map("company_expenses")
+}
+
+model CompanyReceipt {
+  id           String   @id @default(uuid())
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  amount       Float
+  payerName    String
+  category     String   // e.g. "SALES_REVENUE", "ASSET_SALE", "OTHER_INCOME"
+  date         DateTime @default(now())
+  paymentMethod String  // BANK_TRANSFER, CASH, UPI, CREDIT_CARD
+  referenceNo  String?
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  @@map("company_receipts")
+}
+
+model CashbookVoucher {
+  id           String   @id @default(uuid())
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  date         DateTime @default(now())
+  voucherNo    String
+  entryType    String   // INWARD_RECEIPT, OUTWARD_PAYMENT, OUTWARD_EXPENSE
+  amount       Float
+  previousBal  Float    @default(0.0)
+  currentBal   Float    @default(0.0)
+  description  String
+  referenceNo  String?  // links to invoiceNo, expenseId, etc.
+  createdAt    DateTime @default(now())
+
+  @@unique([companyId, voucherNo])
+  @@map("cashbook_vouchers")
+}
+
+model CompanyBankAccount {
+  id           String   @id @default(uuid())
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  bankName     String   // e.g. "HDFC Bank", "ICICI Bank"
+  accountNo    String
+  branchName   String?
+  ifscCode     String
+  accountType  String   // SAVINGS, CURRENT, OVERDRAFT
+  balance      Float    @default(0.0)
+  createdAt    DateTime @default(now())
+
+  @@unique([companyId, accountNo])
+  @@map("company_bank_accounts")
 }

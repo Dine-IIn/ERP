@@ -327,6 +327,58 @@ export async function sendChatGroupMessage(req: AuthenticatedRequest, res: Respo
       }
     });
 
+    // --- FINANCIAL CASHBOOK & EXPENSE SYNC OPTION ---
+    const parsedSettings = JSON.parse(group.settings || '{}');
+    if (group.type === 'EXPENSE' && type === 'EXPENSE' && parsedSettings.connectToCashbook === true && expenseData) {
+      try {
+        const data = typeof expenseData === 'string' ? JSON.parse(expenseData) : expenseData;
+        const amount = parseFloat(data.amount);
+        const description = data.description || `Expense logged in chat group: ${group.name}`;
+        const category = data.category || 'CHAT_EXPENSE';
+
+        if (!isNaN(amount) && amount > 0) {
+          // 1. Create central CompanyExpense record
+          await prisma.companyExpense.create({
+            data: {
+              companyId: user.companyId,
+              amount,
+              description,
+              category,
+              paidById: user.userId,
+              chatGroupId: groupId,
+              referenceNo: `CHAT-${newMessage.id.slice(0, 8).toUpperCase()}`
+            }
+          });
+
+          // 2. Create running CashbookVoucher record
+          const lastVoucher = await prisma.cashbookVoucher.findFirst({
+            where: { companyId: user.companyId },
+            orderBy: { createdAt: 'desc' }
+          });
+          const previousBal = lastVoucher ? lastVoucher.currentBal : 0.0;
+          const currentBal = previousBal - amount;
+
+          const count = await prisma.cashbookVoucher.count({ where: { companyId: user.companyId } });
+          const voucherNo = `VCH-${new Date().getFullYear()}-${(count + 1).toString().padStart(5, '0')}`;
+
+          await prisma.cashbookVoucher.create({
+            data: {
+              companyId: user.companyId,
+              voucherNo,
+              entryType: 'OUTWARD_EXPENSE',
+              amount,
+              previousBal,
+              currentBal,
+              description: `Chat Sync - ${description}`,
+              referenceNo: `CHAT-${newMessage.id.slice(0, 8).toUpperCase()}`
+            }
+          });
+        }
+      } catch (err) {
+        console.error("⚠️ Failed to auto-sync chat expense to central cashbook ledger:", err);
+      }
+    }
+
     // Update group timestamp
     await prisma.chatGroup.update({
       where: { id: groupId },
@@ -465,7 +517,7 @@ export async function updateChatGroupSettings(req: AuthenticatedRequest, res: Re
     }
 
     const { groupId } = req.params;
-    const { isPrivate } = req.body;
+    const { isPrivate, connectToCashbook } = req.body;
 
     const group = await prisma.chatGroup.findFirst({
       where: { id: groupId, companyId: user.companyId }
@@ -490,7 +542,12 @@ export async function updateChatGroupSettings(req: AuthenticatedRequest, res: Re
       return res.status(403).json({ error: "Only group admins can update configurations" });
     }
 
-    const updatedSettings = { isPrivate: !!isPrivate };
+    const prevSettings = JSON.parse(group.settings || '{}');
+    const updatedSettings = {
+      ...prevSettings,
+      ...(isPrivate !== undefined && { isPrivate: !!isPrivate }),
+      ...(connectToCashbook !== undefined && { connectToCashbook: !!connectToCashbook })
+    };
 
     const updatedGroup = await prisma.chatGroup.update({
       where: { id: groupId },

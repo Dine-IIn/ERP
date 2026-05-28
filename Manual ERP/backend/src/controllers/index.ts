@@ -68,7 +68,32 @@ export const HIERARCHICAL_FEATURES = [
   { key: "INVENTORY_DATA", name: "INVENTORY MANAGEMENT", description: "Consolidated Realtime Warehousing & Inventory Control" },
   { key: "INVENTORY_PRODUCT", name: "Warehouse Stock Levels", description: "Conduct manual stock audits, warehouse taggings, and storage logs" },
   { key: "INVENTORY_STOCK_OVERVIEW", name: "Stock Ledger Overview", description: "View transaction ledgers tracking inward POs and outward SOs" },
-  { key: "INVENTORY_LOW_ALERT", name: "Low Stock Alerts Console", description: "Monitor automatically flagged items dropping below minimum reorder thresholds" }
+  { key: "INVENTORY_LOW_ALERT", name: "Low Stock Alerts Console", description: "Monitor automatically flagged items dropping below minimum reorder thresholds" },
+
+  // HRMS MODULE
+  { key: "HRMS_DATA", name: "HRMS MODULE", description: "Human Resource Management System" },
+  { key: "HRMS_EMPLOYEES", name: "Employees Directory", description: "Manage company employees directory, shifts, departments and structures" },
+  { key: "HRMS_ATTENDANCE", name: "Attendance & Punch logs", description: "Punch checks-in/out and worked hour records" },
+  { key: "HRMS_LEAVES", name: "Leave Management Review", description: "Review, request, and decide leaves allocations" },
+  { key: "HRMS_SHIFTS", name: "Corporate Timing Shifts", description: "Set shift times, durations, and grace limits" },
+  { key: "HRMS_PAYROLL", name: "Basic Payroll disbursement", description: "Compile salary sheets and disbursements slip" },
+
+  // FINANCE & ACCOUNTING MODULE
+  { key: "FINANCE_DATA", name: "FINANCE & ACCOUNTING", description: "Corporate Expenses, Payments, Receipts, and double-entry Cashbook Ledger" },
+  { key: "FINANCE_EXPENSES", name: "Central Expense Book", description: "Record and categorize corporate expense vouchers" },
+  { key: "FINANCE_PAYMENTS", name: "Vendor Payments ledger", description: "Finalize outward vendor cash transactions" },
+  { key: "FINANCE_RECEIPTS", name: "Revenue Receipts ledger", description: "Log customer incoming incomes and receipts" },
+  { key: "FINANCE_CASHBOOK", name: "Double-Entry Cashbook vouchers", description: "Monitor running dual balances cashbook" },
+  { key: "FINANCE_GST", name: "GST Tax Configurations", description: "Review and file corporate sales & purchases taxes" },
+  { key: "FINANCE_BANK", name: "Company Bank Accounts directory", description: "Manage bank deposits, accounts, and reconciliations" },
+
+  // REPORTS & ANALYTICS MODULE
+  { key: "REPORTS_DATA", name: "REPORTS & ANALYTICS", description: "Multi-dimensional reports: Sales, Purchases, Stocks, HR levels and Savings statements" },
+  { key: "REPORTS_SALES", name: "Sales Analytical summary", description: "Review monthly sales volumes and invoice counts" },
+  { key: "REPORTS_PURCHASE", name: "Purchase Sourcing summary", description: "Examine PO ratios and complete expenses" },
+  { key: "REPORTS_INVENTORY", name: "Warehouse asset valuations", description: "Audit stock evaluations and catalog sizes" },
+  { key: "REPORTS_HR", name: "HR Metrics totals", description: "Review work durations and disbursed salaries" },
+  { key: "REPORTS_FINANCE", name: "Financial Cashflows curves", description: "Examine inflows vs outflows and running curves" }
 ];
 
 // Global reference to the WebSockets emitter

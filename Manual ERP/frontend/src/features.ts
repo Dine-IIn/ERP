@@ -88,6 +88,43 @@ export const MASTER_FEATURES_HIERARCHY = [
       { key: 'INVENTORY_STOCK_OVERVIEW', name: 'Stock Ledger Overview', desc: 'View transaction ledgers tracking inward POs and outward SOs' },
       { key: 'INVENTORY_LOW_ALERT', name: 'Low Stock Alerts Console', desc: 'Monitor automatically flagged items dropping below minimum reorder thresholds' }
     ]
+  },
+  {
+    key: 'HRMS_DATA',
+    name: 'HRMS MODULE',
+    desc: 'Human Resource Management System connected to Employee Master and Roles',
+    children: [
+      { key: 'HRMS_EMPLOYEES', name: 'Employees Directory', desc: 'Manage hierarchies, department assignments, and timing shifts' },
+      { key: 'HRMS_ATTENDANCE', name: 'Attendance Punch', desc: 'Punch checks-in/out and worked hour records' },
+      { key: 'HRMS_LEAVES', name: 'Leave Management', desc: 'Review leave request pipelines and manage holiday balances' },
+      { key: 'HRMS_SHIFTS', name: 'Corporate Shifts', desc: 'Set timing shift rosters, grace hours, and timetables' },
+      { key: 'HRMS_PAYROLL', name: 'Basic Payroll', desc: 'Disburse employee salaries and generate slip payslips' }
+    ]
+  },
+  {
+    key: 'FINANCE_DATA',
+    name: 'FINANCE & ACCOUNTING',
+    desc: 'Central Expenses, Vendor Payments, Revenues Receipts, double-entry Cashbook Voucher balances, GST worksheets, and Bank Accounts',
+    children: [
+      { key: 'FINANCE_EXPENSES', name: 'Expenses Ledger', desc: 'Log corporate expense vouchers and sync to Cashbook ledger' },
+      { key: 'FINANCE_PAYMENTS', name: 'Vendor Payments', desc: 'Track miscellaneous vendor cash and bank payouts history' },
+      { key: 'FINANCE_RECEIPTS', name: 'Revenue Receipts', desc: 'Log customer payments, revenues, and receipt slips' },
+      { key: 'FINANCE_CASHBOOK', name: 'Cashbook double-entry', desc: 'Monitor dual-entry cashbook running ledger balances' },
+      { key: 'FINANCE_GST', name: 'GST Settings & Filing', desc: 'Manage corporate GST numbers and review GST worksheet liabilities' },
+      { key: 'FINANCE_BANK', name: 'Bank Accounts Hub', desc: 'Manage deposits and bank statement reconciliation ledgers' }
+    ]
+  },
+  {
+    key: 'REPORTS_DATA',
+    name: 'REPORTS & ANALYTICS',
+    desc: 'Consolidated multidimensional analysis for Sales, Purchases, Stocking, HR, and Cashflows',
+    children: [
+      { key: 'REPORTS_SALES', name: 'Sales Analysis', desc: 'Aggregate monthly sales volumes, invoicing, and CSV files exports' },
+      { key: 'REPORTS_PURCHASE', name: 'Purchase Sourcing', desc: 'Examine material PO valuations and complete expenses' },
+      { key: 'REPORTS_INVENTORY', name: 'Inventory Valuations', desc: 'Audit physical stock counts, asset valuations, and catalog sizes' },
+      { key: 'REPORTS_HR', name: 'HR Metrics Overview', desc: 'Visualize active presents, worked hours, and payout summaries' },
+      { key: 'REPORTS_FINANCE', name: 'Financial statements', desc: 'Review cash outflow ratios and running cash flow curves' }
+    ]
   }
 ];
 

@@ -36,6 +36,29 @@ import InventoryProducts from './components/inventory/InventoryProducts';
 import StockOverview from './components/inventory/StockOverview';
 import LowStockAlerts from './components/inventory/LowStockAlerts';
 
+// --- PHASE 2 HIGH-FIDELITY COMPONENT IMPORTS ---
+import CustomizableDashboard from './components/dashboard/CustomizableDashboard';
+
+import Employees from './components/hrms/Employees';
+import Attendance from './components/hrms/Attendance';
+import LeaveManagement from './components/hrms/LeaveManagement';
+import Shifts from './components/hrms/Shifts';
+import Payroll from './components/hrms/Payroll';
+
+import Expenses from './components/finance/Expenses';
+import Payments from './components/finance/Payments';
+import Receipts from './components/finance/Receipts';
+import Cashbook from './components/finance/Cashbook';
+import GstSettings from './components/finance/GstSettings';
+import BankAccounts from './components/finance/BankAccounts';
+
+import SalesReports from './components/reports/SalesReports';
+import PurchaseReports from './components/reports/PurchaseReports';
+import InventoryReports from './components/reports/InventoryReports';
+import HrReports from './components/reports/HrReports';
+import FinancialReports from './components/reports/FinancialReports';
+
+
 import {
   UserCheck,
   TrendingUp,
@@ -266,7 +289,10 @@ export default function App() {
     master_data: true,
     sales_data: true,
     admin: true,
-    alerts: true
+    alerts: true,
+    hrms_data: true,
+    finance_data: true,
+    reports_data: true
   });
 
   // Profile modal and dropdown toggles
@@ -380,6 +406,39 @@ export default function App() {
     { id: "2", time: "2026-05-22 12:30", actor: "corpadmin", action: "Role 'Store Manager' permissions redefined", status: "SUCCESS" },
     { id: "3", time: "2026-05-22 10:45", actor: "superadmin", action: "SUSPENDED tenant 'Legacy Corp'", status: "WARNING" }
   ]);
+
+  // --- PHASE 2 HIGH-FIDELITY HRMS MODULE STATES ---
+  const [hrmsAttendanceList, setHrmsAttendanceList] = useState<any[]>([]);
+  const [hrmsLeaveRequests, setHrmsLeaveRequests] = useState<any[]>([]);
+  const [hrmsShifts, setHrmsShifts] = useState<any[]>([]);
+  const [hrmsPayrollList, setHrmsPayrollList] = useState<any[]>([]);
+
+  // --- PHASE 2 HIGH-FIDELITY FINANCE MODULE STATES ---
+  const [financeExpenses, setFinanceExpenses] = useState<any[]>([]);
+  const [financePayments, setFinancePayments] = useState<any[]>([]);
+  const [financeReceipts, setFinanceReceipts] = useState<any[]>([]);
+  const [financeCashbook, setFinanceCashbook] = useState<any[]>([]);
+  const [financeGstSettings, setFinanceGstSettings] = useState<any>(null);
+  const [financeBankAccounts, setFinanceBankAccounts] = useState<any[]>([]);
+  const [financeCashbookOpening, setFinanceCashbookOpening] = useState(0);
+  const [financeCashbookClosing, setFinanceCashbookClosing] = useState(0);
+
+  // --- PHASE 2 REPORTS & ANALYTICS STATES ---
+  const [salesReportData, setSalesReportData] = useState<any>(null);
+  const [purchaseReportData, setPurchaseReportData] = useState<any>(null);
+  const [inventoryReportData, setInventoryReportData] = useState<any>(null);
+  const [hrReportData, setHrReportData] = useState<any>(null);
+  const [financialReportData, setFinancialReportData] = useState<any>(null);
+
+  // --- PHASE 2 DYNAMIC DASHBOARD STATS ---
+  const [dashboardStats, setDashboardStats] = useState({
+    monthlySales: [] as any[],
+    totalSalesRevenue: 0,
+    headcount: 0,
+    presentCount: 0,
+    totalSalaryDisbursed: 0,
+    netSavings: 0
+  });
 
   // Sync sub-tabs automatically based on tenant licenses
   useEffect(() => {
@@ -652,6 +711,7 @@ export default function App() {
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupType, setNewGroupType] = useState<'GENERAL' | 'EXPENSE'>('GENERAL');
   const [newGroupIsPrivate, setNewGroupIsPrivate] = useState(false);
+  const [newGroupConnectToCashbook, setNewGroupConnectToCashbook] = useState(false);
   const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
   const [expenseAmount, setExpenseAmount] = useState('');
   const [expenseDescription, setExpenseDescription] = useState('');
@@ -1328,6 +1388,10 @@ export default function App() {
       
       fetchMasterData();
       fetchSalesData();
+      fetchHrmsData();
+      fetchFinanceData();
+      fetchReportsData();
+      fetchDashboardStats();
     } catch (e) {}
   };
 
@@ -1397,6 +1461,10 @@ export default function App() {
       fetchPurchasesData();
       fetchInventoryData();
       fetchSalesExtensionsData();
+      fetchHrmsData();
+      fetchFinanceData();
+      fetchReportsData();
+      fetchDashboardStats();
     } catch (e) {}
   };
 
@@ -1500,6 +1568,214 @@ export default function App() {
       setServiceTicketsList(tRes.tickets || []);
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  // --- PHASE 2 HIGH-FIDELITY FETCH LOGIC ---
+  const fetchHrmsData = async () => {
+    try {
+      fetchDepartments();
+      const attendanceRes = await apiRequest('/api/hrms/attendance', 'GET');
+      setHrmsAttendanceList(attendanceRes.attendances || []);
+      
+      const leavesRes = await apiRequest('/api/hrms/leaves', 'GET');
+      setHrmsLeaveRequests(leavesRes.leaveRequests || []);
+      
+      const shiftsRes = await apiRequest('/api/hrms/shifts', 'GET');
+      setHrmsShifts(shiftsRes.shiftRosters || []);
+      
+      const payrollRes = await apiRequest('/api/hrms/payroll', 'GET');
+      setHrmsPayrollList(payrollRes.payrolls || []);
+    } catch (e) {
+      console.error("Error fetching HRMS data:", e);
+    }
+  };
+
+  const fetchFinanceData = async () => {
+    try {
+      const expensesRes = await apiRequest('/api/finance/expenses', 'GET');
+      setFinanceExpenses(expensesRes.expenses || []);
+      
+      const paymentsRes = await apiRequest('/api/finance/payments', 'GET');
+      setFinancePayments(paymentsRes.payments || []);
+      
+      const receiptsRes = await apiRequest('/api/finance/receipts', 'GET');
+      setFinanceReceipts(receiptsRes.receipts || []);
+      
+      const cashbookRes = await apiRequest('/api/finance/cashbook', 'GET');
+      setFinanceCashbook(cashbookRes.vouchers || []);
+      setFinanceCashbookOpening(cashbookRes.openingBalance || 0);
+      setFinanceCashbookClosing(cashbookRes.closingBalance || 0);
+      
+      const gstRes = await apiRequest('/api/finance/gst-worksheet', 'GET');
+      setFinanceGstSettings(gstRes || null);
+      
+      const banksRes = await apiRequest('/api/finance/bank-accounts', 'GET');
+      setFinanceBankAccounts(banksRes.bankAccounts || []);
+    } catch (e) {
+      console.error("Error fetching Finance data:", e);
+    }
+  };
+
+  const fetchReportsData = async () => {
+    try {
+      const salesRes = await apiRequest('/api/reports/sales', 'GET');
+      setSalesReportData(salesRes || null);
+      
+      const purchaseRes = await apiRequest('/api/reports/purchase', 'GET');
+      setPurchaseReportData(purchaseRes || null);
+      
+      const inventoryRes = await apiRequest('/api/reports/inventory', 'GET');
+      setInventoryReportData(inventoryRes || null);
+      
+      const hrRes = await apiRequest('/api/reports/hr', 'GET');
+      setHrReportData(hrRes || null);
+      
+      const financialRes = await apiRequest('/api/reports/financial', 'GET');
+      setFinancialReportData(financialRes || null);
+    } catch (e) {
+      console.error("Error fetching Reports data:", e);
+    }
+  };
+
+  const fetchDashboardStats = async () => {
+    try {
+      const salesReportsRes = await apiRequest('/api/reports/sales', 'GET');
+      const hrReportsRes = await apiRequest('/api/reports/hr', 'GET');
+      const financialRes = await apiRequest('/api/reports/financial', 'GET');
+
+      setDashboardStats({
+        monthlySales: salesReportsRes.data?.monthlySeries || [],
+        totalSalesRevenue: salesReportsRes.data?.totalSalesOrders || 0,
+        headcount: hrReportsRes.data?.headcount || 0,
+        presentCount: hrReportsRes.data?.presentCount || 0,
+        totalSalaryDisbursed: hrReportsRes.data?.totalSalaryDisbursed || 0,
+        netSavings: financialRes.data?.netCashflow || 0
+      });
+    } catch (e) {
+      console.error("Error loading dashboard stats:", e);
+    }
+  };
+
+  // --- PHASE 2 HRMS OPERATIONS ---
+  const handlePunchAttendance = async () => {
+    try {
+      const res = await apiRequest('/api/hrms/attendance/punch', 'POST', {});
+      setSuccessMsg(res.message || "Attendance punch processed!");
+      fetchHrmsData();
+      fetchDashboardStats();
+    } catch (err: any) {
+      setErrorMsg(err.message || "Attendance punch failed.");
+    }
+  };
+
+  const handleCreateLeaveRequest = async (payload: any) => {
+    try {
+      const res = await apiRequest('/api/hrms/leaves', 'POST', payload);
+      setSuccessMsg(res.message || "Leave request submitted successfully!");
+      fetchHrmsData();
+      fetchDashboardStats();
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to submit leave request.");
+    }
+  };
+
+  const handleProcessLeaveRequest = async (id: string, notes: string, approve: boolean) => {
+    try {
+      const status = approve ? "APPROVED" : "REJECTED";
+      const res = await apiRequest(`/api/hrms/leaves/${id}`, 'PATCH', { status, notes });
+      setSuccessMsg(res.message || `Leave request successfully ${status.toLowerCase()}`);
+      fetchHrmsData();
+      fetchDashboardStats();
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to process leave request.");
+    }
+  };
+
+  const handleCreateShiftRoster = async (payload: any) => {
+    try {
+      const res = await apiRequest('/api/hrms/shifts', 'POST', payload);
+      setSuccessMsg(res.message || "Shift roster created!");
+      fetchHrmsData();
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to create shift roster.");
+    }
+  };
+
+  const handleGeneratePayroll = async (payload: any) => {
+    try {
+      const res = await apiRequest('/api/hrms/payroll/generate', 'POST', payload);
+      setSuccessMsg(res.message || "Payroll period details generated!");
+      fetchHrmsData();
+      fetchDashboardStats();
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to generate payroll sheet.");
+    }
+  };
+
+  const handleDisbursePayroll = async (id: string, payload: any) => {
+    try {
+      const res = await apiRequest(`/api/hrms/payroll/disburse/${id}`, 'PATCH', payload);
+      setSuccessMsg(res.message || "Payroll disbursement confirmed!");
+      fetchHrmsData();
+      fetchDashboardStats();
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to disburse payroll.");
+    }
+  };
+
+  const handleUpdateEmployeeProfile = async (id: string, payload: any) => {
+    try {
+      const res = await apiRequest(`/api/hrms/employees/${id}`, 'PATCH', payload);
+      setSuccessMsg(res.message || "Employee master profile synchronized.");
+      fetchHrmsData();
+      fetchDashboardStats();
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to synchronize employee profile.");
+    }
+  };
+
+  // --- PHASE 2 FINANCE OPERATIONS ---
+  const handleCreateExpense = async (payload: any) => {
+    try {
+      const res = await apiRequest('/api/finance/expenses', 'POST', payload);
+      setSuccessMsg(res.message || "Expense voucher logged!");
+      fetchFinanceData();
+      fetchDashboardStats();
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to record expense voucher.");
+    }
+  };
+
+  const handleCreatePayment = async (payload: any) => {
+    try {
+      const res = await apiRequest('/api/finance/payments', 'POST', payload);
+      setSuccessMsg(res.message || "Vendor payment finalized!");
+      fetchFinanceData();
+      fetchDashboardStats();
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to finalize payment.");
+    }
+  };
+
+  const handleCreateReceipt = async (payload: any) => {
+    try {
+      const res = await apiRequest('/api/finance/receipts', 'POST', payload);
+      setSuccessMsg(res.message || "Receipt logged successfully!");
+      fetchFinanceData();
+      fetchDashboardStats();
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to record receipt.");
+    }
+  };
+
+  const handleCreateBankAccount = async (payload: any) => {
+    try {
+      const res = await apiRequest('/api/finance/bank-accounts', 'POST', payload);
+      setSuccessMsg(res.message || "Bank account registered successfully!");
+      fetchFinanceData();
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to register bank account.");
     }
   };
 
@@ -2177,7 +2453,10 @@ export default function App() {
     const body = {
       name: newGroupName.trim(),
       type: newGroupType,
-      settings: JSON.stringify({ isPrivate: newGroupIsPrivate })
+      settings: JSON.stringify({
+        isPrivate: newGroupIsPrivate,
+        connectToCashbook: newGroupConnectToCashbook
+      })
     };
     try {
       const createdGroup = await apiRequest('/api/chat/group', 'POST', body);
@@ -2185,6 +2464,7 @@ export default function App() {
       setShowCreateGroupModal(false);
       setNewGroupName('');
       setNewGroupIsPrivate(false);
+      setNewGroupConnectToCashbook(false);
       handleSelectChatGroup(createdGroup);
     } catch (e) {
       console.error("Error creating chat group:", e);
@@ -2311,14 +2591,18 @@ export default function App() {
     }
   };
 
-  const handleUpdateGroupSettings = async (isPrivate: boolean) => {
+  const handleUpdateGroupSettings = async (isPrivate: boolean, connectToCashbook?: boolean) => {
     if (!selectedChatGroup) return;
+    const settings = JSON.parse(selectedChatGroup.settings || '{}');
+    const newIsPrivate = isPrivate;
+    const newConnectToCashbook = connectToCashbook !== undefined ? connectToCashbook : (settings.connectToCashbook || false);
     try {
       const updatedGroup = await apiRequest(`/api/chat/group/${selectedChatGroup.id}/settings`, 'PATCH', {
-        isPrivate
+        isPrivate: newIsPrivate,
+        connectToCashbook: newConnectToCashbook
       });
       setSelectedChatGroup(updatedGroup);
-      setSuccessMsg(`Group visibility updated to ${isPrivate ? 'Private' : 'Public'}.`);
+      setSuccessMsg(`Group settings updated successfully.`);
     } catch (e) {
       console.error("Error updating settings:", e);
     }
@@ -2920,19 +3204,17 @@ export default function App() {
                     </div>
                   </div>
                 ) : (
-                  <div className="max-w-4xl mx-auto my-12 text-center select-none animate-fade-in">
-                    <div className="p-4 bg-[var(--bg-secondary)] text-indigo-500 border border-[var(--border-color)] rounded-2xl w-fit mx-auto mb-6 shadow-sm">
-                      <Activity className="w-12 h-12 animate-pulse" />
-                    </div>
-                    <h2 className="text-xl font-bold text-[var(--text-primary)] font-display">
-                      ERP Reimplementation Console
-                    </h2>
-                    <p className="text-[var(--text-secondary)] text-xs mt-2 max-w-md mx-auto leading-relaxed">
-                      All default dashboard views and modular features have been completely removed.
-                    </p>
-                    <p className="text-[var(--text-muted)] text-[11px] mt-2 max-w-md mx-auto leading-relaxed border-t border-dashed border-[var(--border-color)] pt-2">
-                      Ready to implement new features one category and one feature at a time!
-                    </p>
+                  <div className="max-w-6xl mx-auto animate-fade-in select-none text-left">
+                    <CustomizableDashboard
+                      companyProfile={adminProfileForm}
+                      companyUsers={companyUsers}
+                      auditLogs={auditLogs}
+                      notifications={notifications}
+                      leaveRequests={hrmsLeaveRequests}
+                      stats={dashboardStats}
+                      onApproveLeave={async (id, notes) => { await handleProcessLeaveRequest(id, notes, true); }}
+                      onRejectLeave={async (id, notes) => { await handleProcessLeaveRequest(id, notes, false); }}
+                    />
                   </div>
                 )
               )}
@@ -3341,6 +3623,230 @@ export default function App() {
                           setActiveWorkspaceModule('inventory_data');
                           setActiveWorkspaceSubModule('INVENTORY_PRODUCT');
                         }}
+                      />
+                    )}
+
+                  </div>
+                </div>
+              )}
+
+              {/* ==========================================
+                  HRMS MODULE WORKSPACE
+                  ========================================== */}
+              {activeWorkspaceModule === 'hrms_data' && (
+                <div className="max-w-6xl mx-auto animate-fade-in text-left select-none">
+                  <div className="w-full bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl p-6 shadow-sm min-h-[480px]">
+                    
+                    {activeWorkspaceSubModule === 'HRMS_EMPLOYEES' && (
+                      <Employees
+                        employees={companyUsers}
+                        departments={departmentList}
+                        roles={companyRoles}
+                        onUpdateEmployee={handleUpdateEmployeeProfile}
+                      />
+                    )}
+
+                    {activeWorkspaceSubModule === 'HRMS_ATTENDANCE' && (
+                      <Attendance
+                        attendances={hrmsAttendanceList}
+                        employees={companyUsers}
+                        currentUser={user}
+                        onPunchAttendance={handlePunchAttendance}
+                        onFetchFilteredAttendance={async (userId, start, end) => {
+                          const qs = new URLSearchParams({
+                            ...(userId && { userId }),
+                            ...(start && { startDate: start }),
+                            ...(end && { endDate: end }),
+                          }).toString();
+                          const res = await apiRequest(`/api/hrms/attendance?${qs}`, 'GET');
+                          setHrmsAttendanceList(res.attendances || []);
+                        }}
+                      />
+                    )}
+
+                    {activeWorkspaceSubModule === 'HRMS_LEAVES' && (
+                      <LeaveManagement
+                        leaveRequests={hrmsLeaveRequests}
+                        onCreateRequest={handleCreateLeaveRequest}
+                        onDecideRequest={async (id, notes, approve) => { await handleProcessLeaveRequest(id, notes, approve); }}
+                        currentUser={user}
+                      />
+                    )}
+
+                    {activeWorkspaceSubModule === 'HRMS_SHIFTS' && (
+                      <Shifts
+                        shiftRosters={hrmsShifts}
+                        onCreateShiftRoster={handleCreateShiftRoster}
+                      />
+                    )}
+
+                    {activeWorkspaceSubModule === 'HRMS_PAYROLL' && (
+                      <Payroll
+                        payrolls={hrmsPayrollList}
+                        employees={companyUsers}
+                        onGeneratePayroll={handleGeneratePayroll}
+                        onDisbursePayroll={handleDisbursePayroll}
+                      />
+                    )}
+
+                  </div>
+                </div>
+              )}
+
+              {/* ==========================================
+                  FINANCE & ACCOUNTING WORKSPACE
+                  ========================================== */}
+              {activeWorkspaceModule === 'finance_data' && (
+                <div className="max-w-6xl mx-auto animate-fade-in text-left select-none">
+                  <div className="w-full bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl p-6 shadow-sm min-h-[480px]">
+                    
+                    {activeWorkspaceSubModule === 'FINANCE_EXPENSES' && (
+                      <Expenses
+                        expenses={financeExpenses}
+                        onCreateExpense={handleCreateExpense}
+                        onDeleteExpense={async (id) => {
+                          if (window.confirm("Are you sure you want to delete this expense?")) {
+                            await apiRequest(`/api/finance/expenses/${id}`, 'DELETE');
+                            setSuccessMsg("Expense voucher discarded.");
+                            fetchFinanceData();
+                            fetchDashboardStats();
+                          }
+                        }}
+                        companyUsers={companyUsers}
+                      />
+                    )}
+
+                    {activeWorkspaceSubModule === 'FINANCE_PAYMENTS' && (
+                      <Payments
+                        payments={financePayments}
+                        vendors={vendorsList}
+                        onCreatePayment={handleCreatePayment}
+                        currencySymbol={currencySymbol}
+                      />
+                    )}
+
+                    {activeWorkspaceSubModule === 'FINANCE_RECEIPTS' && (
+                      <Receipts
+                        receipts={financeReceipts}
+                        onCreateReceipt={handleCreateReceipt}
+                      />
+                    )}
+
+                    {activeWorkspaceSubModule === 'FINANCE_CASHBOOK' && (
+                      <Cashbook
+                        vouchers={financeCashbook}
+                        openingBalance={financeCashbookOpening}
+                        closingBalance={financeCashbookClosing}
+                      />
+                    )}
+
+                    {activeWorkspaceSubModule === 'FINANCE_GST' && (
+                      <GstSettings
+                        gstWorksheet={financeGstSettings || {
+                          companyGstin: "Not Registered",
+                          companyPan: "Not Registered",
+                          outputGst: 0,
+                          inputGst: 0,
+                          netGstPayable: 0,
+                          salesTaxCollected: 0,
+                          purchasesTaxCredited: 0
+                        }}
+                        companyProfile={adminProfileForm}
+                        onUpdateCompanyProfile={async (payload) => {
+                          try {
+                            const res = await apiRequest('/api/admin/company/profile', 'PATCH', payload);
+                            setSuccessMsg(res.message || "GST Settings updated successfully");
+                            fetchFinanceData();
+                            fetchAdminConsoleData();
+                          } catch (err: any) {
+                            setErrorMsg(err.message || "Failed to save GST details");
+                          }
+                        }}
+                        onRefreshWorksheet={async () => {
+                          await fetchFinanceData();
+                        }}
+                      />
+                    )}
+
+                    {activeWorkspaceSubModule === 'FINANCE_BANK' && (
+                      <BankAccounts
+                        bankAccounts={financeBankAccounts}
+                        onCreateBankAccount={handleCreateBankAccount}
+                        currencySymbol={currencySymbol}
+                      />
+                    )}
+
+                  </div>
+                </div>
+              )}
+
+              {/* ==========================================
+                  REPORTS & ANALYTICS WORKSPACE
+                  ========================================== */}
+              {activeWorkspaceModule === 'reports_data' && (
+                <div className="max-w-6xl mx-auto animate-fade-in text-left select-none">
+                  <div className="w-full bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl p-6 shadow-sm min-h-[480px]">
+                    
+                    {activeWorkspaceSubModule === 'REPORTS_SALES' && (
+                      <SalesReports
+                        salesData={salesReportData || {
+                          monthlySales: [],
+                          totalSalesRevenue: 0,
+                          paidSalesCount: 0,
+                          unpaidSalesCount: 0,
+                          invoiceCount: 0
+                        }}
+                        token={token || ""}
+                      />
+                    )}
+
+                    {activeWorkspaceSubModule === 'REPORTS_PURCHASE' && (
+                      <PurchaseReports
+                        purchaseData={purchaseReportData || {
+                          monthlyPurchases: [],
+                          totalPurchasesValuation: 0,
+                          pendingCount: 0,
+                          completedCount: 0,
+                          purchaseCount: 0
+                        }}
+                        token={token || ""}
+                      />
+                    )}
+
+                    {activeWorkspaceSubModule === 'REPORTS_INVENTORY' && (
+                      <InventoryReports
+                        inventoryData={inventoryReportData || {
+                          products: [],
+                          totalAssetValuation: 0,
+                          lowStockCount: 0,
+                          totalProductsCount: 0
+                        }}
+                        token={token || ""}
+                      />
+                    )}
+
+                    {activeWorkspaceSubModule === 'REPORTS_HR' && (
+                      <HrReports
+                        hrData={hrReportData || {
+                          headcount: 0,
+                          presentCount: 0,
+                          lateCount: 0,
+                          totalWorkedHours: 0,
+                          totalSalaryDisbursed: 0
+                        }}
+                        token={token || ""}
+                      />
+                    )}
+
+                    {activeWorkspaceSubModule === 'REPORTS_FINANCE' && (
+                      <FinancialReports
+                        financialData={financialReportData || {
+                          monthlyCashflow: [],
+                          totalInflow: 0,
+                          totalOutflow: 0,
+                          netSavings: 0
+                        }}
+                        token={token || ""}
                       />
                     )}
 
@@ -5222,6 +5728,24 @@ export default function App() {
                     </label>
                   </div>
 
+                  {newGroupType === 'EXPENSE' && (
+                    <div className="flex items-center justify-between p-2 border border-[var(--border-color)] rounded-xl bg-[var(--bg-tertiary)] mt-1 select-none">
+                      <div>
+                        <span className="font-bold text-[11px] block font-display">Connect to corporate Cashbook</span>
+                        <span className="text-[9px] text-[var(--text-secondary)] mt-0.5 block">Sync split expenses directly with accounting registers</span>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={newGroupConnectToCashbook}
+                          onChange={e => setNewGroupConnectToCashbook(e.target.checked)}
+                          className="sr-only peer"
+                        />
+                        <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                      </label>
+                    </div>
+                  )}
+
                   <div className="flex gap-3 mt-2">
                     <button
                       type="button"
@@ -5448,12 +5972,30 @@ export default function App() {
                       <input 
                         type="checkbox" 
                         checked={JSON.parse(selectedChatGroup.settings || '{}').isPrivate || false}
-                        onChange={e => handleUpdateGroupSettings(e.target.checked)}
+                        onChange={e => handleUpdateGroupSettings(e.target.checked, JSON.parse(selectedChatGroup.settings || '{}').connectToCashbook || false)}
                         className="sr-only peer"
                       />
                       <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
                     </label>
                   </div>
+
+                  {selectedChatGroup.type === 'EXPENSE' && (
+                    <div className="flex items-center justify-between p-2.5 border border-[var(--border-color)] rounded-xl bg-[var(--bg-tertiary)]">
+                      <div>
+                        <span className="font-bold text-[11px] block font-display">Connect to corporate Cashbook</span>
+                        <span className="text-[9px] text-[var(--text-secondary)] mt-0.5 block">Sync split expenses directly with accounting registers</span>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={JSON.parse(selectedChatGroup.settings || '{}').connectToCashbook || false}
+                          onChange={e => handleUpdateGroupSettings(JSON.parse(selectedChatGroup.settings || '{}').isPrivate || false, e.target.checked)}
+                          className="sr-only peer"
+                        />
+                        <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                      </label>
+                    </div>
+                  )}
 
                   {/* Add Members Section */}
                   <div>

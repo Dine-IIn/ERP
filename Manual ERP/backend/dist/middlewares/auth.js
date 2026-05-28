@@ -19,6 +19,10 @@ async function authenticateToken(req, res, next) {
     try {
         const decoded = (0, utils_1.verifyToken)(token);
         req.user = decoded;
+        // Skip database active check for Super Admin
+        if (decoded.isSuperAdmin) {
+            return next();
+        }
         // Load session from database to ensure it's still active and not logged out
         const session = await db_1.default.userSession.findUnique({
             where: { token }
@@ -44,10 +48,6 @@ async function authenticateToken(req, res, next) {
                     data: { lastActiveAt: new Date() }
                 });
             }
-        }
-        // Skip database active check for Super Admin
-        if (decoded.isSuperAdmin) {
-            return next();
         }
         // Load user and company status from DB to ensure they are active
         const userFromDb = await db_1.default.user.findUnique({
