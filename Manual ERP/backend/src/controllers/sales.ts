@@ -836,3 +836,198 @@ export async function deleteDispatch(req: AuthenticatedRequest, res: Response) {
     return res.status(500).json({ error: error.message });
   }
 }
+
+// ==========================================
+// 6. QUOTATIONS CONTROLLERS
+// ==========================================
+
+export async function listQuotations(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const quotations = await prisma.quotation.findMany({
+      where: { companyId },
+      include: {
+        customer: { select: { id: true, name: true } },
+        items: { include: { product: { select: { id: true, name: true, uom: true } } } }
+      },
+      orderBy: { date: 'desc' }
+    });
+
+    return res.json({ quotations });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function createQuotation(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { customerId, date, expiryDate, subtotal, discount, tax, total, status, items } = req.body;
+
+    if (!customerId || !items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: "Customer reference and at least one item are required." });
+    }
+
+    const quoteNo = await generateDocNo(companyId, 'QT', 'quotation' as any);
+
+    const quotation = await prisma.quotation.create({
+      data: {
+        companyId,
+        customerId,
+        quoteNo,
+        date: date ? new Date(date) : new Date(),
+        expiryDate: expiryDate ? new Date(expiryDate) : null,
+        subtotal: parseFloat(subtotal) || 0.0,
+        discount: parseFloat(discount) || 0.0,
+        tax: parseFloat(tax) || 0.0,
+        total: parseFloat(total) || 0.0,
+        status: status || 'DRAFT',
+        items: {
+          create: items.map((it: any) => ({
+            productId: it.productId,
+            quantity: parseFloat(it.quantity) || 1.0,
+            price: parseFloat(it.price) || 0.0,
+            discount: parseFloat(it.discount) || 0.0
+          }))
+        }
+      },
+      include: { items: true }
+    });
+
+    return res.status(201).json({ message: `Quotation ${quoteNo} generated successfully`, quotation });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function updateQuotationStatus(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const quotation = await prisma.quotation.update({
+      where: { id },
+      data: { status }
+    });
+
+    return res.json({ message: "Quotation status updated", quotation });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function deleteQuotation(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { id } = req.params;
+    await prisma.quotation.delete({ where: { id } });
+    return res.json({ message: "Quotation permanently removed." });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+// ==========================================
+// 7. POST-SALES SERVICE (SERVICE TICKETS)
+// ==========================================
+
+export async function listServiceTickets(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const tickets = await prisma.serviceTicket.findMany({
+      where: { companyId },
+      include: {
+        customer: { select: { id: true, name: true } },
+        product: { select: { id: true, name: true } }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    return res.json({ tickets });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function createServiceTicket(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { customerId, productId, serialNumber, title, type, priority, status, scheduledDate, resolutionNotes } = req.body;
+
+    if (!customerId || !productId || !title || !type || !priority) {
+      return res.status(400).json({ error: "Customer, Product, Title, Type and Priority are required fields." });
+    }
+
+    const ticketNo = `TKT-${Math.floor(100000 + Math.random() * 900000)}`;
+
+    const ticket = await prisma.serviceTicket.create({
+      data: {
+        companyId,
+        customerId,
+        productId,
+        serialNumber: serialNumber || null,
+        ticketNo,
+        title,
+        type,
+        priority,
+        status: status || "OPEN",
+        scheduledDate: scheduledDate ? new Date(scheduledDate) : null,
+        resolutionNotes: resolutionNotes || null
+      }
+    });
+
+    return res.status(201).json({ message: `Service ticket ${ticketNo} logged successfully`, ticket });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function updateServiceTicket(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { id } = req.params;
+    const { status, resolutionNotes, scheduledDate, priority } = req.body;
+
+    const ticket = await prisma.serviceTicket.update({
+      where: { id },
+      data: {
+        ...(status && { status }),
+        ...(resolutionNotes !== undefined && { resolutionNotes: resolutionNotes || null }),
+        ...(scheduledDate !== undefined && { scheduledDate: scheduledDate ? new Date(scheduledDate) : null }),
+        ...(priority && { priority })
+      }
+    });
+
+    return res.json({ message: "Service ticket details updated", ticket });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function deleteServiceTicket(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { id } = req.params;
+    await prisma.serviceTicket.delete({ where: { id } });
+    return res.json({ message: "Service ticket deleted successfully." });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}

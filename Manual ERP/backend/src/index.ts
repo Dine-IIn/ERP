@@ -51,6 +51,65 @@ import {
   getCompanyChatStats
 } from './controllers/chat';
 
+import {
+  listTaxes,
+  createTax,
+  updateTax,
+  deleteTax
+} from './controllers/taxes';
+
+import {
+  listLeads,
+  createLead,
+  updateLead,
+  deleteLead,
+  listOpportunities,
+  createOpportunity,
+  updateOpportunity,
+  deleteOpportunity,
+  listFollowUps,
+  createFollowUp,
+  updateFollowUp,
+  deleteFollowUp,
+  getCrmStats
+} from './controllers/crm';
+
+import {
+  listVendorQuotations,
+  createVendorQuotation,
+  updateVendorQuotationStatus,
+  deleteVendorQuotation,
+  listPurchaseOrders,
+  createPurchaseOrder,
+  updatePurchaseOrderStatus,
+  deletePurchaseOrder,
+  listGrns,
+  createGrn,
+  deleteGrn,
+  listPurchaseReturns,
+  createPurchaseReturn,
+  deletePurchaseReturn,
+  listVendorPayments,
+  createVendorPayment,
+  deleteVendorPayment
+} from './controllers/purchases';
+
+import {
+  listStockAdjustments,
+  adjustStock
+} from './controllers/inventory';
+
+import {
+  listQuotations,
+  createQuotation,
+  updateQuotationStatus,
+  deleteQuotation,
+  listServiceTickets,
+  createServiceTicket,
+  updateServiceTicket,
+  deleteServiceTicket
+} from './controllers/sales';
+
 dotenv.config();
 if (!process.env.JWT_SECRET) {
   throw new Error('JWT_SECRET is missing in environment variables');
@@ -364,6 +423,68 @@ app.post('/api/sales/dispatches', authenticateToken, createDispatch);
 app.patch('/api/sales/dispatches/:id', authenticateToken, updateDispatch);
 app.delete('/api/sales/dispatches/:id', authenticateToken, deleteDispatch);
 
+// 9.1 Advanced Sales: Quotations & Post-Sales Maintenance Service CRUDs
+app.get('/api/sales/quotations', authenticateToken, listQuotations);
+app.post('/api/sales/quotations', authenticateToken, createQuotation);
+app.patch('/api/sales/quotations/:id', authenticateToken, updateQuotationStatus);
+app.delete('/api/sales/quotations/:id', authenticateToken, deleteQuotation);
+
+app.get('/api/sales/service-tickets', authenticateToken, listServiceTickets);
+app.post('/api/sales/service-tickets', authenticateToken, createServiceTicket);
+app.patch('/api/sales/service-tickets/:id', authenticateToken, updateServiceTicket);
+app.delete('/api/sales/service-tickets/:id', authenticateToken, deleteServiceTicket);
+
+// 9.2 Tax Master CRUD
+app.get('/api/master/taxes', authenticateToken, listTaxes);
+app.post('/api/master/taxes', authenticateToken, createTax);
+app.patch('/api/master/taxes/:id', authenticateToken, updateTax);
+app.delete('/api/master/taxes/:id', authenticateToken, deleteTax);
+
+// 9.3 CRM Portal: Leads, Opportunities, Followups and Analytics Stats CRUDs
+app.get('/api/crm/leads', authenticateToken, listLeads);
+app.post('/api/crm/leads', authenticateToken, createLead);
+app.patch('/api/crm/leads/:id', authenticateToken, updateLead);
+app.delete('/api/crm/leads/:id', authenticateToken, deleteLead);
+
+app.get('/api/crm/opportunities', authenticateToken, listOpportunities);
+app.post('/api/crm/opportunities', authenticateToken, createOpportunity);
+app.patch('/api/crm/opportunities/:id', authenticateToken, updateOpportunity);
+app.delete('/api/crm/opportunities/:id', authenticateToken, deleteOpportunity);
+
+app.get('/api/crm/followups', authenticateToken, listFollowUps);
+app.post('/api/crm/followups', authenticateToken, createFollowUp);
+app.patch('/api/crm/followups/:id', authenticateToken, updateFollowUp);
+app.delete('/api/crm/followups/:id', authenticateToken, deleteFollowUp);
+
+app.get('/api/crm/stats', authenticateToken, getCrmStats);
+
+// 9.4 Purchase Sourcing: Vendor Quotes, POs, GRN, Returns, Payments CRUDs
+app.get('/api/purchase/vendor-quotes', authenticateToken, listVendorQuotations);
+app.post('/api/purchase/vendor-quotes', authenticateToken, createVendorQuotation);
+app.patch('/api/purchase/vendor-quotes/:id', authenticateToken, updateVendorQuotationStatus);
+app.delete('/api/purchase/vendor-quotes/:id', authenticateToken, deleteVendorQuotation);
+
+app.get('/api/purchase/orders', authenticateToken, listPurchaseOrders);
+app.post('/api/purchase/orders', authenticateToken, createPurchaseOrder);
+app.patch('/api/purchase/orders/:id', authenticateToken, updatePurchaseOrderStatus);
+app.delete('/api/purchase/orders/:id', authenticateToken, deletePurchaseOrder);
+
+app.get('/api/purchase/grns', authenticateToken, listGrns);
+app.post('/api/purchase/grns', authenticateToken, createGrn);
+app.delete('/api/purchase/grns/:id', authenticateToken, deleteGrn);
+
+app.get('/api/purchase/returns', authenticateToken, listPurchaseReturns);
+app.post('/api/purchase/returns', authenticateToken, createPurchaseReturn);
+app.delete('/api/purchase/returns/:id', authenticateToken, deletePurchaseReturn);
+
+app.get('/api/purchase/payments', authenticateToken, listVendorPayments);
+app.post('/api/purchase/payments', authenticateToken, createVendorPayment);
+app.delete('/api/purchase/payments/:id', authenticateToken, deleteVendorPayment);
+
+// 9.5 Inventory Warehousing: Ledger listings & manual stock adjustments
+app.get('/api/inventory/adjustments', authenticateToken, listStockAdjustments);
+app.post('/api/inventory/adjust', authenticateToken, adjustStock);
+
 // Automated Seeding Function to ensure feature keys exist and are mapped to companies
 async function seedDatabase() {
   try {
@@ -393,12 +514,30 @@ async function seedDatabase() {
             "MASTER_CUSTOMER",
             "MASTER_VENDOR",
             "MASTER_PRODUCT",
+            "MASTER_TAX",
             "SALES_DATA",
             "SALES_ORDER",
             "SALES_PROFORMA",
             "SALES_INVOICE",
             "SALES_CHALLAN",
-            "SALES_DISPATCH"
+            "SALES_DISPATCH",
+            "SALES_QUOTATION",
+            "SALES_POST_SERVICE",
+            "CRM_DATA",
+            "CRM_LEAD",
+            "CRM_OPPORTUNITY",
+            "CRM_FOLLOWUP",
+            "CRM_DASHBOARD",
+            "PURCHASE_DATA",
+            "PURCHASE_ORDER",
+            "PURCHASE_VENDOR_QUOTE",
+            "PURCHASE_GRN",
+            "PURCHASE_RETURN",
+            "PURCHASE_PAYMENT",
+            "INVENTORY_DATA",
+            "INVENTORY_PRODUCT",
+            "INVENTORY_STOCK_OVERVIEW",
+            "INVENTORY_LOW_ALERT"
           ]
         }
       }
@@ -442,6 +581,7 @@ async function seedDatabase() {
         permissions.MASTER_CUSTOMER = ["read", "write", "delete"];
         permissions.MASTER_VENDOR = ["read", "write", "delete"];
         permissions.MASTER_PRODUCT = ["read", "write", "delete"];
+        permissions.MASTER_TAX = ["read", "write", "delete"];
 
         permissions.SALES_DATA = ["read", "write", "delete"];
         permissions.SALES_ORDER = ["read", "write", "delete"];
@@ -449,6 +589,26 @@ async function seedDatabase() {
         permissions.SALES_INVOICE = ["read", "write", "delete"];
         permissions.SALES_CHALLAN = ["read", "write", "delete"];
         permissions.SALES_DISPATCH = ["read", "write", "delete"];
+        permissions.SALES_QUOTATION = ["read", "write", "delete"];
+        permissions.SALES_POST_SERVICE = ["read", "write", "delete"];
+
+        permissions.CRM_DATA = ["read", "write", "delete"];
+        permissions.CRM_LEAD = ["read", "write", "delete"];
+        permissions.CRM_OPPORTUNITY = ["read", "write", "delete"];
+        permissions.CRM_FOLLOWUP = ["read", "write", "delete"];
+        permissions.CRM_DASHBOARD = ["read", "write", "delete"];
+
+        permissions.PURCHASE_DATA = ["read", "write", "delete"];
+        permissions.PURCHASE_ORDER = ["read", "write", "delete"];
+        permissions.PURCHASE_VENDOR_QUOTE = ["read", "write", "delete"];
+        permissions.PURCHASE_GRN = ["read", "write", "delete"];
+        permissions.PURCHASE_RETURN = ["read", "write", "delete"];
+        permissions.PURCHASE_PAYMENT = ["read", "write", "delete"];
+
+        permissions.INVENTORY_DATA = ["read", "write", "delete"];
+        permissions.INVENTORY_PRODUCT = ["read", "write", "delete"];
+        permissions.INVENTORY_STOCK_OVERVIEW = ["read", "write", "delete"];
+        permissions.INVENTORY_LOW_ALERT = ["read", "write", "delete"];
 
         await prisma.role.update({
           where: { id: adminRole.id },

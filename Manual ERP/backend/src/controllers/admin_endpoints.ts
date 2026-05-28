@@ -999,6 +999,27 @@ export async function restoreBackup(req: AuthenticatedRequest, res: Response) {
       await tx.auditLog.deleteMany({ where: { companyId } });
 
       // Wipe new master data tables
+      await tx.followUp.deleteMany({ where: { companyId } });
+      await tx.opportunity.deleteMany({ where: { companyId } });
+      await tx.lead.deleteMany({ where: { companyId } });
+
+      await tx.quotationItem.deleteMany({});
+      await tx.quotation.deleteMany({ where: { companyId } });
+      await tx.serviceTicket.deleteMany({ where: { companyId } });
+
+      await tx.grnItem.deleteMany({});
+      await tx.grn.deleteMany({ where: { companyId } });
+      await tx.purchaseReturnItem.deleteMany({});
+      await tx.purchaseReturn.deleteMany({ where: { companyId } });
+      await tx.purchaseOrderItem.deleteMany({});
+      await tx.purchaseOrder.deleteMany({ where: { companyId } });
+      await tx.vendorQuotationItem.deleteMany({});
+      await tx.vendorQuotation.deleteMany({ where: { companyId } });
+      await tx.vendorPayment.deleteMany({ where: { companyId } });
+
+      await tx.stockAdjustment.deleteMany({ where: { companyId } });
+      await tx.tax.deleteMany({ where: { companyId } });
+
       await tx.dispatch.deleteMany({ where: { companyId } });
       await tx.deliveryChallanItem.deleteMany({});
       await tx.deliveryChallan.deleteMany({ where: { companyId } });

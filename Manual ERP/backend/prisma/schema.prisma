@@ -88,6 +88,18 @@ model Company {
   salesInvoices     SalesInvoice[]
   deliveryChallans  DeliveryChallan[]
   dispatches        Dispatch[]
+  taxes             Tax[]
+  leads             Lead[]
+  opportunities     Opportunity[]
+  followups         FollowUp[]
+  quotations        Quotation[]
+  serviceTickets    ServiceTicket[]
+  vendorQuotations  VendorQuotation[]
+  purchaseOrders    PurchaseOrder[]
+  grns              Grn[]
+  purchaseReturns   PurchaseReturn[]
+  vendorPayments    VendorPayment[]
+  stockAdjustments  StockAdjustment[]
 
   @@map("companies")
 }
@@ -155,6 +167,7 @@ model User {
   shiftEnd          String?
   shiftName         String?
   documents         String?
+  assignedLeads     Lead[]
 
   @@unique([companyId, username])
   @@map("users")
@@ -310,6 +323,8 @@ model Customer {
   proformaInvoices ProformaInvoice[]
   salesInvoices   SalesInvoice[]
   deliveryChallans DeliveryChallan[]
+  quotations      Quotation[]
+  serviceTickets  ServiceTicket[]
 
   @@unique([companyId, name])
   @@map("customers")
@@ -329,6 +344,9 @@ model Vendor {
   creditTime   Int      @default(0)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  vendorQuotations VendorQuotation[]
+  purchaseOrders   PurchaseOrder[]
+  vendorPayments   VendorPayment[]
 
   @@unique([companyId, name])
   @@map("vendors")
@@ -380,6 +398,18 @@ model Product {
   proformaInvoiceItems ProformaInvoiceItem[]
   salesInvoiceItems    SalesInvoiceItem[]
   deliveryChallanItems DeliveryChallanItem[]
+
+  // --- INVENTORY MANAGEMENT ADDITIONS ---
+  stock        Float            @default(0.0)   // Active physical stock level
+  reorderLevel Float            @default(5.0)   // Alert threshold for low stock
+  warehouseLoc String?          // Warehouse rack designation, e.g. "Rack A-3"
+  quotationItems       QuotationItem[]
+  serviceTickets       ServiceTicket[]
+  vendorQuotationItems VendorQuotationItem[]
+  purchaseOrderItems   PurchaseOrderItem[]
+  grnItems             GrnItem[]
+  purchaseReturnItems  PurchaseReturnItem[]
+  stockAdjustments     StockAdjustment[]
 
   @@unique([companyId, name])
   @@map("products")
@@ -549,4 +579,312 @@ model Dispatch {
 
   @@unique([companyId, dispatchNo])
   @@map("dispatches")
+}
+
+// ==========================================
+// NEW ERP EXPANSION MODELS
+// ==========================================
+
+model Tax {
+  id         String   @id @default(uuid())
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name       String   // e.g. "GST 18%", "VAT 5%"
+  rate       Float    // e.g. 18.0, 5.0
+  type       String   // "GST", "VAT", "SALES_TAX", "SERVICE_TAX"
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([companyId, name])
+  @@map("taxes")
+}
+
+model Lead {
+  id             String   @id @default(uuid())
+  companyId      String
+  company        Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name           String   // Contact name
+  companyName    String?  // Associated company
+  email          String?
+  phone          String
+  source         String   // "WEBSITE", "REFERRAL", "COLD_CALL", "EXHIBITION", "OTHER"
+  status         String   // "NEW", "CONTACTED", "QUALIFIED", "LOST"
+  assignedToId   String?
+  assignedTo     User?    @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  opportunities  Opportunity[]
+  followups      FollowUp[]
+
+  @@map("leads")
+}
+
+model Opportunity {
+  id             String   @id @default(uuid())
+  companyId      String
+  company        Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  leadId         String
+  lead           Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  title          String   // e.g. "100 Tons Copper Wire Supply"
+  value          Float    // Estimated deal value
+  stage          String   // "PROSPECTING", "PROPOSAL", "NEGOTIATION", "WON", "LOST"
+  probability    Float    // Conversion percentage probability (e.g. 20, 50, 90)
+  closeDate      DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("opportunities")
+}
+
+model FollowUp {
+  id             String   @id @default(uuid())
+  companyId      String
+  company        Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  leadId         String
+  lead           Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  scheduledDate  DateTime
+  type           String   // "CALL", "EMAIL", "MEETING", "DEMO"
+  status         String   // "PENDING", "COMPLETED", "CANCELLED"
+  notes          String?
+  outcome        String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("followups")
+}
+
+model Quotation {
+  id           String          @id @default(uuid())
+  companyId    String
+  company      Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customerId   String
+  customer     Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  quoteNo      String
+  date         DateTime        @default(now())
+  expiryDate   DateTime?
+  subtotal     Float
+  discount     Float           @default(0.0) // percentage
+  tax          Float           @default(0.0)
+  total        Float
+  status       String          @default("DRAFT") // DRAFT, SENT, ACCEPTED, REJECTED, EXPIRED
+  items        QuotationItem[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@unique([companyId, quoteNo])
+  @@map("quotations")
+}
+
+model QuotationItem {
+  id          String    @id @default(uuid())
+  quoteId     String
+  quotation   Quotation @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity    Float
+  price       Float
+  discount    Float     @default(0.0)
+
+  @@map("quotation_items")
+}
+
+model ServiceTicket {
+  id             String   @id @default(uuid())
+  companyId      String
+  company        Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customerId     String
+  customer       Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  serialNumber   String?
+  ticketNo       String
+  title          String   // ticket summary
+  type           String   // "MAINTENANCE", "REPAIR", "INSTALLATION", "WARRANTY_CLAIM"
+  priority       String   // "LOW", "MEDIUM", "HIGH", "CRITICAL"
+  status         String   // "OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"
+  scheduledDate  DateTime?
+  resolutionNotes String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([companyId, ticketNo])
+  @@map("service_tickets")
+}
+
+model VendorQuotation {
+  id             String                 @id @default(uuid())
+  companyId      String
+  company        Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  vendorId       String
+  vendor         Vendor                 @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  quoteNo        String
+  date           DateTime               @default(now())
+  validUntil     DateTime?
+  subtotal       Float
+  tax            Float                  @default(0.0)
+  total          Float
+  status         String                 @default("PENDING") // PENDING, ACCEPTED, REJECTED
+  items          VendorQuotationItem[]
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  @@unique([companyId, quoteNo])
+  @@map("vendor_quotations")
+}
+
+model VendorQuotationItem {
+  id          String          @id @default(uuid())
+  quoteId     String
+  quotation   VendorQuotation @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity    Float
+  price       Float
+
+  @@map("vendor_quotation_items")
+}
+
+model PurchaseOrder {
+  id           String              @id @default(uuid())
+  companyId    String
+  company      Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  vendorId     String
+  vendor       Vendor              @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  poNo         String
+  date         DateTime            @default(now())
+  deliveryDate DateTime?
+  subtotal     Float
+  discount     Float               @default(0.0) // percentage
+  tax          Float               @default(0.0)
+  total        Float
+  status       String              @default("PENDING") // PENDING, APPROVED, SHIPPED, COMPLETED
+  items        PurchaseOrderItem[]
+  grns         Grn[]
+  returns      PurchaseReturn[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@unique([companyId, poNo])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id          String        @id @default(uuid())
+  poId        String
+  po          PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity    Float
+  price       Float
+  discount    Float         @default(0.0)
+
+  @@map("purchase_order_items")
+}
+
+model Grn {
+  id             String     @id @default(uuid())
+  companyId      String
+  company        Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  poId           String
+  purchaseOrder  PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+  grnNo          String
+  receivedDate   DateTime   @default(now())
+  receivedBy     String?
+  gateEntryNo    String?
+  challanNo      String?
+  status         String     @default("RECEIVED") // RECEIVED, INSPECTED, REJECTED
+  notes          String?
+  items          GrnItem[]
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@unique([companyId, grnNo])
+  @@map("grns")
+}
+
+model GrnItem {
+  id          String   @id @default(uuid())
+  grnId       String
+  grn         Grn      @relation(fields: [grnId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  qtyOrdered  Float
+  qtyReceived Float
+  qtyAccepted Float
+  qtyRejected Float    @default(0.0)
+
+  @@map("grn_items")
+}
+
+model PurchaseReturn {
+  id             String               @id @default(uuid())
+  companyId      String
+  company        Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  poId           String
+  purchaseOrder  PurchaseOrder        @relation(fields: [poId], references: [id], onDelete: Cascade)
+  returnNo       String
+  returnDate     DateTime             @default(now())
+  reason         String
+  status         String               @default("PENDING") // PENDING, SENT, COMPLETED
+  items          PurchaseReturnItem[]
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@unique([companyId, returnNo])
+  @@map("purchase_returns")
+}
+
+model PurchaseReturnItem {
+  id          String         @id @default(uuid())
+  returnId    String
+  pret        PurchaseReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity    Float
+  price       Float
+
+  @@map("purchase_return_items")
+}
+
+model VendorPayment {
+  id             String   @id @default(uuid())
+  companyId      String
+  company        Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  vendorId       String
+  vendor         Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  paymentNo      String
+  paymentDate    DateTime @default(now())
+  amount         Float
+  paymentMethod  String   // "BANK_TRANSFER", "CASH", "CHEQUE", "UPI", "CREDIT_CARD"
+  referenceNo    String?  // Bank transfer / UPI reference
+  bankDetails    String?
+  status         String   @default("COMPLETED") // PENDING, COMPLETED, FAILED
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([companyId, paymentNo])
+  @@map("vendor_payments")
+}
+
+model StockAdjustment {
+  id             String   @id @default(uuid())
+  companyId      String
+  company        Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  adjustmentNo   String
+  date           DateTime @default(now())
+  type           String   // "INWARD_PO", "OUTWARD_SO", "INWARD_RETURN", "OUTWARD_RETURN", "MANUAL_ADD", "MANUAL_SUB"
+  quantity       Float    // Positive/Negative
+  previousStock  Float
+  newStock       Float
+  reason         String?
+  referenceNo    String?
+  createdAt      DateTime @default(now())
+
+  @@unique([companyId, adjustmentNo])
+  @@map("stock_adjustments")
 }

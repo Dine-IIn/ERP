@@ -36,18 +36,39 @@ export const HIERARCHICAL_FEATURES = [
   { key: "ADMIN_USERS", name: "Employee Users & Approvals", description: "Approve signups and manage employee profiles" },
   { key: "ADMIN_DEPARTMENTS", name: "Corporate Departments Settings", description: "Map structures and delegate managers" },
 
-  { key: "MASTER_DATA", name: "MASTER DATA HUB", description: "Manage Employees, Customers, Vendors and Products profiles" },
+  { key: "MASTER_DATA", name: "MASTER DATA HUB", description: "Manage Employees, Customers, Vendors, Products, and Taxes profiles" },
   { key: "MASTER_EMPLOYEE", name: "Employee Master", description: "Manage hierarchies, timing shifts, and secure documents" },
   { key: "MASTER_CUSTOMER", name: "Customer Master", description: "Administer sales accounts, billing destinations, and credit ratings" },
   { key: "MASTER_VENDOR", name: "Vendor / Supplier Master", description: "Handle supply registers, GST details, bank parameters, and payments" },
   { key: "MASTER_PRODUCT", name: "Product / Item Master", description: "Configure inventory catalog, variants, pricing, and HSN codes" },
+  { key: "MASTER_TAX", name: "Tax Master", description: "Configure corporate sales tax rates, GSTIN brackets, and VAT schemes" },
 
-  { key: "SALES_DATA", name: "SALES MANAGEMENT", description: "Consolidated Sales, Invoicing and Dispatching Hub" },
+  { key: "SALES_DATA", name: "SALES MANAGEMENT", description: "Consolidated Sales, Invoicing, Quotation, Maintenance and Dispatching Hub" },
   { key: "SALES_ORDER", name: "Sales Orders Hub", description: "Manage customer orders, quantities, expected delivery dates and discounts" },
   { key: "SALES_PROFORMA", name: "Proforma Invoices", description: "Generate, edit, download and email proforma invoices" },
   { key: "SALES_INVOICE", name: "Sales Invoices", description: "Manage sales invoices, track collections, and email customers" },
   { key: "SALES_CHALLAN", name: "Delivery Challans", description: "Generate transit challans and declarations" },
-  { key: "SALES_DISPATCH", name: "Dispatch Management", description: "Coordinate shipments, carrier tracking and vehicles details" }
+  { key: "SALES_DISPATCH", name: "Dispatch Management", description: "Coordinate shipments, carrier tracking and vehicles details" },
+  { key: "SALES_QUOTATION", name: "Sales Quotations", description: "Generate, edit, and dispatch legal price quotations" },
+  { key: "SALES_POST_SERVICE", name: "Post-Sales Service & Maintenance", description: "Coordinate warranty claims, maintenance logs, and service sheets" },
+
+  { key: "CRM_DATA", name: "CRM PORTAL", description: "Customer Relationship Management portal" },
+  { key: "CRM_LEAD", name: "CRM Leads Hub", description: "Capture, log, track, and assign sales leads" },
+  { key: "CRM_OPPORTUNITY", name: "CRM Opportunities Pipeline", description: "Administer potential deal pipelines and conversion projections" },
+  { key: "CRM_FOLLOWUP", name: "CRM Follow-ups Scheduler", description: "Log and schedule phone calls, emails, and meetings with clients" },
+  { key: "CRM_DASHBOARD", name: "CRM Analytics Dashboard", description: "Visualize lead pipelines, conversion rates, and revenue projections" },
+
+  { key: "PURCHASE_DATA", name: "PURCHASE MANAGEMENT", description: "Consolidated Vendor Sourcing & Purchase Operations Hub" },
+  { key: "PURCHASE_ORDER", name: "Purchase Orders Hub", description: "Generate purchase orders and dispatch requests to vendors" },
+  { key: "PURCHASE_VENDOR_QUOTE", name: "Vendor Quotations", description: "Capture, evaluate, and choose price quotes submitted by suppliers" },
+  { key: "PURCHASE_GRN", name: "Goods Receipt Notes (GRN)", description: "Record gate entries, check material volumes, and register inward packages" },
+  { key: "PURCHASE_RETURN", name: "Purchase Returns (Debit Notes)", description: "Generate debit notes and dispatch returns of defected goods" },
+  { key: "PURCHASE_PAYMENT", name: "Vendor Payments Hub", description: "Manage bank transfer payments, transaction receipts, and outstanding dues" },
+
+  { key: "INVENTORY_DATA", name: "INVENTORY MANAGEMENT", description: "Consolidated Realtime Warehousing & Inventory Control" },
+  { key: "INVENTORY_PRODUCT", name: "Warehouse Stock Levels", description: "Conduct manual stock audits, warehouse taggings, and storage logs" },
+  { key: "INVENTORY_STOCK_OVERVIEW", name: "Stock Ledger Overview", description: "View transaction ledgers tracking inward POs and outward SOs" },
+  { key: "INVENTORY_LOW_ALERT", name: "Low Stock Alerts Console", description: "Monitor automatically flagged items dropping below minimum reorder thresholds" }
 ];
 
 // Global reference to the WebSockets emitter

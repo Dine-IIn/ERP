@@ -19,7 +19,31 @@ import ProformaInvoice from './components/sales/ProformaInvoice';
 import SalesInvoice from './components/sales/SalesInvoice';
 import DeliveryChallan from './components/sales/DeliveryChallan';
 import DispatchManagement from './components/sales/DispatchManagement';
+
+import TaxMaster from './components/master_data/TaxMaster';
+import Leads from './components/crm/Leads';
+import Opportunities from './components/crm/Opportunities';
+import FollowUps from './components/crm/FollowUps';
+import CrmDashboard from './components/crm/CrmDashboard';
+import Quotations from './components/sales/Quotations';
+import PostSalesService from './components/sales/PostSalesService';
+import VendorQuotations from './components/purchase/VendorQuotations';
+import PurchaseOrders from './components/purchase/PurchaseOrders';
+import Grn from './components/purchase/Grn';
+import PurchaseReturns from './components/purchase/PurchaseReturns';
+import VendorPayments from './components/purchase/VendorPayments';
+import InventoryProducts from './components/inventory/InventoryProducts';
+import StockOverview from './components/inventory/StockOverview';
+import LowStockAlerts from './components/inventory/LowStockAlerts';
+
 import {
+  UserCheck,
+  TrendingUp,
+  CalendarClock,
+  Clipboard,
+  PackageX,
+  Banknote,
+  ShieldAlert,
   Wrench,
   Factory,
   ShoppingCart,
@@ -161,6 +185,8 @@ const getFeatureIcon = (key: string) => {
       return <Truck className="w-4 h-4" style={{ flexShrink: 0 }} />;
     case 'MASTER_PRODUCT':
       return <Package className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'MASTER_TAX':
+      return <Percent className="w-4 h-4" style={{ flexShrink: 0 }} />;
     case 'SALES_DATA':
     case 'SALES_ORDER':
       return <ShoppingCart className="w-4 h-4" style={{ flexShrink: 0 }} />;
@@ -171,6 +197,37 @@ const getFeatureIcon = (key: string) => {
     case 'SALES_CHALLAN':
     case 'SALES_DISPATCH':
       return <Truck className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'SALES_QUOTATION':
+      return <FileText className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'SALES_POST_SERVICE':
+      return <Wrench className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'CRM_DATA':
+    case 'CRM_DASHBOARD':
+      return <BarChart3 className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'CRM_LEAD':
+      return <UserCheck className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'CRM_OPPORTUNITY':
+      return <TrendingUp className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'CRM_FOLLOWUP':
+      return <CalendarClock className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'PURCHASE_DATA':
+    case 'PURCHASE_ORDER':
+      return <ShoppingCart className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'PURCHASE_VENDOR_QUOTE':
+      return <FileText className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'PURCHASE_GRN':
+      return <Clipboard className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'PURCHASE_RETURN':
+      return <PackageX className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'PURCHASE_PAYMENT':
+      return <Banknote className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'INVENTORY_DATA':
+    case 'INVENTORY_PRODUCT':
+      return <Warehouse className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'INVENTORY_STOCK_OVERVIEW':
+      return <Layers className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'INVENTORY_LOW_ALERT':
+      return <ShieldAlert className="w-4 h-4" style={{ flexShrink: 0 }} />;
     default:
       return <Layers className="w-4 h-4" style={{ flexShrink: 0 }} />;
   }
@@ -272,6 +329,21 @@ export default function App() {
   const [salesInvoicesList, setSalesInvoicesList] = useState<any[]>([]);
   const [deliveryChallansList, setDeliveryChallansList] = useState<any[]>([]);
   const [dispatchesList, setDispatchesList] = useState<any[]>([]);
+
+  // --- NEW ADVANCED ERP STATES ---
+  const [taxesList, setTaxesList] = useState<any[]>([]);
+  const [leadsList, setLeadsList] = useState<any[]>([]);
+  const [opportunitiesList, setOpportunitiesList] = useState<any[]>([]);
+  const [followupsList, setFollowupsList] = useState<any[]>([]);
+  const [crmStats, setCrmStats] = useState<any>(null);
+  const [vendorQuotationsList, setVendorQuotationsList] = useState<any[]>([]);
+  const [purchaseOrdersList, setPurchaseOrdersList] = useState<any[]>([]);
+  const [grnsList, setGrnsList] = useState<any[]>([]);
+  const [purchaseReturnsList, setPurchaseReturnsList] = useState<any[]>([]);
+  const [vendorPaymentsList, setVendorPaymentsList] = useState<any[]>([]);
+  const [stockAdjustmentsList, setStockAdjustmentsList] = useState<any[]>([]);
+  const [quotationsList, setQuotationsList] = useState<any[]>([]);
+  const [serviceTicketsList, setServiceTicketsList] = useState<any[]>([]);
 
   // --- WORKSPACE SUB-TAB STATES ---
   const [crmSubTab, setCrmSubTab] = useState<'leads' | 'customer_logs'>('leads');
@@ -1320,6 +1392,11 @@ export default function App() {
       
       fetchMasterData();
       fetchSalesData();
+      fetchTaxesData();
+      fetchCrmData();
+      fetchPurchasesData();
+      fetchInventoryData();
+      fetchSalesExtensionsData();
     } catch (e) {}
   };
 
@@ -1363,6 +1440,255 @@ export default function App() {
     } catch (e) {
       console.error("Error fetching sales data:", e);
     }
+  };
+
+  const fetchTaxesData = async () => {
+    try {
+      const res = await apiRequest('/api/master/taxes', 'GET');
+      setTaxesList(res.taxes || []);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const fetchCrmData = async () => {
+    try {
+      const leadsRes = await apiRequest('/api/crm/leads', 'GET');
+      setLeadsList(leadsRes.leads || []);
+      const oppsRes = await apiRequest('/api/crm/opportunities', 'GET');
+      setOpportunitiesList(oppsRes.opportunities || []);
+      const fupsRes = await apiRequest('/api/crm/followups', 'GET');
+      setFollowupsList(fupsRes.followups || []);
+      const statsRes = await apiRequest('/api/crm/stats', 'GET');
+      setCrmStats(statsRes.stats || null);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const fetchPurchasesData = async () => {
+    try {
+      const vqRes = await apiRequest('/api/purchase/quotations', 'GET');
+      setVendorQuotationsList(vqRes.quotations || []);
+      const poRes = await apiRequest('/api/purchase/orders', 'GET');
+      setPurchaseOrdersList(poRes.purchaseOrders || []);
+      const grnRes = await apiRequest('/api/purchase/grns', 'GET');
+      setGrnsList(grnRes.grns || []);
+      const retRes = await apiRequest('/api/purchase/returns', 'GET');
+      setPurchaseReturnsList(retRes.returns || []);
+      const payRes = await apiRequest('/api/purchase/payments', 'GET');
+      setVendorPaymentsList(payRes.payments || []);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const fetchInventoryData = async () => {
+    try {
+      const res = await apiRequest('/api/inventory/adjustments', 'GET');
+      setStockAdjustmentsList(res.adjustments || []);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const fetchSalesExtensionsData = async () => {
+    try {
+      const qRes = await apiRequest('/api/sales/quotations', 'GET');
+      setQuotationsList(qRes.quotations || []);
+      const tRes = await apiRequest('/api/sales/service-tickets', 'GET');
+      setServiceTicketsList(tRes.tickets || []);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  // --- TAXES MASTER OPERATIONS ---
+  const handleCreateTax = async (payload: any) => {
+    const res = await apiRequest('/api/master/taxes', 'POST', payload);
+    setSuccessMsg(res.message || "Tax scheme saved");
+    fetchTaxesData();
+  };
+  const handleUpdateTax = async (id: string, payload: any) => {
+    const res = await apiRequest(`/api/master/taxes/${id}`, 'PATCH', payload);
+    setSuccessMsg(res.message || "Tax configuration updated");
+    fetchTaxesData();
+  };
+  const handleDeleteTax = async (id: string) => {
+    const res = await apiRequest(`/api/master/taxes/${id}`, 'DELETE');
+    setSuccessMsg(res.message || "Tax removed");
+    fetchTaxesData();
+  };
+
+  // --- CRM LEADS OPERATIONS ---
+  const handleCreateLead = async (payload: any) => {
+    const res = await apiRequest('/api/crm/leads', 'POST', payload);
+    setSuccessMsg(res.message || "Lead created");
+    fetchCrmData();
+  };
+  const handleUpdateLead = async (id: string, payload: any) => {
+    const res = await apiRequest(`/api/crm/leads/${id}`, 'PATCH', payload);
+    setSuccessMsg(res.message || "Lead updated");
+    fetchCrmData();
+  };
+  const handleDeleteLead = async (id: string) => {
+    const res = await apiRequest(`/api/crm/leads/${id}`, 'DELETE');
+    setSuccessMsg(res.message || "Lead discarded");
+    fetchCrmData();
+  };
+
+  // --- CRM OPPORTUNITIES OPERATIONS ---
+  const handleCreateOpportunity = async (payload: any) => {
+    const res = await apiRequest('/api/crm/opportunities', 'POST', payload);
+    setSuccessMsg(res.message || "Opportunity logged");
+    fetchCrmData();
+  };
+  const handleUpdateOpportunity = async (id: string, payload: any) => {
+    const res = await apiRequest(`/api/crm/opportunities/${id}`, 'PATCH', payload);
+    setSuccessMsg(res.message || "Opportunity updated");
+    fetchCrmData();
+  };
+  const handleDeleteOpportunity = async (id: string) => {
+    const res = await apiRequest(`/api/crm/opportunities/${id}`, 'DELETE');
+    setSuccessMsg(res.message || "Opportunity discarded");
+    fetchCrmData();
+  };
+
+  // --- CRM FOLLOW-UPS OPERATIONS ---
+  const handleCreateFollowUp = async (payload: any) => {
+    const res = await apiRequest('/api/crm/followups', 'POST', payload);
+    setSuccessMsg(res.message || "Follow-up scheduled");
+    fetchCrmData();
+  };
+  const handleUpdateFollowUp = async (id: string, payload: any) => {
+    const res = await apiRequest(`/api/crm/followups/${id}`, 'PATCH', payload);
+    setSuccessMsg(res.message || "Follow-up updated");
+    fetchCrmData();
+  };
+  const handleDeleteFollowUp = async (id: string) => {
+    const res = await apiRequest(`/api/crm/followups/${id}`, 'DELETE');
+    setSuccessMsg(res.message || "Follow-up cancelled");
+    fetchCrmData();
+  };
+
+  // --- VENDOR QUOTATIONS OPERATIONS ---
+  const handleCreateVendorQuotation = async (payload: any) => {
+    const res = await apiRequest('/api/purchase/quotations', 'POST', payload);
+    setSuccessMsg(res.message || "Vendor Quotation saved");
+    fetchPurchasesData();
+  };
+  const handleUpdateVendorQuotationStatus = async (id: string, payload: any) => {
+    const res = await apiRequest(`/api/purchase/quotations/${id}/status`, 'PATCH', payload);
+    setSuccessMsg(res.message || "Status updated");
+    fetchPurchasesData();
+  };
+  const handleDeleteVendorQuotation = async (id: string) => {
+    const res = await apiRequest(`/api/purchase/quotations/${id}`, 'DELETE');
+    setSuccessMsg(res.message || "Quotation removed");
+    fetchPurchasesData();
+  };
+
+  // --- PURCHASE ORDERS OPERATIONS ---
+  const handleCreatePurchaseOrder = async (payload: any) => {
+    const res = await apiRequest('/api/purchase/orders', 'POST', payload);
+    setSuccessMsg(res.message || "PO registered");
+    fetchPurchasesData();
+  };
+  const handleUpdatePurchaseOrderStatus = async (id: string, payload: any) => {
+    const res = await apiRequest(`/api/purchase/orders/${id}/status`, 'PATCH', payload);
+    setSuccessMsg(res.message || "PO Status updated");
+    fetchPurchasesData();
+  };
+  const handleDeletePurchaseOrder = async (id: string) => {
+    const res = await apiRequest(`/api/purchase/orders/${id}`, 'DELETE');
+    setSuccessMsg(res.message || "PO discarded");
+    fetchPurchasesData();
+  };
+
+  // --- GRN OPERATIONS ---
+  const handleCreateGrn = async (payload: any) => {
+    const res = await apiRequest('/api/purchase/grns', 'POST', payload);
+    setSuccessMsg(res.message || "GRN recorded! Stocks updated.");
+    fetchPurchasesData();
+    fetchMasterData();
+    fetchInventoryData();
+  };
+  const handleDeleteGrn = async (id: string) => {
+    const res = await apiRequest(`/api/purchase/grns/${id}`, 'DELETE');
+    setSuccessMsg(res.message || "GRN voided! Stocks restored.");
+    fetchPurchasesData();
+    fetchMasterData();
+    fetchInventoryData();
+  };
+
+  // --- PURCHASE RETURNS OPERATIONS ---
+  const handleCreatePurchaseReturn = async (payload: any) => {
+    const res = await apiRequest('/api/purchase/returns', 'POST', payload);
+    setSuccessMsg(res.message || "Debit note issued! Stocks deducted.");
+    fetchPurchasesData();
+    fetchMasterData();
+    fetchInventoryData();
+  };
+  const handleDeletePurchaseReturn = async (id: string) => {
+    const res = await apiRequest(`/api/purchase/returns/${id}`, 'DELETE');
+    setSuccessMsg(res.message || "Debit note voided! Stocks restored.");
+    fetchPurchasesData();
+    fetchMasterData();
+    fetchInventoryData();
+  };
+
+  // --- VENDOR PAYMENTS OPERATIONS ---
+  const handleCreateVendorPayment = async (payload: any) => {
+    const res = await apiRequest('/api/purchase/payments', 'POST', payload);
+    setSuccessMsg(res.message || "Payout logged");
+    fetchPurchasesData();
+  };
+  const handleDeleteVendorPayment = async (id: string) => {
+    const res = await apiRequest(`/api/purchase/payments/${id}`, 'DELETE');
+    setSuccessMsg(res.message || "Payout voucher voided");
+    fetchPurchasesData();
+  };
+
+  // --- INVENTORY AUDIT OPERATIONS ---
+  const handleAdjustStock = async (payload: any) => {
+    const res = await apiRequest('/api/inventory/adjustments', 'POST', payload);
+    setSuccessMsg(res.message || "Physical audit stock adjusted");
+    fetchInventoryData();
+    fetchMasterData();
+  };
+
+  // --- SALES QUOTATIONS OPERATIONS ---
+  const handleCreateQuotation = async (payload: any) => {
+    const res = await apiRequest('/api/sales/quotations', 'POST', payload);
+    setSuccessMsg(res.message || "Sales Quotation registered");
+    fetchSalesExtensionsData();
+  };
+  const handleUpdateQuotationStatus = async (id: string, payload: any) => {
+    const res = await apiRequest(`/api/sales/quotations/${id}/status`, 'PATCH', payload);
+    setSuccessMsg(res.message || "Quotation stage updated");
+    fetchSalesExtensionsData();
+  };
+  const handleDeleteQuotation = async (id: string) => {
+    const res = await apiRequest(`/api/sales/quotations/${id}`, 'DELETE');
+    setSuccessMsg(res.message || "Quotation voided");
+    fetchSalesExtensionsData();
+  };
+
+  // --- SALES POST-SERVICES (SERVICE TICKETS) OPERATIONS ---
+  const handleCreateServiceTicket = async (payload: any) => {
+    const res = await apiRequest('/api/sales/service-tickets', 'POST', payload);
+    setSuccessMsg(res.message || "Support ticket logged");
+    fetchSalesExtensionsData();
+  };
+  const handleUpdateServiceTicket = async (id: string, payload: any) => {
+    const res = await apiRequest(`/api/sales/service-tickets/${id}`, 'PATCH', payload);
+    setSuccessMsg(res.message || "Support ticket updated");
+    fetchSalesExtensionsData();
+  };
+  const handleDeleteServiceTicket = async (id: string) => {
+    const res = await apiRequest(`/api/sales/service-tickets/${id}`, 'DELETE');
+    setSuccessMsg(res.message || "Support ticket deleted");
+    fetchSalesExtensionsData();
   };
 
   // --- CUSTOMER MASTER OPERATIONS ---
@@ -2761,6 +3087,15 @@ export default function App() {
                       />
                     )}
 
+                    {activeWorkspaceSubModule === 'MASTER_TAX' && (
+                      <TaxMaster
+                        taxes={taxesList}
+                        onCreateTax={handleCreateTax}
+                        onUpdateTax={handleUpdateTax}
+                        onDeleteTax={handleDeleteTax}
+                      />
+                    )}
+
                   </div>
                 </div>
               )}
@@ -2831,6 +3166,181 @@ export default function App() {
                         onUpdateDispatch={handleUpdateDispatch}
                         onDeleteDispatch={handleDeleteDispatch}
                         currencySymbol={currencySymbol}
+                      />
+                    )}
+
+                    {activeWorkspaceSubModule === 'SALES_QUOTATION' && (
+                      <Quotations
+                        quotations={quotationsList}
+                        customers={customersList}
+                        products={productsList}
+                        onCreateQuotation={handleCreateQuotation}
+                        onUpdateQuotationStatus={handleUpdateQuotationStatus}
+                        onDeleteQuotation={handleDeleteQuotation}
+                        currencySymbol={currencySymbol}
+                      />
+                    )}
+
+                    {activeWorkspaceSubModule === 'SALES_POST_SERVICE' && (
+                      <PostSalesService
+                        tickets={serviceTicketsList}
+                        customers={customersList}
+                        products={productsList}
+                        onCreateTicket={handleCreateServiceTicket}
+                        onUpdateTicket={handleUpdateServiceTicket}
+                        onDeleteTicket={handleDeleteServiceTicket}
+                      />
+                    )}
+
+                  </div>
+                </div>
+              )}
+
+              {/* ==========================================
+                  CRM PORTAL WORKSPACE
+                  ========================================== */}
+              {activeWorkspaceModule === 'crm_data' && (
+                <div className="max-w-6xl mx-auto animate-fade-in text-left select-none">
+                  <div className="w-full bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl p-6 shadow-sm min-h-[480px]">
+                    
+                    {activeWorkspaceSubModule === 'CRM_DASHBOARD' && (
+                      <CrmDashboard
+                        stats={crmStats}
+                        currencySymbol={currencySymbol}
+                      />
+                    )}
+
+                    {activeWorkspaceSubModule === 'CRM_LEAD' && (
+                      <Leads
+                        leads={leadsList}
+                        companyUsers={companyUsers}
+                        onCreateLead={handleCreateLead}
+                        onUpdateLead={handleUpdateLead}
+                        onDeleteLead={handleDeleteLead}
+                      />
+                    )}
+
+                    {activeWorkspaceSubModule === 'CRM_OPPORTUNITY' && (
+                      <Opportunities
+                        opportunities={opportunitiesList}
+                        leads={leadsList}
+                        onCreateOpportunity={handleCreateOpportunity}
+                        onUpdateOpportunity={handleUpdateOpportunity}
+                        onDeleteOpportunity={handleDeleteOpportunity}
+                        currencySymbol={currencySymbol}
+                      />
+                    )}
+
+                    {activeWorkspaceSubModule === 'CRM_FOLLOWUP' && (
+                      <FollowUps
+                        followups={followupsList}
+                        leads={leadsList}
+                        onCreateFollowUp={handleCreateFollowUp}
+                        onUpdateFollowUp={handleUpdateFollowUp}
+                        onDeleteFollowUp={handleDeleteFollowUp}
+                      />
+                    )}
+
+                  </div>
+                </div>
+              )}
+
+              {/* ==========================================
+                  PURCHASE MANAGEMENT WORKSPACE
+                  ========================================== */}
+              {activeWorkspaceModule === 'purchase_data' && (
+                <div className="max-w-6xl mx-auto animate-fade-in text-left select-none">
+                  <div className="w-full bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl p-6 shadow-sm min-h-[480px]">
+                    
+                    {activeWorkspaceSubModule === 'PURCHASE_VENDOR_QUOTE' && (
+                      <VendorQuotations
+                        quotations={vendorQuotationsList}
+                        vendors={vendorsList}
+                        products={productsList}
+                        onCreateQuotation={handleCreateVendorQuotation}
+                        onUpdateQuotationStatus={handleUpdateVendorQuotationStatus}
+                        onDeleteQuotation={handleDeleteVendorQuotation}
+                        currencySymbol={currencySymbol}
+                      />
+                    )}
+
+                    {activeWorkspaceSubModule === 'PURCHASE_ORDER' && (
+                      <PurchaseOrders
+                        orders={purchaseOrdersList}
+                        vendors={vendorsList}
+                        products={productsList}
+                        onCreateOrder={handleCreatePurchaseOrder}
+                        onUpdateOrderStatus={handleUpdatePurchaseOrderStatus}
+                        onDeleteOrder={handleDeletePurchaseOrder}
+                        currencySymbol={currencySymbol}
+                      />
+                    )}
+
+                    {activeWorkspaceSubModule === 'PURCHASE_GRN' && (
+                      <Grn
+                        grns={grnsList}
+                        purchaseOrders={purchaseOrdersList}
+                        onCreateGrn={handleCreateGrn}
+                        onDeleteGrn={handleDeleteGrn}
+                      />
+                    )}
+
+                    {activeWorkspaceSubModule === 'PURCHASE_RETURN' && (
+                      <PurchaseReturns
+                        returns={purchaseReturnsList}
+                        purchaseOrders={purchaseOrdersList}
+                        onCreateReturn={handleCreatePurchaseReturn}
+                        onDeleteReturn={handleDeletePurchaseReturn}
+                        currencySymbol={currencySymbol}
+                      />
+                    )}
+
+                    {activeWorkspaceSubModule === 'PURCHASE_PAYMENT' && (
+                      <VendorPayments
+                        payments={vendorPaymentsList}
+                        vendors={vendorsList}
+                        onCreatePayment={handleCreateVendorPayment}
+                        onDeletePayment={handleDeleteVendorPayment}
+                        currencySymbol={currencySymbol}
+                      />
+                    )}
+
+                  </div>
+                </div>
+              )}
+
+              {/* ==========================================
+                  INVENTORY WAREHOUSING WORKSPACE
+                  ========================================== */}
+              {activeWorkspaceModule === 'inventory_data' && (
+                <div className="max-w-6xl mx-auto animate-fade-in text-left select-none">
+                  <div className="w-full bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl p-6 shadow-sm min-h-[480px]">
+                    
+                    {activeWorkspaceSubModule === 'INVENTORY_PRODUCT' && (
+                      <InventoryProducts
+                        products={productsList}
+                        onAdjustStock={handleAdjustStock}
+                        onUpdateProduct={handleUpdateProduct}
+                      />
+                    )}
+
+                    {activeWorkspaceSubModule === 'INVENTORY_STOCK_OVERVIEW' && (
+                      <StockOverview
+                        adjustments={stockAdjustmentsList}
+                      />
+                    )}
+
+                    {activeWorkspaceSubModule === 'INVENTORY_LOW_ALERT' && (
+                      <LowStockAlerts
+                        products={productsList}
+                        onTriggerReorderRedirect={() => {
+                          setActiveWorkspaceModule('purchase_data');
+                          setActiveWorkspaceSubModule('PURCHASE_ORDER');
+                        }}
+                        onTriggerAuditRedirect={() => {
+                          setActiveWorkspaceModule('inventory_data');
+                          setActiveWorkspaceSubModule('INVENTORY_PRODUCT');
+                        }}
                       />
                     )}
 
