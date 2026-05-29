@@ -164,6 +164,7 @@ app.use(compression());
 const allowedOrigins = [
   'http://localhost:5173',
   'https://localhost',
+  'http://tauri.localhost',
   'https://erp.anbindustries.com',
   'https://yourfrontend.vercel.app'
 ];
@@ -184,6 +185,7 @@ const corsOptions: cors.CorsOptions = {
     if (isAllowed) {
       callback(null, true);
     } else {
+      console.log('❌ BLOCKED ORIGIN:', origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -223,6 +225,7 @@ const io = new Server(server, {
       if (isAllowed) {
         callback(null, true);
       } else {
+        console.log('❌ BLOCKED ORIGIN:', origin);
         callback(new Error('Not allowed by CORS'));
       }
     },

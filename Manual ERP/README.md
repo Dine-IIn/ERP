@@ -242,7 +242,7 @@ We utilize **Capacitor** to wrap our React app output inside a native Android wr
 
 2. **Initialize the Capacitor Configuration:**
    ```powershell
-   npx cap init "Manual ERP" "com.manualerp.app" --web-dir=dist
+   npx cap init "ERP" "com.erp.app" --web-dir=dist
    ```
 
 3. **Add the Android Native Project Folder:**
