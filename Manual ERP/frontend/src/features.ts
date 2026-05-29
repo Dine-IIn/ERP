@@ -123,7 +123,22 @@ export const MASTER_FEATURES_HIERARCHY = [
       { key: 'REPORTS_PURCHASE', name: 'Purchase Sourcing', desc: 'Examine material PO valuations and complete expenses' },
       { key: 'REPORTS_INVENTORY', name: 'Inventory Valuations', desc: 'Audit physical stock counts, asset valuations, and catalog sizes' },
       { key: 'REPORTS_HR', name: 'HR Metrics Overview', desc: 'Visualize active presents, worked hours, and payout summaries' },
-      { key: 'REPORTS_FINANCE', name: 'Financial statements', desc: 'Review cash outflow ratios and running cash flow curves' }
+      { key: 'REPORTS_FINANCE', name: 'Financial statements', desc: 'Review cash outflow ratios and running cash flow curves' },
+      { key: 'MANUFACTURING_REPORTS', name: 'Production Reports', desc: 'Examine monthly production outputs and completion statistics' },
+      { key: 'MANUFACTURING_COSTING', name: 'Production Cost Analysis', desc: 'Track labor allocations and item cost deviations' }
+    ]
+  },
+  {
+    key: 'MANUFACTURING',
+    name: 'MANUFACTURING OPERATIONS',
+    desc: 'BOM Management, Production Planning, Work Orders, Production Execution, Quality Control, and Shop Floor shifts',
+    children: [
+      { key: 'MANUFACTURING_BOM', name: 'BOM Management', desc: 'Configure product formulas, components lists, and pricing' },
+      { key: 'MANUFACTURING_PLAN', name: 'Production Planning', desc: 'Schedule factory production runs and compute material deficits' },
+      { key: 'MANUFACTURING_WORK_ORDER', name: 'Work Orders', desc: 'Dispatch assembly instructions and track operator logs' },
+      { key: 'MANUFACTURING_PRODUCTION', name: 'Production Execution', desc: 'Log output quantities and raw material issues' },
+      { key: 'MANUFACTURING_QC', name: 'Quality Control', desc: 'Inspect manufactured batches and reject defects' },
+      { key: 'MANUFACTURING_SHOP_FLOOR', name: 'Shop Floor', desc: 'Manage assembly stations, capacities, and factory rosters' }
     ]
   }
 ];

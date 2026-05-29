@@ -107,7 +107,24 @@ exports.HIERARCHICAL_FEATURES = [
     { key: "REPORTS_PURCHASE", name: "Purchase Sourcing summary", description: "Examine PO ratios and complete expenses" },
     { key: "REPORTS_INVENTORY", name: "Warehouse asset valuations", description: "Audit stock evaluations and catalog sizes" },
     { key: "REPORTS_HR", name: "HR Metrics totals", description: "Review work durations and disbursed salaries" },
-    { key: "REPORTS_FINANCE", name: "Financial Cashflows curves", description: "Examine inflows vs outflows and running curves" }
+    { key: "REPORTS_FINANCE", name: "Financial Cashflows curves", description: "Examine inflows vs outflows and running curves" },
+    { key: "MANUFACTURING_REPORTS", name: "Production Reports", description: "Monitor monthly yields, run volumes and OEE efficiencies" },
+    { key: "MANUFACTURING_COSTING", name: "Production Cost Analysis", description: "Analyze cost variances, material price trends and overhead gaps" },
+    // MANUFACTURING MODULE
+    { key: "MANUFACTURING", name: "MANUFACTURING MODULE", description: "BOM Costing, Production Planning, Work Orders, Job Cards, QC & Shop Floor control" },
+    { key: "MANUFACTURING_BOM", name: "Bill of Materials", description: "BOM creation and structure definition" },
+    { key: "MANUFACTURING_BOM_COSTING", name: "BOM Costing", description: "Cost analysis and standard overhead allocations" },
+    { key: "MANUFACTURING_PLAN", name: "Production Planning", description: "Schedule production orders and plan floor runs" },
+    { key: "MANUFACTURING_MRP", name: "Material Requirement (MRP)", description: "Calculate raw materials shortage and check inventories" },
+    { key: "MANUFACTURING_WORK_ORDER", name: "Work Orders Routing", description: "Create floor routing and track order status" },
+    { key: "MANUFACTURING_JOB_CARD", name: "Job Cards Console", description: "Start/stop shop floor job operations and timers" },
+    { key: "MANUFACTURING_PRODUCTION", name: "Production Execution", description: "Overall floor yield and machinery efficiency console" },
+    { key: "MANUFACTURING_CONSUMPTION", name: "Material Consumption", description: "Record planned vs actual raw material usage logs" },
+    { key: "MANUFACTURING_FINISHED_GOODS", name: "Finished Goods Receipt", description: "Receive finished production batches back into stocks" },
+    { key: "MANUFACTURING_QC", name: "Quality Control Inspections", description: "Inspect batches, checks tolerance checklists and verify yield" },
+    { key: "MANUFACTURING_REWORK", name: "Rework & Rejection logs", description: "Manage rejected items, reroutes to reworks or write-offs" },
+    { key: "MANUFACTURING_WORK_CENTER", name: "Work Centers & Machines", description: "Register floor machinery hourly rates and capacities" },
+    { key: "MANUFACTURING_SHIFT", name: "Production Shifts Scheduler", description: "Shift calendars and supervisor assignments" }
 ];
 // Global reference to the WebSockets emitter
 exports.ioInstance = null;

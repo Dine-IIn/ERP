@@ -93,7 +93,18 @@ export const HIERARCHICAL_FEATURES = [
   { key: "REPORTS_PURCHASE", name: "Purchase Sourcing summary", description: "Examine PO ratios and complete expenses" },
   { key: "REPORTS_INVENTORY", name: "Warehouse asset valuations", description: "Audit stock evaluations and catalog sizes" },
   { key: "REPORTS_HR", name: "HR Metrics totals", description: "Review work durations and disbursed salaries" },
-  { key: "REPORTS_FINANCE", name: "Financial Cashflows curves", description: "Examine inflows vs outflows and running curves" }
+  { key: "REPORTS_FINANCE", name: "Financial Cashflows curves", description: "Examine inflows vs outflows and running curves" },
+
+  // MANUFACTURING MODULE
+  { key: "MANUFACTURING", name: "MANUFACTURING OPERATIONS", description: "Factory Operations & Manufacturing Module" },
+  { key: "MANUFACTURING_BOM", name: "BOM & Bill of Materials", description: "Configure product formulas, components lists, and pricing" },
+  { key: "MANUFACTURING_PLAN", name: "Production Planning & MRP", description: "Schedule factory production runs and compute material deficits" },
+  { key: "MANUFACTURING_WORK_ORDER", name: "Work Orders & Job Cards", description: "Dispatch assembly instructions and track operator logs" },
+  { key: "MANUFACTURING_PRODUCTION", name: "Production & Material Consumption", description: "Log output quantities and raw material issues" },
+  { key: "MANUFACTURING_QC", name: "Quality Control & Reworks", description: "Inspect manufactured batches and reject defects" },
+  { key: "MANUFACTURING_SHOP_FLOOR", name: "Shop Floor Work Centers", description: "Manage assembly stations, capacities, and factory rosters" },
+  { key: "MANUFACTURING_REPORTS", name: "Production Reports", description: "Examine monthly production outputs and analytics" },
+  { key: "MANUFACTURING_COSTING", name: "Production Cost Analysis", description: "Track overhead allocation and item cost deviations" }
 ];
 
 // Global reference to the WebSockets emitter

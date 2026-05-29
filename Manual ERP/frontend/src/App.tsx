@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { MASTER_FEATURES_HIERARCHY, getCategoryKeys, getChildKeys, getParentKey } from './features';
 import Login from './components/auth/Login';
@@ -58,6 +58,16 @@ import InventoryReports from './components/reports/InventoryReports';
 import HrReports from './components/reports/HrReports';
 import FinancialReports from './components/reports/FinancialReports';
 
+import BomManagement from './components/manufacturing/BomManagement';
+import ProductionPlanning from './components/manufacturing/ProductionPlanning';
+import WorkOrders from './components/manufacturing/WorkOrders';
+import ProductionExecution from './components/manufacturing/ProductionExecution';
+import QualityControl from './components/manufacturing/QualityControl';
+import ShopFloor from './components/manufacturing/ShopFloor';
+
+import ManufacturingReports from './components/reports/ManufacturingReports';
+import ManufacturingCosting from './components/reports/ManufacturingCosting';
+
 
 import {
   UserCheck,
@@ -114,7 +124,11 @@ import {
   Truck,
   UserCircle,
   Receipt,
-  Warehouse
+  Warehouse,
+  LayoutDashboard,
+  BarChart4,
+  CalendarRange,
+  PlayCircle
 } from 'lucide-react';
 
 import { apiClient, ApiError } from './utils/apiService';
@@ -251,6 +265,24 @@ const getFeatureIcon = (key: string) => {
       return <Layers className="w-4 h-4" style={{ flexShrink: 0 }} />;
     case 'INVENTORY_LOW_ALERT':
       return <ShieldAlert className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'MANUFACTURING':
+      return <Factory className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'MANUFACTURING_BOM':
+      return <Clipboard className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'MANUFACTURING_PLAN':
+      return <CalendarRange className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'MANUFACTURING_WORK_ORDER':
+      return <Clipboard className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'MANUFACTURING_PRODUCTION':
+      return <PlayCircle className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'MANUFACTURING_QC':
+      return <ShieldAlert className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'MANUFACTURING_SHOP_FLOOR':
+      return <Cpu className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'MANUFACTURING_REPORTS':
+      return <BarChart4 className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'MANUFACTURING_COSTING':
+      return <TrendingUp className="w-4 h-4" style={{ flexShrink: 0 }} />;
     default:
       return <Layers className="w-4 h-4" style={{ flexShrink: 0 }} />;
   }
@@ -2882,6 +2914,24 @@ export default function App() {
                 <>
                   {!sidebarCollapsed && <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-widest uppercase px-3 block my-1">Menu Navigator</span>}
 
+                  {/* Sidebar Dashboard Button */}
+                  <button
+                    onClick={() => {
+                      setActiveWorkspaceModule('dashboard');
+                      setActiveWorkspaceSubModule('');
+                      setSelectedCompany(null);
+                    }}
+                    className={`w-full py-2.5 px-3 rounded-xl text-left text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border-0 bg-transparent mb-1.5 ${
+                      activeWorkspaceModule === 'dashboard'
+                        ? 'bg-indigo-500/10 text-indigo-400 font-extrabold border-l-2 border-indigo-500'
+                        : 'text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-white'
+                    }`}
+                    title={sidebarCollapsed ? "Corporate Dashboard" : ""}
+                  >
+                    <LayoutDashboard className="w-4 h-4 text-indigo-400 shrink-0" />
+                    {!sidebarCollapsed && <span>Corporate Dashboard</span>}
+                  </button>
+
                   {companyFeatures.length === 0 ? (
                     <div className="px-3 py-4 mt-6 text-center select-none animate-fade-in">
                       <span className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-widest border border-dashed border-[var(--border-color)] rounded-xl py-3 px-2 block leading-relaxed bg-[var(--bg-secondary)]/30">
@@ -3856,6 +3906,49 @@ export default function App() {
                         }}
                         token={token || ""}
                       />
+                    )}
+
+                    {activeWorkspaceSubModule === 'MANUFACTURING_REPORTS' && (
+                      <ManufacturingReports token={token || ""} />
+                    )}
+
+                    {activeWorkspaceSubModule === 'MANUFACTURING_COSTING' && (
+                      <ManufacturingCosting token={token || ""} />
+                    )}
+
+                  </div>
+                </div>
+              )}
+
+              {/* ==========================================
+                  MANUFACTURING WORKSPACE
+                  ========================================== */}
+              {activeWorkspaceModule === 'manufacturing' && (
+                <div className="max-w-6xl mx-auto animate-fade-in text-left select-none">
+                  <div className="w-full bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl p-6 shadow-sm min-h-[480px]">
+                    
+                    {activeWorkspaceSubModule === 'MANUFACTURING_BOM' && (
+                      <BomManagement products={productsList} />
+                    )}
+
+                    {activeWorkspaceSubModule === 'MANUFACTURING_PLAN' && (
+                      <ProductionPlanning salesOrders={salesOrdersList} products={productsList} />
+                    )}
+
+                    {activeWorkspaceSubModule === 'MANUFACTURING_WORK_ORDER' && (
+                      <WorkOrders employees={companyUsers} />
+                    )}
+
+                    {activeWorkspaceSubModule === 'MANUFACTURING_PRODUCTION' && (
+                      <ProductionExecution products={productsList} />
+                    )}
+
+                    {activeWorkspaceSubModule === 'MANUFACTURING_QC' && (
+                      <QualityControl products={productsList} />
+                    )}
+
+                    {activeWorkspaceSubModule === 'MANUFACTURING_SHOP_FLOOR' && (
+                      <ShopFloor employees={companyUsers} />
                     )}
 
                   </div>

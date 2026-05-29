@@ -39,6 +39,8 @@ app.use((0, compression_1.default)());
 // Define whitelisted production origins for CORS
 const allowedOrigins = [
     'http://localhost:5173',
+    'https://localhost',
+    'http://tauri.localhost',
     'https://erp.anbindustries.com',
     'https://yourfrontend.vercel.app'
 ];
@@ -50,13 +52,14 @@ const corsOptions = {
         if (!origin)
             return callback(null, true);
         const isAllowed = allowedOrigins.includes(origin) ||
-            /^http:\/\/localhost:\d+$/.test(origin) ||
+            /^(http|https):\/\/localhost(:\d+)?$/.test(origin) ||
             origin.startsWith('tauri://') ||
             origin.startsWith('capacitor://');
         if (isAllowed) {
             callback(null, true);
         }
         else {
+            console.log('❌ BLOCKED ORIGIN:', origin);
             callback(new Error('Not allowed by CORS'));
         }
     },
@@ -87,13 +90,14 @@ const io = new socket_io_1.Server(server, {
             if (!origin)
                 return callback(null, true);
             const isAllowed = allowedOrigins.includes(origin) ||
-                /^http:\/\/localhost:\d+$/.test(origin) ||
+                /^(http|https):\/\/localhost(:\d+)?$/.test(origin) ||
                 origin.startsWith('tauri://') ||
                 origin.startsWith('capacitor://');
             if (isAllowed) {
                 callback(null, true);
             }
             else {
+                console.log('❌ BLOCKED ORIGIN:', origin);
                 callback(new Error('Not allowed by CORS'));
             }
         },
@@ -389,7 +393,24 @@ async function seedDatabase() {
                         "REPORTS_PURCHASE",
                         "REPORTS_INVENTORY",
                         "REPORTS_HR",
-                        "REPORTS_FINANCE"
+                        "REPORTS_FINANCE",
+                        // Manufacturing Module Features
+                        "MANUFACTURING",
+                        "MANUFACTURING_BOM",
+                        "MANUFACTURING_BOM_COSTING",
+                        "MANUFACTURING_PLAN",
+                        "MANUFACTURING_MRP",
+                        "MANUFACTURING_WORK_ORDER",
+                        "MANUFACTURING_JOB_CARD",
+                        "MANUFACTURING_PRODUCTION",
+                        "MANUFACTURING_CONSUMPTION",
+                        "MANUFACTURING_FINISHED_GOODS",
+                        "MANUFACTURING_QC",
+                        "MANUFACTURING_REWORK",
+                        "MANUFACTURING_WORK_CENTER",
+                        "MANUFACTURING_SHIFT",
+                        "MANUFACTURING_REPORTS",
+                        "MANUFACTURING_COSTING"
                     ]
                 }
             }
