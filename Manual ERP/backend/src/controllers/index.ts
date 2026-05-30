@@ -412,7 +412,8 @@ export async function login(req: AuthenticatedRequest, res: Response) {
         hasBackupAccess: user.hasBackupAccess,
         backupAccess: company.backupAccess,
         email: user.email,
-        mobileNo: user.mobileNo
+        mobileNo: user.mobileNo,
+        currencyId: company.currencyId || 'USD'
       }
     });
   } catch (error: any) {

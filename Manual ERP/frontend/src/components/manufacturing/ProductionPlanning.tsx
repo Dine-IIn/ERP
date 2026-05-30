@@ -18,15 +18,29 @@ interface ProductionPlan {
 interface ProductionPlanningProps {
   salesOrders: any[];
   products: any[];
+  customers?: any[];
 }
 
-export default function ProductionPlanning({ salesOrders = [], products = [] }: ProductionPlanningProps) {
+export default function ProductionPlanning({ salesOrders = [], products = [], customers = [] }: ProductionPlanningProps) {
   const [activeTab, setActiveTab] = useState<'schedule' | 'mrp'>('schedule');
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
 
-  // Mapped Sales Orders from props
-  const activeSalesOrders = salesOrders.length > 0 ? salesOrders : [
+  // Mapped Sales Orders from props (resolving relational parameters dynamically)
+  const activeSalesOrders = salesOrders.length > 0 ? salesOrders.map((so: any) => {
+    if (so.customerName && so.product) return so;
+    const customer = customers.find(c => c.id === so.customerId);
+    const firstItem = so.items?.[0];
+    const product = products.find(p => p.id === firstItem?.productId);
+    return {
+      id: so.id,
+      orderNo: so.orderNo || 'SO-UNKNOWN',
+      customerName: customer ? customer.name : 'Standard Customer',
+      product: product ? product.name : 'Standard Product',
+      code: product ? (product.code || 'PROD-CF90') : 'PROD-CF90',
+      qty: firstItem ? (parseFloat(firstItem.quantity) || 10) : 10
+    };
+  }) : [
     { id: 'so-static-1', orderNo: 'SO-STANDARD-01', customerName: 'Apex Distributors Ltd', product: 'Standard Finished Item A', code: 'PROD-S1', qty: 10 }
   ];
 
@@ -68,10 +82,13 @@ export default function ProductionPlanning({ salesOrders = [], products = [] }: 
 
   // Set default dropdown selections when catalog loads
   useEffect(() => {
-    if (activeSalesOrders.length > 0 && !selectedSoId) {
-      setSelectedSoId(activeSalesOrders[0].id || activeSalesOrders[0].orderNo);
+    if (activeSalesOrders.length > 0) {
+      const exists = activeSalesOrders.some(so => (so.id || so.orderNo) === selectedSoId);
+      if (!selectedSoId || !exists) {
+        setSelectedSoId(activeSalesOrders[0].id || activeSalesOrders[0].orderNo);
+      }
     }
-  }, [activeSalesOrders]);
+  }, [activeSalesOrders, selectedSoId]);
 
   const handleCreatePlanSubmit = (e: React.FormEvent) => {
     e.preventDefault();

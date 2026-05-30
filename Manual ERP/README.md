@@ -242,12 +242,12 @@ We utilize **Capacitor** to wrap our React app output inside a native Android wr
 
 2. **Initialize the Capacitor Configuration:**
    ```powershell
-   npx cap init "ERP" "com.erp.app" --web-dir=dist
+   corepack npx cap init "ERP" "com.erp.app" --web-dir=dist
    ```
 
 3. **Add the Android Native Project Folder:**
    ```powershell
-   npx cap add android
+   corepack npx cap add android
    ```
    *(This creates a high-fidelity native Android studio project folder inside `frontend/android/`).*
 
@@ -258,12 +258,12 @@ We utilize **Capacitor** to wrap our React app output inside a native Android wr
 
 5. **Synchronize/Copy web assets into the Android native envelope:**
    ```powershell
-   npx cap sync
+   corepack npx cap sync
    ```
 
 6. **Open the native project inside Android Studio to run on an Emulator/Device or compile `.apk`:**
    ```powershell
-   npx cap open android
+   corepack npx cap open android
    ```
    *Within Android Studio:*
    * Click **Run** to launch the ERP instantly on your connected physical Android test device or Virtual Device emulator.

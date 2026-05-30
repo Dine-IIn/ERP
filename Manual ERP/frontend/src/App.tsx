@@ -90,6 +90,7 @@ import {
   Key,
   Layers,
   X,
+  Menu,
   LogOut,
   Phone,
   Lock,
@@ -589,7 +590,7 @@ export default function App() {
   });
 
   // Compute active currency symbol globally
-  const currencySymbol = CURRENCY_SYMBOLS[adminProfileForm?.currencyId || 'USD'] || '$';
+  const currencySymbol = CURRENCY_SYMBOLS[user?.currencyId || adminProfileForm?.currencyId || 'USD'] || '$';
 
   const [auditTrailLogs, setAuditTrailLogs] = useState<any[]>([]);
   const [auditTotal, setAuditTotal] = useState(0);
@@ -727,7 +728,7 @@ export default function App() {
   });
 
   // --- COLLAPSIBLE SIDEBAR & POPOVER STATES ---
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(window.innerWidth < 768);
   const [activePopoverCategory, setActivePopoverCategory] = useState<string | null>(null);
 
   // --- FLOATING CHAT DRAWER STATES ---
@@ -756,8 +757,27 @@ export default function App() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
+    const checkConnectivity = async () => {
+      if (!navigator.onLine) {
+        setIsOnline(false);
+        return;
+      }
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2500);
+        await fetch('https://clients3.google.com/generate_204', {
+          method: 'GET',
+          mode: 'no-cors',
+          signal: controller.signal,
+          headers: { 'Cache-Control': 'no-cache' }
+        });
+        clearTimeout(timeoutId);
+        setIsOnline(true);
+      } catch (err) {
+        setIsOnline(false);
+      }
+    };
+
     const handleAuthExpired = (e: Event) => {
       const customEvent = e as CustomEvent;
       const detail = customEvent.detail;
@@ -774,13 +794,22 @@ export default function App() {
         setErrorMsg('Session expired or logged out. Please log in again.');
       }
     };
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
+
+    window.addEventListener('online', checkConnectivity);
+    window.addEventListener('offline', checkConnectivity);
     window.addEventListener('auth-expired', handleAuthExpired);
+
+    // Initial check
+    checkConnectivity();
+
+    // Poll local network status every 2 seconds for immediate and reliable mobile WebView updates
+    const intervalId = setInterval(checkConnectivity, 2000);
+
     return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', checkConnectivity);
+      window.removeEventListener('offline', checkConnectivity);
       window.removeEventListener('auth-expired', handleAuthExpired);
+      clearInterval(intervalId);
     };
   }, []);
 
@@ -1125,6 +1154,7 @@ export default function App() {
       setConflictModalOpen(false);
       setConflictDeviceModel('');
       setConflictDeviceType('');
+      setLoginForm({ companyCode: '', username: '', password: '' });
     } catch (err: any) {
       if (err instanceof ApiError && err.status === 409 && err.data?.sessionConflict) {
         // Active concurrent session detected
@@ -1142,7 +1172,14 @@ export default function App() {
     handleLoginSubmit(undefined, true);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      if (token) {
+        await apiRequest('/api/auth/logout', 'POST');
+      }
+    } catch (e) {
+      console.warn("Logout request failed:", e);
+    }
     localStorage.removeItem('erp_token');
     localStorage.removeItem('erp_user');
     setToken(null);
@@ -2233,6 +2270,7 @@ export default function App() {
       const profileRes = await apiRequest('/api/admin/company/profile', 'GET');
       if (profileRes?.company) {
         setAdminProfileData(profileRes.company);
+        const activeCurrency = profileRes.company.currencyId || 'USD';
         setAdminProfileForm({
           legalCompanyName: profileRes.company.legalCompanyName || '',
           companyEmail: profileRes.company.companyEmail || '',
@@ -2252,9 +2290,14 @@ export default function App() {
           smtpPort: profileRes.company.smtpPort ? String(profileRes.company.smtpPort) : '',
           smtpUser: profileRes.company.smtpUser || '',
           smtpPassword: profileRes.company.smtpPassword || '',
-          currencyId: profileRes.company.currencyId || 'USD'
+          currencyId: activeCurrency
         });
-         setBackupRetentionDays(profileRes.company.backupRetentionDays || 60);
+        if (user && user.currencyId !== activeCurrency) {
+          const updatedUser = { ...user, currencyId: activeCurrency };
+          setUser(updatedUser);
+          localStorage.setItem('erp_user', JSON.stringify(updatedUser));
+        }
+        setBackupRetentionDays(profileRes.company.backupRetentionDays || 60);
         setAutoBackupInterval(profileRes.company.autoBackupInterval || 2);
       }
 
@@ -3119,19 +3162,28 @@ export default function App() {
             </div>
           </aside>
 
+          {/* Mobile overlay backdrop when sidebar is open */}
+          {!sidebarCollapsed && (
+            <div 
+              className="fixed inset-0 bg-black/40 z-39 md:hidden transition-opacity"
+              onClick={() => setSidebarCollapsed(true)}
+            />
+          )}
+
           {/* ==========================================
               MAIN CONTENT VIEWPORT
               ========================================== */}
-          <div className={`flex-1 ${sidebarCollapsed ? 'ml-16' : 'ml-64'} flex flex-col min-h-screen transition-all duration-300`}>
+          <div className={`flex-1 ml-16 ${sidebarCollapsed ? 'md:ml-16' : 'md:ml-64'} flex flex-col min-h-screen max-w-[calc(100vw-64px)] overflow-x-hidden transition-all duration-300`}>
             
-            {/* Top Workspace Header */}
-            <header className="sticky top-0 z-35 bg-[var(--bg-secondary)] border-b border-[var(--border-color)] px-6 py-4 flex items-center justify-between select-none">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold text-indigo-500 tracking-wider uppercase font-display">Workstation Hub</span>
-                <span className="text-slate-400">/</span>
-                <h1 className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-2 leading-none uppercase">
-                  {selectedCompany ? `${selectedCompany.name} Profile` : activeWorkspaceModule.replace('_', ' ')}
-                </h1>
+            <header className="sticky top-0 z-35 bg-[var(--bg-secondary)] border-b border-[var(--border-color)] px-4 md:px-6 py-4 flex items-center justify-between select-none">
+              <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-1.5 md:gap-2">
+                  <span className="text-[10px] font-bold text-indigo-500 tracking-wider uppercase font-display hidden sm:inline">Workstation Hub</span>
+                  <span className="text-slate-400 hidden sm:inline">/</span>
+                  <h1 className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-2 leading-none uppercase text-xs sm:text-sm truncate max-w-[150px] sm:max-w-none">
+                    {selectedCompany ? `${selectedCompany.name} Profile` : activeWorkspaceModule.replace('_', ' ')}
+                  </h1>
+                </div>
               </div>
 
               {/* Top Right Corner Status */}
@@ -3179,7 +3231,7 @@ export default function App() {
 
                 {/* Backup Info & Trigger */}
                 {user?.role === 'Admin' && (
-                  <div className="flex items-center gap-2 border-r border-[var(--border-color)] pr-4">
+                  <div className="hidden sm:flex items-center gap-2 border-r border-[var(--border-color)] pr-4">
                     <button
                       onClick={() => setShowTopBackupModal(true)}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border border-emerald-500/20 transition-colors text-xs font-bold cursor-pointer"
@@ -3272,6 +3324,7 @@ export default function App() {
                       stats={dashboardStats}
                       onApproveLeave={async (id, notes) => { await handleProcessLeaveRequest(id, notes, true); }}
                       onRejectLeave={async (id, notes) => { await handleProcessLeaveRequest(id, notes, false); }}
+                      currencySymbol={currencySymbol}
                     />
                   </div>
                 )
@@ -3932,7 +3985,7 @@ export default function App() {
                     )}
 
                     {activeWorkspaceSubModule === 'MANUFACTURING_PLAN' && (
-                      <ProductionPlanning salesOrders={salesOrdersList} products={productsList} />
+                      <ProductionPlanning salesOrders={salesOrdersList} products={productsList} customers={customersList} />
                     )}
 
                     {activeWorkspaceSubModule === 'MANUFACTURING_WORK_ORDER' && (

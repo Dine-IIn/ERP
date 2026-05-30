@@ -17,6 +17,7 @@ interface CustomizableDashboardProps {
   };
   onApproveLeave: (id: string, notes: string) => Promise<void>;
   onRejectLeave: (id: string, notes: string) => Promise<void>;
+  currencySymbol?: string;
 }
 
 export default function CustomizableDashboard({
@@ -27,7 +28,8 @@ export default function CustomizableDashboard({
   leaveRequests,
   stats,
   onApproveLeave,
-  onRejectLeave
+  onRejectLeave,
+  currencySymbol = '$'
 }: CustomizableDashboardProps) {
   // Customizable Widgets States with localStorage persistence
   const [widgets, setWidgets] = useState({
@@ -104,15 +106,15 @@ export default function CustomizableDashboard({
   return (
     <div className="space-y-6">
       {/* Premium Welcome Banner */}
-      <div className={`relative flex flex-col md:flex-row md:items-center md:justify-between p-8 rounded-3xl border bg-gradient-to-r ${getThemeClass()} backdrop-blur-2xl transition-all duration-500 overflow-hidden`}>
+      <div className={`relative flex flex-col md:flex-row md:items-center md:justify-between p-5 md:p-8 rounded-3xl border bg-gradient-to-r ${getThemeClass()} backdrop-blur-2xl transition-all duration-500 overflow-hidden`}>
         <div className="absolute right-0 top-0 w-96 h-96 bg-indigo-500/10 blur-[120px] rounded-full pointer-events-none" />
         <div className="z-10 space-y-2">
           <div className="flex items-center gap-2.5">
-            <span className="px-3 py-1 text-xs font-semibold uppercase tracking-wider bg-slate-900/60 rounded-full text-indigo-400 border border-slate-800">
+            <span className="px-3 py-1 text-[10px] sm:text-xs font-semibold uppercase tracking-wider bg-slate-900/60 rounded-full text-indigo-400 border border-slate-800">
               Enterprise Dashboard
             </span>
           </div>
-          <h1 className="text-3xl font-extrabold text-white tracking-tight">
+          <h1 className="text-xl md:text-3xl font-extrabold text-white tracking-tight leading-tight">
             Welcome Back, {companyProfile?.name || 'ERP Tenant'} Console
           </h1>
           <p className="text-slate-400 text-sm max-w-xl">
@@ -138,7 +140,7 @@ export default function CustomizableDashboard({
             <div className="space-y-2">
               <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">Corporate Sales Revenue</span>
               <h3 className="text-2xl font-black text-white font-mono">
-                ${stats.totalSalesRevenue?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                {currencySymbol}{stats.totalSalesRevenue?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </h3>
               <div className="text-xs text-emerald-400 font-medium">Invoiced & Unpaid combined</div>
             </div>
@@ -152,7 +154,7 @@ export default function CustomizableDashboard({
             <div className="space-y-2">
               <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">Disbursed Salaries</span>
               <h3 className="text-2xl font-black text-white font-mono">
-                ${stats.totalSalaryDisbursed?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                {currencySymbol}{stats.totalSalaryDisbursed?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </h3>
               <div className="text-xs text-rose-400 font-medium">Outflow this calendar month</div>
             </div>
@@ -166,7 +168,7 @@ export default function CustomizableDashboard({
             <div className="space-y-2">
               <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">Cash Surplus (Net)</span>
               <h3 className="text-2xl font-black text-white font-mono">
-                ${stats.netSavings?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                {currencySymbol}{stats.netSavings?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </h3>
               <div className="text-xs text-emerald-400 font-medium">Revenues minus expenses</div>
             </div>
@@ -210,7 +212,7 @@ export default function CustomizableDashboard({
                   <div key={idx} className="space-y-1.5">
                     <div className="flex items-center justify-between text-xs font-semibold">
                       <span className="text-slate-300">{item.month}</span>
-                      <span className="text-white">${item.value?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                      <span className="text-white">{currencySymbol}{item.value?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                     </div>
                     {/* Visual Bar */}
                     <div className="w-full h-3 bg-slate-950 rounded-full overflow-hidden border border-slate-900">
