@@ -129,7 +129,8 @@ import {
   LayoutDashboard,
   BarChart4,
   CalendarRange,
-  PlayCircle
+  PlayCircle,
+  RotateCcw
 } from 'lucide-react';
 
 import { apiClient, ApiError } from './utils/apiService';
@@ -754,6 +755,7 @@ export default function App() {
   const [paymentTo, setPaymentTo] = useState('');
   const [paymentAmount, setPaymentAmount] = useState('');
   const [showGroupSettingsModal, setShowGroupSettingsModal] = useState(false);
+  const [editingGroupName, setEditingGroupName] = useState('');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   useEffect(() => {
@@ -938,6 +940,12 @@ export default function App() {
     };
   }, [token]);
 
+  useEffect(() => {
+    if (showChatDrawer && token) {
+      fetchChatGroups();
+    }
+  }, [showChatDrawer, token]);
+
   const fetchChatGroups = async () => {
     if (!localStorage.getItem('erp_token')) return;
     try {
@@ -1003,6 +1011,15 @@ export default function App() {
       }
     });
 
+    socketRef.current.on('message_deleted', (payload: { groupId: string, messageId: string }) => {
+      console.log('🗑️ Real-time message deleted received:', payload);
+      if (selectedGroupIdRef.current === payload.groupId) {
+        setChatMessages(prev => prev.filter(m => m.id !== payload.messageId));
+      }
+      fetchChatGroups();
+      fetchWorkspaceStats();
+    });
+
     // Real-time group space metadata sync
     socketRef.current.on('group_created', (newGroup: any) => {
       console.log('📣 Chat space metadata updated:', newGroup);
@@ -1012,6 +1029,21 @@ export default function App() {
         }
         return [newGroup, ...prev];
       });
+    });
+
+    // Real-time group space deletion sync
+    socketRef.current.on('group_deleted', (payload: { groupId: string }) => {
+      console.log('📣 Chat space deleted:', payload);
+      setChatGroups(prev => prev.filter(g => g.id !== payload.groupId));
+      if (selectedGroupIdRef.current === payload.groupId) {
+        setSelectedChatGroup(null);
+        setChatActiveView('list');
+        setActiveToast({
+          title: "Channel Removed",
+          message: "The active group conversation has been deleted by an administrator."
+        });
+        setTimeout(() => setActiveToast(null), 5000);
+      }
     });
 
     // Real-time direct message alert toast
@@ -1469,6 +1501,7 @@ export default function App() {
       fetchFinanceData();
       fetchReportsData();
       fetchDashboardStats();
+      fetchChatGroups();
     } catch (e) {}
   };
 
@@ -1542,6 +1575,7 @@ export default function App() {
       fetchFinanceData();
       fetchReportsData();
       fetchDashboardStats();
+      fetchChatGroups();
     } catch (e) {}
   };
 
@@ -2515,15 +2549,23 @@ export default function App() {
 
   const handleSendChatMessage = async () => {
     if (!selectedChatGroup || !chatMessageInput.trim()) return;
+    const messageText = chatMessageInput.trim();
     const body = {
-      message: chatMessageInput.trim(),
+      message: messageText,
       type: 'TEXT'
     };
     setChatMessageInput('');
     try {
-      await apiRequest(`/api/chat/group/${selectedChatGroup.id}/message`, 'POST', body);
+      const response = await apiRequest(`/api/chat/group/${selectedChatGroup.id}/message`, 'POST', body);
+      // Optimistically append the sent message to state if not already added
+      setChatMessages(prev => {
+        if (prev.some(m => m.id === response.id)) return prev;
+        return [...prev, response];
+      });
     } catch (e) {
       console.error("Error sending message:", e);
+      // Restore input if sending failed
+      setChatMessageInput(messageText);
     }
   };
 
@@ -2606,12 +2648,19 @@ export default function App() {
     };
 
     try {
-      await apiRequest(`/api/chat/group/${selectedChatGroup.id}/message`, 'POST', body);
+      const response = await apiRequest(`/api/chat/group/${selectedChatGroup.id}/message`, 'POST', body);
       setSuccessMsg("Expense logged successfully!");
       setShowAddExpenseModal(false);
       setExpenseAmount('');
       setExpenseDescription('');
       setExpensePaidBy('');
+      
+      // Optimistically append to message stream
+      setChatMessages(prev => {
+        if (prev.some(m => m.id === response.id)) return prev;
+        return [...prev, response];
+      });
+      
       fetchWorkspaceStats();
     } catch (e) {
       console.error("Error logging expense:", e);
@@ -2648,12 +2697,19 @@ export default function App() {
     };
 
     try {
-      await apiRequest(`/api/chat/group/${selectedChatGroup.id}/message`, 'POST', body);
+      const response = await apiRequest(`/api/chat/group/${selectedChatGroup.id}/message`, 'POST', body);
       setSuccessMsg("Payment recorded successfully!");
       setShowRecordPaymentModal(false);
       setPaymentAmount('');
       setPaymentFrom('');
       setPaymentTo('');
+      
+      // Optimistically append to message stream
+      setChatMessages(prev => {
+        if (prev.some(m => m.id === response.id)) return prev;
+        return [...prev, response];
+      });
+      
       fetchWorkspaceStats();
     } catch (e) {
       console.error("Error recording payment:", e);
@@ -2674,21 +2730,78 @@ export default function App() {
     }
   };
 
-  const handleUpdateGroupSettings = async (isPrivate: boolean, connectToCashbook?: boolean) => {
+  const handleUndoChatMessage = async (messageId: string) => {
+    if (!selectedChatGroup) return;
+    const confirmed = window.confirm("Are you sure you want to undo/delete this chat? This will permanently revert any logged splits or settlements.");
+    if (!confirmed) return;
+
+    try {
+      await apiRequest(`/api/chat/message/${messageId}`, 'DELETE');
+      setSuccessMsg("Message successfully undone.");
+      
+      // Optimistically remove from active message stream
+      setChatMessages(prev => prev.filter(m => m.id !== messageId));
+      fetchChatGroups();
+      fetchWorkspaceStats();
+    } catch (e: any) {
+      console.error("Error undoing message:", e);
+      setErrorMsg(`Failed to undo message: ${e.message || 'Unknown error'}`);
+    }
+  };
+
+  const handleUpdateGroupSettings = async (isPrivate: boolean, connectToCashbook?: boolean, newName?: string) => {
     if (!selectedChatGroup) return;
     const settings = JSON.parse(selectedChatGroup.settings || '{}');
     const newIsPrivate = isPrivate;
     const newConnectToCashbook = connectToCashbook !== undefined ? connectToCashbook : (settings.connectToCashbook || false);
     try {
       const updatedGroup = await apiRequest(`/api/chat/group/${selectedChatGroup.id}/settings`, 'PATCH', {
+        name: newName !== undefined ? newName : selectedChatGroup.name,
         isPrivate: newIsPrivate,
         connectToCashbook: newConnectToCashbook
       });
       setSelectedChatGroup(updatedGroup);
-      setSuccessMsg(`Group settings updated successfully.`);
+      setChatGroups(prev => prev.map(g => g.id === updatedGroup.id ? updatedGroup : g));
+      setSuccessMsg(`Group configurations updated successfully.`);
     } catch (e) {
       console.error("Error updating settings:", e);
     }
+  };
+
+  const handleDeleteGroup = async () => {
+    if (!selectedChatGroup) return;
+    const confirmed = window.confirm(`Are you sure you want to permanently delete the group "${selectedChatGroup.name}"? This action will permanently remove all messages and membership history.`);
+    if (!confirmed) return;
+
+    const groupId = selectedChatGroup.id;
+    const groupName = selectedChatGroup.name;
+
+    // Immediately close settings modal, deselect group, and return to main list panel
+    setShowGroupSettingsModal(false);
+    setSelectedChatGroup(null);
+    setChatActiveView('list');
+
+    try {
+      await apiRequest(`/api/chat/group/${groupId}`, 'DELETE');
+      setSuccessMsg(`Group "${groupName}" has been deleted.`);
+      fetchChatGroups();
+    } catch (e: any) {
+      console.error("Error deleting group:", e);
+      setErrorMsg(`Failed to delete group: ${e.message || 'Unknown error'}`);
+      fetchChatGroups();
+    }
+  };
+
+  const handleDownloadExpenseSheet = () => {
+    if (!selectedChatGroup) return;
+    const activeToken = token || localStorage.getItem('erp_token');
+    const url = `${BACKEND_URL}/api/chat/group/${selectedChatGroup.id}/expense-sheet?token=${activeToken}`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `expense_sheet_${selectedChatGroup.name.replace(/[^a-zA-Z0-9]/g, '_')}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   // ==========================================
@@ -5385,7 +5498,10 @@ export default function App() {
 
                     {selectedChatGroup.type !== 'DIRECT' && (
                       <button
-                        onClick={() => setShowGroupSettingsModal(true)}
+                        onClick={() => {
+                          setShowGroupSettingsModal(true);
+                          setEditingGroupName(selectedChatGroup.name);
+                        }}
                         className="p-1 rounded hover:bg-[var(--bg-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer animate-fade-in"
                         title="Manage Room Members & Privacy"
                       >
@@ -5457,15 +5573,28 @@ export default function App() {
                     ) : (
                       chatMessages.map(msg => {
                         const isMe = msg.senderId === user?.id;
+                        const isGroupAdmin = user?.role === 'Admin' || selectedChatGroup.createdById === user?.id;
+                        const canUndo = isMe || isGroupAdmin || user?.isSuperAdmin;
                         
                         if (msg.type === 'EXPENSE') {
                           const data = typeof msg.expenseData === 'string' ? JSON.parse(msg.expenseData) : msg.expenseData;
                           const payerName = selectedChatGroup.members.find((m: any) => m.userId === data?.paidBy)?.username || msg.senderName;
                           return (
-                            <div key={msg.id} className="flex flex-col items-center my-1 select-none w-full animate-fade-in">
-                              <div className="bg-emerald-500/5 border border-emerald-500/10 rounded-xl p-3 max-w-[280px] w-full text-xs">
-                                <div className="flex items-center gap-1.5 text-emerald-500 font-extrabold text-[9px] tracking-wider uppercase mb-1">
-                                  <Wallet className="w-3.5 h-3.5" /> EXPENSE REGISTERED
+                            <div key={msg.id} className="flex flex-col items-center my-1 select-none w-full animate-fade-in group/item">
+                              <div className="bg-emerald-500/5 border border-emerald-500/10 rounded-xl p-3 max-w-[280px] w-full text-xs relative">
+                                <div className="flex items-center justify-between mb-1">
+                                  <div className="flex items-center gap-1.5 text-emerald-500 font-extrabold text-[9px] tracking-wider uppercase">
+                                    <Wallet className="w-3.5 h-3.5" /> EXPENSE REGISTERED
+                                  </div>
+                                  {canUndo && (
+                                    <button
+                                      onClick={() => handleUndoChatMessage(msg.id)}
+                                      className="opacity-0 group-hover/item:opacity-100 transition-opacity text-[8px] text-rose-500 hover:text-rose-400 font-bold bg-rose-500/10 hover:bg-rose-500/20 px-1.5 py-0.5 rounded cursor-pointer flex items-center gap-0.5"
+                                      title="Undo/Delete Expense"
+                                    >
+                                      <RotateCcw className="w-2.5 h-2.5" /> Undo
+                                    </button>
+                                  )}
                                 </div>
                                 <h4 className="font-bold text-[var(--text-primary)] font-display">{data?.description}</h4>
                                 <div className="flex justify-between items-center mt-2 pt-2 border-t border-[var(--border-color)]/40 text-[10px]">
@@ -5482,10 +5611,21 @@ export default function App() {
                           const payerName = selectedChatGroup.members.find((m: any) => m.userId === data?.from)?.username || 'Someone';
                           const recipientName = selectedChatGroup.members.find((m: any) => m.userId === data?.to)?.username || 'Someone';
                           return (
-                            <div key={msg.id} className="flex flex-col items-center my-1 select-none w-full animate-fade-in">
-                              <div className="bg-indigo-500/5 border border-indigo-500/10 rounded-xl p-3 max-w-[280px] w-full text-xs">
-                                <div className="flex items-center gap-1.5 text-indigo-400 font-extrabold text-[9px] tracking-wider uppercase mb-1">
-                                  <CheckCircle className="w-3.5 h-3.5" /> PAYMENT RECORDED
+                            <div key={msg.id} className="flex flex-col items-center my-1 select-none w-full animate-fade-in group/item">
+                              <div className="bg-indigo-500/5 border border-indigo-500/10 rounded-xl p-3 max-w-[280px] w-full text-xs relative">
+                                <div className="flex items-center justify-between mb-1">
+                                  <div className="flex items-center gap-1.5 text-indigo-400 font-extrabold text-[9px] tracking-wider uppercase">
+                                    <CheckCircle className="w-3.5 h-3.5" /> PAYMENT RECORDED
+                                  </div>
+                                  {canUndo && (
+                                    <button
+                                      onClick={() => handleUndoChatMessage(msg.id)}
+                                      className="opacity-0 group-hover/item:opacity-100 transition-opacity text-[8px] text-rose-500 hover:text-rose-400 font-bold bg-rose-500/10 hover:bg-rose-500/20 px-1.5 py-0.5 rounded cursor-pointer flex items-center gap-0.5"
+                                      title="Undo/Delete Payment"
+                                    >
+                                      <RotateCcw className="w-2.5 h-2.5" /> Undo
+                                    </button>
+                                  )}
                                 </div>
                                 <p className="text-[10px] text-[var(--text-secondary)] font-semibold leading-relaxed">
                                   <span className="font-bold text-[var(--text-primary)]">{payerName}</span> paid <span className="font-bold text-[var(--text-primary)]">{recipientName}</span> <span className="font-bold text-indigo-400">${(data?.amount || 0).toFixed(2)}</span> to settle debts.
@@ -5496,14 +5636,34 @@ export default function App() {
                         }
 
                         return (
-                          <div key={msg.id} className={`flex flex-col max-w-[75%] ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'} select-text`}>
+                          <div key={msg.id} className={`flex flex-col max-w-[75%] ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'} select-text group/msg`}>
                             <span className="text-[8px] text-[var(--text-muted)] font-bold mb-0.5 px-1">{msg.senderName}</span>
-                            <div className={`p-2.5 rounded-2xl text-xs leading-normal shadow-sm ${
-                              isMe 
-                                ? 'bg-indigo-600 text-white rounded-tr-none' 
-                                : 'bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-color)]/30 rounded-tl-none'
-                            }`}>
-                              {msg.message}
+                            <div className="flex items-center gap-1.5">
+                              {isMe && canUndo && (
+                                <button
+                                  onClick={() => handleUndoChatMessage(msg.id)}
+                                  className="opacity-0 group-hover/msg:opacity-100 transition-opacity text-[8px] text-rose-500 hover:text-rose-400 font-bold bg-rose-500/10 hover:bg-rose-500/20 px-1.5 py-0.5 rounded cursor-pointer flex items-center gap-0.5"
+                                  title="Undo Message"
+                                >
+                                  <RotateCcw className="w-2.5 h-2.5" /> Undo
+                                </button>
+                              )}
+                              <div className={`p-2.5 rounded-2xl text-xs leading-normal shadow-sm ${
+                                isMe 
+                                  ? 'bg-indigo-600 text-white rounded-tr-none' 
+                                  : 'bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-color)]/30 rounded-tl-none'
+                              }`}>
+                                {msg.message}
+                              </div>
+                              {!isMe && canUndo && (
+                                <button
+                                  onClick={() => handleUndoChatMessage(msg.id)}
+                                  className="opacity-0 group-hover/msg:opacity-100 transition-opacity text-[8px] text-rose-500 hover:text-rose-400 font-bold bg-rose-500/10 hover:bg-rose-500/20 px-1.5 py-0.5 rounded cursor-pointer flex items-center gap-0.5"
+                                  title="Undo Message"
+                                >
+                                  <RotateCcw className="w-2.5 h-2.5" /> Undo
+                                </button>
+                              )}
                             </div>
                           </div>
                         );
@@ -5519,7 +5679,8 @@ export default function App() {
                         <div className="flex gap-1 mr-1">
                           <button
                             onClick={() => {
-                              setExpensePaidBy(user?.id || '');
+                              const isMember = selectedChatGroup.members.some((m: any) => m.userId === user?.id);
+                              setExpensePaidBy(isMember ? (user?.id || '') : (selectedChatGroup.members[0]?.userId || ''));
                               setShowAddExpenseModal(true);
                             }}
                             className="p-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 rounded-lg cursor-pointer transition-colors"
@@ -5529,7 +5690,10 @@ export default function App() {
                           </button>
                           <button
                             onClick={() => {
-                              setPaymentFrom(user?.id || '');
+                              const isMember = selectedChatGroup.members.some((m: any) => m.userId === user?.id);
+                              setPaymentFrom(isMember ? (user?.id || '') : '');
+                              setPaymentTo('');
+                              setPaymentAmount('');
                               setShowRecordPaymentModal(true);
                             }}
                             className="p-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 rounded-lg cursor-pointer transition-colors"
@@ -6095,128 +6259,195 @@ export default function App() {
           {/* ==========================================
               MODAL: GROUP CHAT ROOM CONFIG & SETTINGS
               ========================================== */}
-          {showGroupSettingsModal && selectedChatGroup && (
-            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 animate-fade-in">
-              <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl w-full max-w-md p-6 relative shadow-2xl text-left select-none animate-scale-up">
-                <button 
-                  onClick={() => setShowGroupSettingsModal(false)}
-                  className="absolute top-4 right-4 text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+          {showGroupSettingsModal && selectedChatGroup && (() => {
+            const isGroupAdmin = user?.role === 'Admin' || user?.isSuperAdmin || selectedChatGroup.createdById === user?.id || selectedChatGroup.members?.some((m: any) => m.userId === user?.id && m.role === 'ADMIN');
+            return (
+              <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 animate-fade-in">
+                <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl w-full max-w-md p-6 relative shadow-2xl text-left select-none animate-scale-up">
+                  <button 
+                    onClick={() => setShowGroupSettingsModal(false)}
+                    className="absolute top-4 right-4 text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
 
-                <div className="flex items-center gap-3 pb-3 border-b border-[var(--border-color)]">
-                  <div className="p-2.5 bg-indigo-500/10 rounded-xl text-indigo-400 border border-indigo-500/20">
-                    <Settings className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-base text-[var(--text-primary)] font-display">Room Settings & Membership</h3>
-                    <p className="text-[var(--text-secondary)] text-[10px]">Configure privacy scopes and group members</p>
-                  </div>
-                </div>
-
-                <div className="mt-4 flex flex-col gap-4 max-h-[380px] overflow-y-auto">
-                  {/* Privacy Toggle */}
-                  <div className="flex items-center justify-between p-2.5 border border-[var(--border-color)] rounded-xl bg-[var(--bg-tertiary)]">
-                    <div>
-                      <span className="font-bold text-[11px] block font-display">Restrict Visibility (Private Channel)</span>
-                      <span className="text-[9px] text-[var(--text-secondary)] mt-0.5 block">Only added members will discover this room</span>
+                  <div className="flex items-center gap-3 pb-3 border-b border-[var(--border-color)]">
+                    <div className="p-2.5 bg-indigo-500/10 rounded-xl text-indigo-400 border border-indigo-500/20">
+                      <Settings className="w-6 h-6" />
                     </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        checked={JSON.parse(selectedChatGroup.settings || '{}').isPrivate || false}
-                        onChange={e => handleUpdateGroupSettings(e.target.checked, JSON.parse(selectedChatGroup.settings || '{}').connectToCashbook || false)}
-                        className="sr-only peer"
-                      />
-                      <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
-                    </label>
+                    <div>
+                      <h3 className="font-bold text-base text-[var(--text-primary)] font-display">Room Settings & Membership</h3>
+                      <p className="text-[var(--text-secondary)] text-[10px]">Configure privacy scopes, rename, download ledger, or delete group</p>
+                    </div>
                   </div>
 
-                  {selectedChatGroup.type === 'EXPENSE' && (
+                  <div className="mt-4 flex flex-col gap-4 max-h-[380px] overflow-y-auto">
+                    {/* Rename Section */}
+                    {isGroupAdmin ? (
+                      <div className="p-2.5 border border-[var(--border-color)] rounded-xl bg-[var(--bg-tertiary)] flex flex-col gap-2">
+                        <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Group Space Name</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={editingGroupName}
+                            onChange={e => setEditingGroupName(e.target.value)}
+                            placeholder="Enter group name..."
+                            className="flex-1 bg-[var(--bg-primary)] border border-[var(--border-color)] px-3 py-1.5 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateGroupSettings(
+                              JSON.parse(selectedChatGroup.settings || '{}').isPrivate || false,
+                              JSON.parse(selectedChatGroup.settings || '{}').connectToCashbook || false,
+                              editingGroupName
+                            )}
+                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-xs cursor-pointer transition-colors"
+                          >
+                            Rename
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-2.5 border border-[var(--border-color)] rounded-xl bg-[var(--bg-tertiary)]">
+                        <span className="text-[9px] font-bold text-[var(--text-muted)] tracking-wider uppercase block">Group Space Name</span>
+                        <span className="text-xs font-bold text-[var(--text-primary)] block mt-1">{selectedChatGroup.name}</span>
+                      </div>
+                    )}
+
+                    {/* Privacy Toggle */}
                     <div className="flex items-center justify-between p-2.5 border border-[var(--border-color)] rounded-xl bg-[var(--bg-tertiary)]">
                       <div>
-                        <span className="font-bold text-[11px] block font-display">Connect to corporate Cashbook</span>
-                        <span className="text-[9px] text-[var(--text-secondary)] mt-0.5 block">Sync split expenses directly with accounting registers</span>
+                        <span className="font-bold text-[11px] block font-display">Restrict Visibility (Private Channel)</span>
+                        <span className="text-[9px] text-[var(--text-secondary)] mt-0.5 block">Only added members will discover this room</span>
                       </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
+                      <label className={`relative inline-flex items-center ${isGroupAdmin ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}>
                         <input 
                           type="checkbox" 
-                          checked={JSON.parse(selectedChatGroup.settings || '{}').connectToCashbook || false}
-                          onChange={e => handleUpdateGroupSettings(JSON.parse(selectedChatGroup.settings || '{}').isPrivate || false, e.target.checked)}
+                          disabled={!isGroupAdmin}
+                          checked={JSON.parse(selectedChatGroup.settings || '{}').isPrivate || false}
+                          onChange={e => handleUpdateGroupSettings(e.target.checked, JSON.parse(selectedChatGroup.settings || '{}').connectToCashbook || false)}
                           className="sr-only peer"
                         />
                         <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
                       </label>
                     </div>
-                  )}
 
-                  {/* Add Members Section */}
-                  <div>
-                    <span className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-2">Add Colleague to Room</span>
-                    <div className="flex flex-col gap-1.5 border border-[var(--border-color)] p-2 rounded-xl bg-[var(--bg-primary)] max-h-32 overflow-y-auto">
-                      {companyUsers
-                        .filter(u => !selectedChatGroup.members.some((m: any) => m.userId === u.id))
-                        .map(colleague => (
-                          <div key={colleague.id} className="flex justify-between items-center text-xs py-1 px-1.5 hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors">
-                            <span className="font-semibold text-[var(--text-primary)]">{colleague.username}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleManageGroupMember(colleague.id, 'ADD')}
-                              className="px-2 py-0.5 bg-indigo-600/10 hover:bg-indigo-600 text-indigo-400 hover:text-white font-extrabold text-[8px] uppercase rounded transition-all cursor-pointer"
-                            >
-                              Add
-                            </button>
-                          </div>
-                        ))}
-                      {companyUsers.filter(u => !selectedChatGroup.members.some((m: any) => m.userId === u.id)).length === 0 && (
-                        <div className="text-[10px] text-[var(--text-muted)] text-center py-2">All colleagues are members of this space</div>
-                      )}
-                    </div>
-                  </div>
+                    {selectedChatGroup.type === 'EXPENSE' && (
+                      <div className="flex items-center justify-between p-2.5 border border-[var(--border-color)] rounded-xl bg-[var(--bg-tertiary)]">
+                        <div>
+                          <span className="font-bold text-[11px] block font-display">Connect to corporate Cashbook</span>
+                          <span className="text-[9px] text-[var(--text-secondary)] mt-0.5 block">Sync split expenses directly with accounting registers</span>
+                        </div>
+                        <label className={`relative inline-flex items-center ${isGroupAdmin ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}>
+                          <input 
+                            type="checkbox" 
+                            disabled={!isGroupAdmin}
+                            checked={JSON.parse(selectedChatGroup.settings || '{}').connectToCashbook || false}
+                            onChange={e => handleUpdateGroupSettings(JSON.parse(selectedChatGroup.settings || '{}').isPrivate || false, e.target.checked)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                        </label>
+                      </div>
+                    )}
 
-                  {/* Current Members list */}
-                  <div>
-                    <span className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-2">Current Members ({selectedChatGroup.members.length})</span>
-                    <div className="flex flex-col gap-1.5 border border-[var(--border-color)] p-2 rounded-xl bg-[var(--bg-primary)] max-h-36 overflow-y-auto">
-                      {selectedChatGroup.members.map((m: any) => {
-                        const canKick = m.userId !== selectedChatGroup.createdById;
-                        return (
-                          <div key={m.id} className="flex justify-between items-center text-xs py-1 px-1.5 hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors">
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-semibold text-[var(--text-primary)]">{m.username}</span>
-                              <span className={`text-[8px] font-extrabold px-1 rounded uppercase ${m.role === 'ADMIN' ? 'bg-indigo-500/15 text-indigo-400' : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]'}`}>
-                                {m.role}
-                              </span>
+                    {/* Add Members Section */}
+                    {isGroupAdmin && (
+                      <div>
+                        <span className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-2">Add Colleague to Room</span>
+                        <div className="flex flex-col gap-1.5 border border-[var(--border-color)] p-2 rounded-xl bg-[var(--bg-primary)] max-h-32 overflow-y-auto">
+                          {companyUsers
+                            .filter(u => !selectedChatGroup.members.some((m: any) => m.userId === u.id))
+                            .map(colleague => (
+                              <div key={colleague.id} className="flex justify-between items-center text-xs py-1 px-1.5 hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors">
+                                <span className="font-semibold text-[var(--text-primary)]">{colleague.username}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleManageGroupMember(colleague.id, 'ADD')}
+                                  className="px-2 py-0.5 bg-indigo-600/10 hover:bg-indigo-600 text-indigo-400 hover:text-white font-extrabold text-[8px] uppercase rounded transition-all cursor-pointer"
+                                >
+                                  Add
+                                </button>
+                              </div>
+                            ))}
+                          {companyUsers.filter(u => !selectedChatGroup.members.some((m: any) => m.userId === u.id)).length === 0 && (
+                            <div className="text-[10px] text-[var(--text-muted)] text-center py-2">All colleagues are members of this space</div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Current Members list */}
+                    <div>
+                      <span className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-2">Current Members ({selectedChatGroup.members.length})</span>
+                      <div className="flex flex-col gap-1.5 border border-[var(--border-color)] p-2 rounded-xl bg-[var(--bg-primary)] max-h-36 overflow-y-auto">
+                        {selectedChatGroup.members.map((m: any) => {
+                          const canKick = m.userId !== selectedChatGroup.createdById;
+                          return (
+                            <div key={m.id} className="flex justify-between items-center text-xs py-1 px-1.5 hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-semibold text-[var(--text-primary)]">{m.username}</span>
+                                <span className={`text-[8px] font-extrabold px-1 rounded uppercase ${m.role === 'ADMIN' ? 'bg-indigo-500/15 text-indigo-400' : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]'}`}>
+                                  {m.role}
+                                </span>
+                              </div>
+                              {isGroupAdmin && canKick ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleManageGroupMember(m.userId, 'REMOVE')}
+                                  className="px-2 py-0.5 bg-rose-500/10 hover:bg-rose-600 text-rose-400 hover:text-white font-extrabold text-[8px] uppercase rounded transition-all cursor-pointer"
+                                >
+                                  Kick
+                                </button>
+                              ) : !canKick ? (
+                                <span className="text-[8px] text-[var(--text-muted)] italic">Founder</span>
+                              ) : null}
                             </div>
-                            {canKick ? (
-                              <button
-                                type="button"
-                                onClick={() => handleManageGroupMember(m.userId, 'REMOVE')}
-                                className="px-2 py-0.5 bg-rose-500/10 hover:bg-rose-600 text-rose-400 hover:text-white font-extrabold text-[8px] uppercase rounded transition-all cursor-pointer"
-                              >
-                                Kick
-                              </button>
-                            ) : (
-                              <span className="text-[8px] text-[var(--text-muted)] italic">Founder</span>
-                            )}
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                </div>
 
-                <button
-                  type="button"
-                  onClick={() => setShowGroupSettingsModal(false)}
-                  className="w-full mt-6 bg-[var(--bg-tertiary)] border border-[var(--border-color)] hover:text-[var(--text-primary)] font-bold py-2 rounded-lg text-xs cursor-pointer"
-                >
-                  Close Settings
-                </button>
+                    {/* Download Expense Sheet Action */}
+                    {selectedChatGroup.type === 'EXPENSE' && (
+                      <div className="border-t border-[var(--border-color)] pt-3 flex flex-col gap-2">
+                        <span className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Expense Sheet Ledger</span>
+                        <button
+                          type="button"
+                          onClick={handleDownloadExpenseSheet}
+                          className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-[0.99] shadow-md shadow-emerald-950/20"
+                        >
+                          <Database className="w-3.5 h-3.5" /> Download Group Expense Sheet (CSV)
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Danger Zone: Delete Group Option */}
+                    {isGroupAdmin && (
+                      <div className="border-t border-rose-500/20 pt-3 flex flex-col gap-2">
+                        <span className="text-[9px] font-bold text-rose-400 tracking-wider uppercase block font-display">Danger Zone</span>
+                        <button
+                          type="button"
+                          onClick={handleDeleteGroup}
+                          className="w-full py-2.5 px-4 bg-rose-600/10 hover:bg-rose-600 border border-rose-500/20 text-rose-500 hover:text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-[0.99]"
+                        >
+                          <X className="w-3.5 h-3.5" /> Permanently Delete Group Chat
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowGroupSettingsModal(false)}
+                    className="w-full mt-6 bg-[var(--bg-tertiary)] border border-[var(--border-color)] hover:text-[var(--text-primary)] font-bold py-2 rounded-lg text-xs cursor-pointer transition-colors"
+                  >
+                    Close Settings
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* ==========================================
               MODAL: SUPER ADMIN - ACCESS SAVING OVERLAY POPUP

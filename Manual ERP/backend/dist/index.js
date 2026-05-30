@@ -172,6 +172,9 @@ app.get('/api/chat/group/:groupId/messages', auth_1.authenticateToken, chat_1.ge
 app.post('/api/chat/group/:groupId/message', auth_1.authenticateToken, chat_1.sendChatGroupMessage);
 app.post('/api/chat/group/:groupId/members', auth_1.authenticateToken, chat_1.manageChatGroupMembers);
 app.patch('/api/chat/group/:groupId/settings', auth_1.authenticateToken, chat_1.updateChatGroupSettings);
+app.delete('/api/chat/group/:groupId', auth_1.authenticateToken, chat_1.deleteChatGroup);
+app.get('/api/chat/group/:groupId/expense-sheet', auth_1.authenticateToken, chat_1.downloadExpenseSheet);
+app.delete('/api/chat/message/:messageId', auth_1.authenticateToken, chat_1.deleteChatMessage);
 const db_1 = __importDefault(require("./services/db"));
 const controllers_2 = require("./controllers");
 const admin_endpoints_1 = require("./controllers/admin_endpoints");
@@ -393,24 +396,7 @@ async function seedDatabase() {
                         "REPORTS_PURCHASE",
                         "REPORTS_INVENTORY",
                         "REPORTS_HR",
-                        "REPORTS_FINANCE",
-                        // Manufacturing Module Features
-                        "MANUFACTURING",
-                        "MANUFACTURING_BOM",
-                        "MANUFACTURING_BOM_COSTING",
-                        "MANUFACTURING_PLAN",
-                        "MANUFACTURING_MRP",
-                        "MANUFACTURING_WORK_ORDER",
-                        "MANUFACTURING_JOB_CARD",
-                        "MANUFACTURING_PRODUCTION",
-                        "MANUFACTURING_CONSUMPTION",
-                        "MANUFACTURING_FINISHED_GOODS",
-                        "MANUFACTURING_QC",
-                        "MANUFACTURING_REWORK",
-                        "MANUFACTURING_WORK_CENTER",
-                        "MANUFACTURING_SHIFT",
-                        "MANUFACTURING_REPORTS",
-                        "MANUFACTURING_COSTING"
+                        "REPORTS_FINANCE"
                     ]
                 }
             }

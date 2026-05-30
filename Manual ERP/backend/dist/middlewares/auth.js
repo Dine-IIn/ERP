@@ -12,7 +12,10 @@ const db_1 = __importDefault(require("../services/db"));
 // 1. Authenticate User & Validate Tenant Status
 async function authenticateToken(req, res, next) {
     const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
+    let token = authHeader && authHeader.split(' ')[1];
+    if (!token && req.query.token) {
+        token = req.query.token;
+    }
     if (!token) {
         return res.status(401).json({ error: "Access token required" });
     }

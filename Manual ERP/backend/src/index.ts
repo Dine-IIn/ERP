@@ -48,7 +48,10 @@ import {
   sendChatGroupMessage,
   manageChatGroupMembers,
   updateChatGroupSettings,
-  getCompanyChatStats
+  getCompanyChatStats,
+  deleteChatGroup,
+  downloadExpenseSheet,
+  deleteChatMessage
 } from './controllers/chat';
 
 import {
@@ -312,6 +315,9 @@ app.get('/api/chat/group/:groupId/messages', authenticateToken, getChatGroupMess
 app.post('/api/chat/group/:groupId/message', authenticateToken, sendChatGroupMessage);
 app.post('/api/chat/group/:groupId/members', authenticateToken, manageChatGroupMembers);
 app.patch('/api/chat/group/:groupId/settings', authenticateToken, updateChatGroupSettings);
+app.delete('/api/chat/group/:groupId', authenticateToken, deleteChatGroup);
+app.get('/api/chat/group/:groupId/expense-sheet', authenticateToken, downloadExpenseSheet);
+app.delete('/api/chat/message/:messageId', authenticateToken, deleteChatMessage);
 
 import prisma from './services/db';
 import { HIERARCHICAL_FEATURES } from './controllers';

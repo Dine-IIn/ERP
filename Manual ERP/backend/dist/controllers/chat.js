@@ -10,6 +10,9 @@ exports.sendChatGroupMessage = sendChatGroupMessage;
 exports.manageChatGroupMembers = manageChatGroupMembers;
 exports.updateChatGroupSettings = updateChatGroupSettings;
 exports.getCompanyChatStats = getCompanyChatStats;
+exports.deleteChatGroup = deleteChatGroup;
+exports.downloadExpenseSheet = downloadExpenseSheet;
+exports.deleteChatMessage = deleteChatMessage;
 const db_1 = __importDefault(require("../services/db"));
 const index_1 = require("./index");
 /**
@@ -60,8 +63,8 @@ async function listChatGroups(req, res) {
                 // GENERAL or EXPENSE groups
                 const parsedSettings = JSON.parse(group.settings || '{}');
                 const isPrivate = parsedSettings.isPrivate || false;
-                // If it's private, only show if the user is a member
-                if (!isPrivate || isMember) {
+                // If it's private, only show if the user is a member or a Company Admin
+                if (!isPrivate || isMember || user.role === 'Admin' || user.isSuperAdmin) {
                     filteredGroups.push({
                         ...group,
                         members: members.map(m => ({
@@ -232,14 +235,19 @@ async function getChatGroupMessages(req, res) {
         if (!group) {
             return res.status(404).json({ error: "Chat group not found" });
         }
-        // Verify private room membership
         const parsedSettings = JSON.parse(group.settings || '{}');
         const isPrivate = parsedSettings.isPrivate || false;
         if (group.type === 'DIRECT' || isPrivate) {
-            const isMember = await db_1.default.groupMember.findFirst({
-                where: { groupId, userId: user.userId }
-            });
-            if (!isMember) {
+            let isAuthorized = user.role === 'Admin' || user.isSuperAdmin;
+            if (!isAuthorized) {
+                const isMember = await db_1.default.groupMember.findFirst({
+                    where: { groupId, userId: user.userId }
+                });
+                if (isMember) {
+                    isAuthorized = true;
+                }
+            }
+            if (!isAuthorized) {
                 return res.status(403).json({ error: "You are not authorized to access this private space" });
             }
         }
@@ -459,7 +467,7 @@ async function updateChatGroupSettings(req, res) {
             return res.status(401).json({ error: "Unauthorized" });
         }
         const { groupId } = req.params;
-        const { isPrivate, connectToCashbook } = req.body;
+        const { name, isPrivate, connectToCashbook } = req.body;
         const group = await db_1.default.chatGroup.findFirst({
             where: { id: groupId, companyId: user.companyId }
         });
@@ -488,6 +496,7 @@ async function updateChatGroupSettings(req, res) {
         const updatedGroup = await db_1.default.chatGroup.update({
             where: { id: groupId },
             data: {
+                ...(name !== undefined && { name: name.trim() }),
                 settings: JSON.stringify(updatedSettings)
             }
         });
@@ -638,6 +647,315 @@ async function getCompanyChatStats(req, res) {
     }
     catch (error) {
         console.error("❌ Error computing company stats:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+}
+/**
+ * 8. Delete a chat group (cascade deletes group members and chat messages)
+ */
+async function deleteChatGroup(req, res) {
+    try {
+        const user = req.user;
+        if (!user) {
+            return res.status(401).json({ error: "Unauthorized access" });
+        }
+        const { groupId } = req.params;
+        const group = await db_1.default.chatGroup.findFirst({
+            where: { id: groupId, companyId: user.companyId }
+        });
+        if (!group) {
+            return res.status(404).json({ error: "Chat group not found" });
+        }
+        if (group.type === 'DIRECT') {
+            return res.status(400).json({ error: "Individual direct messages cannot be deleted" });
+        }
+        // Verify authorized user: Company Admin, Super Admin, or Group Admin (creator/admin member)
+        let isAuthorized = user.role === 'Admin' || user.isSuperAdmin;
+        if (!isAuthorized) {
+            const callerMembership = await db_1.default.groupMember.findFirst({
+                where: { groupId, userId: user.userId }
+            });
+            if (callerMembership?.role === 'ADMIN') {
+                isAuthorized = true;
+            }
+        }
+        if (!isAuthorized) {
+            return res.status(403).json({ error: "Only group admins or company admins can delete this group" });
+        }
+        // Perform cascade deletion manually inside transaction
+        await db_1.default.$transaction([
+            db_1.default.groupMember.deleteMany({ where: { groupId } }),
+            db_1.default.chatMessage.deleteMany({ where: { groupId } }),
+            db_1.default.chatGroup.delete({ where: { id: groupId } })
+        ]);
+        // Broadcast deletion to company
+        if (index_1.ioInstance) {
+            index_1.ioInstance.emit('group_deleted', { groupId });
+        }
+        res.json({ message: `Group "${group.name}" has been successfully deleted.` });
+    }
+    catch (error) {
+        console.error("❌ Error deleting group:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+}
+/**
+ * 9. Download detailed group expense ledger as a formatted CSV attachment
+ */
+async function downloadExpenseSheet(req, res) {
+    try {
+        const user = req.user;
+        if (!user) {
+            return res.status(401).json({ error: "Unauthorized access" });
+        }
+        const { groupId } = req.params;
+        const group = await db_1.default.chatGroup.findFirst({
+            where: { id: groupId, companyId: user.companyId }
+        });
+        if (!group) {
+            return res.status(404).json({ error: "Chat group not found" });
+        }
+        if (group.type !== 'EXPENSE') {
+            return res.status(400).json({ error: "Only expense groups can generate an expense sheet" });
+        }
+        // Verify user is member OR Company Admin / Super Admin
+        let isAuthorized = user.role === 'Admin' || user.isSuperAdmin;
+        if (!isAuthorized) {
+            const membership = await db_1.default.groupMember.findFirst({
+                where: { groupId, userId: user.userId }
+            });
+            if (membership) {
+                isAuthorized = true;
+            }
+        }
+        if (!isAuthorized) {
+            return res.status(403).json({ error: "You are not authorized to download this group's expense sheet" });
+        }
+        // Fetch members and messages
+        const members = await db_1.default.groupMember.findMany({
+            where: { groupId }
+        });
+        const companyUsers = await db_1.default.user.findMany({
+            where: { companyId: user.companyId }
+        });
+        const userMap = new Map(companyUsers.map(u => [u.id, u]));
+        const messages = await db_1.default.chatMessage.findMany({
+            where: { groupId, type: { in: ['EXPENSE', 'PAYMENT'] } },
+            orderBy: { createdAt: 'asc' }
+        });
+        // Compute balances
+        let totalExpense = 0;
+        const netBalances = {};
+        const totalPaid = {};
+        members.forEach(m => {
+            netBalances[m.userId] = 0;
+            totalPaid[m.userId] = 0;
+        });
+        messages.forEach(msg => {
+            if (msg.type === 'EXPENSE') {
+                try {
+                    const data = typeof msg.expenseData === 'string' ? JSON.parse(msg.expenseData) : msg.expenseData;
+                    if (data) {
+                        const amount = Number(data.amount || 0);
+                        const paidBy = data.paidBy || msg.senderId;
+                        const splits = data.splits || {};
+                        totalExpense += amount;
+                        totalPaid[paidBy] = (totalPaid[paidBy] || 0) + amount;
+                        netBalances[paidBy] = (netBalances[paidBy] || 0) + amount;
+                        Object.entries(splits).forEach(([uId, share]) => {
+                            netBalances[uId] = (netBalances[uId] || 0) - Number(share || 0);
+                        });
+                    }
+                }
+                catch (e) { }
+            }
+            else if (msg.type === 'PAYMENT') {
+                try {
+                    const data = typeof msg.expenseData === 'string' ? JSON.parse(msg.expenseData) : msg.expenseData;
+                    if (data) {
+                        const amount = Number(data.amount || 0);
+                        const from = data.from;
+                        const to = data.to;
+                        netBalances[from] = (netBalances[from] || 0) + amount;
+                        netBalances[to] = (netBalances[to] || 0) - amount;
+                    }
+                }
+                catch (e) { }
+            }
+        });
+        // Greedy debt settlement calculation
+        const debtors = [];
+        const creditors = [];
+        Object.entries(netBalances).forEach(([uId, bal]) => {
+            const name = userMap.get(uId)?.username || 'Unknown Colleague';
+            if (bal < -0.01) {
+                debtors.push({ userId: uId, username: name, amount: -bal });
+            }
+            else if (bal > 0.01) {
+                creditors.push({ userId: uId, username: name, amount: bal });
+            }
+        });
+        debtors.sort((a, b) => b.amount - a.amount);
+        creditors.sort((a, b) => b.amount - a.amount);
+        const settlements = [];
+        let dIdx = 0;
+        let cIdx = 0;
+        const tempDebtors = debtors.map(d => ({ ...d }));
+        const tempCreditors = creditors.map(c => ({ ...c }));
+        while (dIdx < tempDebtors.length && cIdx < tempCreditors.length) {
+            const debtor = tempDebtors[dIdx];
+            const creditor = tempCreditors[cIdx];
+            const settleAmount = Math.min(debtor.amount, creditor.amount);
+            if (settleAmount > 0.01) {
+                settlements.push(`"${debtor.username}" owes "${creditor.username}","$${settleAmount.toFixed(2)}"`);
+            }
+            debtor.amount -= settleAmount;
+            creditor.amount -= settleAmount;
+            if (debtor.amount < 0.01)
+                dIdx++;
+            if (creditor.amount < 0.01)
+                cIdx++;
+        }
+        // Build CSV Content
+        let csv = `Group Expense Sheet: "${group.name}"\n`;
+        csv += `Generated Date,${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}\n\n`;
+        csv += `--- GROUP SUMMARY ---\n`;
+        csv += `Total Expenditure,$${totalExpense.toFixed(2)}\n`;
+        csv += `Total Members,${members.length}\n\n`;
+        csv += `--- MEMBER SUMMARY ---\n`;
+        csv += `Member Name,Role,Total Paid,Net Balance\n`;
+        members.forEach(m => {
+            const username = userMap.get(m.userId)?.username || 'Unknown';
+            const bal = netBalances[m.userId] || 0;
+            const balText = bal > 0.01 ? `+$${bal.toFixed(2)}` : bal < -0.01 ? `-$${Math.abs(bal).toFixed(2)}` : '$0.00';
+            csv += `"${username}","${m.role}","$${(totalPaid[m.userId] || 0).toFixed(2)}","${balText}"\n`;
+        });
+        csv += `\n`;
+        csv += `--- RECOMMENDED SETTLEMENTS ---\n`;
+        csv += `Debt Recommendation,Amount\n`;
+        if (settlements.length === 0) {
+            csv += `"All balances settled/cleared","$0.00"\n`;
+        }
+        else {
+            settlements.forEach(s => {
+                csv += `${s}\n`;
+            });
+        }
+        csv += `\n`;
+        csv += `--- DETAILED EXPENSES REGISTER ---\n`;
+        csv += `Date,Type,Description,Amount,Logged By,Split Details\n`;
+        messages.forEach(msg => {
+            const dateText = new Date(msg.createdAt).toLocaleDateString() + ' ' + new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const sender = msg.senderName;
+            let amountVal = 0;
+            let desc = msg.message;
+            let splitsText = "";
+            try {
+                const data = typeof msg.expenseData === 'string' ? JSON.parse(msg.expenseData) : msg.expenseData;
+                if (data) {
+                    amountVal = data.amount || 0;
+                    if (msg.type === 'EXPENSE') {
+                        desc = data.description || msg.message;
+                        const splits = data.splits || {};
+                        splitsText = Object.entries(splits).map(([uId, val]) => {
+                            const name = userMap.get(uId)?.username || 'Unknown';
+                            return `${name}: $${Number(val).toFixed(2)}`;
+                        }).join('; ');
+                    }
+                    else if (msg.type === 'PAYMENT') {
+                        const fromName = userMap.get(data.from)?.username || 'Someone';
+                        const toName = userMap.get(data.to)?.username || 'Someone';
+                        desc = `Payment: ${fromName} -> ${toName}`;
+                    }
+                }
+            }
+            catch (e) { }
+            csv += `"${dateText}","${msg.type}","${desc}","$${amountVal.toFixed(2)}","${sender}","${splitsText}"\n`;
+        });
+        // Send CSV attachment
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename="expense_sheet_${group.name.replace(/[^a-zA-Z0-9]/g, '_')}.csv"`);
+        res.status(200).send(csv);
+    }
+    catch (error) {
+        console.error("❌ Error generating CSV expense sheet:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+}
+/**
+ * 10. Undo/Delete a chat message (reverts associated expense splits and cashbook vouchers)
+ */
+async function deleteChatMessage(req, res) {
+    try {
+        const user = req.user;
+        if (!user) {
+            return res.status(401).json({ error: "Unauthorized access" });
+        }
+        const { messageId } = req.params;
+        // Fetch the message
+        const message = await db_1.default.chatMessage.findUnique({
+            where: { id: messageId }
+        });
+        if (!message) {
+            return res.status(404).json({ error: "Message not found" });
+        }
+        // Verify room exists in this company
+        const group = await db_1.default.chatGroup.findFirst({
+            where: { id: message.groupId, companyId: user.companyId }
+        });
+        if (!group) {
+            return res.status(404).json({ error: "Chat group not found" });
+        }
+        // Verify authorization:
+        // 1. Sender of the message
+        // 2. Group founder/creator
+        // 3. Company Admin or Super Admin
+        let isAuthorized = message.senderId === user.userId || user.role === 'Admin' || user.isSuperAdmin;
+        if (!isAuthorized) {
+            const callerMembership = await db_1.default.groupMember.findFirst({
+                where: { groupId: message.groupId, userId: user.userId }
+            });
+            if (callerMembership?.role === 'ADMIN') {
+                isAuthorized = true;
+            }
+        }
+        if (!isAuthorized) {
+            return res.status(403).json({ error: "You are not authorized to undo this message" });
+        }
+        // Reference identifier for central cashbook records
+        const referenceNo = `CHAT-${message.id.slice(0, 8).toUpperCase()}`;
+        // Perform cascade deletion in database transaction
+        await db_1.default.$transaction(async (tx) => {
+            // 1. Delete associated cashbook vouchers (linked by referenceNo)
+            await tx.cashbookVoucher.deleteMany({
+                where: {
+                    companyId: user.companyId,
+                    referenceNo: referenceNo
+                }
+            });
+            // 2. Delete associated company expenses (linked by referenceNo)
+            await tx.companyExpense.deleteMany({
+                where: {
+                    companyId: user.companyId,
+                    referenceNo: referenceNo
+                }
+            });
+            // 3. Delete the message itself
+            await tx.chatMessage.delete({
+                where: { id: messageId }
+            });
+        });
+        // Broadcast message deletion via Socket
+        if (index_1.ioInstance) {
+            index_1.ioInstance.to(`group_${message.groupId}`).emit('message_deleted', {
+                groupId: message.groupId,
+                messageId: messageId
+            });
+        }
+        res.json({ message: "Message successfully undone/deleted." });
+    }
+    catch (error) {
+        console.error("❌ Error undoing message:", error);
         res.status(500).json({ error: "Internal server error" });
     }
 }
