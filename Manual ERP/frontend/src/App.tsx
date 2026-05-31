@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { MASTER_FEATURES_HIERARCHY, getCategoryKeys, getChildKeys, getParentKey } from './features';
 const Login = React.lazy(() => import('./components/auth/Login'));
@@ -1161,41 +1161,48 @@ export default function App() {
 
       if (!isMe && (!isDrawerOpen || !isCurrentGroup || document.visibilityState === 'hidden')) {
         console.log(`💬 Notification condition met: dispatching notification alerts...`);
-        setActiveToast({
-          title: `New message from ${newMessage.senderName}`,
-          message: newMessage.message
-        });
-        setTimeout(() => setActiveToast(null), 5000);
+        
+        // Show in-app Toast only if the application is in the foreground
+        if (document.visibilityState !== 'hidden') {
+          setActiveToast({
+            title: `New message from ${newMessage.senderName}`,
+            message: newMessage.message
+          });
+          setTimeout(() => setActiveToast(null), 5000);
+        }
 
-        if (Capacitor.isNativePlatform()) {
-          console.log(`💬 Scheduling native Android push/local notification...`);
-          try {
-            LocalNotifications.schedule({
-              notifications: [
-                {
-                  title: `New message from ${newMessage.senderName}`,
-                  body: newMessage.message,
-                  id: Math.floor(Math.random() * 1000000),
-                  schedule: { at: new Date(Date.now() + 100) },
-                  extra: { groupId: newMessage.groupId }
-                }
-              ]
-            });
-            console.log(`💬 Android native notification scheduled successfully.`);
-          } catch (e) {
-            console.error("❌ Android native notification scheduling failed:", e);
-          }
-        } else if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-          console.log(`💬 Dispatching system web notification...`);
-          try {
-            new Notification(`New message from ${newMessage.senderName}`, {
-              body: newMessage.message,
-              tag: newMessage.groupId,
-              renotify: true
-            });
-            console.log(`💬 Web notification triggered.`);
-          } catch (e) {
-            console.error("❌ System notification display failed:", e);
+        // Trigger native local notifications or system web notifications only if the application is in the background
+        if (document.visibilityState === 'hidden') {
+          if (Capacitor.isNativePlatform()) {
+            console.log(`💬 Scheduling native Android push/local notification...`);
+            try {
+              LocalNotifications.schedule({
+                notifications: [
+                  {
+                    title: `New message from ${newMessage.senderName}`,
+                    body: newMessage.message,
+                    id: Math.floor(Math.random() * 1000000),
+                    schedule: { at: new Date(Date.now() + 100) },
+                    extra: { groupId: newMessage.groupId }
+                  }
+                ]
+              });
+              console.log(`💬 Android native notification scheduled successfully.`);
+            } catch (e) {
+              console.error("❌ Android native notification scheduling failed:", e);
+            }
+          } else if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+            console.log(`💬 Dispatching system web notification...`);
+            try {
+              new Notification(`New message from ${newMessage.senderName}`, {
+                body: newMessage.message,
+                tag: newMessage.groupId,
+                renotify: true
+              });
+              console.log(`💬 Web notification triggered.`);
+            } catch (e) {
+              console.error("❌ System notification display failed:", e);
+            }
           }
         }
       }
