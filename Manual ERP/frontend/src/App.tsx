@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { MASTER_FEATURES_HIERARCHY, getCategoryKeys, getChildKeys, getParentKey } from './features';
 const Login = React.lazy(() => import('./components/auth/Login'));
@@ -139,11 +139,11 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 import { apiClient, ApiError } from './utils/apiService';
 
 const getBackendUrl = () => {
-  const url = import.meta.env.VITE_API_URL || 'https://erp.anbindustries.com';
+  const url = import.meta.env.VITE_API_URL;
   if (Capacitor.isNativePlatform()) {
-    if (url.includes('localhost') || url.includes('127.0.0.1')) {
-      return url.replace('localhost', '10.0.2.2').replace('127.0.0.1', '10.0.2.2');
-    }
+    // if (url.includes('localhost') || url.includes('127.0.0.1')) {
+    //   return url.replace('localhost', '10.0.2.2').replace('127.0.0.1', '10.0.2.2');
+    // }
   }
   return url;
 };
@@ -1070,7 +1070,12 @@ export default function App() {
     console.log(`🔌 WebSockets Secure connection (WSS) forced: ${BACKEND_URL.startsWith('https')}`);
     console.log(`🔌 WebSockets User context: id="${user.id}", username="${user.username}"`);
     console.log(`🔌 WebSockets Auth token length: ${token ? token.length : 0} characters`);
-    
+    console.log("CAPACITOR TEST");
+    console.log("isNative:", Capacitor.isNativePlatform());
+    console.log("backend:", BACKEND_URL);
+    console.log("origin:", window.location.origin);
+    console.log("href:", window.location.href);
+    console.log("userAgent:", navigator.userAgent);
     socketRef.current = io(BACKEND_URL, {
       transports: ['polling', 'websocket'],
       upgrade: true,
