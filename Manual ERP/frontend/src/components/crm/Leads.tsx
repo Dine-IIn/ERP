@@ -23,7 +23,7 @@ interface LeadsProps {
   onDeleteLead: (id: string) => Promise<void>;
 }
 
-export default function Leads({
+const Leads = React.memo(function Leads({
   leads,
   companyUsers,
   onCreateLead,
@@ -430,4 +430,6 @@ export default function Leads({
       )}
     </div>
   );
-}
+})
+
+export default Leads;

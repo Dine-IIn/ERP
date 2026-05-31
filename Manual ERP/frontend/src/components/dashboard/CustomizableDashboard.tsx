@@ -20,7 +20,7 @@ interface CustomizableDashboardProps {
   currencySymbol?: string;
 }
 
-export default function CustomizableDashboard({
+const CustomizableDashboard = React.memo(function CustomizableDashboard({
   companyProfile,
   companyUsers,
   auditLogs,
@@ -504,4 +504,6 @@ export default function CustomizableDashboard({
       )}
     </div>
   );
-}
+});
+
+export default CustomizableDashboard;

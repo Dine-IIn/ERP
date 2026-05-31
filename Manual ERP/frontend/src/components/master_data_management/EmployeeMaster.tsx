@@ -16,7 +16,7 @@ interface EmployeeMasterProps {
   currentUser: any;
 }
 
-export default function EmployeeMaster({
+const EmployeeMaster = React.memo(function EmployeeMaster({
   companyUsers,
   companyRoles,
   departmentList,
@@ -607,4 +607,6 @@ export default function EmployeeMaster({
       )}
     </div>
   );
-}
+})
+
+export default EmployeeMaster;

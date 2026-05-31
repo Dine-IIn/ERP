@@ -1097,6 +1097,60 @@ export default function App() {
     });
   };
 
+  const prefetchComponent = (key: string) => {
+    switch (key) {
+      case 'MASTER_EMPLOYEE': import('./components/master_data_management/EmployeeMaster'); break;
+      case 'MASTER_CUSTOMER': import('./components/master_data_management/CustomerMaster'); break;
+      case 'MASTER_VENDOR': import('./components/master_data_management/VendorMaster'); break;
+      case 'MASTER_PRODUCT': import('./components/master_data_management/ProductMaster'); break;
+      case 'MASTER_TAX': import('./components/master_data/TaxMaster'); break;
+      case 'CRM_LEADS': import('./components/crm/Leads'); break;
+      case 'CRM_OPPORTUNITIES': import('./components/crm/Opportunities'); break;
+      case 'CRM_FOLLOWUPS': import('./components/crm/FollowUps'); break;
+      case 'CRM_DASHBOARD': import('./components/crm/CrmDashboard'); break;
+      case 'SALES_ORDER': import('./components/sales/SalesOrder'); break;
+      case 'SALES_PROFORMA': import('./components/sales/ProformaInvoice'); break;
+      case 'SALES_INVOICE': import('./components/sales/SalesInvoice'); break;
+      case 'SALES_CHALLAN': import('./components/sales/DeliveryChallan'); break;
+      case 'SALES_DISPATCH': import('./components/sales/DispatchManagement'); break;
+      case 'SALES_QUOTATION': import('./components/sales/Quotations'); break;
+      case 'SALES_POSTSALES': import('./components/sales/PostSalesService'); break;
+      case 'PURCHASE_QUOTATIONS': import('./components/purchase/VendorQuotations'); break;
+      case 'PURCHASE_ORDERS': import('./components/purchase/PurchaseOrders'); break;
+      case 'PURCHASE_GRN': import('./components/purchase/Grn'); break;
+      case 'PURCHASE_RETURNS': import('./components/purchase/PurchaseReturns'); break;
+      case 'PURCHASE_PAYMENTS': import('./components/purchase/VendorPayments'); break;
+      case 'INVENTORY_PRODUCTS': import('./components/inventory/InventoryProducts'); break;
+      case 'INVENTORY_OVERVIEW': import('./components/inventory/StockOverview'); break;
+      case 'INVENTORY_ALERTS': import('./components/inventory/LowStockAlerts'); break;
+      case 'HRMS_EMPLOYEES': import('./components/hrms/Employees'); break;
+      case 'HRMS_ATTENDANCE': import('./components/hrms/Attendance'); break;
+      case 'HRMS_LEAVES': import('./components/hrms/LeaveManagement'); break;
+      case 'HRMS_SHIFTS': import('./components/hrms/Shifts'); break;
+      case 'HRMS_PAYROLL': import('./components/hrms/Payroll'); break;
+      case 'FINANCE_EXPENSES': import('./components/finance/Expenses'); break;
+      case 'FINANCE_PAYMENTS': import('./components/finance/Payments'); break;
+      case 'FINANCE_RECEIPTS': import('./components/finance/Receipts'); break;
+      case 'FINANCE_CASHBOOK': import('./components/finance/Cashbook'); break;
+      case 'FINANCE_GST': import('./components/finance/GstSettings'); break;
+      case 'FINANCE_BANK': import('./components/finance/BankAccounts'); break;
+      case 'REPORTS_SALES': import('./components/reports/SalesReports'); break;
+      case 'REPORTS_PURCHASE': import('./components/reports/PurchaseReports'); break;
+      case 'REPORTS_INVENTORY': import('./components/reports/InventoryReports'); break;
+      case 'REPORTS_HR': import('./components/reports/HrReports'); break;
+      case 'REPORTS_FINANCIAL': import('./components/reports/FinancialReports'); break;
+      case 'MRP_BOM': import('./components/manufacturing/BomManagement'); break;
+      case 'MRP_PLANNING': import('./components/manufacturing/ProductionPlanning'); break;
+      case 'MRP_WORKORDERS': import('./components/manufacturing/WorkOrders'); break;
+      case 'MRP_EXECUTION': import('./components/manufacturing/ProductionExecution'); break;
+      case 'MRP_QUALITY': import('./components/manufacturing/QualityControl'); break;
+      case 'MRP_SHOPFLOOR': import('./components/manufacturing/ShopFloor'); break;
+      case 'REPORTS_MRP': import('./components/reports/ManufacturingReports'); break;
+      case 'REPORTS_COSTING': import('./components/reports/ManufacturingCosting'); break;
+      default: break;
+    }
+  };
+
   // ==========================================
   // 2. HTTP API REQUEST AGENT
   // ==========================================
@@ -3210,6 +3264,7 @@ export default function App() {
                                 setActiveWorkspaceSubModule(child.key);
                                 setSelectedCompany(null); // Clear superadmin company focus
                               }}
+                              onMouseEnter={() => prefetchComponent(child.key)}
                               className={`w-full py-2 px-3 rounded-lg text-left text-xs font-semibold transition-colors flex items-center gap-2 cursor-pointer border-0 bg-transparent ${
                                 isActive
                                   ? 'bg-[var(--bg-tertiary)] text-indigo-500 font-bold border-l-2 border-indigo-500'
@@ -3258,6 +3313,7 @@ export default function App() {
                                             setActivePopoverCategory(null);
                                             setSelectedCompany(null);
                                           }}
+                                          onMouseEnter={() => prefetchComponent(child.key)}
                                           className={`w-full text-left py-1.5 px-2 rounded-lg text-[11px] font-medium transition-colors flex items-center gap-2 cursor-pointer border-0 bg-transparent ${
                                             isChildActive
                                               ? 'bg-indigo-500/10 text-indigo-400 font-bold'
@@ -3304,6 +3360,7 @@ export default function App() {
                                             setActiveWorkspaceSubModule(child.key);
                                             setSelectedCompany(null);
                                           }}
+                                          onMouseEnter={() => prefetchComponent(child.key)}
                                           className={`w-full text-left py-1.5 px-2.5 rounded-lg text-[11px] font-medium transition-colors flex items-center gap-2 cursor-pointer border-0 bg-transparent ${
                                             isChildActive
                                               ? 'bg-indigo-500/10 text-indigo-400 font-bold'
@@ -5407,7 +5464,7 @@ export default function App() {
 
           {showChatDrawer && (
             <div
-              className="fixed top-[76px] right-6 z-40 w-[380px] h-[550px] bg-[var(--bg-card)]/95 backdrop-blur-md border border-[var(--border-color)] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-scale-up text-left"
+              className="fixed top-[76px] left-4 right-4 sm:left-auto sm:right-6 z-40 w-auto sm:w-[380px] h-[550px] bg-[var(--bg-card)]/95 backdrop-blur-md border border-[var(--border-color)] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-scale-up text-left"
               style={{
                 transition: 'transform 0.2s ease',
               }}
@@ -5987,7 +6044,7 @@ export default function App() {
 
           {showAlertsPopup && (
             <div
-              className="fixed top-[76px] right-6 z-40 w-[380px] h-[480px] bg-[var(--bg-card)]/95 backdrop-blur-md border border-[var(--border-color)] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-scale-up text-left text-xs font-sans"
+              className="fixed top-[76px] left-4 right-4 sm:left-auto sm:right-6 z-40 w-auto sm:w-[380px] h-[480px] bg-[var(--bg-card)]/95 backdrop-blur-md border border-[var(--border-color)] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-scale-up text-left text-xs font-sans"
               style={{
                 transition: 'transform 0.2s ease',
               }}
