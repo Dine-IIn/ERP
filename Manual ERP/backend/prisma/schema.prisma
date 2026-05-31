@@ -258,6 +258,7 @@ model ChatGroup {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  @@index([companyId])
   @@map("chat_groups")
 }
 
@@ -269,6 +270,7 @@ model GroupMember {
   createdAt DateTime @default(now())
 
   @@unique([groupId, userId])
+  @@index([userId])
   @@map("group_members")
 }
 
@@ -282,6 +284,8 @@ model ChatMessage {
   expenseData String?
   createdAt   DateTime @default(now())
 
+  @@index([groupId])
+  @@index([createdAt])
   @@map("chat_messages")
 }
 
@@ -299,6 +303,8 @@ model AuditLog {
   deviceInfo String?
   timestamp  DateTime @default(now())
 
+  @@index([companyId])
+  @@index([timestamp])
   @@map("audit_logs")
 }
 
@@ -990,6 +996,8 @@ model CompanyExpense {
   referenceNo  String?
   createdAt    DateTime @default(now())
 
+  @@index([companyId])
+  @@index([referenceNo])
   @@map("company_expenses")
 }
 
@@ -1024,6 +1032,8 @@ model CashbookVoucher {
   createdAt    DateTime @default(now())
 
   @@unique([companyId, voucherNo])
+  @@index([companyId])
+  @@index([referenceNo])
   @@map("cashbook_vouchers")
 }
 

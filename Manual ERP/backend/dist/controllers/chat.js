@@ -29,8 +29,13 @@ async function listChatGroups(req, res) {
             where: { companyId: user.companyId },
             orderBy: { updatedAt: 'desc' }
         });
-        // Fetch all group member connections in this company
-        const allMemberships = await db_1.default.groupMember.findMany();
+        // Fetch all group member connections inside this corporate tenant using loaded groupIds
+        const groupIds = groups.map(g => g.id);
+        const allMemberships = await db_1.default.groupMember.findMany({
+            where: {
+                groupId: { in: groupIds }
+            }
+        });
         // Fetch all users in the company to map names
         const companyUsers = await db_1.default.user.findMany({
             where: { companyId: user.companyId },
@@ -228,6 +233,8 @@ async function getChatGroupMessages(req, res) {
             return res.status(401).json({ error: "Unauthorized access" });
         }
         const { groupId } = req.params;
+        const cursor = req.query.cursor;
+        const limit = parseInt(req.query.limit) || 50;
         // Verify room exists in this company
         const group = await db_1.default.chatGroup.findFirst({
             where: { id: groupId, companyId: user.companyId }
@@ -251,12 +258,25 @@ async function getChatGroupMessages(req, res) {
                 return res.status(403).json({ error: "You are not authorized to access this private space" });
             }
         }
-        // Query messages in ascending timeline
-        const messages = await db_1.default.chatMessage.findMany({
+        let queryOptions = {
             where: { groupId },
-            orderBy: { createdAt: 'asc' }
-        });
-        res.json(messages);
+            take: limit,
+            orderBy: { createdAt: 'desc' }
+        };
+        if (cursor) {
+            const cursorMessage = await db_1.default.chatMessage.findUnique({
+                where: { id: cursor }
+            });
+            if (cursorMessage) {
+                queryOptions.where.createdAt = {
+                    lt: cursorMessage.createdAt
+                };
+            }
+        }
+        // Query messages in descending order (latest first) for cursor slice
+        const messages = await db_1.default.chatMessage.findMany(queryOptions);
+        // Return in ascending chronological timeline for client layout rendering
+        res.json(messages.reverse());
     }
     catch (error) {
         console.error("❌ Error retrieving message history:", error);

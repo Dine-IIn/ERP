@@ -19,8 +19,13 @@ export async function listChatGroups(req: AuthenticatedRequest, res: Response) {
       orderBy: { updatedAt: 'desc' }
     });
 
-    // Fetch all group member connections in this company
-    const allMemberships = await prisma.groupMember.findMany();
+    // Fetch all group member connections inside this corporate tenant using loaded groupIds
+    const groupIds = groups.map(g => g.id);
+    const allMemberships = await prisma.groupMember.findMany({
+      where: {
+        groupId: { in: groupIds }
+      }
+    });
 
     // Fetch all users in the company to map names
     const companyUsers = await prisma.user.findMany({
@@ -249,6 +254,8 @@ export async function getChatGroupMessages(req: AuthenticatedRequest, res: Respo
     }
 
     const { groupId } = req.params;
+    const cursor = req.query.cursor as string;
+    const limit = parseInt(req.query.limit as string) || 50;
 
     // Verify room exists in this company
     const group = await prisma.chatGroup.findFirst({
@@ -277,13 +284,28 @@ export async function getChatGroupMessages(req: AuthenticatedRequest, res: Respo
       }
     }
 
-    // Query messages in ascending timeline
-    const messages = await prisma.chatMessage.findMany({
+    let queryOptions: any = {
       where: { groupId },
-      orderBy: { createdAt: 'asc' }
-    });
+      take: limit,
+      orderBy: { createdAt: 'desc' }
+    };
 
-    res.json(messages);
+    if (cursor) {
+      const cursorMessage = await prisma.chatMessage.findUnique({
+        where: { id: cursor }
+      });
+      if (cursorMessage) {
+        queryOptions.where.createdAt = {
+          lt: cursorMessage.createdAt
+        };
+      }
+    }
+
+    // Query messages in descending order (latest first) for cursor slice
+    const messages = await prisma.chatMessage.findMany(queryOptions);
+
+    // Return in ascending chronological timeline for client layout rendering
+    res.json(messages.reverse());
   } catch (error: any) {
     console.error("❌ Error retrieving message history:", error);
     res.status(500).json({ error: "Internal server error" });

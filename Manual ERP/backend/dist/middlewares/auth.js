@@ -66,6 +66,8 @@ async function authenticateToken(req, res, next) {
         if (userFromDb.status !== "ACTIVE") {
             return res.status(403).json({ error: "Your user account is pending admin approval or suspended" });
         }
+        // Cache the loaded record to prevent duplicate database lookups in subsequent RBAC middleware
+        req.user = { ...decoded, userRecord: userFromDb };
         next();
     }
     catch (error) {
@@ -114,8 +116,8 @@ function requirePermission(featureKey, action) {
         if (req.user.isSuperAdmin || req.user.role === "Admin") {
             return next();
         }
-        // Fetch the user's role permissions
-        const userFromDb = await db_1.default.user.findUnique({
+        // Retrieve cached user record or fetch from DB if not already cached
+        const userFromDb = req.user.userRecord || await db_1.default.user.findUnique({
             where: { id: req.user.userId },
             include: { role: true }
         });

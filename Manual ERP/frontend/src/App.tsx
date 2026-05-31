@@ -1,72 +1,73 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { MASTER_FEATURES_HIERARCHY, getCategoryKeys, getChildKeys, getParentKey } from './features';
-import Login from './components/auth/Login';
-import Signup from './components/auth/Signup';
-import ForgotPasswordModal from './components/auth/ForgotPasswordModal';
-import CompanyProfile from './components/administration/CompanyProfile';
-import RolesPermissions from './components/administration/RolesPermissions';
-import AuditLogs from './components/administration/AuditLogs';
-import SnapshotBackups from './components/administration/SnapshotBackups';
-import EmployeeRegistry from './components/administration/EmployeeRegistry';
-import CorporateDepartments from './components/administration/CorporateDepartments';
-import EmployeeMaster from './components/master_data_management/EmployeeMaster';
-import CustomerMaster from './components/master_data_management/CustomerMaster';
-import VendorMaster from './components/master_data_management/VendorMaster';
-import ProductMaster from './components/master_data_management/ProductMaster';
-import SalesOrder from './components/sales/SalesOrder';
-import ProformaInvoice from './components/sales/ProformaInvoice';
-import SalesInvoice from './components/sales/SalesInvoice';
-import DeliveryChallan from './components/sales/DeliveryChallan';
-import DispatchManagement from './components/sales/DispatchManagement';
+const Login = React.lazy(() => import('./components/auth/Login'));
+const Signup = React.lazy(() => import('./components/auth/Signup'));
+const ForgotPasswordModal = React.lazy(() => import('./components/auth/ForgotPasswordModal'));
+const CompanyProfile = React.lazy(() => import('./components/administration/CompanyProfile'));
+const RolesPermissions = React.lazy(() => import('./components/administration/RolesPermissions'));
+const AuditLogs = React.lazy(() => import('./components/administration/AuditLogs'));
+const SnapshotBackups = React.lazy(() => import('./components/administration/SnapshotBackups'));
+const EmployeeRegistry = React.lazy(() => import('./components/administration/EmployeeRegistry'));
+const CorporateDepartments = React.lazy(() => import('./components/administration/CorporateDepartments'));
+const EmployeeMaster = React.lazy(() => import('./components/master_data_management/EmployeeMaster'));
+const CustomerMaster = React.lazy(() => import('./components/master_data_management/CustomerMaster'));
+const VendorMaster = React.lazy(() => import('./components/master_data_management/VendorMaster'));
+const ProductMaster = React.lazy(() => import('./components/master_data_management/ProductMaster'));
+const SalesOrder = React.lazy(() => import('./components/sales/SalesOrder'));
+const ProformaInvoice = React.lazy(() => import('./components/sales/ProformaInvoice'));
+const SalesInvoice = React.lazy(() => import('./components/sales/SalesInvoice'));
+const DeliveryChallan = React.lazy(() => import('./components/sales/DeliveryChallan'));
+const DispatchManagement = React.lazy(() => import('./components/sales/DispatchManagement'));
 
-import TaxMaster from './components/master_data/TaxMaster';
-import Leads from './components/crm/Leads';
-import Opportunities from './components/crm/Opportunities';
-import FollowUps from './components/crm/FollowUps';
-import CrmDashboard from './components/crm/CrmDashboard';
-import Quotations from './components/sales/Quotations';
-import PostSalesService from './components/sales/PostSalesService';
-import VendorQuotations from './components/purchase/VendorQuotations';
-import PurchaseOrders from './components/purchase/PurchaseOrders';
-import Grn from './components/purchase/Grn';
-import PurchaseReturns from './components/purchase/PurchaseReturns';
-import VendorPayments from './components/purchase/VendorPayments';
-import InventoryProducts from './components/inventory/InventoryProducts';
-import StockOverview from './components/inventory/StockOverview';
-import LowStockAlerts from './components/inventory/LowStockAlerts';
+const TaxMaster = React.lazy(() => import('./components/master_data/TaxMaster'));
+const Leads = React.lazy(() => import('./components/crm/Leads'));
+const Opportunities = React.lazy(() => import('./components/crm/Opportunities'));
+const FollowUps = React.lazy(() => import('./components/crm/FollowUps'));
+const CrmDashboard = React.lazy(() => import('./components/crm/CrmDashboard'));
+const Quotations = React.lazy(() => import('./components/sales/Quotations'));
+const PostSalesService = React.lazy(() => import('./components/sales/PostSalesService'));
+const VendorQuotations = React.lazy(() => import('./components/purchase/VendorQuotations'));
+const PurchaseOrders = React.lazy(() => import('./components/purchase/PurchaseOrders'));
+const Grn = React.lazy(() => import('./components/purchase/Grn'));
+const PurchaseReturns = React.lazy(() => import('./components/purchase/PurchaseReturns'));
+const VendorPayments = React.lazy(() => import('./components/purchase/VendorPayments'));
+const InventoryProducts = React.lazy(() => import('./components/inventory/InventoryProducts'));
+const StockOverview = React.lazy(() => import('./components/inventory/StockOverview'));
+const LowStockAlerts = React.lazy(() => import('./components/inventory/LowStockAlerts'));
 
 // --- PHASE 2 HIGH-FIDELITY COMPONENT IMPORTS ---
-import CustomizableDashboard from './components/dashboard/CustomizableDashboard';
+const CustomizableDashboard = React.lazy(() => import('./components/dashboard/CustomizableDashboard'));
 
-import Employees from './components/hrms/Employees';
-import Attendance from './components/hrms/Attendance';
-import LeaveManagement from './components/hrms/LeaveManagement';
-import Shifts from './components/hrms/Shifts';
-import Payroll from './components/hrms/Payroll';
+const Employees = React.lazy(() => import('./components/hrms/Employees'));
+const Attendance = React.lazy(() => import('./components/hrms/Attendance'));
+const LeaveManagement = React.lazy(() => import('./components/hrms/LeaveManagement'));
+const Shifts = React.lazy(() => import('./components/hrms/Shifts'));
+const Payroll = React.lazy(() => import('./components/hrms/Payroll'));
 
-import Expenses from './components/finance/Expenses';
-import Payments from './components/finance/Payments';
-import Receipts from './components/finance/Receipts';
-import Cashbook from './components/finance/Cashbook';
-import GstSettings from './components/finance/GstSettings';
-import BankAccounts from './components/finance/BankAccounts';
+const Expenses = React.lazy(() => import('./components/finance/Expenses'));
+const Payments = React.lazy(() => import('./components/finance/Payments'));
+const Receipts = React.lazy(() => import('./components/finance/Receipts'));
+const Cashbook = React.lazy(() => import('./components/finance/Cashbook'));
+const GstSettings = React.lazy(() => import('./components/finance/GstSettings'));
+const BankAccounts = React.lazy(() => import('./components/finance/BankAccounts'));
 
-import SalesReports from './components/reports/SalesReports';
-import PurchaseReports from './components/reports/PurchaseReports';
-import InventoryReports from './components/reports/InventoryReports';
-import HrReports from './components/reports/HrReports';
-import FinancialReports from './components/reports/FinancialReports';
+const SalesReports = React.lazy(() => import('./components/reports/SalesReports'));
+const PurchaseReports = React.lazy(() => import('./components/reports/PurchaseReports'));
+const InventoryReports = React.lazy(() => import('./components/reports/InventoryReports'));
+const HrReports = React.lazy(() => import('./components/reports/HrReports'));
+const FinancialReports = React.lazy(() => import('./components/reports/FinancialReports'));
 
-import BomManagement from './components/manufacturing/BomManagement';
-import ProductionPlanning from './components/manufacturing/ProductionPlanning';
-import WorkOrders from './components/manufacturing/WorkOrders';
-import ProductionExecution from './components/manufacturing/ProductionExecution';
-import QualityControl from './components/manufacturing/QualityControl';
-import ShopFloor from './components/manufacturing/ShopFloor';
+const BomManagement = React.lazy(() => import('./components/manufacturing/BomManagement'));
+const ProductionPlanning = React.lazy(() => import('./components/manufacturing/ProductionPlanning'));
+const WorkOrders = React.lazy(() => import('./components/manufacturing/WorkOrders'));
+const ProductionExecution = React.lazy(() => import('./components/manufacturing/ProductionExecution'));
+const QualityControl = React.lazy(() => import('./components/manufacturing/QualityControl'));
+const ShopFloor = React.lazy(() => import('./components/manufacturing/ShopFloor'));
 
-import ManufacturingReports from './components/reports/ManufacturingReports';
-import ManufacturingCosting from './components/reports/ManufacturingCosting';
+const ManufacturingReports = React.lazy(() => import('./components/reports/ManufacturingReports'));
+const ManufacturingCosting = React.lazy(() => import('./components/reports/ManufacturingCosting'));
+
 
 
 import {
@@ -302,10 +303,34 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
 
 export default function App() {
   // --- CORE SYSTEM STATES ---
-  const [token, setToken] = useState<string | null>(localStorage.getItem('erp_token'));
-  const [user, setUser] = useState<UserProfile | null>(
-    localStorage.getItem('erp_user') ? JSON.parse(localStorage.getItem('erp_user')!) : null
-  );
+  const getInitialToken = () => {
+    const tok = localStorage.getItem('erp_token');
+    const expires = localStorage.getItem('erp_token_expires');
+    if (!tok || !expires) return tok; // Backwards compatibility
+    if (Date.now() > parseInt(expires)) {
+      localStorage.removeItem('erp_token');
+      localStorage.removeItem('erp_token_expires');
+      localStorage.removeItem('erp_user');
+      return null;
+    }
+    return tok;
+  };
+
+  const getInitialUser = () => {
+    const usrStr = localStorage.getItem('erp_user');
+    const expires = localStorage.getItem('erp_token_expires');
+    if (expires && Date.now() > parseInt(expires)) {
+      return null;
+    }
+    try {
+      return usrStr ? JSON.parse(usrStr) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const [token, setToken] = useState<string | null>(getInitialToken());
+  const [user, setUser] = useState<UserProfile | null>(getInitialUser());
   
   const [view, setView] = useState<'login' | 'signup' | 'super_admin' | 'company_admin' | 'user_workspace'>('login');
   
@@ -597,6 +622,14 @@ export default function App() {
   const [auditTotal, setAuditTotal] = useState(0);
   const [auditFilterModule, setAuditFilterModule] = useState('');
   const [auditSearchActor, setAuditSearchActor] = useState('');
+  const [debouncedSearchActor, setDebouncedSearchActor] = useState('');
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchActor(auditSearchActor);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [auditSearchActor]);
 
   const [backupList, setBackupList] = useState<any[]>([]);
   const [backupRetentionDays, setBackupRetentionDays] = useState(60);
@@ -740,6 +773,7 @@ export default function App() {
   const [chatGroups, setChatGroups] = useState<any[]>([]);
   const [selectedChatGroup, setSelectedChatGroup] = useState<any | null>(null);
   const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [hasMoreChatMessages, setHasMoreChatMessages] = useState(true);
   const [chatMessageInput, setChatMessageInput] = useState('');
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
@@ -874,6 +908,7 @@ export default function App() {
   const selectedGroupIdRef = useRef<string | null>(null);
   const chatMessagesEndRef = useRef<HTMLDivElement | null>(null);
   const sidebarRef = useRef<HTMLElement | null>(null);
+  const loadingOlderMessagesRef = useRef(false);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -964,8 +999,10 @@ export default function App() {
       upgrade: false,
       secure: true,
       reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 1000
+      reconnectionAttempts: 30,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 10000,
+      randomizationFactor: 0.5
     });
     
     socketRef.current.on('connect', () => {
@@ -1176,7 +1213,10 @@ export default function App() {
 
     try {
       const data = await apiRequest('/api/auth/login', 'POST', payload);
+      const ttl = 24 * 60 * 60 * 1000; // 24 Hours Session Cache Time-To-Live (TTL)
+      const expires = Date.now() + ttl;
       localStorage.setItem('erp_token', data.token);
+      localStorage.setItem('erp_token_expires', expires.toString());
       localStorage.setItem('erp_user', JSON.stringify(data.user));
       setToken(data.token);
       setUser(data.user);
@@ -1213,6 +1253,7 @@ export default function App() {
       console.warn("Logout request failed:", e);
     }
     localStorage.removeItem('erp_token');
+    localStorage.removeItem('erp_token_expires');
     localStorage.removeItem('erp_user');
     setToken(null);
     setUser(null);
@@ -2287,7 +2328,7 @@ export default function App() {
     try {
       const params: any = {};
       if (auditFilterModule) params.moduleName = auditFilterModule;
-      if (auditSearchActor) params.username = auditSearchActor;
+      if (debouncedSearchActor) params.username = debouncedSearchActor;
 
       const res = await apiClient.get<any>('/api/admin/audit-logs', { params });
       setAuditTrailLogs(res.logs || []);
@@ -2356,7 +2397,7 @@ export default function App() {
     if (activeWorkspaceModule === 'administration') {
       fetchAdminConsoleData();
     }
-  }, [activeWorkspaceModule, activeWorkspaceSubModule, auditFilterModule, auditSearchActor]);
+  }, [activeWorkspaceModule, activeWorkspaceSubModule, auditFilterModule, debouncedSearchActor]);
 
   // --- CONTROLLER ACTION HANDLERS ---
 
@@ -2534,37 +2575,78 @@ export default function App() {
     setSelectedChatGroup(group);
     setChatActiveView('room');
     setChatMessages([]);
+    setHasMoreChatMessages(true);
     
     if (socketRef.current) {
       socketRef.current.emit('join_group', group.id);
     }
 
     try {
-      const messages = await apiRequest(`/api/chat/group/${group.id}/messages`, 'GET');
+      const messages = await apiRequest(`/api/chat/group/${group.id}/messages?limit=50`, 'GET');
       setChatMessages(messages || []);
+      if (messages && messages.length < 50) {
+        setHasMoreChatMessages(false);
+      }
     } catch (e) {
       console.error("Error fetching chat messages:", e);
     }
   };
 
+  const fetchOlderChatMessages = async () => {
+    if (!selectedChatGroup || chatMessages.length === 0 || !hasMoreChatMessages || loadingOlderMessagesRef.current) return;
+    loadingOlderMessagesRef.current = true;
+    const oldestMessageId = chatMessages[0].id;
+    try {
+      const olderMessages = await apiRequest(`/api/chat/group/${selectedChatGroup.id}/messages?cursor=${oldestMessageId}&limit=50`, 'GET');
+      if (olderMessages && olderMessages.length > 0) {
+        setChatMessages(prev => [...olderMessages, ...prev]);
+        if (olderMessages.length < 50) {
+          setHasMoreChatMessages(false);
+        }
+      } else {
+        setHasMoreChatMessages(false);
+      }
+    } catch (e) {
+      console.error("Error fetching older messages:", e);
+    } finally {
+      loadingOlderMessagesRef.current = false;
+    }
+  };
+
   const handleSendChatMessage = async () => {
-    if (!selectedChatGroup || !chatMessageInput.trim()) return;
+    if (!selectedChatGroup || !chatMessageInput.trim() || !user) return;
     const messageText = chatMessageInput.trim();
     const body = {
       message: messageText,
       type: 'TEXT'
     };
     setChatMessageInput('');
+
+    // Generate unique temporary ID for the optimistic message
+    const tempId = `temp-${Date.now()}`;
+    const optimisticMessage = {
+      id: tempId,
+      groupId: selectedChatGroup.id,
+      senderId: user.userId,
+      senderUsername: user.username,
+      message: messageText,
+      type: 'TEXT',
+      createdAt: new Date().toISOString(),
+      pending: true // Mark as pending for visual styling feedback
+    };
+
+    // Optimistically append to the local chat state flow
+    setChatMessages(prev => [...prev, optimisticMessage]);
+
     try {
       const response = await apiRequest(`/api/chat/group/${selectedChatGroup.id}/message`, 'POST', body);
-      // Optimistically append the sent message to state if not already added
-      setChatMessages(prev => {
-        if (prev.some(m => m.id === response.id)) return prev;
-        return [...prev, response];
-      });
+      // Swap out the optimistic message with the actual database persisted record
+      setChatMessages(prev => prev.map(m => m.id === tempId ? response : m));
     } catch (e) {
       console.error("Error sending message:", e);
-      // Restore input if sending failed
+      // Remove the optimistic message on network transmission failure
+      setChatMessages(prev => prev.filter(m => m.id !== tempId));
+      // Restore input context so user doesn't lose their typed draft
       setChatMessageInput(messageText);
     }
   };
@@ -3391,6 +3473,13 @@ export default function App() {
                   )}
                 </div>
               )}
+
+              <React.Suspense fallback={
+                <div className="flex flex-col items-center justify-center p-12 min-h-[480px] bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl">
+                  <div className="w-8 h-8 border-2 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin mb-3" />
+                  <span className="text-[10px] font-bold text-slate-400 tracking-wider uppercase animate-pulse">Loading workspace module...</span>
+                </div>
+              }>
 
               {/* ==========================================
                   DASHBOARD HOME VIEW (EMPTY / WELCOME STATE)
@@ -4971,6 +5060,7 @@ export default function App() {
                   )}
                 </div>
               )}
+              </React.Suspense>
             </main>
           </div>
 
@@ -5565,16 +5655,24 @@ export default function App() {
                   })()}
 
                   {/* Message Stream */}
-                  <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
+                  <div 
+                    onScroll={(e) => {
+                      const target = e.currentTarget;
+                      if (target.scrollTop === 0) {
+                        fetchOlderChatMessages();
+                      }
+                    }}
+                    className="flex-1 overflow-y-auto p-4 flex flex-col gap-3"
+                  >
                     {chatMessages.length === 0 ? (
                       <div className="my-auto text-center p-6">
                         <p className="text-[11px] text-[var(--text-muted)]">This space is quiet. Send a message to get started!</p>
                       </div>
                     ) : (
                       chatMessages.map(msg => {
-                        const isMe = msg.senderId === user?.id;
+                        const isMe = msg.senderId === user?.id || msg.senderId === user?.userId;
                         const isGroupAdmin = user?.role === 'Admin' || selectedChatGroup.createdById === user?.id;
-                        const canUndo = isMe || isGroupAdmin || user?.isSuperAdmin;
+                        const canUndo = (isMe || isGroupAdmin || user?.isSuperAdmin) && !msg.pending;
                         
                         if (msg.type === 'EXPENSE') {
                           const data = typeof msg.expenseData === 'string' ? JSON.parse(msg.expenseData) : msg.expenseData;
@@ -5648,12 +5746,15 @@ export default function App() {
                                   <RotateCcw className="w-2.5 h-2.5" /> Undo
                                 </button>
                               )}
-                              <div className={`p-2.5 rounded-2xl text-xs leading-normal shadow-sm ${
+                              <div className={`p-2.5 rounded-2xl text-xs leading-normal shadow-sm ${msg.pending ? 'opacity-60 select-none' : ''} ${
                                 isMe 
                                   ? 'bg-indigo-600 text-white rounded-tr-none' 
                                   : 'bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-color)]/30 rounded-tl-none'
                               }`}>
                                 {msg.message}
+                                {msg.pending && (
+                                  <span className="inline-block ml-1.5 opacity-70 animate-pulse text-[9px] font-semibold text-slate-300" title="Sending...">⏳</span>
+                                )}
                               </div>
                               {!isMe && canUndo && (
                                 <button

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Activity } from 'lucide-react';
 
 interface AuditLogsProps {
@@ -18,6 +18,7 @@ export default function AuditLogs({
   auditSearchActor,
   setAuditSearchActor,
 }: AuditLogsProps) {
+  const [visibleCount, setVisibleCount] = useState(50);
   return (
     <div className="animate-fade-in flex flex-col gap-4">
       <h3 className="font-bold text-sm text-[var(--text-primary)] border-b border-[var(--border-color)] pb-2 font-display flex items-center gap-1.5 uppercase tracking-wide">
@@ -78,7 +79,7 @@ export default function AuditLogs({
             </tr>
           </thead>
           <tbody>
-            {auditTrailLogs.map(log => {
+            {auditTrailLogs.slice(0, visibleCount).map(log => {
               const date = new Date(log.timestamp).toLocaleString();
               const isCreate = log.actionType === 'CREATE';
               const isDelete = log.actionType === 'DELETE';
@@ -123,6 +124,18 @@ export default function AuditLogs({
           </tbody>
         </table>
       </div>
+
+      {auditTrailLogs.length > visibleCount && (
+        <div className="flex justify-center mt-3 select-none">
+          <button
+            type="button"
+            onClick={() => setVisibleCount(prev => prev + 50)}
+            className="px-4 py-2 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 border border-indigo-500/20 rounded-xl text-xs font-bold transition-all hover:scale-105 active:scale-95 cursor-pointer"
+          >
+            Show More Action Records (+50)
+          </button>
+        </div>
+      )}
     </div>
   );
 }

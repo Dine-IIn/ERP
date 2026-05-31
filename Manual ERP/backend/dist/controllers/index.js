@@ -612,7 +612,20 @@ async function listCompanyUsers(req, res) {
         }
         const users = await db_1.default.user.findMany({
             where: { companyId: id },
-            include: { role: true },
+            select: {
+                id: true,
+                username: true,
+                mobileNo: true,
+                email: true,
+                status: true,
+                roleId: true,
+                createdAt: true,
+                role: {
+                    select: {
+                        name: true
+                    }
+                }
+            },
             orderBy: { createdAt: 'desc' }
         });
         const sanitized = users.map(u => ({

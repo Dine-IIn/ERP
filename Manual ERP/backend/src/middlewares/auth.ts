@@ -3,7 +3,9 @@ import { verifyToken, JwtPayload } from '../utils';
 import prisma from '../services/db';
 
 export interface AuthenticatedRequest extends Request {
-  user?: JwtPayload;
+  user?: JwtPayload & {
+    userRecord?: any;
+  };
 }
 
 // 1. Authenticate User & Validate Tenant Status
@@ -78,6 +80,9 @@ export async function authenticateToken(req: AuthenticatedRequest, res: Response
       return res.status(403).json({ error: "Your user account is pending admin approval or suspended" });
     }
 
+    // Cache the loaded record to prevent duplicate database lookups in subsequent RBAC middleware
+    req.user = { ...decoded, userRecord: userFromDb };
+
     next();
   } catch (error) {
     return res.status(403).json({ error: "Invalid or expired access token" });
@@ -134,8 +139,8 @@ export function requirePermission(featureKey: string, action: "read" | "write" |
       return next();
     }
 
-    // Fetch the user's role permissions
-    const userFromDb = await prisma.user.findUnique({
+    // Retrieve cached user record or fetch from DB if not already cached
+    const userFromDb = req.user.userRecord || await prisma.user.findUnique({
       where: { id: req.user.userId },
       include: { role: true }
     });

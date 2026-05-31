@@ -71,3 +71,8 @@ h1, h2, h3, h4, h5, h6, .font-display {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--border-active);
 }
+
+/* Optimize touch interactions by overriding the 300ms delay on mobile WebViews (Capacitor/Tauri) */
+a, button, select, input, [role="button"] {
+  touch-action: manipulation;
+}

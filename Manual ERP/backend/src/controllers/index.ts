@@ -666,7 +666,20 @@ export async function listCompanyUsers(req: AuthenticatedRequest, res: Response)
 
     const users = await prisma.user.findMany({
       where: { companyId: id },
-      include: { role: true },
+      select: {
+        id: true,
+        username: true,
+        mobileNo: true,
+        email: true,
+        status: true,
+        roleId: true,
+        createdAt: true,
+        role: {
+          select: {
+            name: true
+          }
+        }
+      },
       orderBy: { createdAt: 'desc' }
     });
 
