@@ -242,20 +242,24 @@ const io = new Server(server, {
     methods: ["GET", "POST"],
     credentials: true
   },
-  transports: ['websocket']
+  transports: ['polling', 'websocket']
 });
 
 // Share Socket.io instance with controllers
 setIoInstance(io);
 
 io.use((socket, next) => {
+  console.log("🔌 [STEP 1 - SOCKET BACKEND] handshake received. Socket ID:", socket.id);
   const token = socket.handshake.auth.token;
+  console.log("🔌 [STEP 1 - SOCKET BACKEND] auth token received:", token ? `YES (length ${token.length})` : "NO");
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET as string);
+    console.log("🔌 [STEP 1 - SOCKET BACKEND] JWT verification result: SUCCESS. User ID:", (decoded as any).userId, "Username:", (decoded as any).username);
     socket.data.user = decoded;
     next();
-  } catch {
+  } catch (err: any) {
+    console.error("🔌 [STEP 1 - SOCKET BACKEND] JWT verification result: FAILED. Error:", err.message);
     next(new Error("Unauthorized"));
   }
 });
@@ -263,10 +267,14 @@ io.use((socket, next) => {
 // WebSocket Connection Handler
 io.on('connection', async (socket) => {
   const user = socket.data.user;
+  console.log("🔌 [STEP 1 - SOCKET BACKEND] socket connected. ID:", socket.id, "User ID:", user?.userId);
+
   if (user && user.userId) {
     // Join personal user room
     socket.join(user.userId);
+    console.log("Socket joined room:", user.userId);
     socket.join(`user_${user.userId}`);
+    console.log("Socket joined room:", `user_${user.userId}`);
     
     try {
       // Auto join socket rooms for all chat groups the user is currently a member of
@@ -276,6 +284,7 @@ io.on('connection', async (socket) => {
       });
       memberships.forEach(m => {
         socket.join(`group_${m.groupId}`);
+        console.log("Socket joined room:", `group_${m.groupId}`);
       });
       console.log(`🔌 Socket joined ${memberships.length} group rooms for user: ${user.username}`);
     } catch (err) {
@@ -285,19 +294,23 @@ io.on('connection', async (socket) => {
 
   socket.on('join', (userId: string) => {
     socket.join(userId);
+    console.log("Socket joined room:", userId);
     socket.join(`user_${userId}`);
+    console.log("Socket joined room:", `user_${userId}`);
   });
 
   socket.on('join_group', (groupId: string) => {
     socket.join(`group_${groupId}`);
+    console.log("Socket joined room:", `group_${groupId}`);
   });
 
   socket.on('leave_group', (groupId: string) => {
     socket.leave(`group_${groupId}`);
+    console.log("Socket left room:", `group_${groupId}`);
   });
 
-  socket.on('disconnect', () => {
-    // Client disconnected
+  socket.on('disconnect', (reason) => {
+    console.log(`🔌 [STEP 1 - SOCKET BACKEND] socket disconnected. ID: ${socket.id}, reason: ${reason}`);
   });
 });
 

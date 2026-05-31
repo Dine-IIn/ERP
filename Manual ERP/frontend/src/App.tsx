@@ -1064,14 +1064,16 @@ export default function App() {
     }
     
     console.log(`🔌 [WebSockets Init] Starting connection to backend socket server...`);
+    console.log("socket URL:", BACKEND_URL);
+    console.log("token existence:", !!token);
     console.log(`🔌 WebSockets Target URL (BACKEND_URL): "${BACKEND_URL}"`);
     console.log(`🔌 WebSockets Secure connection (WSS) forced: ${BACKEND_URL.startsWith('https')}`);
     console.log(`🔌 WebSockets User context: id="${user.id}", username="${user.username}"`);
     console.log(`🔌 WebSockets Auth token length: ${token ? token.length : 0} characters`);
     
     socketRef.current = io(BACKEND_URL, {
-      transports: ['websocket'],
-      upgrade: false,
+      transports: ['polling', 'websocket'],
+      upgrade: true,
       secure: BACKEND_URL.startsWith('https'),
       reconnection: true,
       reconnectionAttempts: 30,
@@ -1084,13 +1086,14 @@ export default function App() {
     });
     
     socketRef.current.on('connect', () => {
+      console.log("connect");
       console.log(`🔌 [WebSockets SUCCESS] Socket connected successfully. Socket ID: "${socketRef.current?.id}"`);
-      console.log(`🔌 Emitting room 'join' event for user: "${user.id}"`);
+      console.log("Joining room:", user.id);
       socketRef.current?.emit('join', user.id);
       
       // Auto re-join active room if one is selected (fixes background severing issue)
       if (selectedGroupIdRef.current) {
-        console.log(`🔌 Socket auto-rejoining active group room: "group_${selectedGroupIdRef.current}"`);
+        console.log("Joining room:", `group_${selectedGroupIdRef.current}`);
         socketRef.current?.emit('join_group', selectedGroupIdRef.current);
       } else {
         console.log(`🔌 No active group room ref to auto-join on connection.`);
@@ -1102,6 +1105,7 @@ export default function App() {
     });
 
     socketRef.current.on('connect_error', (error) => {
+      console.error("connect_error", error);
       console.error("❌ [WebSockets ERROR] Connection error occurred!");
       console.error("❌ Connection error message:", error.message);
       console.error("❌ Connection error details:", error);
@@ -1111,7 +1115,12 @@ export default function App() {
     });
 
     socketRef.current.on('disconnect', (reason) => {
+      console.log("disconnect", reason);
       console.warn(`🔌 [WebSockets WARNING] Socket disconnected. Disconnection reason: "${reason}"`);
+    });
+
+    socketRef.current.io.on('reconnect', (attempt) => {
+      console.log("reconnect", attempt);
     });
 
     socketRef.current.on('notification', (newNotification: NotificationItem) => {
@@ -1135,6 +1144,8 @@ export default function App() {
 
     // Real-time chat messages channel
     socketRef.current.on('new_chat_message', (newMessage: any) => {
+      console.log("MESSAGE RECEIVED FROM SOCKET");
+      console.log(newMessage);
       console.log('💬 [WebSockets Event] new_chat_message received payload:', newMessage);
       
       const isCurrentGroup = selectedGroupIdRef.current === newMessage.groupId;
@@ -1234,8 +1245,10 @@ export default function App() {
       const isMember = newGroup.members?.some((m: any) => m.userId === userRef.current?.id || m.userId === userRef.current?.userId);
       if (socketRef.current) {
         if (isMember) {
+          console.log("Joining room:", newGroup.id);
           socketRef.current.emit('join_group', newGroup.id);
         } else {
+          console.log("Leaving room:", newGroup.id);
           socketRef.current.emit('leave_group', newGroup.id);
         }
       }
@@ -2803,6 +2816,7 @@ export default function App() {
 
   const handleSelectChatGroup = async (group: any) => {
     if (selectedChatGroup && socketRef.current) {
+      console.log("Leaving room:", selectedChatGroup.id);
       socketRef.current.emit('leave_group', selectedChatGroup.id);
     }
     
@@ -2812,6 +2826,7 @@ export default function App() {
     setHasMoreChatMessages(true);
     
     if (socketRef.current) {
+      console.log("Joining room:", group.id);
       socketRef.current.emit('join_group', group.id);
     }
 

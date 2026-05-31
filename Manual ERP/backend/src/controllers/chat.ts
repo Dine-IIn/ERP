@@ -317,6 +317,7 @@ export async function getChatGroupMessages(req: AuthenticatedRequest, res: Respo
  */
 export async function sendChatGroupMessage(req: AuthenticatedRequest, res: Response) {
   try {
+    console.log("MESSAGE RECEIVED");
     const user = req.user;
     if (!user) {
       return res.status(401).json({ error: "Unauthorized access" });
@@ -353,6 +354,7 @@ export async function sendChatGroupMessage(req: AuthenticatedRequest, res: Respo
         expenseData: expenseData ? JSON.stringify(expenseData) : null
       }
     });
+    console.log("MESSAGE SAVED");
 
     // --- FINANCIAL CASHBOOK & EXPENSE SYNC OPTION ---
     const parsedSettings = JSON.parse(group.settings || '{}');
@@ -415,6 +417,7 @@ export async function sendChatGroupMessage(req: AuthenticatedRequest, res: Respo
     // Broadcast dynamically to this WebSocket group room
     if (ioInstance) {
       ioInstance.to(`group_${groupId}`).emit('new_chat_message', newMessage);
+      console.log("MESSAGE EMITTED");
       
       // Also notify peer if it's a DM and they are not currently in the room
       if (group.type === 'DIRECT') {

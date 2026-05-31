@@ -288,6 +288,7 @@ async function getChatGroupMessages(req, res) {
  */
 async function sendChatGroupMessage(req, res) {
     try {
+        console.log("MESSAGE RECEIVED");
         const user = req.user;
         if (!user) {
             return res.status(401).json({ error: "Unauthorized access" });
@@ -318,6 +319,7 @@ async function sendChatGroupMessage(req, res) {
                 expenseData: expenseData ? JSON.stringify(expenseData) : null
             }
         });
+        console.log("MESSAGE SAVED");
         // --- FINANCIAL CASHBOOK & EXPENSE SYNC OPTION ---
         const parsedSettings = JSON.parse(group.settings || '{}');
         if (group.type === 'EXPENSE' && type === 'EXPENSE' && parsedSettings.connectToCashbook === true && expenseData) {
@@ -374,6 +376,7 @@ async function sendChatGroupMessage(req, res) {
         // Broadcast dynamically to this WebSocket group room
         if (index_1.ioInstance) {
             index_1.ioInstance.to(`group_${groupId}`).emit('new_chat_message', newMessage);
+            console.log("MESSAGE EMITTED");
             // Also notify peer if it's a DM and they are not currently in the room
             if (group.type === 'DIRECT') {
                 const otherMember = await db_1.default.groupMember.findFirst({

@@ -13,6 +13,7 @@ const helmet_1 = __importDefault(require("helmet"));
 const compression_1 = __importDefault(require("compression"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const db_1 = __importDefault(require("./services/db"));
 const auth_1 = require("./middlewares/auth");
 const controllers_1 = require("./controllers");
 const chat_1 = require("./controllers/chat");
@@ -53,9 +54,12 @@ const corsOptions = {
             return callback(null, true);
         const isAllowed = allowedOrigins.includes(origin) ||
             /^(http|https):\/\/localhost(:\d+)?$/.test(origin) ||
+            /^(http|https):\/\/192\.168\.\d+\.\d+(:\d+)?$/.test(origin) ||
+            /^(http|https):\/\/10\.\d+\.\d+\.\d+(:\d+)?$/.test(origin) ||
+            /^(http|https):\/\/172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+(:\d+)?$/.test(origin) ||
             origin.startsWith('tauri://') ||
             origin.startsWith('capacitor://');
-        if (isAllowed) {
+        if (isAllowed || process.env.NODE_ENV !== 'production') {
             callback(null, true);
         }
         else {
@@ -91,9 +95,12 @@ const io = new socket_io_1.Server(server, {
                 return callback(null, true);
             const isAllowed = allowedOrigins.includes(origin) ||
                 /^(http|https):\/\/localhost(:\d+)?$/.test(origin) ||
+                /^(http|https):\/\/192\.168\.\d+\.\d+(:\d+)?$/.test(origin) ||
+                /^(http|https):\/\/10\.\d+\.\d+\.\d+(:\d+)?$/.test(origin) ||
+                /^(http|https):\/\/172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+(:\d+)?$/.test(origin) ||
                 origin.startsWith('tauri://') ||
                 origin.startsWith('capacitor://');
-            if (isAllowed) {
+            if (isAllowed || process.env.NODE_ENV !== 'production') {
                 callback(null, true);
             }
             else {
@@ -104,31 +111,67 @@ const io = new socket_io_1.Server(server, {
         methods: ["GET", "POST"],
         credentials: true
     },
-    transports: ['websocket']
+    transports: ['polling', 'websocket']
 });
 // Share Socket.io instance with controllers
 (0, controllers_1.setIoInstance)(io);
 io.use((socket, next) => {
+    console.log("🔌 [STEP 1 - SOCKET BACKEND] handshake received. Socket ID:", socket.id);
     const token = socket.handshake.auth.token;
+    console.log("🔌 [STEP 1 - SOCKET BACKEND] auth token received:", token ? `YES (length ${token.length})` : "NO");
     try {
         const decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET);
+        console.log("🔌 [STEP 1 - SOCKET BACKEND] JWT verification result: SUCCESS. User ID:", decoded.userId, "Username:", decoded.username);
         socket.data.user = decoded;
         next();
     }
-    catch {
+    catch (err) {
+        console.error("🔌 [STEP 1 - SOCKET BACKEND] JWT verification result: FAILED. Error:", err.message);
         next(new Error("Unauthorized"));
     }
 });
 // WebSocket Connection Handler
-io.on('connection', (socket) => {
+io.on('connection', async (socket) => {
+    const user = socket.data.user;
+    console.log("🔌 [STEP 1 - SOCKET BACKEND] socket connected. ID:", socket.id, "User ID:", user?.userId);
+    if (user && user.userId) {
+        // Join personal user room
+        socket.join(user.userId);
+        console.log("Socket joined room:", user.userId);
+        socket.join(`user_${user.userId}`);
+        console.log("Socket joined room:", `user_${user.userId}`);
+        try {
+            // Auto join socket rooms for all chat groups the user is currently a member of
+            const memberships = await db_1.default.groupMember.findMany({
+                where: { userId: user.userId },
+                select: { groupId: true }
+            });
+            memberships.forEach(m => {
+                socket.join(`group_${m.groupId}`);
+                console.log("Socket joined room:", `group_${m.groupId}`);
+            });
+            console.log(`🔌 Socket joined ${memberships.length} group rooms for user: ${user.username}`);
+        }
+        catch (err) {
+            console.error("Error auto-joining chat groups on socket connection:", err);
+        }
+    }
+    socket.on('join', (userId) => {
+        socket.join(userId);
+        console.log("Socket joined room:", userId);
+        socket.join(`user_${userId}`);
+        console.log("Socket joined room:", `user_${userId}`);
+    });
     socket.on('join_group', (groupId) => {
         socket.join(`group_${groupId}`);
+        console.log("Socket joined room:", `group_${groupId}`);
     });
     socket.on('leave_group', (groupId) => {
         socket.leave(`group_${groupId}`);
+        console.log("Socket left room:", `group_${groupId}`);
     });
-    socket.on('disconnect', () => {
-        // Client disconnected
+    socket.on('disconnect', (reason) => {
+        console.log(`🔌 [STEP 1 - SOCKET BACKEND] socket disconnected. ID: ${socket.id}, reason: ${reason}`);
     });
 });
 // ==========================================
@@ -175,7 +218,6 @@ app.patch('/api/chat/group/:groupId/settings', auth_1.authenticateToken, chat_1.
 app.delete('/api/chat/group/:groupId', auth_1.authenticateToken, chat_1.deleteChatGroup);
 app.get('/api/chat/group/:groupId/expense-sheet', auth_1.authenticateToken, chat_1.downloadExpenseSheet);
 app.delete('/api/chat/message/:messageId', auth_1.authenticateToken, chat_1.deleteChatMessage);
-const db_1 = __importDefault(require("./services/db"));
 const controllers_2 = require("./controllers");
 const admin_endpoints_1 = require("./controllers/admin_endpoints");
 const master_data_1 = require("./controllers/master_data");
