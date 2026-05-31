@@ -76,3 +76,65 @@ h1, h2, h3, h4, h5, h6, .font-display {
 a, button, select, input, [role="button"] {
   touch-action: manipulation;
 }
+
+/* --- HIGH-CONTRAST LIGHT THEME TEXT OVERRIDES --- */
+:root.light .text-slate-100,
+:root.light .text-slate-200,
+:root.light .text-slate-250,
+:root.light .text-gray-100,
+:root.light .text-gray-200 {
+  color: var(--text-primary) !important;
+}
+
+:root.light .text-slate-300,
+:root.light .text-slate-350,
+:root.light .text-slate-400,
+:root.light .text-slate-450,
+:root.light .text-slate-500,
+:root.light .text-slate-550,
+:root.light .text-slate-600,
+:root.light .text-slate-650,
+:root.light .text-gray-350,
+:root.light .text-gray-400,
+:root.light .text-gray-450,
+:root.light .text-gray-500 {
+  color: var(--text-secondary) !important;
+}
+
+/* --- COMPACT RESPONSIVE LAYOUT OVERRIDES (PREVENTS COMPRESSED FEELING) --- */
+@media (max-width: 1024px) {
+  .gap-6, .gap-y-6, .gap-x-6 {
+    gap: 0.875rem !important; /* Tighten gaps from 24px to 14px */
+  }
+  .p-6, .px-6, .py-6 {
+    padding: 0.875rem !important; /* Tighten paddings from 24px to 14px */
+  }
+  .p-8, .px-8, .py-8 {
+    padding: 1.25rem !important; /* Tighten paddings from 32px to 20px */
+  }
+  .space-y-6 > :not([hidden]) ~ :not([hidden]) {
+    --tw-space-y-reverse: 0;
+    margin-top: calc(0.875rem * calc(1 - var(--tw-space-y-reverse))) !important;
+    margin-bottom: calc(0.875rem * var(--tw-space-y-reverse)) !important;
+  }
+}
+
+@media (min-width: 1025px) {
+  .gap-6, .gap-y-6, .gap-x-6 {
+    gap: 1.125rem !important; /* Tighten gaps from 24px to 18px */
+  }
+  .gap-8, .gap-y-8, .gap-x-8 {
+    gap: 1.375rem !important; /* Tighten gaps from 32px to 22px */
+  }
+  .p-6, .px-6, .py-6 {
+    padding: 1.125rem !important; /* Tighten paddings from 24px to 18px */
+  }
+  .p-8, .px-8, .py-8 {
+    padding: 1.375rem !important; /* Tighten paddings from 32px to 22px */
+  }
+  .space-y-6 > :not([hidden]) ~ :not([hidden]) {
+    --tw-space-y-reverse: 0;
+    margin-top: calc(1.125rem * calc(1 - var(--tw-space-y-reverse))) !important;
+    margin-bottom: calc(1.125rem * var(--tw-space-y-reverse)) !important;
+  }
+}

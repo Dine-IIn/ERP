@@ -8,6 +8,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
+import prisma from './services/db';
 import {
   authenticateToken,
   requireSuperAdmin
@@ -182,10 +183,13 @@ const corsOptions: cors.CorsOptions = {
     
     const isAllowed = allowedOrigins.includes(origin) ||
                       /^(http|https):\/\/localhost(:\d+)?$/.test(origin) ||
+                      /^(http|https):\/\/192\.168\.\d+\.\d+(:\d+)?$/.test(origin) ||
+                      /^(http|https):\/\/10\.\d+\.\d+\.\d+(:\d+)?$/.test(origin) ||
+                      /^(http|https):\/\/172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+(:\d+)?$/.test(origin) ||
                       origin.startsWith('tauri://') ||
                       origin.startsWith('capacitor://');
                       
-    if (isAllowed) {
+    if (isAllowed || process.env.NODE_ENV !== 'production') {
       callback(null, true);
     } else {
       console.log('❌ BLOCKED ORIGIN:', origin);
@@ -223,9 +227,12 @@ const io = new Server(server, {
       if (!origin) return callback(null, true);
       const isAllowed = allowedOrigins.includes(origin) || 
                         /^(http|https):\/\/localhost(:\d+)?$/.test(origin) ||
+                        /^(http|https):\/\/192\.168\.\d+\.\d+(:\d+)?$/.test(origin) ||
+                        /^(http|https):\/\/10\.\d+\.\d+\.\d+(:\d+)?$/.test(origin) ||
+                        /^(http|https):\/\/172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+(:\d+)?$/.test(origin) ||
                         origin.startsWith('tauri://') ||
                         origin.startsWith('capacitor://');
-      if (isAllowed) {
+      if (isAllowed || process.env.NODE_ENV !== 'production') {
         callback(null, true);
       } else {
         console.log('❌ BLOCKED ORIGIN:', origin);
@@ -254,7 +261,33 @@ io.use((socket, next) => {
 });
 
 // WebSocket Connection Handler
-io.on('connection', (socket) => {
+io.on('connection', async (socket) => {
+  const user = socket.data.user;
+  if (user && user.userId) {
+    // Join personal user room
+    socket.join(user.userId);
+    socket.join(`user_${user.userId}`);
+    
+    try {
+      // Auto join socket rooms for all chat groups the user is currently a member of
+      const memberships = await prisma.groupMember.findMany({
+        where: { userId: user.userId },
+        select: { groupId: true }
+      });
+      memberships.forEach(m => {
+        socket.join(`group_${m.groupId}`);
+      });
+      console.log(`🔌 Socket joined ${memberships.length} group rooms for user: ${user.username}`);
+    } catch (err) {
+      console.error("Error auto-joining chat groups on socket connection:", err);
+    }
+  }
+
+  socket.on('join', (userId: string) => {
+    socket.join(userId);
+    socket.join(`user_${userId}`);
+  });
+
   socket.on('join_group', (groupId: string) => {
     socket.join(`group_${groupId}`);
   });
@@ -319,7 +352,6 @@ app.delete('/api/chat/group/:groupId', authenticateToken, deleteChatGroup);
 app.get('/api/chat/group/:groupId/expense-sheet', authenticateToken, downloadExpenseSheet);
 app.delete('/api/chat/message/:messageId', authenticateToken, deleteChatMessage);
 
-import prisma from './services/db';
 import { HIERARCHICAL_FEATURES } from './controllers';
 import {
   listAuditLogs,

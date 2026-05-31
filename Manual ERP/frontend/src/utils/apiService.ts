@@ -1,4 +1,16 @@
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+import { Capacitor } from '@capacitor/core';
+
+const getBaseUrl = () => {
+  const url = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+  if (Capacitor.isNativePlatform()) {
+    if (url.includes('localhost') || url.includes('127.0.0.1')) {
+      return url.replace('localhost', '10.0.2.2').replace('127.0.0.1', '10.0.2.2');
+    }
+  }
+  return url;
+};
+
+const BASE_URL = getBaseUrl();
 
 interface RequestOptions extends RequestInit {
   params?: Record<string, string>;

@@ -134,9 +134,21 @@ import {
   RotateCcw
 } from 'lucide-react';
 
+import { Capacitor } from '@capacitor/core';
+import { LocalNotifications } from '@capacitor/local-notifications';
 import { apiClient, ApiError } from './utils/apiService';
 
-const BACKEND_URL = import.meta.env.VITE_API_URL || 'https://erp.anbindustries.com';
+const getBackendUrl = () => {
+  const url = import.meta.env.VITE_API_URL || 'https://erp.anbindustries.com';
+  if (Capacitor.isNativePlatform()) {
+    if (url.includes('localhost') || url.includes('127.0.0.1')) {
+      return url.replace('localhost', '10.0.2.2').replace('127.0.0.1', '10.0.2.2');
+    }
+  }
+  return url;
+};
+
+const BACKEND_URL = getBackendUrl();
 
 interface UserProfile {
   id?: string;
@@ -906,6 +918,8 @@ export default function App() {
 
   // Refs for tracking active group and auto-scrolling
   const selectedGroupIdRef = useRef<string | null>(null);
+  const showChatDrawerRef = useRef(showChatDrawer);
+  const userRef = useRef(user);
   const chatMessagesEndRef = useRef<HTMLDivElement | null>(null);
   const sidebarRef = useRef<HTMLElement | null>(null);
   const loadingOlderMessagesRef = useRef(false);
@@ -918,6 +932,18 @@ export default function App() {
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
+
+    if (Capacitor.isNativePlatform()) {
+      const url = import.meta.env.VITE_API_URL || '';
+      if (url.includes('localhost') || url.includes('127.0.0.1')) {
+        setActiveToast({
+          title: "Local Backend Configured",
+          message: "Note: Android emulator will auto-route localhost to 10.0.2.2. If you are using a physical phone, please change the URL to your laptop's Wi-Fi IP (e.g., http://192.168.x.x:5000)."
+        });
+        setTimeout(() => setActiveToast(null), 12000);
+      }
+    }
+
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
@@ -926,6 +952,14 @@ export default function App() {
   useEffect(() => {
     selectedGroupIdRef.current = selectedChatGroup?.id || null;
   }, [selectedChatGroup]);
+
+  useEffect(() => {
+    showChatDrawerRef.current = showChatDrawer;
+  }, [showChatDrawer]);
+
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
 
   useEffect(() => {
     if (chatMessagesEndRef.current) {
@@ -949,7 +983,37 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => {
+    let actionListener: any = null;
     if (token && user) {
+      if (Capacitor.isNativePlatform()) {
+        try {
+          LocalNotifications.requestPermissions();
+          actionListener = LocalNotifications.addListener('localNotificationActionPerformed', (notificationAction) => {
+            console.log('🔔 Local notification action performed:', notificationAction);
+            const groupId = notificationAction.notification.extra?.groupId;
+            if (groupId) {
+              setShowChatDrawer(true);
+              const fetchAndSelect = async () => {
+                try {
+                  const groups = await apiRequest('/api/chat/groups', 'GET');
+                  setChatGroups(groups || []);
+                  const match = groups.find((g: any) => g.id === groupId);
+                  if (match) {
+                    handleSelectChatGroup(match);
+                  }
+                } catch (err) {
+                  console.error("Error navigating from notification click:", err);
+                }
+              };
+              fetchAndSelect();
+            }
+          });
+        } catch (e) {
+          console.error("Failed to request native notification permissions or add tap listener:", e);
+        }
+      } else if (typeof Notification !== 'undefined' && Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+        Notification.requestPermission();
+      }
       if (user.isSuperAdmin) {
         setView('super_admin');
         fetchSuperAdminData();
@@ -972,15 +1036,17 @@ export default function App() {
       if (socketRef.current) {
         socketRef.current.disconnect();
       }
+      if (actionListener) {
+        actionListener.remove();
+      }
     };
-  }, [token]);
+  }, [token, user]);
 
   useEffect(() => {
     if (showChatDrawer && token) {
       fetchChatGroups();
     }
   }, [showChatDrawer, token]);
-
   const fetchChatGroups = async () => {
     if (!localStorage.getItem('erp_token')) return;
     try {
@@ -992,26 +1058,60 @@ export default function App() {
   };
 
   const connectWebSockets = () => {
-    if (!user || !user.id) return;
+    if (!user || !user.id) {
+      console.warn("⚠️ [WebSockets Bypassed] WebSocket connection bypassed: User or User ID is not defined in scope.", user);
+      return;
+    }
+    
+    console.log(`🔌 [WebSockets Init] Starting connection to backend socket server...`);
+    console.log(`🔌 WebSockets Target URL (BACKEND_URL): "${BACKEND_URL}"`);
+    console.log(`🔌 WebSockets Secure connection (WSS) forced: ${BACKEND_URL.startsWith('https')}`);
+    console.log(`🔌 WebSockets User context: id="${user.id}", username="${user.username}"`);
+    console.log(`🔌 WebSockets Auth token length: ${token ? token.length : 0} characters`);
     
     socketRef.current = io(BACKEND_URL, {
       transports: ['websocket'],
       upgrade: false,
-      secure: true,
+      secure: BACKEND_URL.startsWith('https'),
       reconnection: true,
       reconnectionAttempts: 30,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 10000,
-      randomizationFactor: 0.5
+      randomizationFactor: 0.5,
+      auth: {
+        token: token
+      }
     });
     
     socketRef.current.on('connect', () => {
-      console.log('🔌 Connected to real-time notification socket.');
+      console.log(`🔌 [WebSockets SUCCESS] Socket connected successfully. Socket ID: "${socketRef.current?.id}"`);
+      console.log(`🔌 Emitting room 'join' event for user: "${user.id}"`);
       socketRef.current?.emit('join', user.id);
+      
+      // Auto re-join active room if one is selected (fixes background severing issue)
+      if (selectedGroupIdRef.current) {
+        console.log(`🔌 Socket auto-rejoining active group room: "group_${selectedGroupIdRef.current}"`);
+        socketRef.current?.emit('join_group', selectedGroupIdRef.current);
+      } else {
+        console.log(`🔌 No active group room ref to auto-join on connection.`);
+      }
       
       // Auto fetch chat rooms on connection
       fetchChatGroups();
       fetchWorkspaceStats();
+    });
+
+    socketRef.current.on('connect_error', (error) => {
+      console.error("❌ [WebSockets ERROR] Connection error occurred!");
+      console.error("❌ Connection error message:", error.message);
+      console.error("❌ Connection error details:", error);
+      if ((error as any).description) {
+        console.error("❌ Low-level connection error description:", (error as any).description);
+      }
+    });
+
+    socketRef.current.on('disconnect', (reason) => {
+      console.warn(`🔌 [WebSockets WARNING] Socket disconnected. Disconnection reason: "${reason}"`);
     });
 
     socketRef.current.on('notification', (newNotification: NotificationItem) => {
@@ -1035,12 +1135,81 @@ export default function App() {
 
     // Real-time chat messages channel
     socketRef.current.on('new_chat_message', (newMessage: any) => {
-      console.log('💬 Real-time chat message received:', newMessage);
-      if (selectedGroupIdRef.current === newMessage.groupId) {
+      console.log('💬 [WebSockets Event] new_chat_message received payload:', newMessage);
+      
+      const isCurrentGroup = selectedGroupIdRef.current === newMessage.groupId;
+      const isDrawerOpen = showChatDrawerRef.current;
+      const isMe = newMessage.senderId === userRef.current?.id || newMessage.senderId === userRef.current?.userId;
+
+      console.log(`💬 Message diagnostics: isCurrentGroup=${isCurrentGroup}, isDrawerOpen=${isDrawerOpen}, isMe=${isMe}, docVisibility="${document.visibilityState}"`);
+
+      if (!isMe && (!isDrawerOpen || !isCurrentGroup || document.visibilityState === 'hidden')) {
+        console.log(`💬 Notification condition met: dispatching notification alerts...`);
+        setActiveToast({
+          title: `New message from ${newMessage.senderName}`,
+          message: newMessage.message
+        });
+        setTimeout(() => setActiveToast(null), 5000);
+
+        if (Capacitor.isNativePlatform()) {
+          console.log(`💬 Scheduling native Android push/local notification...`);
+          try {
+            LocalNotifications.schedule({
+              notifications: [
+                {
+                  title: `New message from ${newMessage.senderName}`,
+                  body: newMessage.message,
+                  id: Math.floor(Math.random() * 1000000),
+                  schedule: { at: new Date(Date.now() + 100) },
+                  extra: { groupId: newMessage.groupId }
+                }
+              ]
+            });
+            console.log(`💬 Android native notification scheduled successfully.`);
+          } catch (e) {
+            console.error("❌ Android native notification scheduling failed:", e);
+          }
+        } else if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+          console.log(`💬 Dispatching system web notification...`);
+          try {
+            new Notification(`New message from ${newMessage.senderName}`, {
+              body: newMessage.message,
+              tag: newMessage.groupId,
+              renotify: true
+            });
+            console.log(`💬 Web notification triggered.`);
+          } catch (e) {
+            console.error("❌ System notification display failed:", e);
+          }
+        }
+      }
+
+      if (isCurrentGroup) {
+        console.log(`💬 Group room "${newMessage.groupId}" is active: updating message timeline state...`);
         setChatMessages(prev => {
-          if (prev.some(m => m.id === newMessage.id)) return prev;
+          // If we already have the message by real ID, do nothing
+          if (prev.some(m => m.id === newMessage.id)) {
+            console.log(`💬 Message ID "${newMessage.id}" already present in state. Bypassing append to prevent duplicates.`);
+            return prev;
+          }
+          
+          // Swap optimistic/pending message if one exists with same text and sender is me
+          if (isMe) {
+            const pendingIndex = prev.findIndex(m => m.pending && m.message === newMessage.message);
+            if (pendingIndex !== -1) {
+              console.log(`💬 Optimistic draft matched at index ${pendingIndex}. Swapping with database record.`);
+              const updated = [...prev];
+              updated[pendingIndex] = newMessage;
+              return updated;
+            }
+            console.log(`💬 Message from me, but no optimistic pending draft matched. Appending message.`);
+          }
+          
+          console.log(`💬 Appending real-time message payload to timeline.`);
           return [...prev, newMessage];
         });
+      } else {
+        console.log(`💬 Message group "${newMessage.groupId}" does not match active group "${selectedGroupIdRef.current}". Bypassing timeline append.`);
       }
       fetchChatGroups();
       if (newMessage.type === 'EXPENSE') {
@@ -1060,6 +1229,17 @@ export default function App() {
     // Real-time group space metadata sync
     socketRef.current.on('group_created', (newGroup: any) => {
       console.log('📣 Chat space metadata updated:', newGroup);
+      
+      // Auto join or leave socket room based on membership
+      const isMember = newGroup.members?.some((m: any) => m.userId === userRef.current?.id || m.userId === userRef.current?.userId);
+      if (socketRef.current) {
+        if (isMember) {
+          socketRef.current.emit('join_group', newGroup.id);
+        } else {
+          socketRef.current.emit('leave_group', newGroup.id);
+        }
+      }
+
       setChatGroups(prev => {
         if (prev.some(g => g.id === newGroup.id)) {
           return prev.map(g => g.id === newGroup.id ? newGroup : g);
@@ -2764,11 +2944,10 @@ export default function App() {
       return;
     }
 
-    const share = parseFloat((amt / members.length).toFixed(2));
-    const splits: Record<string, number> = {};
-    members.forEach((m: any) => {
-      splits[m.userId] = share;
-    });
+    const paidByUserId = expensePaidBy || user?.id || '';
+    const splits: Record<string, number> = {
+      [paidByUserId]: amt
+    };
 
     const expenseData = {
       amount: amt,
@@ -5659,33 +5838,36 @@ export default function App() {
 
                   {/* Expense Stats Bar */}
                   {selectedChatGroup.type === 'EXPENSE' && (() => {
-                    // Compute stats dynamically in pure React
-                    let totalExp = 0;
-                    const netBalances: Record<string, number> = {};
-                    selectedChatGroup.members.forEach((m: any) => netBalances[m.userId] = 0);
+                    // Compute stats dynamically in pure React using user's explicit formulas
+                    let totalOfExpenseByMe = 0;
+                    let transferByMe = 0;
+                    let totalReceivedByMe = 0;
+                    const currentUserId = user?.id || user?.userId || '';
 
                     chatMessages.forEach(msg => {
                       if (msg.type === 'EXPENSE') {
                         const data = typeof msg.expenseData === 'string' ? JSON.parse(msg.expenseData) : msg.expenseData;
                         if (data) {
-                          totalExp += data.amount || 0;
-                          const splits = data.splits || {};
-                          const paidBy = data.paidBy;
-                          netBalances[paidBy] = (netBalances[paidBy] || 0) + (data.amount || 0);
-                          Object.entries(splits).forEach(([uId, share]) => {
-                            netBalances[uId] = (netBalances[uId] || 0) - (share as number);
-                          });
+                          const paidBy = data.paidBy || msg.senderId;
+                          if (paidBy === currentUserId) {
+                            totalOfExpenseByMe += data.amount || 0;
+                          }
                         }
                       } else if (msg.type === 'PAYMENT') {
                         const data = typeof msg.expenseData === 'string' ? JSON.parse(msg.expenseData) : msg.expenseData;
                         if (data) {
-                          netBalances[data.from] = (netBalances[data.from] || 0) + (data.amount || 0);
-                          netBalances[data.to] = (netBalances[data.to] || 0) - (data.amount || 0);
+                          if (data.from === currentUserId) {
+                            transferByMe += data.amount || 0;
+                          }
+                          if (data.to === currentUserId) {
+                            totalReceivedByMe += data.amount || 0;
+                          }
                         }
                       }
                     });
 
-                    const myBal = netBalances[user?.id || ''] || 0;
+                    const totalExp = totalOfExpenseByMe + transferByMe;
+                    const myBal = totalExp - totalReceivedByMe;
 
                     return (
                       <div className="bg-emerald-500/5 border-b border-[var(--border-color)] px-4 py-2 flex items-center justify-between text-[11px] select-none">
@@ -5919,8 +6101,8 @@ export default function App() {
                         } else if (msg.type === 'PAYMENT') {
                           const data = typeof msg.expenseData === 'string' ? JSON.parse(msg.expenseData) : msg.expenseData;
                           if (data) {
-                            netBalances[data.from] = (netBalances[data.from] || 0) + (data.amount || 0);
-                            netBalances[data.to] = (netBalances[data.to] || 0) - (data.amount || 0);
+                            netBalances[data.from] = (netBalances[data.from] || 0) - (data.amount || 0);
+                            netBalances[data.to] = (netBalances[data.to] || 0) + (data.amount || 0);
                           }
                         }
                       });
@@ -5998,7 +6180,7 @@ export default function App() {
                                 </div>
                               ) : (
                                 transactions.map((t, idx) => {
-                                  const amIDebtor = t.fromId === user?.id;
+                                  const amIDebtor = t.fromId === user?.id || t.fromId === user?.userId;
                                   return (
                                     <div key={idx} className="p-2.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] flex items-center justify-between text-[11.5px]">
                                       <div className="flex-1">
@@ -6261,8 +6443,8 @@ export default function App() {
                     <DollarSign className="w-6 h-6" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-base text-[var(--text-primary)] font-display">Log Group Expenditure</h3>
-                    <p className="text-[var(--text-secondary)] text-[10px]">Log expenses to split equally among group members</p>
+                    <h3 className="font-bold text-base text-[var(--text-primary)] font-display">Log Expense</h3>
+                    <p className="text-[var(--text-secondary)] text-[10px]">Log personal expense</p>
                   </div>
                 </div>
 

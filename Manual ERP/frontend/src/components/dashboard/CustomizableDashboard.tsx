@@ -105,32 +105,6 @@ const CustomizableDashboard = React.memo(function CustomizableDashboard({
 
   return (
     <div className="space-y-6">
-      {/* Premium Welcome Banner */}
-      <div className={`relative flex flex-col md:flex-row md:items-center md:justify-between p-5 md:p-8 rounded-3xl border bg-gradient-to-r ${getThemeClass()} backdrop-blur-2xl transition-all duration-500 overflow-hidden`}>
-        <div className="absolute right-0 top-0 w-96 h-96 bg-indigo-500/10 blur-[120px] rounded-full pointer-events-none" />
-        <div className="z-10 space-y-2">
-          <div className="flex items-center gap-2.5">
-            <span className="px-3 py-1 text-[10px] sm:text-xs font-semibold uppercase tracking-wider bg-slate-900/60 rounded-full text-indigo-400 border border-slate-800">
-              Enterprise Dashboard
-            </span>
-          </div>
-          <h1 className="text-xl md:text-3xl font-extrabold text-white tracking-tight leading-tight">
-            Welcome Back, {companyProfile?.name || 'ERP Tenant'} Console
-          </h1>
-          <p className="text-slate-400 text-sm max-w-xl">
-            Realtime operations monitoring, employee status Punch metrics, cashbook vouchers records, and direct tax worksheets.
-          </p>
-        </div>
-        <div className="z-10 mt-6 md:mt-0 flex gap-3">
-          <button
-            onClick={() => setShowConfigModal(true)}
-            className="flex items-center justify-center gap-2 px-5 py-3 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-xl active:scale-95 transition-all text-white font-bold text-sm shadow-md"
-          >
-            <Settings className="w-4 h-4 text-slate-400" />
-            Customize Layout
-          </button>
-        </div>
-      </div>
 
       {/* 1. Customizable KPI Cards */}
       {widgets.kpiCards && (
@@ -502,6 +476,17 @@ const CustomizableDashboard = React.memo(function CustomizableDashboard({
           </div>
         </div>
       )}
+      {/* Repositioned Customize Layout Action Button */}
+      <div className="flex justify-end pt-4 mt-6 border-t border-slate-800/40 select-none">
+        <button
+          onClick={() => setShowConfigModal(true)}
+          className="flex items-center justify-center gap-2 px-5 py-3 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-slate-700 rounded-xl active:scale-95 transition-all text-white font-bold text-xs shadow-md hover:shadow-indigo-500/5 cursor-pointer"
+          title="Customize Screen Layout & Colors"
+        >
+          <Settings className="w-3.5 h-3.5 text-slate-450" />
+          Customize Layout
+        </button>
+      </div>
     </div>
   );
 });

@@ -663,6 +663,7 @@ export async function getCompanyChatStats(req: AuthenticatedRequest, res: Respon
 
     let totalCompanyExpense = 0;
     let individualTotalExpense = 0;
+    let individualTotalReceived = 0;
 
     // Group the messages and members by groupId for faster access
     const messagesByGroup: Record<string, typeof messages> = {};
@@ -684,8 +685,6 @@ export async function getCompanyChatStats(req: AuthenticatedRequest, res: Respon
         membersByGroup[m.groupId].push(m.userId);
       }
     });
-
-    let individualNetSum = 0;
 
     // For each group, compute balances
     groupIds.forEach(gId => {
@@ -728,8 +727,15 @@ export async function getCompanyChatStats(req: AuthenticatedRequest, res: Respon
               const from = data.from;
               const to = data.to;
 
-              netBalances[from] = (netBalances[from] || 0) + amount;
-              netBalances[to] = (netBalances[to] || 0) - amount;
+              netBalances[from] = (netBalances[from] || 0) - amount;
+              netBalances[to] = (netBalances[to] || 0) + amount;
+
+              if (from === user.userId) {
+                individualTotalExpense += amount; // Transfer by me
+              }
+              if (to === user.userId) {
+                individualTotalReceived += amount; // Received by me
+              }
             }
           } catch (e) {
             console.error("Error parsing payment expenseData in stats:", e);
@@ -738,10 +744,10 @@ export async function getCompanyChatStats(req: AuthenticatedRequest, res: Respon
       });
 
       // Add this group's user balance to individualNetSum
-      if (netBalances[user.userId] !== undefined) {
-        individualNetSum += netBalances[user.userId];
-      }
     });
+
+    // Compute Net balance globally using User's custom formula: Net = Expense - Received
+    const individualNetSum = individualTotalExpense - individualTotalReceived;
 
     res.json({
       totalCompanyExpense,
@@ -900,8 +906,8 @@ export async function downloadExpenseSheet(req: AuthenticatedRequest, res: Respo
             const from = data.from;
             const to = data.to;
 
-            netBalances[from] = (netBalances[from] || 0) + amount;
-            netBalances[to] = (netBalances[to] || 0) - amount;
+            netBalances[from] = (netBalances[from] || 0) - amount;
+            netBalances[to] = (netBalances[to] || 0) + amount;
           }
         } catch (e) {}
       }

@@ -590,6 +590,7 @@ async function getCompanyChatStats(req, res) {
         });
         let totalCompanyExpense = 0;
         let individualTotalExpense = 0;
+        let individualTotalReceived = 0;
         // Group the messages and members by groupId for faster access
         const messagesByGroup = {};
         const membersByGroup = {};
@@ -607,7 +608,6 @@ async function getCompanyChatStats(req, res) {
                 membersByGroup[m.groupId].push(m.userId);
             }
         });
-        let individualNetSum = 0;
         // For each group, compute balances
         groupIds.forEach(gId => {
             const gMembers = membersByGroup[gId];
@@ -645,8 +645,14 @@ async function getCompanyChatStats(req, res) {
                             const amount = Number(data.amount || 0);
                             const from = data.from;
                             const to = data.to;
-                            netBalances[from] = (netBalances[from] || 0) + amount;
-                            netBalances[to] = (netBalances[to] || 0) - amount;
+                            netBalances[from] = (netBalances[from] || 0) - amount;
+                            netBalances[to] = (netBalances[to] || 0) + amount;
+                            if (from === user.userId) {
+                                individualTotalExpense += amount; // Transfer by me
+                            }
+                            if (to === user.userId) {
+                                individualTotalReceived += amount; // Received by me
+                            }
                         }
                     }
                     catch (e) {
@@ -655,10 +661,9 @@ async function getCompanyChatStats(req, res) {
                 }
             });
             // Add this group's user balance to individualNetSum
-            if (netBalances[user.userId] !== undefined) {
-                individualNetSum += netBalances[user.userId];
-            }
         });
+        // Compute Net balance globally using User's custom formula: Net = Expense - Received
+        const individualNetSum = individualTotalExpense - individualTotalReceived;
         res.json({
             totalCompanyExpense,
             individualNetSum,
@@ -796,8 +801,8 @@ async function downloadExpenseSheet(req, res) {
                         const amount = Number(data.amount || 0);
                         const from = data.from;
                         const to = data.to;
-                        netBalances[from] = (netBalances[from] || 0) + amount;
-                        netBalances[to] = (netBalances[to] || 0) - amount;
+                        netBalances[from] = (netBalances[from] || 0) - amount;
+                        netBalances[to] = (netBalances[to] || 0) + amount;
                     }
                 }
                 catch (e) { }
