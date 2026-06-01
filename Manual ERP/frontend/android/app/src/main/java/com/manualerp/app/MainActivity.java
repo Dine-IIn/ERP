@@ -1,4 +1,4 @@
-package com.manualerp.app;
+package com.ERP.enterprise;
 
 import com.getcapacitor.BridgeActivity;
 

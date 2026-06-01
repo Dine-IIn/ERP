@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Manual ERP</string>
-    <string name="title_activity_main">Manual ERP</string>
-    <string name="package_name">com.manualerp.app</string>
-    <string name="custom_url_scheme">com.manualerp.app</string>
+    <string name="app_name">ERP</string>
+    <string name="title_activity_main">ERP</string>
+    <string name="package_name">com.ERP.enterprise</string>
+    <string name="custom_url_scheme">com.ERP.enterprise</string>
 </resources>

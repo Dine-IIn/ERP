@@ -1,10 +1,10 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace = "com.manualerp.app"
+    namespace = "com.ERP.enterprise"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.manualerp.app"
+        applicationId "com.ERP.enterprise"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

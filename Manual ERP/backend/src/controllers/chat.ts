@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import prisma from '../services/db';
 import { ioInstance } from './index';
+import { sendPushNotifications } from '../services/firebase';
 
 /**
  * 1. List all chat groups and individual DMs available to the user
@@ -432,6 +433,52 @@ export async function sendChatGroupMessage(req: AuthenticatedRequest, res: Respo
           });
         }
       }
+    }
+
+    // Trigger Firebase Cloud Messaging (FCM) push notifications in the background
+    try {
+      const otherMemberships = await prisma.groupMember.findMany({
+        where: {
+          groupId,
+          userId: { not: user.userId }
+        },
+        select: { userId: true }
+      });
+      const otherUserIds = otherMemberships.map(m => m.userId);
+
+      if (otherUserIds.length > 0) {
+        const tokens = await prisma.pushToken.findMany({
+          where: {
+            userId: { in: otherUserIds }
+          },
+          select: { deviceToken: true }
+        });
+        const deviceTokens = tokens.map(t => t.deviceToken);
+
+        if (deviceTokens.length > 0) {
+          const pushTitle = group.type === 'DIRECT'
+            ? `New message from ${user.username}`
+            : `[${group.name}] ${user.username}`;
+          const pushBody = type === 'TEXT' ? (message || '') : `Logged an attachment (${type})`;
+
+          const payload = {
+            title: pushTitle,
+            body: pushBody,
+            data: {
+              groupId,
+              senderId: user.userId,
+              messageId: newMessage.id,
+              type: type || 'TEXT'
+            }
+          };
+
+          sendPushNotifications(deviceTokens, payload).catch(err => {
+            console.error("❌ Failed to dispatch async FCM push notifications:", err);
+          });
+        }
+      }
+    } catch (pushError) {
+      console.error("⚠️ Background FCM push notifications trigger failed:", pushError);
     }
 
     res.status(201).json(newMessage);

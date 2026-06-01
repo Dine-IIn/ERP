@@ -136,6 +136,7 @@ import {
 
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { PushNotifications } from '@capacitor/push-notifications';
 import { apiClient, ApiError } from './utils/apiService';
 
 const getBackendUrl = () => {
@@ -983,16 +984,33 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => {
-    let actionListener: any = null;
+    let pushRegListener: any = null;
+    let pushErrListener: any = null;
+    let pushRecListener: any = null;
+    let pushActionListener: any = null;
+    let localActionListener: any = null;
+
     if (token && user) {
       if (Capacitor.isNativePlatform()) {
         try {
+          // 1. Request standard permissions for both Local and Push Notifications
           LocalNotifications.requestPermissions();
-          actionListener = LocalNotifications.addListener('localNotificationActionPerformed', (notificationAction) => {
+          PushNotifications.requestPermissions().then(result => {
+            if (result.receive === 'granted') {
+              // Register device with Apple/Google to receive push tokens
+              PushNotifications.register();
+            } else {
+              console.warn("⚠️ [Push] Native push notification permissions denied.");
+            }
+          });
+
+          // 2. Local Notifications Tap Action Listener
+          localActionListener = LocalNotifications.addListener('localNotificationActionPerformed', (notificationAction) => {
             console.log('🔔 Local notification action performed:', notificationAction);
             const groupId = notificationAction.notification.extra?.groupId;
             if (groupId) {
               setShowChatDrawer(true);
+              showChatDrawerRef.current = true;
               const fetchAndSelect = async () => {
                 try {
                   const groups = await apiRequest('/api/chat/groups', 'GET');
@@ -1002,14 +1020,72 @@ export default function App() {
                     handleSelectChatGroup(match);
                   }
                 } catch (err) {
-                  console.error("Error navigating from notification click:", err);
+                  console.error("Error navigating from local notification click:", err);
+                }
+              };
+              fetchAndSelect();
+            }
+          });
+
+          // 3. Push Notifications Device Token Registration
+          pushRegListener = PushNotifications.addListener('registration', async (registrationToken) => {
+            console.log(`🔌 [Push SUCCESS] FCM device push token resolved:`, registrationToken.value);
+            try {
+              await apiRequest('/api/notifications/register-token', 'POST', {
+                deviceToken: registrationToken.value,
+                platform: Capacitor.getPlatform() === 'ios' ? 'IOS' : 'ANDROID'
+              });
+              console.log(`🔌 [Push] Device token registered successfully on the backend.`);
+            } catch (err) {
+              console.error("❌ [Push Error] Failed to register device token on backend:", err);
+            }
+          });
+
+          // 4. Push Notifications Registration Error
+          pushErrListener = PushNotifications.addListener('registrationError', (error) => {
+            console.error("❌ [Push Error] Device push registration error:", error);
+          });
+
+          // 5. Push Notifications Foreground Message Received Listener
+          pushRecListener = PushNotifications.addListener('pushNotificationReceived', (notification) => {
+            console.log('📡 [Push Foreground] Received push notification in foreground:', notification);
+            // Foreground criteria: show ONLY inside-the-app toast (never Android banner/sound)
+            setActiveToast({
+              title: notification.title || "New Message",
+              message: notification.body || ""
+            });
+            setTimeout(() => setActiveToast(null), 5000);
+
+            // Fetch chat groups and metrics dynamically
+            fetchChatGroups();
+            fetchWorkspaceStats();
+          });
+
+          // 6. Push Notifications Tap Action Listener
+          pushActionListener = PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
+            console.log('📡 [Push Action] User tapped background push notification:', action);
+            const data = action.notification.data || {};
+            const groupId = data.groupId;
+            if (groupId) {
+              setShowChatDrawer(true);
+              showChatDrawerRef.current = true;
+              const fetchAndSelect = async () => {
+                try {
+                  const groups = await apiRequest('/api/chat/groups', 'GET');
+                  setChatGroups(groups || []);
+                  const match = groups.find((g: any) => g.id === groupId);
+                  if (match) {
+                    handleSelectChatGroup(match);
+                  }
+                } catch (err) {
+                  console.error("Error navigating from push notification click:", err);
                 }
               };
               fetchAndSelect();
             }
           });
         } catch (e) {
-          console.error("Failed to request native notification permissions or add tap listener:", e);
+          console.error("Failed to request native notification permissions or add tap listeners:", e);
         }
       } else if (typeof Notification !== 'undefined' && Notification.permission !== 'granted' && Notification.permission !== 'denied') {
         Notification.requestPermission();
@@ -1020,9 +1096,11 @@ export default function App() {
       } else if (user.role === 'Admin') {
         setView('company_admin');
         fetchCompanyAdminData();
+        fetchWorkspaceStats();
       } else {
         setView('user_workspace');
         fetchUserWorkspaceData();
+        fetchWorkspaceStats();
       }
       
       connectWebSockets();
@@ -1036,8 +1114,20 @@ export default function App() {
       if (socketRef.current) {
         socketRef.current.disconnect();
       }
-      if (actionListener) {
-        actionListener.remove();
+      if (localActionListener) {
+        localActionListener.remove();
+      }
+      if (pushRegListener) {
+        pushRegListener.remove();
+      }
+      if (pushErrListener) {
+        pushErrListener.remove();
+      }
+      if (pushRecListener) {
+        pushRecListener.remove();
+      }
+      if (pushActionListener) {
+        pushActionListener.remove();
       }
     };
   }, [token, user]);
@@ -1159,7 +1249,7 @@ export default function App() {
 
       console.log(`💬 Message diagnostics: isCurrentGroup=${isCurrentGroup}, isDrawerOpen=${isDrawerOpen}, isMe=${isMe}, docVisibility="${document.visibilityState}"`);
 
-      if (!isMe && (!isDrawerOpen || !isCurrentGroup || document.visibilityState === 'hidden')) {
+      if (!isMe && (!isDrawerOpen || !isCurrentGroup)) {
         console.log(`💬 Notification condition met: dispatching notification alerts...`);
         
         // Show in-app Toast only if the application is in the foreground
@@ -1169,41 +1259,6 @@ export default function App() {
             message: newMessage.message
           });
           setTimeout(() => setActiveToast(null), 5000);
-        }
-
-        // Trigger native local notifications or system web notifications only if the application is in the background
-        if (document.visibilityState === 'hidden') {
-          if (Capacitor.isNativePlatform()) {
-            console.log(`💬 Scheduling native Android push/local notification...`);
-            try {
-              LocalNotifications.schedule({
-                notifications: [
-                  {
-                    title: `New message from ${newMessage.senderName}`,
-                    body: newMessage.message,
-                    id: Math.floor(Math.random() * 1000000),
-                    schedule: { at: new Date(Date.now() + 100) },
-                    extra: { groupId: newMessage.groupId }
-                  }
-                ]
-              });
-              console.log(`💬 Android native notification scheduled successfully.`);
-            } catch (e) {
-              console.error("❌ Android native notification scheduling failed:", e);
-            }
-          } else if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-            console.log(`💬 Dispatching system web notification...`);
-            try {
-              new Notification(`New message from ${newMessage.senderName}`, {
-                body: newMessage.message,
-                tag: newMessage.groupId,
-                renotify: true
-              });
-              console.log(`💬 Web notification triggered.`);
-            } catch (e) {
-              console.error("❌ System notification display failed:", e);
-            }
-          }
         }
       }
 

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "371417945812",
+    "project_id": "erpnotification-783a9",
+    "storage_bucket": "erpnotification-783a9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:371417945812:android:d7758b369f761a390e0d41",
+        "android_client_info": {
+          "package_name": "com.ERP.enterprise"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAzAlk6KCXF2oO0mWZMn6G957CERP1NNm4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
