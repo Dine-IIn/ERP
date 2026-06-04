@@ -139,7 +139,7 @@ import {
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { PushNotifications } from '@capacitor/push-notifications';
-import { apiClient, ApiError, getActiveBaseUrl, isTauriClient, getActiveFetch, getCentralServicesUrl, logToConsole } from './utils/apiService';
+import { apiClient, ApiError, getActiveBaseUrl, isTauriClient, getActiveFetch, getCentralServicesUrl, getDiscoveryServiceUrl, logToConsole } from './utils/apiService';
 import TauriSetup from './components/auth/TauriSetup';
 import { invoke } from '@tauri-apps/api/core';
 import { check } from '@tauri-apps/plugin-updater';
@@ -397,7 +397,11 @@ export default function App() {
     setProfileError(null);
     setProfileSuccess(null);
 
-    const targetUrl = `${getCentralServicesUrl()}/api/discovery`;
+    const targetUrl = getDiscoveryServiceUrl();
+    console.log("=== DISCOVERY DEBUG (RECONNECT) ===");
+    console.log("Discovery URL:", targetUrl);
+    console.log("Environment URL:", import.meta.env.VITE_DISCOVERY_SERVICE_URL);
+    console.log("=======================");
     logToConsole('info', `[Tauri Reconnect] Attempting workspace discovery for code "${code}" at: "${targetUrl}"`);
     
     try {
@@ -479,7 +483,12 @@ export default function App() {
       
       if (code) {
         logToConsole('info', `[Tauri Startup] Re-validating company code "${code}"...`);
-        getActiveFetch()(`${getCentralServicesUrl()}/api/discovery`, {
+        const targetUrl = getDiscoveryServiceUrl();
+        console.log("=== DISCOVERY DEBUG (STARTUP VALIDATION) ===");
+        console.log("Discovery URL:", targetUrl);
+        console.log("Environment URL:", import.meta.env.VITE_DISCOVERY_SERVICE_URL);
+        console.log("=======================");
+        getActiveFetch()(targetUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ companyCode: code })

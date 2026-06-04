@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Building, Shield, AlertCircle, Loader2 } from 'lucide-react';
-import { getActiveFetch, getCentralServicesUrl, isTauriClient, logToConsole } from '../../utils/apiService';
+import { getActiveFetch, getCentralServicesUrl, getDiscoveryServiceUrl, isTauriClient, logToConsole } from '../../utils/apiService';
 
 interface TauriSetupProps {
   onSuccess: (companyCode: string, serverUrl: string) => void;
@@ -29,7 +29,7 @@ export default function TauriSetup({ onSuccess }: TauriSetupProps) {
     setLoading(true);
     setErrorMsg(null);
 
-    const targetUrl = `${getCentralServicesUrl()}/api/discovery`;
+    const targetUrl = getDiscoveryServiceUrl();
     console.log('[DISCOVERY] Request URL resolved to:', targetUrl);
     logToConsole('info', `[DISCOVERY] Request URL resolved to: "${targetUrl}"`);
 
@@ -39,6 +39,11 @@ export default function TauriSetup({ onSuccess }: TauriSetupProps) {
 
     console.log('[DISCOVERY] Starting network request');
     logToConsole('info', '[DISCOVERY] Starting network request');
+
+    console.log("=== DISCOVERY DEBUG ===");
+    console.log("Discovery URL:", targetUrl);
+    console.log("Environment URL:", import.meta.env.VITE_DISCOVERY_SERVICE_URL);
+    console.log("=======================");
 
     try {
       const activeFetch = getActiveFetch();
@@ -90,10 +95,23 @@ export default function TauriSetup({ onSuccess }: TauriSetupProps) {
       console.error('[DISCOVERY] Connection/Request failure caught:', err);
       logToConsole('error', `[DISCOVERY] Connection/Request failure caught: ${err.message || err.toString()}`);
       
+      let extraDiagnostics = '';
+      if (err.message && (err.message.includes('scope') || err.message.includes('not allowed'))) {
+        extraDiagnostics = `\n\n=== SCOPE REJECTION DIAGNOSTICS ===\n` +
+          `• Requested URL: ${targetUrl}\n` +
+          `• Environment Config: ${import.meta.env.VITE_DISCOVERY_SERVICE_URL || 'Not Set'}\n` +
+          `• HTTP Client Used: ${isTauriClient() ? 'Tauri plugin-http fetch' : 'Browser standard fetch'}\n` +
+          `• Runtime Env Mode: ${import.meta.env.MODE || 'development'}\n` +
+          `=====================================`;
+        console.error(extraDiagnostics);
+        logToConsole('error', extraDiagnostics);
+      }
+
       const description = `Failed to connect to Discovery Service.\n` + 
         `• Target: ${targetUrl}\n` +
         `• Error: ${err.message || err.toString()}\n` +
-        `• Client Type: ${isTauriClient() ? 'Tauri Native' : 'Browser'}`;
+        `• Client Type: ${isTauriClient() ? 'Tauri Native' : 'Browser'}` +
+        extraDiagnostics;
       setErrorMsg(description);
     } finally {
       setLoading(false);

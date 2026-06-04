@@ -41,9 +41,9 @@
     "updater": {
       "active": true,
       "endpoints": [
-        "http://localhost:6001/api/updater/{{target}}/{{current_version}}",
         "http://localhost:6000/api/updater/{{target}}/{{current_version}}",
-        "https://license.xyz.com/api/updater/{{target}}/{{current_version}}"
+        "http://localhost:6001/api/updater/{{target}}/{{current_version}}",
+        "https://centeralservice.anbindustries.com/api/updater/{{target}}/{{current_version}}"
       ],
       "pubkey": "dW51c2VkX3NhbmRib3hfcHVibGljX2tleV9wbGFjZWhvbGRlcg==",
       "dangerousInsecureTransportProtocol": true

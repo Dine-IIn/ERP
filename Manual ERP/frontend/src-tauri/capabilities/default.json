@@ -11,39 +11,33 @@
     "http:default",
     {
       "identifier": "http:allow-fetch",
-      "scope": {
-        "allow": [
-          "http://localhost:5000/*",
-          "http://localhost:6001/*",
-          "https://license.xyz.com/*",
-          "https://updates.xyz.com/*",
-          "https://*.xyz.com/*"
-        ]
-      }
+      "allow": [
+        "http://localhost:5000/*",
+        "http://localhost:6000/*",
+        "http://localhost:6001/*",
+        "https://centeralservice.anbindustries.com/*",
+        "https://erp.anbindustries.com/*"
+      ]
     },
     {
       "identifier": "http:allow-fetch-send",
-      "scope": {
-        "allow": [
-          "http://localhost:5000/*",
-          "http://localhost:6001/*",
-          "https://license.xyz.com/*",
-          "https://updates.xyz.com/*",
-          "https://*.xyz.com/*"
-        ]
-      }
+      "allow": [
+        "http://localhost:5000/*",
+        "http://localhost:6000/*",
+        "http://localhost:6001/*",
+        "https://centeralservice.anbindustries.com/*",
+        "https://erp.anbindustries.com/*"
+      ]
     },
     {
       "identifier": "http:allow-fetch-read-body",
-      "scope": {
-        "allow": [
-          "http://localhost:5000/*",
-          "http://localhost:6001/*",
-          "https://license.xyz.com/*",
-          "https://updates.xyz.com/*",
-          "https://*.xyz.com/*"
-        ]
-      }
+      "allow": [
+        "http://localhost:5000/*",
+        "http://localhost:6000/*",
+        "http://localhost:6001/*",
+        "https://centeralservice.anbindustries.com/*",
+        "https://erp.anbindustries.com/*"
+      ]
     }
   ]
 }

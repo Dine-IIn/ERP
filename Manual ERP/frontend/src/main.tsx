@@ -1,7 +1,28 @@
-import React, { StrictMode, Suspense } from 'react'
+import React, { StrictMode, StrictMode as _StrictMode, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import { config } from './config'
+import { logToConsole, isTauriClient } from './utils/apiService'
+
+// Startup Diagnostics
+console.log(`=========================================`);
+console.log(`🚀 [ERP Startup Diagnostics]`);
+console.log(`• Discovery URL: ${config.discoveryServiceUrl || 'Not Configured'}`);
+if (isTauriClient()) {
+  let allowed = config.allowedRemoteUrl;
+  if (!allowed && config.centralServicesUrl) {
+    try {
+      allowed = `${new URL(config.centralServicesUrl).origin}/*`;
+    } catch (e) {}
+  }
+  console.log(`• Tauri HTTP Scope: ${allowed || 'Not Configured'}`);
+  logToConsole('info', `[Startup] Discovery URL: "${config.discoveryServiceUrl}". Tauri HTTP Scope: "${allowed}"`).catch(() => {});
+} else {
+  console.log(`• Tauri HTTP Scope: N/A (Running in Browser)`);
+}
+console.log(`=========================================`);
+
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

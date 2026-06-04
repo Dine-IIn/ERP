@@ -42,6 +42,10 @@ export const getCentralServicesUrl = (): string => {
   return config.centralServicesUrl;
 };
 
+export const getDiscoveryServiceUrl = (): string => {
+  return config.discoveryServiceUrl;
+};
+
 
 const getBaseUrl = () => {
   // Prioritize the dynamically resolved discovery URL stored in localStorage
