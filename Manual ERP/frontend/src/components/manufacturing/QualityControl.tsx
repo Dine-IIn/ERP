@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, Plus, Search, HelpCircle, CheckCircle, AlertTriangle, AlertCircle, Wrench, FileText } from 'lucide-react';
+import { ShieldCheck, Plus, Search, HelpCircle, CheckCircle, AlertTriangle, AlertCircle, Wrench, FileText, Trash2, Edit2 } from 'lucide-react';
+import { apiClient } from '../../utils/apiService';
 
 interface QCRecord {
   id: string;
   batchNo: string;
+  productId: string;
   productName: string;
   productCode: string;
   totalInspected: number;
@@ -29,46 +31,46 @@ interface ReworkCard {
 
 interface QualityControlProps {
   products: any[];
+  employees?: any[];
 }
 
-export default function QualityControl({ products = [] }: QualityControlProps) {
+export default function QualityControl({ products = [], employees = [] }: QualityControlProps) {
   const [activeTab, setActiveTab] = useState<'inspections' | 'reworks'>('inspections');
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  // Mapped products from props
-  const productCatalog = products.length > 0 ? products : [
-    { id: 'p-static-1', name: 'Standard Finished Product', code: 'PROD-S1' }
+  // Mapped products & employees from props
+  const productCatalog = products.length > 0 ? products : [];
+  const employeeCatalog = employees.length > 0 ? employees : [
+    { id: 'emp-static-1', username: 'Shop Technician' }
   ];
 
-  // QC Records - Initialized from LocalStorage (0 static/demo data)
-  const [qcRecordsList, setQcRecordsList] = useState<QCRecord[]>(() => {
-    const saved = localStorage.getItem('erp_qc_records');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  // Rework Cards - Initialized from LocalStorage (0 static/demo data)
-  const [reworkCardsList, setReworkCardsList] = useState<ReworkCard[]>(() => {
-    const saved = localStorage.getItem('erp_rework_cards');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  // Persistence helpers
-  useEffect(() => {
-    localStorage.setItem('erp_qc_records', JSON.stringify(qcRecordsList));
-  }, [qcRecordsList]);
-
-  useEffect(() => {
-    localStorage.setItem('erp_rework_cards', JSON.stringify(reworkCardsList));
-  }, [reworkCardsList]);
+  // QC Records & Rework lists
+  const [qcRecordsList, setQcRecordsList] = useState<QCRecord[]>([]);
+  const [reworkCardsList, setReworkCardsList] = useState<ReworkCard[]>([]);
 
   // Modal inspection variables
   const [newBatchNo, setNewBatchNo] = useState('BAT-2026-001');
-  const [newProductName, setNewProductName] = useState('');
-  const [newProductCode, setNewProductCode] = useState('');
+  const [newProductId, setNewProductId] = useState('');
   const [totalInspected, setTotalInspected] = useState(10);
   const [qtyPassed, setQtyPassed] = useState(9);
   const [inspectorRemarks, setInspectorRemarks] = useState('');
+
+  // QC Edit modal states
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingRecord, setEditingRecord] = useState<QCRecord | null>(null);
+  const [editBatchNo, setEditBatchNo] = useState('');
+  const [editTotalInspected, setEditTotalInspected] = useState(0);
+  const [editQtyPassed, setEditQtyPassed] = useState(0);
+  const [editRemarks, setEditRemarks] = useState('');
+
+  // Rework Edit modal states
+  const [showEditReworkModal, setShowEditReworkModal] = useState(false);
+  const [editingRework, setEditingRework] = useState<ReworkCard | null>(null);
+  const [editReworkNotes, setEditReworkNotes] = useState('');
+  const [editReworkOperation, setEditReworkOperation] = useState('');
+  const [editReworkOperatorId, setEditReworkOperatorId] = useState('');
 
   // Checklist states
   const [checks, setChecks] = useState({
@@ -78,58 +80,164 @@ export default function QualityControl({ products = [] }: QualityControlProps) {
     visualFinish: true
   });
 
+  const fetchQCData = async () => {
+    setLoading(true);
+    try {
+      const qcRes = await apiClient.get<{ qcRecords: any[] }>('/api/manufacturing/qc');
+      setQcRecordsList((qcRes.qcRecords || []).map((rec: any) => ({
+        id: rec.id,
+        batchNo: rec.batchNo,
+        productId: rec.productId,
+        productName: rec.product?.name || 'Standard Product',
+        productCode: rec.product?.code || 'PROD-S1',
+        totalInspected: rec.totalInspected,
+        qtyPassed: rec.qtyPassed,
+        qtyFailed: rec.qtyFailed,
+        inspectorName: rec.inspectorName,
+        status: rec.status,
+        remarks: rec.remarks,
+        checkDate: rec.checkDate?.split('T')[0] || rec.createdAt?.split('T')[0] || ''
+      })));
+
+      const rewRes = await apiClient.get<{ reworkCards: any[] }>('/api/manufacturing/rework');
+      setReworkCardsList((rewRes.reworkCards || []).map((card: any) => ({
+        id: card.id,
+        qcRecordId: card.qcRecordId,
+        batchNo: card.batchNo,
+        productName: card.product?.name || 'Standard Product',
+        qtyToRepair: card.qtyToRepair,
+        reworkOperation: card.reworkOperation,
+        assignedOperator: card.assignedOperator?.username || card.assignedOperator?.name || 'Shop Technician',
+        status: card.status,
+        notes: card.notes || ''
+      })));
+    } catch (err: any) {
+      console.error('Failed to load quality control data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchQCData();
+  }, [products]);
+
   // Set default dropdown selection when catalog loads
   useEffect(() => {
-    if (productCatalog.length > 0 && !newProductName) {
-      setNewProductName(productCatalog[0].name);
-      setNewProductCode(productCatalog[0].code || 'PROD-X');
+    if (productCatalog.length > 0 && !newProductId) {
+      setNewProductId(productCatalog[0].id);
     }
   }, [productCatalog]);
 
   const handleCreateQCRecord = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newProductId) return;
     
     const failed = Math.max(0, totalInspected - qtyPassed);
     const status = failed === 0 ? 'PASSED' : (checks.weldIntegrity ? 'REWORK_REQUIRED' : 'FAILED');
 
-    const newRecord: QCRecord = {
-      id: `qc-${Date.now()}`,
+    apiClient.post('/api/manufacturing/qc', {
       batchNo: newBatchNo,
-      productName: newProductName,
-      productCode: newProductCode,
+      productId: newProductId,
       totalInspected: Number(totalInspected),
       qtyPassed: Number(qtyPassed),
-      qtyFailed: failed,
       inspectorName: 'Rohan Sharma',
       status,
-      remarks: inspectorRemarks || 'Standard checklists complete.',
-      checkDate: new Date().toISOString().split('T')[0]
-    };
-
-    setQcRecordsList([newRecord, ...qcRecordsList]);
-
-    // If failed/rework required, spawn Rework card!
-    if (failed > 0) {
-      const newRework: ReworkCard = {
-        id: `rew-${Date.now()}`,
-        qcRecordId: newRecord.id,
-        batchNo: newBatchNo,
-        productName: newProductName,
-        qtyToRepair: failed,
-        reworkOperation: 'Manual sand routing & surface inspection',
-        assignedOperator: 'Shop Technician',
-        status: 'OPEN',
-        notes: 'Failed stress/weld tolerances during QC checklists.'
-      };
-      setReworkCardsList([newRework, ...reworkCardsList]);
-    }
-
-    setShowAddModal(false);
-    setInspectorRemarks('');
+      remarks: inspectorRemarks || 'Standard checklists complete.'
+    }).then(() => {
+      fetchQCData();
+      setShowAddModal(false);
+      setInspectorRemarks('');
+    }).catch((err: any) => {
+      alert("Error creating QC record: " + (err.response?.data?.error || err.message));
+    });
   };
 
-  const handleResolveRework = (rewId: string, status: 'REPAIRED_PASSED' | 'SCRAPPED') => {
-    setReworkCardsList(reworkCardsList.map(c => c.id === rewId ? { ...c, status } : c));
+  const handleResolveRework = async (rewId: string, status: 'REPAIRED_PASSED' | 'SCRAPPED') => {
+    try {
+      await apiClient.put(`/api/manufacturing/rework/${rewId}`, { status });
+      fetchQCData();
+    } catch (err: any) {
+      alert("Error resolving rework status: " + (err.response?.data?.error || err.message));
+    }
+  };
+
+  const handleDeleteQC = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this Quality Audit record? This will also remove any related rework cards.")) return;
+    try {
+      await apiClient.delete(`/api/manufacturing/qc/${id}`);
+      fetchQCData();
+    } catch (err: any) {
+      alert("Error deleting QC record: " + (err.response?.data?.error || err.message));
+    }
+  };
+
+  const handleDeleteRework = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this Rework repair card?")) return;
+    try {
+      await apiClient.delete(`/api/manufacturing/rework/${id}`);
+      fetchQCData();
+    } catch (err: any) {
+      alert("Error deleting Rework card: " + (err.response?.data?.error || err.message));
+    }
+  };
+
+  const openEditQC = (rec: QCRecord) => {
+    setEditingRecord(rec);
+    setEditBatchNo(rec.batchNo);
+    setEditTotalInspected(rec.totalInspected);
+    setEditQtyPassed(rec.qtyPassed);
+    setEditRemarks(rec.remarks);
+    setShowEditModal(true);
+  };
+
+  const handleUpdateQCRecord = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingRecord) return;
+
+    const failed = Math.max(0, editTotalInspected - editQtyPassed);
+    const status = failed === 0 ? 'PASSED' : 'REWORK_REQUIRED';
+
+    apiClient.put(`/api/manufacturing/qc/${editingRecord.id}`, {
+      batchNo: editBatchNo,
+      totalInspected: Number(editTotalInspected),
+      qtyPassed: Number(editQtyPassed),
+      status,
+      remarks: editRemarks
+    }).then(() => {
+      fetchQCData();
+      setShowEditModal(false);
+      setEditingRecord(null);
+    }).catch((err: any) => {
+      alert("Error updating QC record: " + (err.response?.data?.error || err.message));
+    });
+  };
+
+  const openEditRework = (card: ReworkCard) => {
+    setEditingRework(card);
+    setEditReworkNotes(card.notes);
+    setEditReworkOperation(card.reworkOperation);
+    // Find operator id from catalog if name matching
+    const matchingOp = employeeCatalog.find(e => e.username === card.assignedOperator || e.name === card.assignedOperator);
+    setEditReworkOperatorId(matchingOp?.id || '');
+    setShowEditReworkModal(true);
+  };
+
+  const handleUpdateReworkCard = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingRework) return;
+
+    apiClient.put(`/api/manufacturing/rework/${editingRework.id}`, {
+      notes: editReworkNotes,
+      reworkOperation: editReworkOperation,
+      assignedOperatorId: editReworkOperatorId || null
+    }).then(() => {
+      fetchQCData();
+      setShowEditReworkModal(false);
+      setEditingRework(null);
+    }).catch((err: any) => {
+      alert("Error updating Rework card: " + (err.response?.data?.error || err.message));
+    });
   };
 
   const filteredQC = qcRecordsList.filter(rec =>
@@ -206,9 +314,27 @@ export default function QualityControl({ products = [] }: QualityControlProps) {
                       <h4 className="font-bold text-sm text-white mt-2">{rec.productName}</h4>
                       <p className="text-[10px] text-slate-500 font-mono mt-0.5">Batch: {rec.batchNo} | Code: {rec.productCode}</p>
                     </div>
-                    <div className="text-right">
-                      <span className="text-[9px] text-slate-500 block uppercase font-semibold">Passed Yield</span>
-                      <span className="text-xs font-black text-white mt-1 block">{rec.qtyPassed} / {rec.totalInspected} Passed</span>
+                    <div className="text-right flex flex-col items-end gap-1.5">
+                      <div>
+                        <span className="text-[9px] text-slate-500 block uppercase font-semibold">Passed Yield</span>
+                        <span className="text-xs font-black text-white mt-0.5 block">{rec.qtyPassed} / {rec.totalInspected} Passed</span>
+                      </div>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => openEditQC(rec)}
+                          className="text-indigo-400 hover:text-indigo-300 p-1.5 hover:bg-slate-950/45 rounded transition-all cursor-pointer border-0 bg-transparent"
+                          title="Edit QC Audit"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteQC(rec.id)}
+                          className="text-rose-450 hover:text-rose-400 p-1.5 hover:bg-slate-950/45 rounded transition-all cursor-pointer border-0 bg-transparent"
+                          title="Delete QC Audit"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -272,22 +398,40 @@ export default function QualityControl({ products = [] }: QualityControlProps) {
                     {card.notes && <p className="text-[10px] text-slate-550 italic mt-1">"Notes: {card.notes}"</p>}
                   </div>
 
-                  {card.status === 'OPEN' && (
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleResolveRework(card.id, 'REPAIRED_PASSED')}
-                        className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] uppercase rounded-lg border-0 cursor-pointer transition-all active:scale-95 shadow-md shadow-emerald-600/10 flex items-center gap-1"
-                      >
-                        <CheckCircle className="w-3.5 h-3.5" /> Re-inspected Passed
-                      </button>
-                      <button
-                        onClick={() => handleResolveRework(card.id, 'SCRAPPED')}
-                        className="px-3.5 py-1.5 bg-rose-600/10 hover:bg-rose-600 text-rose-400 hover:text-white font-bold text-[10px] uppercase rounded-lg border border-rose-500/20 hover:border-0 cursor-pointer transition-all active:scale-95 flex items-center gap-1"
-                      >
-                        <AlertCircle className="w-3.5 h-3.5" /> Scrap Batch
-                      </button>
-                    </div>
-                  )}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => openEditRework(card)}
+                      className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-[10px] uppercase rounded-lg border-0 cursor-pointer transition-all active:scale-95 flex items-center gap-1"
+                      title="Edit Rework Details"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" /> Edit
+                    </button>
+
+                    {card.status === 'OPEN' && (
+                      <>
+                        <button
+                          onClick={() => handleResolveRework(card.id, 'REPAIRED_PASSED')}
+                          className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] uppercase rounded-lg border-0 cursor-pointer transition-all active:scale-95 shadow-md shadow-emerald-600/10 flex items-center gap-1"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" /> Re-inspected Passed
+                        </button>
+                        <button
+                          onClick={() => handleResolveRework(card.id, 'SCRAPPED')}
+                          className="px-3.5 py-1.5 bg-rose-600/10 hover:bg-rose-600 text-rose-400 hover:text-white font-bold text-[10px] uppercase rounded-lg border border-rose-500/20 hover:border-0 cursor-pointer transition-all active:scale-95 flex items-center gap-1"
+                        >
+                          <AlertCircle className="w-3.5 h-3.5" /> Scrap Batch
+                        </button>
+                      </>
+                    )}
+
+                    <button
+                      onClick={() => handleDeleteRework(card.id)}
+                      className="text-rose-455 hover:text-rose-400 p-1.5 hover:bg-slate-950/45 rounded transition-all cursor-pointer border-0 bg-transparent"
+                      title="Delete Rework Card"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -327,16 +471,12 @@ export default function QualityControl({ products = [] }: QualityControlProps) {
                 <div>
                   <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Target Product</label>
                   <select
-                    value={newProductName}
-                    onChange={e => {
-                      setNewProductName(e.target.value);
-                      const code = productCatalog.find(p => p.name === e.target.value)?.code || 'PROD-S1';
-                      setNewProductCode(code);
-                    }}
+                    value={newProductId}
+                    onChange={e => setNewProductId(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-850 p-2.5 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
                   >
                     {productCatalog.map(p => (
-                      <option key={p.id || p.name} value={p.name}>{p.name}</option>
+                      <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
                   </select>
                 </div>
@@ -433,6 +573,161 @@ export default function QualityControl({ products = [] }: QualityControlProps) {
                   className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl border-0 cursor-pointer transition-all shadow-lg shadow-indigo-600/10"
                 >
                   Confirm QC Log
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* QC Edit Modal */}
+      {showEditModal && editingRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md text-left animate-fade-in">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden animate-scale-up">
+            <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-950/20">
+              <h3 className="text-sm font-bold text-white flex items-center gap-1.5 uppercase">
+                <ShieldCheck className="w-4 h-4 text-indigo-400" />
+                Edit Quality Audit Record
+              </h3>
+              <button
+                onClick={() => { setShowEditModal(false); setEditingRecord(null); }}
+                className="text-slate-500 hover:text-white p-1 hover:bg-slate-800 rounded-lg transition-all border-0 bg-transparent cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateQCRecord} className="p-6 space-y-4">
+              <div>
+                <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Batch Number</label>
+                <input
+                  type="text"
+                  required
+                  value={editBatchNo}
+                  onChange={e => setEditBatchNo(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-850 p-2.5 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Total Inspected</label>
+                  <input
+                    type="number"
+                    required
+                    value={editTotalInspected}
+                    onChange={e => setEditTotalInspected(Number(e.target.value))}
+                    min="1"
+                    className="w-full bg-slate-950 border border-slate-850 p-2 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Qty Passed</label>
+                  <input
+                    type="number"
+                    required
+                    value={editQtyPassed}
+                    onChange={e => setEditQtyPassed(Number(e.target.value))}
+                    min="0"
+                    className="w-full bg-slate-950 border border-slate-850 p-2 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Inspector Remarks</label>
+                <textarea
+                  value={editRemarks}
+                  onChange={e => setEditRemarks(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-850 p-2.5 rounded-lg text-xs text-white h-20 focus:outline-none focus:border-indigo-500 resize-none"
+                />
+              </div>
+
+              <div className="flex gap-3 justify-end pt-3">
+                <button
+                  type="button"
+                  onClick={() => { setShowEditModal(false); setEditingRecord(null); }}
+                  className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl border-0 cursor-pointer transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl border-0 cursor-pointer transition-all shadow-lg"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Rework Edit Modal */}
+      {showEditReworkModal && editingRework && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md text-left animate-fade-in">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden animate-scale-up">
+            <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-950/20">
+              <h3 className="text-sm font-bold text-white flex items-center gap-1.5 uppercase">
+                <Wrench className="w-4 h-4 text-indigo-400" />
+                Edit Rework Repair Details
+              </h3>
+              <button
+                onClick={() => { setShowEditReworkModal(false); setEditingRework(null); }}
+                className="text-slate-500 hover:text-white p-1 hover:bg-slate-800 rounded-lg transition-all border-0 bg-transparent cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateReworkCard} className="p-6 space-y-4">
+              <div>
+                <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Rework Operation Required</label>
+                <input
+                  type="text"
+                  required
+                  value={editReworkOperation}
+                  onChange={e => setEditReworkOperation(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-850 p-2.5 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Assign Operator / Technician</label>
+                <select
+                  value={editReworkOperatorId}
+                  onChange={e => setEditReworkOperatorId(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-850 p-2.5 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="">-- Select Operator --</option>
+                  {employeeCatalog.map(e => (
+                    <option key={e.id} value={e.id}>{e.username || e.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Rework Progress Notes</label>
+                <textarea
+                  value={editReworkNotes}
+                  onChange={e => setEditReworkNotes(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-850 p-2.5 rounded-lg text-xs text-white h-20 focus:outline-none focus:border-indigo-500 resize-none"
+                />
+              </div>
+
+              <div className="flex gap-3 justify-end pt-3">
+                <button
+                  type="button"
+                  onClick={() => { setShowEditReworkModal(false); setEditingRework(null); }}
+                  className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl border-0 cursor-pointer transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl border-0 cursor-pointer transition-all shadow-lg"
+                >
+                  Save Changes
                 </button>
               </div>
             </form>

@@ -121,6 +121,18 @@ import {
 } from './controllers/inventory';
 
 import {
+  listBoms, createBom, updateBom, deleteBom,
+  listPlans, createPlan, updatePlan, deletePlan, releasePlan,
+  listWorkOrders, createWorkOrder, updateWorkOrder, deleteWorkOrder, startWorkOrder,
+  listJobCards, createJobCard, updateJobCard, deleteJobCard, startJobCard, completeJobCard,
+  listLogs, createLog, deleteLog,
+  listQcRecords, createQcRecord, updateQcRecord, deleteQcRecord,
+  listReworkCards, updateReworkCard, deleteReworkCard,
+  listWorkCenters, createWorkCenter, updateWorkCenter, deleteWorkCenter,
+  listShifts, createShift, updateShift, deleteShift
+} from './controllers';
+
+import {
   listQuotations,
   createQuotation,
   updateQuotationStatus,
@@ -653,6 +665,54 @@ app.delete('/api/purchase/payments/:id', authenticateToken, deleteVendorPayment)
 app.get('/api/inventory/adjustments', authenticateToken, listStockAdjustments);
 app.post('/api/inventory/adjust', authenticateToken, adjustStock);
 
+// 9.55 Manufacturing Operations Routes
+app.get('/api/manufacturing/boms', authenticateToken, listBoms);
+app.post('/api/manufacturing/boms', authenticateToken, createBom);
+app.put('/api/manufacturing/boms/:id', authenticateToken, updateBom);
+app.delete('/api/manufacturing/boms/:id', authenticateToken, deleteBom);
+
+app.get('/api/manufacturing/plans', authenticateToken, listPlans);
+app.post('/api/manufacturing/plans', authenticateToken, createPlan);
+app.put('/api/manufacturing/plans/:id', authenticateToken, updatePlan);
+app.delete('/api/manufacturing/plans/:id', authenticateToken, deletePlan);
+app.post('/api/manufacturing/plans/:id/release', authenticateToken, releasePlan);
+
+app.get('/api/manufacturing/work-orders', authenticateToken, listWorkOrders);
+app.post('/api/manufacturing/work-orders', authenticateToken, createWorkOrder);
+app.put('/api/manufacturing/work-orders/:id', authenticateToken, updateWorkOrder);
+app.delete('/api/manufacturing/work-orders/:id', authenticateToken, deleteWorkOrder);
+app.post('/api/manufacturing/work-orders/:id/start', authenticateToken, startWorkOrder);
+
+app.get('/api/manufacturing/job-cards', authenticateToken, listJobCards);
+app.post('/api/manufacturing/job-cards', authenticateToken, createJobCard);
+app.put('/api/manufacturing/job-cards/:id', authenticateToken, updateJobCard);
+app.delete('/api/manufacturing/job-cards/:id', authenticateToken, deleteJobCard);
+app.post('/api/manufacturing/job-cards/:id/start', authenticateToken, startJobCard);
+app.post('/api/manufacturing/job-cards/:id/complete', authenticateToken, completeJobCard);
+
+app.get('/api/manufacturing/logs', authenticateToken, listLogs);
+app.post('/api/manufacturing/logs', authenticateToken, createLog);
+app.delete('/api/manufacturing/logs/:id', authenticateToken, deleteLog);
+
+app.get('/api/manufacturing/qc', authenticateToken, listQcRecords);
+app.post('/api/manufacturing/qc', authenticateToken, createQcRecord);
+app.put('/api/manufacturing/qc/:id', authenticateToken, updateQcRecord);
+app.delete('/api/manufacturing/qc/:id', authenticateToken, deleteQcRecord);
+
+app.get('/api/manufacturing/rework', authenticateToken, listReworkCards);
+app.put('/api/manufacturing/rework/:id', authenticateToken, updateReworkCard);
+app.delete('/api/manufacturing/rework/:id', authenticateToken, deleteReworkCard);
+
+app.get('/api/manufacturing/work-centers', authenticateToken, listWorkCenters);
+app.post('/api/manufacturing/work-centers', authenticateToken, createWorkCenter);
+app.put('/api/manufacturing/work-centers/:id', authenticateToken, updateWorkCenter);
+app.delete('/api/manufacturing/work-centers/:id', authenticateToken, deleteWorkCenter);
+
+app.get('/api/manufacturing/shifts', authenticateToken, listShifts);
+app.post('/api/manufacturing/shifts', authenticateToken, createShift);
+app.put('/api/manufacturing/shifts/:id', authenticateToken, updateShift);
+app.delete('/api/manufacturing/shifts/:id', authenticateToken, deleteShift);
+
 // 9.6 HRMS Module Routes
 app.get('/api/hrms/employees', authenticateToken, listEmployees);
 app.patch('/api/hrms/employees/:id', authenticateToken, updateEmployee);
@@ -759,7 +819,18 @@ async function seedDatabase() {
             "REPORTS_PURCHASE",
             "REPORTS_INVENTORY",
             "REPORTS_HR",
-            "REPORTS_FINANCE"
+            "REPORTS_FINANCE",
+
+            // Phase 2.5 Manufacturing Modules
+            "MANUFACTURING",
+            "MANUFACTURING_BOM",
+            "MANUFACTURING_PLAN",
+            "MANUFACTURING_WORK_ORDER",
+            "MANUFACTURING_PRODUCTION",
+            "MANUFACTURING_QC",
+            "MANUFACTURING_SHOP_FLOOR",
+            "MANUFACTURING_REPORTS",
+            "MANUFACTURING_COSTING"
           ]
         }
       }
@@ -854,6 +925,17 @@ async function seedDatabase() {
         permissions.REPORTS_INVENTORY = ["read", "write", "delete"];
         permissions.REPORTS_HR = ["read", "write", "delete"];
         permissions.REPORTS_FINANCE = ["read", "write", "delete"];
+
+        permissions.MANUFACTURING = ["read", "write", "delete"];
+        permissions.MANUFACTURING_BOM = ["read", "write", "delete"];
+        permissions.MANUFACTURING_PLAN = ["read", "write", "delete"];
+        permissions.MANUFACTURING_WORK_ORDER = ["read", "write", "delete"];
+        permissions.MANUFACTURING_PRODUCTION = ["read", "write", "delete"];
+        permissions.MANUFACTURING_QC = ["read", "write", "delete"];
+        permissions.MANUFACTURING_SHOP_FLOOR = ["read", "write", "delete"];
+        permissions.MANUFACTURING_REPORTS = ["read", "write", "delete"];
+        permissions.MANUFACTURING_COSTING = ["read", "write", "delete"];
+
 
         await prisma.role.update({
           where: { id: adminRole.id },

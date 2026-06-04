@@ -22,6 +22,7 @@ const taxes_1 = require("./controllers/taxes");
 const crm_1 = require("./controllers/crm");
 const purchases_1 = require("./controllers/purchases");
 const inventory_1 = require("./controllers/inventory");
+const controllers_3 = require("./controllers");
 const sales_1 = require("./controllers/sales");
 const hrms_1 = require("./controllers/hrms");
 const finance_1 = require("./controllers/finance");
@@ -271,7 +272,7 @@ app.patch('/api/chat/group/:groupId/settings', auth_1.authenticateToken, chat_1.
 app.delete('/api/chat/group/:groupId', auth_1.authenticateToken, chat_1.deleteChatGroup);
 app.get('/api/chat/group/:groupId/expense-sheet', auth_1.authenticateToken, chat_1.downloadExpenseSheet);
 app.delete('/api/chat/message/:messageId', auth_1.authenticateToken, chat_1.deleteChatMessage);
-const controllers_3 = require("./controllers");
+const controllers_4 = require("./controllers");
 const admin_endpoints_1 = require("./controllers/admin_endpoints");
 const master_data_1 = require("./controllers/master_data");
 const sales_2 = require("./controllers/sales");
@@ -390,6 +391,45 @@ app.delete('/api/purchase/payments/:id', auth_1.authenticateToken, purchases_1.d
 // 9.5 Inventory Warehousing: Ledger listings & manual stock adjustments
 app.get('/api/inventory/adjustments', auth_1.authenticateToken, inventory_1.listStockAdjustments);
 app.post('/api/inventory/adjust', auth_1.authenticateToken, inventory_1.adjustStock);
+// 9.55 Manufacturing Operations Routes
+app.get('/api/manufacturing/boms', auth_1.authenticateToken, controllers_3.listBoms);
+app.post('/api/manufacturing/boms', auth_1.authenticateToken, controllers_3.createBom);
+app.put('/api/manufacturing/boms/:id', auth_1.authenticateToken, controllers_3.updateBom);
+app.delete('/api/manufacturing/boms/:id', auth_1.authenticateToken, controllers_3.deleteBom);
+app.get('/api/manufacturing/plans', auth_1.authenticateToken, controllers_3.listPlans);
+app.post('/api/manufacturing/plans', auth_1.authenticateToken, controllers_3.createPlan);
+app.put('/api/manufacturing/plans/:id', auth_1.authenticateToken, controllers_3.updatePlan);
+app.delete('/api/manufacturing/plans/:id', auth_1.authenticateToken, controllers_3.deletePlan);
+app.post('/api/manufacturing/plans/:id/release', auth_1.authenticateToken, controllers_3.releasePlan);
+app.get('/api/manufacturing/work-orders', auth_1.authenticateToken, controllers_3.listWorkOrders);
+app.post('/api/manufacturing/work-orders', auth_1.authenticateToken, controllers_3.createWorkOrder);
+app.put('/api/manufacturing/work-orders/:id', auth_1.authenticateToken, controllers_3.updateWorkOrder);
+app.delete('/api/manufacturing/work-orders/:id', auth_1.authenticateToken, controllers_3.deleteWorkOrder);
+app.post('/api/manufacturing/work-orders/:id/start', auth_1.authenticateToken, controllers_3.startWorkOrder);
+app.get('/api/manufacturing/job-cards', auth_1.authenticateToken, controllers_3.listJobCards);
+app.post('/api/manufacturing/job-cards', auth_1.authenticateToken, controllers_3.createJobCard);
+app.put('/api/manufacturing/job-cards/:id', auth_1.authenticateToken, controllers_3.updateJobCard);
+app.delete('/api/manufacturing/job-cards/:id', auth_1.authenticateToken, controllers_3.deleteJobCard);
+app.post('/api/manufacturing/job-cards/:id/start', auth_1.authenticateToken, controllers_3.startJobCard);
+app.post('/api/manufacturing/job-cards/:id/complete', auth_1.authenticateToken, controllers_3.completeJobCard);
+app.get('/api/manufacturing/logs', auth_1.authenticateToken, controllers_3.listLogs);
+app.post('/api/manufacturing/logs', auth_1.authenticateToken, controllers_3.createLog);
+app.delete('/api/manufacturing/logs/:id', auth_1.authenticateToken, controllers_3.deleteLog);
+app.get('/api/manufacturing/qc', auth_1.authenticateToken, controllers_3.listQcRecords);
+app.post('/api/manufacturing/qc', auth_1.authenticateToken, controllers_3.createQcRecord);
+app.put('/api/manufacturing/qc/:id', auth_1.authenticateToken, controllers_3.updateQcRecord);
+app.delete('/api/manufacturing/qc/:id', auth_1.authenticateToken, controllers_3.deleteQcRecord);
+app.get('/api/manufacturing/rework', auth_1.authenticateToken, controllers_3.listReworkCards);
+app.put('/api/manufacturing/rework/:id', auth_1.authenticateToken, controllers_3.updateReworkCard);
+app.delete('/api/manufacturing/rework/:id', auth_1.authenticateToken, controllers_3.deleteReworkCard);
+app.get('/api/manufacturing/work-centers', auth_1.authenticateToken, controllers_3.listWorkCenters);
+app.post('/api/manufacturing/work-centers', auth_1.authenticateToken, controllers_3.createWorkCenter);
+app.put('/api/manufacturing/work-centers/:id', auth_1.authenticateToken, controllers_3.updateWorkCenter);
+app.delete('/api/manufacturing/work-centers/:id', auth_1.authenticateToken, controllers_3.deleteWorkCenter);
+app.get('/api/manufacturing/shifts', auth_1.authenticateToken, controllers_3.listShifts);
+app.post('/api/manufacturing/shifts', auth_1.authenticateToken, controllers_3.createShift);
+app.put('/api/manufacturing/shifts/:id', auth_1.authenticateToken, controllers_3.updateShift);
+app.delete('/api/manufacturing/shifts/:id', auth_1.authenticateToken, controllers_3.deleteShift);
 // 9.6 HRMS Module Routes
 app.get('/api/hrms/employees', auth_1.authenticateToken, hrms_1.listEmployees);
 app.patch('/api/hrms/employees/:id', auth_1.authenticateToken, hrms_1.updateEmployee);
@@ -424,7 +464,7 @@ app.get('/api/reports/financial', auth_1.authenticateToken, reports_1.getFinanci
 async function seedDatabase() {
     try {
         console.log("🌱 [Database Seeding] Ensuring all feature keys exist...");
-        for (const item of controllers_3.HIERARCHICAL_FEATURES) {
+        for (const item of controllers_4.HIERARCHICAL_FEATURES) {
             await db_1.default.feature.upsert({
                 where: { key: item.key },
                 update: { name: item.name, description: item.description },
@@ -491,7 +531,17 @@ async function seedDatabase() {
                         "REPORTS_PURCHASE",
                         "REPORTS_INVENTORY",
                         "REPORTS_HR",
-                        "REPORTS_FINANCE"
+                        "REPORTS_FINANCE",
+                        // Phase 2.5 Manufacturing Modules
+                        "MANUFACTURING",
+                        "MANUFACTURING_BOM",
+                        "MANUFACTURING_PLAN",
+                        "MANUFACTURING_WORK_ORDER",
+                        "MANUFACTURING_PRODUCTION",
+                        "MANUFACTURING_QC",
+                        "MANUFACTURING_SHOP_FLOOR",
+                        "MANUFACTURING_REPORTS",
+                        "MANUFACTURING_COSTING"
                     ]
                 }
             }
@@ -576,6 +626,15 @@ async function seedDatabase() {
                 permissions.REPORTS_INVENTORY = ["read", "write", "delete"];
                 permissions.REPORTS_HR = ["read", "write", "delete"];
                 permissions.REPORTS_FINANCE = ["read", "write", "delete"];
+                permissions.MANUFACTURING = ["read", "write", "delete"];
+                permissions.MANUFACTURING_BOM = ["read", "write", "delete"];
+                permissions.MANUFACTURING_PLAN = ["read", "write", "delete"];
+                permissions.MANUFACTURING_WORK_ORDER = ["read", "write", "delete"];
+                permissions.MANUFACTURING_PRODUCTION = ["read", "write", "delete"];
+                permissions.MANUFACTURING_QC = ["read", "write", "delete"];
+                permissions.MANUFACTURING_SHOP_FLOOR = ["read", "write", "delete"];
+                permissions.MANUFACTURING_REPORTS = ["read", "write", "delete"];
+                permissions.MANUFACTURING_COSTING = ["read", "write", "delete"];
                 await db_1.default.role.update({
                     where: { id: adminRole.id },
                     data: { permissions: JSON.stringify(permissions) }

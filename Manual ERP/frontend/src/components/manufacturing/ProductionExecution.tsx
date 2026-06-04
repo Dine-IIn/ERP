@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { PlayCircle, Plus, Search, BarChart3, ShieldCheck, Database, Layers, ArrowUpRight, TrendingUp } from 'lucide-react';
+import { PlayCircle, Plus, Search, BarChart3, ShieldCheck, Database, Layers, ArrowUpRight, TrendingUp, Trash2 } from 'lucide-react';
+import { apiClient } from '../../utils/apiService';
 
 interface ProductionLog {
   id: string;
@@ -32,48 +33,74 @@ export default function ProductionExecution({ products = [] }: ProductionExecuti
   const [activeTab, setActiveTab] = useState<'execution' | 'consumption' | 'ledger'>('execution');
   const [searchTerm, setSearchTerm] = useState('');
   const [showLogModal, setShowLogModal] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  // Mapped Active Released Work Orders from LocalStorage
+  // Mapped Active Released Work Orders from database
   const [dispatchedWorkOrders, setDispatchedWorkOrders] = useState<any[]>([]);
 
-  useEffect(() => {
-    const wos = localStorage.getItem('erp_work_orders');
-    if (wos) {
-      setDispatchedWorkOrders(JSON.parse(wos).filter((w: any) => w.status === 'RELEASED' || w.status === 'IN_PROGRESS'));
-    }
-  }, []);
+  // Logs List
+  const [logsList, setLogsList] = useState<ProductionLog[]>([]);
 
-  // Mapped Warehouse Stocks from products prop (simulating real stocks from Master Product catalog)
-  const warehouseInventory = products.length > 0 ? products : [
-    { id: 'p-static-1', name: 'Standard Finished Product', code: 'PROD-S1', available: 10 }
-  ];
-
-  // Logs List - Initialized from LocalStorage (0 static/demo data)
-  const [logsList, setLogsList] = useState<ProductionLog[]>(() => {
-    const saved = localStorage.getItem('erp_logs');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  // Stock Ledger - Initialized from LocalStorage (0 static/demo data)
-  const [stockLedger, setStockLedger] = useState<StockLedgerEntry[]>(() => {
-    const saved = localStorage.getItem('erp_ledger');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  // Persistence helpers
-  useEffect(() => {
-    localStorage.setItem('erp_logs', JSON.stringify(logsList));
-  }, [logsList]);
-
-  useEffect(() => {
-    localStorage.setItem('erp_ledger', JSON.stringify(stockLedger));
-  }, [stockLedger]);
+  // Stock Ledger
+  const [stockLedger, setStockLedger] = useState<StockLedgerEntry[]>([]);
 
   // Log Modal variables
   const [selectedWoId, setSelectedWoId] = useState('');
   const [logQtyCompleted, setLogQtyCompleted] = useState(5);
   const [logQtyScrapped, setLogQtyScrapped] = useState(0);
   const [logOperator, setLogOperator] = useState('System Operator');
+
+  const fetchExecutionData = async () => {
+    setLoading(true);
+    try {
+      // 1. Fetch work orders
+      const wosRes = await apiClient.get<{ workOrders: any[] }>('/api/manufacturing/work-orders');
+      const filteredWos = (wosRes.workOrders || []).filter((w: any) => w.status === 'RELEASED' || w.status === 'IN_PROGRESS');
+      setDispatchedWorkOrders(filteredWos);
+      if (filteredWos.length > 0 && !selectedWoId) {
+        setSelectedWoId(filteredWos[0].id);
+      }
+
+      // 2. Fetch Yield logs
+      const logsRes = await apiClient.get<{ logs: any[] }>('/api/manufacturing/logs');
+      const formattedLogs = (logsRes.logs || []).map((log: any) => ({
+        id: log.id,
+        woNo: log.workOrder?.woNo || 'UNKNOWN',
+        finishedProductName: log.workOrder?.plan?.finishedProduct?.name || 'Standard Product',
+        qtyTarget: log.workOrder?.qtyTarget || 0,
+        qtyCompleted: log.qtyCompleted,
+        qtyScrapped: log.qtyScrapped,
+        operatorName: log.operatorName,
+        consumptionStatus: log.consumptionStatus,
+        dateLog: log.dateLog?.split('T')[0] || log.createdAt?.split('T')[0] || ''
+      }));
+      setLogsList(formattedLogs);
+
+      // 3. Fetch Stock Adjustments
+      const adjRes = await apiClient.get<{ adjustments: any[] }>('/api/inventory/adjustments');
+      const formattedLedger = (adjRes.adjustments || [])
+        .filter((adj: any) => adj.referenceNo || adj.reason?.includes('BOM') || adj.reason?.includes('Yield'))
+        .map((adj: any) => ({
+          id: adj.id,
+          transactionType: adj.quantity > 0 ? 'FG_RECEIPT' : 'RAW_CONSUMPTION',
+          productName: adj.product?.name || 'Material Item',
+          productCode: adj.product?.uom || 'unit',
+          qtyChange: adj.quantity,
+          remainingStock: adj.newStock,
+          referenceNo: adj.referenceNo || adj.adjustmentNo,
+          timestamp: adj.date?.replace('T', ' ').substring(0, 16) || adj.createdAt?.replace('T', ' ').substring(0, 16) || ''
+        }));
+      setStockLedger(formattedLedger);
+    } catch (err: any) {
+      console.error('Failed to load production execution data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchExecutionData();
+  }, [products]);
 
   // Set default dropdown selections when catalog loads
   useEffect(() => {
@@ -84,57 +111,31 @@ export default function ProductionExecution({ products = [] }: ProductionExecuti
 
   const handlePostProductionExecution = (e: React.FormEvent) => {
     e.preventDefault();
-    const wo = dispatchedWorkOrders.find(w => w.id === selectedWoId);
-    if (!wo) return;
+    if (!selectedWoId) return;
 
-    // 1. Add Log
-    const newLog: ProductionLog = {
-      id: `log-${Date.now()}`,
-      woNo: wo.woNo,
-      finishedProductName: wo.finishedProductName,
-      qtyTarget: wo.qtyTarget,
+    apiClient.post('/api/manufacturing/logs', {
+      woId: selectedWoId,
       qtyCompleted: Number(logQtyCompleted),
       qtyScrapped: Number(logQtyScrapped),
-      operatorName: logOperator,
-      consumptionStatus: 'CONSUMED',
-      dateLog: new Date().toISOString().split('T')[0]
-    };
+      operatorName: logOperator
+    }).then(() => {
+      fetchExecutionData();
+      setShowLogModal(false);
+      setLogQtyCompleted(5);
+      setLogQtyScrapped(0);
+    }).catch((err: any) => {
+      alert("Error posting production yield: " + (err.response?.data?.error || err.message));
+    });
+  };
 
-    setLogsList([newLog, ...logsList]);
-
-    // 2. Add to Stock Ledger
-    const fgReceiptEntry: StockLedgerEntry = {
-      id: `st-receipt-${Date.now()}`,
-      transactionType: 'FG_RECEIPT',
-      productName: wo.finishedProductName,
-      productCode: wo.finishedProductCode || 'PROD-CF90',
-      qtyChange: Number(logQtyCompleted),
-      remainingStock: (warehouseInventory.find(i => i.code === wo.finishedProductCode)?.stockCount || 10) + Number(logQtyCompleted),
-      referenceNo: wo.woNo,
-      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16)
-    };
-
-    setStockLedger([fgReceiptEntry, ...stockLedger]);
-
-    // 3. Mark the Work Order as Completed or update produced qty in LocalStorage
-    const allWOs = localStorage.getItem('erp_work_orders');
-    if (allWOs) {
-      const parsedWOs = JSON.parse(allWOs).map((w: any) => {
-        if (w.id === selectedWoId) {
-          const updatedProduced = w.qtyProduced + Number(logQtyCompleted);
-          return {
-            ...w,
-            qtyProduced: updatedProduced,
-            status: updatedProduced >= w.qtyTarget ? 'COMPLETED' : 'IN_PROGRESS',
-            routingStage: updatedProduced >= w.qtyTarget ? 'Audit & QC' : w.routingStage
-          };
-        }
-        return w;
-      });
-      localStorage.setItem('erp_work_orders', JSON.stringify(parsedWOs));
+  const handleDeleteLog = async (id: string) => {
+    if (!confirm("Are you sure you want to discard this production yield log? Stock adjustments in the ledger will remain, but the execution log entry will be removed.")) return;
+    try {
+      await apiClient.delete(`/api/manufacturing/logs/${id}`);
+      fetchExecutionData();
+    } catch (err: any) {
+      alert("Error discarding log: " + (err.response?.data?.error || err.message));
     }
-
-    setShowLogModal(false);
   };
 
   const filteredLogs = logsList.filter(log =>
@@ -232,7 +233,8 @@ export default function ProductionExecution({ products = [] }: ProductionExecuti
                       <th className="py-2.5 px-3 text-center">Accepted Yield</th>
                       <th className="py-2.5 px-3 text-center">Scrap / Waste</th>
                       <th className="py-2.5 px-3 text-left">Operator Log</th>
-                      <th className="py-2.5 px-3 text-right">Logging Date</th>
+                      <th className="py-2.5 px-3 text-center">Logging Date</th>
+                      <th className="py-2.5 px-3 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -244,7 +246,16 @@ export default function ProductionExecution({ products = [] }: ProductionExecuti
                         <td className="py-3 px-3 text-center font-mono text-emerald-400 font-bold">+{log.qtyCompleted} units</td>
                         <td className="py-3 px-3 text-center font-mono text-rose-500">-{log.qtyScrapped}</td>
                         <td className="py-3 px-3 text-slate-300">{log.operatorName}</td>
-                        <td className="py-3 px-3 text-right text-slate-500 font-mono">{log.dateLog}</td>
+                        <td className="py-3 px-3 text-center text-slate-500 font-mono">{log.dateLog}</td>
+                        <td className="py-3 px-3 text-right">
+                          <button
+                            onClick={() => handleDeleteLog(log.id)}
+                            className="text-rose-550 hover:text-rose-450 p-1 hover:bg-slate-950/45 rounded transition-all cursor-pointer border-0 bg-transparent"
+                            title="Discard Yield Log"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -267,7 +278,7 @@ export default function ProductionExecution({ products = [] }: ProductionExecuti
             </p>
           </div>
 
-          {logsList.length === 0 ? (
+          {stockLedger.filter(entry => entry.transactionType === 'RAW_CONSUMPTION').length === 0 ? (
             <div className="p-16 text-center text-slate-500 border border-dashed border-slate-800 rounded-2xl bg-slate-900/10 flex flex-col items-center justify-center">
               <Layers className="w-12 h-12 text-slate-750 mb-3" />
               <p className="font-semibold text-sm">No Materials Drawdown logs</p>
@@ -275,23 +286,23 @@ export default function ProductionExecution({ products = [] }: ProductionExecuti
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {logsList.map(log => (
-                <div key={log.id} className="p-4 bg-slate-950/30 border border-slate-850 rounded-xl space-y-3">
+              {stockLedger.filter(entry => entry.transactionType === 'RAW_CONSUMPTION').map(entry => (
+                <div key={entry.id} className="p-4 bg-slate-950/30 border border-slate-850 rounded-xl space-y-3">
                   <div className="flex justify-between items-start border-b border-slate-900 pb-2">
                     <div className="text-left">
-                      <span className="text-[9px] text-slate-500 font-mono">Reference WO: {log.woNo}</span>
-                      <h5 className="font-bold text-xs text-white mt-1">{log.finishedProductName}</h5>
+                      <span className="text-[9px] text-slate-500 font-mono">Reference WO: {entry.referenceNo}</span>
+                      <h5 className="font-bold text-xs text-white mt-1">{entry.productName}</h5>
                     </div>
-                    <span className="text-[10px] bg-emerald-500/10 text-emerald-400 font-bold border border-emerald-500/20 py-0.5 px-2 rounded-full uppercase tracking-wider">STOCK ADJUSTED</span>
+                    <span className="text-[10px] bg-rose-500/10 text-rose-455 font-bold border border-rose-500/20 py-0.5 px-2 rounded-full uppercase tracking-wider">RAW DRAWDOWN</span>
                   </div>
                   <div className="text-xs space-y-1.5">
                     <div className="flex justify-between text-slate-400">
                       <span>Primary Core Material component</span>
-                      <span className="font-mono text-rose-450">-{log.qtyCompleted * 3} units</span>
+                      <span className="font-mono text-rose-450 font-bold">{entry.qtyChange} {entry.productCode}</span>
                     </div>
-                    <div className="flex justify-between text-slate-400">
-                      <span>Secondary Curing component</span>
-                      <span className="font-mono text-rose-455">-{log.qtyCompleted * 5} units</span>
+                    <div className="flex justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-900/40">
+                      <span>Audit Time</span>
+                      <span className="font-mono">{entry.timestamp}</span>
                     </div>
                   </div>
                 </div>

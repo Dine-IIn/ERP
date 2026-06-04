@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ClipboardSignature, Plus, Search, Layers, Play, CheckCircle2, AlertTriangle, Users, Clock, Cpu } from 'lucide-react';
+import { ClipboardSignature, Plus, Search, Layers, Play, CheckCircle2, Trash2, Edit2, Users, Clock, Cpu } from 'lucide-react';
+import { apiClient } from '../../utils/apiService';
 
 interface WorkOrder {
   id: string;
@@ -41,43 +42,89 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showAddJobModal, setShowAddJobModal] = useState(false);
+  
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const [isEditingJob, setIsEditingJob] = useState(false);
+  const [editingJobId, setEditingJobId] = useState<string | null>(null);
 
   // Core Mapped Active Employees (connected to HR Employees Directory)
-  const employeeOperators = employees.length > 0 ? employees : [
-    { id: 'emp-static-1', username: 'System Operator 1', mobileNo: 'N/A' },
-    { id: 'emp-static-2', username: 'System Operator 2', mobileNo: 'N/A' }
-  ];
+  const employeeOperators = employees.length > 0 ? employees : [];
 
-  // Core Mapped Active Production Plans from LocalStorage
+  // Core Mapped Active Production Plans from database
   const [activeReleasedPlans, setActiveReleasedPlans] = useState<any[]>([]);
 
-  useEffect(() => {
-    const plans = localStorage.getItem('erp_plans');
-    if (plans) {
-      setActiveReleasedPlans(JSON.parse(plans));
+  // Lists
+  const [workOrdersList, setWorkOrdersList] = useState<WorkOrder[]>([]);
+  const [jobCardsList, setJobCardsList] = useState<JobCard[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetchWorkOrders = async () => {
+    setLoading(true);
+    try {
+      const data = await apiClient.get<{ workOrders: any[] }>('/api/manufacturing/work-orders');
+      const formatted = (data.workOrders || []).map((wo: any) => ({
+        id: wo.id,
+        woNo: wo.woNo,
+        planId: wo.planId,
+        finishedProductName: wo.plan?.finishedProduct?.name || 'Finished Goods',
+        finishedProductCode: wo.plan?.finishedProduct?.hsnSacCode || wo.plan?.finishedProduct?.code || 'PROD-CF90',
+        qtyTarget: wo.qtyTarget,
+        qtyProduced: wo.qtyProduced,
+        priority: wo.priority,
+        status: wo.status,
+        routingStage: wo.routingStage,
+        createdAt: wo.createdAt?.split('T')[0] || ''
+      }));
+      setWorkOrdersList(formatted);
+    } catch (err) {
+      console.error('Failed to load work orders:', err);
+    } finally {
+      setLoading(false);
     }
-  }, []);
+  };
 
-  // Work Orders List - Initialized from LocalStorage (0 static/demo data)
-  const [workOrdersList, setWorkOrdersList] = useState<WorkOrder[]>(() => {
-    const saved = localStorage.getItem('erp_work_orders');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const fetchJobCards = async () => {
+    try {
+      const data = await apiClient.get<{ jobCards: any[] }>('/api/manufacturing/job-cards');
+      const formatted = (data.jobCards || []).map((job: any) => ({
+        id: job.id,
+        woId: job.woId,
+        woNo: job.workOrder?.woNo || 'WO-UNKNOWN',
+        operationName: job.operationName,
+        workCenterName: job.workCenterId || 'Center A',
+        assignedOperator: job.assignedOperator?.username || 'Operator',
+        operatorId: job.assignedOperatorId || '',
+        status: job.status,
+        startTime: job.startTime ? new Date(job.startTime).toISOString().replace('T', ' ').substring(0, 16) : undefined,
+        endTime: job.endTime ? new Date(job.endTime).toISOString().replace('T', ' ').substring(0, 16) : undefined,
+        cycleTimeMinutes: job.cycleTimeMinutes,
+        qtyTarget: job.qtyTarget,
+        qtyAccepted: job.qtyAccepted,
+        qtyScrapped: job.qtyScrapped
+      }));
+      setJobCardsList(formatted);
+    } catch (err) {
+      console.error('Failed to load job cards:', err);
+    }
+  };
 
-  // Job Cards List - Initialized from LocalStorage (0 static/demo data)
-  const [jobCardsList, setJobCardsList] = useState<JobCard[]>(() => {
-    const saved = localStorage.getItem('erp_job_cards');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const fetchPlans = async () => {
+    try {
+      const data = await apiClient.get<{ plans: any[] }>('/api/manufacturing/plans');
+      const releasedPlans = (data.plans || []).filter((p: any) => p.status === 'RELEASED');
+      setActiveReleasedPlans(releasedPlans);
+    } catch (err) {
+      console.error('Failed to load production plans:', err);
+    }
+  };
 
-  // Save helper
   useEffect(() => {
-    localStorage.setItem('erp_work_orders', JSON.stringify(workOrdersList));
-  }, [workOrdersList]);
-
-  useEffect(() => {
-    localStorage.setItem('erp_job_cards', JSON.stringify(jobCardsList));
-  }, [jobCardsList]);
+    fetchWorkOrders();
+    fetchJobCards();
+    fetchPlans();
+  }, [employees]);
 
   // Modal new Work Order variables
   const [selectedPlanId, setSelectedPlanId] = useState('');
@@ -85,7 +132,7 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
 
   // Modal new Job Card variables
   const [selectedWoId, setSelectedWoId] = useState('');
-  const [jobOperationName, setJobOperationName] = useState('Autoclave Curing');
+  const [jobOperationName, setJobOperationName] = useState('Autoclave Molding');
   const [jobWorkCenter, setJobWorkCenter] = useState('Autoclave Molding Oven B');
   const [selectedOperatorId, setSelectedOperatorId] = useState('');
   const [jobCycleTime, setJobCycleTime] = useState(30);
@@ -96,94 +143,135 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
     if (activeReleasedPlans.length > 0 && !selectedPlanId) {
       setSelectedPlanId(activeReleasedPlans[0].id);
     }
-  }, [activeReleasedPlans]);
+  }, [activeReleasedPlans, selectedPlanId]);
 
   useEffect(() => {
     if (workOrdersList.length > 0 && !selectedWoId) {
       setSelectedWoId(workOrdersList[0].id);
     }
-  }, [workOrdersList]);
+  }, [workOrdersList, selectedWoId]);
 
   useEffect(() => {
     if (employeeOperators.length > 0 && !selectedOperatorId) {
-      setSelectedOperatorId(employeeOperators[0].id || employeeOperators[0].username);
+      setSelectedOperatorId(employeeOperators[0].id);
     }
-  }, [employeeOperators]);
+  }, [employeeOperators, selectedOperatorId]);
 
-  const handleCreateWorkOrderSubmit = (e: React.FormEvent) => {
+  const handleCreateWorkOrderSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const plan = activeReleasedPlans.find(p => p.id === selectedPlanId);
-    if (!plan) {
+    if (!plan && !isEditing) {
       alert("Please configure and schedule a Production Plan first before creating a Work Order!");
       return;
     }
 
-    // Check if already dispatched
-    if (workOrdersList.some(wo => wo.planId === selectedPlanId && wo.status !== 'COMPLETED')) {
-      alert("This Production Plan is already mapped to an active dispatched Work Order!");
-      return;
+    try {
+      if (isEditing && editingId) {
+        await apiClient.put(`/api/manufacturing/work-orders/${editingId}`, {
+          priority: woPriority
+        });
+        alert('Work Order priority updated.');
+      } else {
+        const payload = {
+          planId: selectedPlanId,
+          woNo: `WO-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+          qtyTarget: Number(plan.qtyToProduce),
+          priority: woPriority
+        };
+        await apiClient.post('/api/manufacturing/work-orders', payload);
+        alert('Work Order dispatched to floor successfully!');
+      }
+      setShowAddModal(false);
+      setIsEditing(false);
+      setEditingId(null);
+      fetchWorkOrders();
+      fetchPlans();
+    } catch (err: any) {
+      alert(err.message || 'Failed to save Work Order');
     }
-
-    const newWO: WorkOrder = {
-      id: `wo-${Date.now()}`,
-      woNo: `WO-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-      planId: selectedPlanId,
-      finishedProductName: plan.finishedProductName,
-      finishedProductCode: plan.finishedProductCode,
-      qtyTarget: plan.qtyToProduce,
-      qtyProduced: 0,
-      priority: woPriority,
-      status: 'RELEASED',
-      routingStage: 'Scheduled Routing',
-      createdAt: new Date().toISOString().split('T')[0]
-    };
-
-    setWorkOrdersList([...workOrdersList, newWO]);
-    setShowAddModal(false);
   };
 
-  const handleCreateJobCardSubmit = (e: React.FormEvent) => {
+  const handleCreateJobCardSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const targetWO = workOrdersList.find(w => w.id === selectedWoId);
-    const operator = employeeOperators.find(emp => (emp.id || emp.username) === selectedOperatorId);
-    if (!targetWO || !operator) return;
-
-    const newJobCard: JobCard = {
-      id: `job-${Date.now()}`,
+    const payload = {
       woId: selectedWoId,
-      woNo: targetWO.woNo,
       operationName: jobOperationName,
-      workCenterName: jobWorkCenter,
-      assignedOperator: operator.username || operator.name || 'Technician',
-      operatorId: selectedOperatorId,
-      status: 'PENDING',
+      workCenterId: jobWorkCenter,
+      assignedOperatorId: selectedOperatorId,
       cycleTimeMinutes: Number(jobCycleTime),
-      qtyTarget: Number(jobQtyTarget),
-      qtyAccepted: 0,
-      qtyScrapped: 0
+      qtyTarget: Number(jobQtyTarget)
     };
 
-    setJobCardsList([...jobCardsList, newJobCard]);
-    setShowAddModal(false);
-    setShowAddJobModal(false);
+    try {
+      if (isEditingJob && editingJobId) {
+        await apiClient.put(`/api/manufacturing/job-cards/${editingJobId}`, payload);
+        alert('Job Card updated successfully.');
+      } else {
+        await apiClient.post('/api/manufacturing/job-cards', payload);
+        alert('Job Card rostered successfully.');
+      }
+      setShowAddJobModal(false);
+      setIsEditingJob(false);
+      setEditingJobId(null);
+      fetchJobCards();
+    } catch (err: any) {
+      alert(err.message || 'Failed to save job card');
+    }
   };
 
-  const handleStartWO = (woId: string) => {
-    setWorkOrdersList(workOrdersList.map(wo => wo.id === woId ? { ...wo, status: 'IN_PROGRESS', routingStage: 'Molding & Curing' } : wo));
+  const handleStartWO = async (woId: string) => {
+    try {
+      await apiClient.post(`/api/manufacturing/work-orders/${woId}/start`);
+      fetchWorkOrders();
+    } catch (err: any) {
+      alert(err.message || 'Failed to start Work Order');
+    }
   };
 
-  const handleStartJob = (jobId: string) => {
-    setJobCardsList(jobCardsList.map(job => job.id === jobId ? { ...job, status: 'RUNNING', startTime: new Date().toISOString().replace('T', ' ').substring(0, 16) } : job));
+  const handleDeleteWO = async (id: string) => {
+    if (window.confirm("Are you sure you want to permanently delete this Work Order?")) {
+      try {
+        await apiClient.delete(`/api/manufacturing/work-orders/${id}`);
+        fetchWorkOrders();
+        alert('Work Order deleted.');
+      } catch (err: any) {
+        alert(err.message || 'Failed to delete Work Order');
+      }
+    }
   };
 
-  const handleCompleteJob = (jobId: string, accepted: number, scrapped: number) => {
-    setJobCardsList(jobCardsList.map(job => job.id === jobId ? { 
-      ...job, 
-      status: 'COMPLETED', 
-      qtyAccepted: Number(accepted), 
-      qtyScrapped: Number(scrapped),
-      endTime: new Date().toISOString().replace('T', ' ').substring(0, 16)
-    } : job));
+  const handleStartJob = async (jobId: string) => {
+    try {
+      await apiClient.post(`/api/manufacturing/job-cards/${jobId}/start`);
+      fetchJobCards();
+    } catch (err: any) {
+      alert(err.message || 'Failed to start job');
+    }
+  };
+
+  const handleCompleteJob = async (jobId: string, accepted: number, scrapped: number) => {
+    try {
+      await apiClient.post(`/api/manufacturing/job-cards/${jobId}/complete`, {
+        qtyAccepted: Number(accepted),
+        qtyScrapped: Number(scrapped)
+      });
+      fetchJobCards();
+      alert('Job results compiled.');
+    } catch (err: any) {
+      alert(err.message || 'Failed to complete job');
+    }
+  };
+
+  const handleDeleteJob = async (id: string) => {
+    if (window.confirm("Are you sure you want to permanently delete this Job Card?")) {
+      try {
+        await apiClient.delete(`/api/manufacturing/job-cards/${id}`);
+        fetchJobCards();
+        alert('Job Card deleted.');
+      } catch (err: any) {
+        alert(err.message || 'Failed to delete Job Card');
+      }
+    }
   };
 
   const filteredWO = workOrdersList.filter(wo =>
@@ -207,7 +295,7 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
         <div className="flex gap-2.5">
           <button
             onClick={() => setActiveTab(activeTab === 'wo' ? 'jobs' : 'wo')}
-            className="flex items-center gap-1.5 px-4 py-2 bg-slate-800/50 hover:bg-slate-800 border border-slate-700/50 hover:border-slate-600/85 text-slate-300 hover:text-white font-semibold text-xs rounded-xl transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-2 bg-slate-800/50 hover:bg-slate-800 border border-slate-700/50 hover:border-slate-600/85 text-slate-300 hover:text-white font-semibold text-xs rounded-xl transition-all cursor-pointer border-0"
           >
             <Users className="w-4 h-4 text-indigo-400" />
             {activeTab === 'wo' ? 'Track Operator Job Cards' : 'Manage Work Orders'}
@@ -219,6 +307,8 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
                   alert("Please release a Work Order first before configuring Job Cards!");
                   return;
                 }
+                setIsEditingJob(false);
+                setEditingJobId(null);
                 setShowAddJobModal(true);
               }}
               className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 active:scale-95 transition-all text-white font-bold text-xs rounded-xl shadow-lg cursor-pointer border-0"
@@ -232,6 +322,8 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
                   alert("Please configure and schedule a Production Plan first before releasing Work Orders!");
                   return;
                 }
+                setIsEditing(false);
+                setEditingId(null);
                 setShowAddModal(true);
               }}
               className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 active:scale-95 transition-all text-white font-bold text-xs rounded-xl shadow-lg cursor-pointer border-0"
@@ -242,7 +334,9 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
         </div>
       </div>
 
-      {activeTab === 'wo' ? (
+      {loading ? (
+        <div className="text-center py-12 text-slate-400 text-xs">Syncing operations logs...</div>
+      ) : activeTab === 'wo' ? (
         <div className="space-y-4 animate-fade-in text-left">
           {/* Search */}
           <div className="flex items-center relative w-full max-w-sm">
@@ -304,21 +398,41 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
                     </div>
                   </div>
 
-                  <div className="border-t border-slate-850 pt-3.5 flex items-center justify-between">
+                  <div className="border-t border-slate-850/60 pt-3.5 flex items-center justify-between">
                     <span className={`text-[10px] font-extrabold uppercase ${
                       wo.status === 'COMPLETED' ? 'text-emerald-400' : wo.status === 'IN_PROGRESS' ? 'text-indigo-400' : 'text-slate-550'
                     }`}>
                       Status: {wo.status}
                     </span>
                     
-                    {wo.status === 'RELEASED' && (
+                    <div className="flex gap-2">
+                      {wo.status === 'RELEASED' && (
+                        <button
+                          onClick={() => handleStartWO(wo.id)}
+                          className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] uppercase rounded-lg border-0 cursor-pointer transition-all"
+                        >
+                          <Play className="w-3 h-3" /> Start Run
+                        </button>
+                      )}
                       <button
-                        onClick={() => handleStartWO(wo.id)}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] uppercase rounded-lg border-0 cursor-pointer transition-all"
+                        onClick={() => {
+                          setSelectedPlanId(wo.planId);
+                          setWoPriority(wo.priority);
+                          setIsEditing(true);
+                          setEditingId(wo.id);
+                          setShowAddModal(true);
+                        }}
+                        className="px-2.5 py-1.5 bg-indigo-650/10 hover:bg-indigo-650 text-indigo-400 hover:text-white rounded-lg text-[10px] uppercase font-bold cursor-pointer transition-all border-0 bg-transparent flex items-center gap-1"
                       >
-                        <Play className="w-3 h-3" /> Start Run
+                        Edit
                       </button>
-                    )}
+                      <button
+                        onClick={() => handleDeleteWO(wo.id)}
+                        className="px-2.5 py-1.5 bg-rose-650/10 hover:bg-rose-600 text-rose-400 hover:text-white rounded-lg text-[10px] uppercase font-bold cursor-pointer transition-all border-0 bg-transparent flex items-center gap-1"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -406,7 +520,7 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
                             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl border-0 cursor-pointer transition-all active:scale-95 shadow-md shadow-emerald-600/10 flex items-center gap-1"
                           >
                             <CheckCircle2 className="w-4 h-4" /> End & log
-                        </button>
+                          </button>
                         </div>
                       )}
 
@@ -414,9 +528,39 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
                         <div className="text-right">
                           <span className="text-[9px] text-slate-500 block uppercase font-bold tracking-wider">Completed Logs</span>
                           <span className="text-xs font-bold text-emerald-400 mt-1 block">Accepted: {job.qtyAccepted} | Scrap: {job.qtyScrapped}</span>
-                          <span className="text-[9px] text-slate-600 font-mono mt-0.5 block">Ended at: {job.endTime}</span>
+                          <span className="text-[9px] text-slate-650 font-mono mt-0.5 block">Ended at: {job.endTime}</span>
                         </div>
                       )}
+
+                      {/* Edit / Delete on Job Cards */}
+                      <div className="flex flex-col gap-1.5 ml-2">
+                        {job.status === 'PENDING' && (
+                          <button
+                            onClick={() => {
+                              setSelectedWoId(job.woId);
+                              setJobOperationName(job.operationName);
+                              setJobWorkCenter(job.workCenterName);
+                              setSelectedOperatorId(job.operatorId);
+                              setJobCycleTime(job.cycleTimeMinutes);
+                              setJobQtyTarget(job.qtyTarget);
+                              setIsEditingJob(true);
+                              setEditingJobId(job.id);
+                              setShowAddJobModal(true);
+                            }}
+                            className="p-1.5 text-indigo-400 hover:bg-indigo-600/15 rounded border-0 bg-transparent cursor-pointer"
+                            title="Edit Job Card"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleDeleteJob(job.id)}
+                          className="p-1.5 text-rose-450 hover:bg-rose-500/15 rounded border-0 bg-transparent cursor-pointer"
+                          title="Delete Job Card"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -433,7 +577,7 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
             <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-950/20">
               <h3 className="text-sm font-bold text-white flex items-center gap-1.5 uppercase">
                 <ClipboardSignature className="w-4 h-4 text-indigo-400" />
-                Dispatch Assembly Work Order
+                {isEditing ? 'Modify Assembly Work Order Priority' : 'Dispatch Assembly Work Order'}
               </h3>
               <button
                 onClick={() => setShowAddModal(false)}
@@ -444,18 +588,20 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
             </div>
 
             <form onSubmit={handleCreateWorkOrderSubmit} className="p-6 space-y-4">
-              <div>
-                <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Select Scheduled Production Plan</label>
-                <select
-                  value={selectedPlanId}
-                  onChange={e => setSelectedPlanId(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-850 p-2.5 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
-                >
-                  {activeReleasedPlans.map(p => (
-                    <option key={p.id} value={p.id}>{p.finishedProductName} (Plan Target: {p.qtyToProduce} units)</option>
-                  ))}
-                </select>
-              </div>
+              {!isEditing && (
+                <div>
+                  <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Select Scheduled Production Plan</label>
+                  <select
+                    value={selectedPlanId}
+                    onChange={e => setSelectedPlanId(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-850 p-2.5 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
+                  >
+                    {activeReleasedPlans.map(p => (
+                      <option key={p.id} value={p.id}>{p.finishedProductName} (Plan Target: {p.qtyToProduce} units)</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Priority Classification</label>
@@ -480,9 +626,9 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl border-0 cursor-pointer transition-all shadow-lg shadow-indigo-600/10"
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl border-0 cursor-pointer transition-all shadow-lg"
                 >
-                  Dispatch to Floor
+                  {isEditing ? 'Save Changes' : 'Dispatch to Floor'}
                 </button>
               </div>
             </form>
@@ -497,7 +643,7 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
             <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-950/20">
               <h3 className="text-sm font-bold text-white flex items-center gap-1.5 uppercase">
                 <Users className="w-4 h-4 text-indigo-400" />
-                Roster Operator Job Card
+                {isEditingJob ? 'Edit Job Card details' : 'Roster Operator Job Card'}
               </h3>
               <button
                 onClick={() => setShowAddJobModal(false)}
@@ -513,7 +659,8 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
                 <select
                   value={selectedWoId}
                   onChange={e => setSelectedWoId(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-850 p-2.5 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
+                  disabled={isEditingJob}
+                  className="w-full bg-slate-950 border border-slate-850 p-2.5 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500 disabled:opacity-55"
                 >
                   {workOrdersList.map(wo => (
                     <option key={wo.id} value={wo.id}>{wo.woNo} - {wo.finishedProductName}</option>
@@ -556,7 +703,7 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
                     className="w-full bg-slate-950 border border-slate-850 p-2.5 rounded-lg text-xs text-white focus:outline-none"
                   >
                     {employeeOperators.map(emp => (
-                      <option key={emp.id || emp.username} value={emp.id || emp.username}>{emp.username || emp.name} ({emp.role || 'Operator'})</option>
+                      <option key={emp.id} value={emp.id}>{emp.username} ({emp.role || 'Operator'})</option>
                     ))}
                   </select>
                 </div>
@@ -595,9 +742,9 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl border-0 cursor-pointer transition-all shadow-lg shadow-indigo-600/10"
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl border-0 cursor-pointer transition-all shadow-lg"
                 >
-                  Confirm Job Roster
+                  {isEditingJob ? 'Save Changes' : 'Confirm Job Roster'}
                 </button>
               </div>
             </form>

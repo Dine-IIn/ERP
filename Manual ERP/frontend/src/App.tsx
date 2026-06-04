@@ -4749,7 +4749,7 @@ export default function App() {
                     )}
 
                     {activeWorkspaceSubModule === 'MANUFACTURING_QC' && (
-                      <QualityControl products={productsList} />
+                      <QualityControl products={productsList} employees={companyUsers} />
                     )}
 
                     {activeWorkspaceSubModule === 'MANUFACTURING_SHOP_FLOOR' && (

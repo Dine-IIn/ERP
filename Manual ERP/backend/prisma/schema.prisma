@@ -101,6 +101,17 @@ model Company {
   vendorPayments    VendorPayment[]
   stockAdjustments  StockAdjustment[]
 
+  // Manufacturing relations
+  boms                 BillOfMaterials[]
+  productionPlans      ProductionPlan[]
+  workOrders           WorkOrder[]
+  jobCards             JobCard[]
+  productionLogs       ProductionLog[]
+  qcRecords            QualityControlRecord[]
+  reworkCards          ReworkCard[]
+  workCenters          WorkCenter[]
+  factoryShifts        FactoryShift[]
+
   // HRMS & Finance Extensions
   attendances       Attendance[]
   leaveRequests     LeaveRequest[]
@@ -185,6 +196,11 @@ model User {
   approvedLeaves    LeaveRequest[]  @relation("ApprovedLeaves")
   payrollPeriods    PayrollPeriod[]
   paidExpenses      CompanyExpense[]
+
+  // Manufacturing Relations
+  assignedJobCards    JobCard[]      @relation("AssignedOperator")
+  assignedReworkCards ReworkCard[]   @relation("AssignedReworkOperator")
+  factoryShifts       FactoryShift[]
 
   @@unique([companyId, username])
   @@map("users")
@@ -434,6 +450,13 @@ model Product {
   purchaseReturnItems  PurchaseReturnItem[]
   stockAdjustments     StockAdjustment[]
 
+  // Manufacturing Relations
+  finishedBoms BillOfMaterials[] @relation("FinishedProductBOM")
+  componentBoms BomComponent[] @relation("ComponentProductBOM")
+  productionPlans ProductionPlan[]
+  qcRecords QualityControlRecord[]
+  reworkCards ReworkCard[]
+
   @@unique([companyId, name])
   @@map("products")
 }
@@ -465,6 +488,9 @@ model SalesOrder {
   dispatches   Dispatch[]
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
+
+  // Manufacturing Relations
+  productionPlans ProductionPlan[]
 
   @@unique([companyId, orderNo])
   @@map("sales_orders")
@@ -1052,3 +1078,199 @@ model CompanyBankAccount {
   @@unique([companyId, accountNo])
   @@map("company_bank_accounts")
 }
+
+// ==========================================
+// MANUFACTURING MODULE EXPANSIONS
+// ==========================================
+
+model BillOfMaterials {
+  id                   String           @id @default(uuid())
+  companyId            String
+  company              Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  finishedProductId    String
+  finishedProduct      Product          @relation("FinishedProductBOM", fields: [finishedProductId], references: [id], onDelete: Cascade)
+  version              String
+  laborHours           Float            @default(0.0)
+  laborRate            Float            @default(0.0)
+  overheadAllocation   Float            @default(0.0)
+  status               String           @default("ACTIVE") // ACTIVE, ARCHIVED, DRAFT
+  components           BomComponent[]
+  productionPlans      ProductionPlan[]
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  @@unique([companyId, finishedProductId, version])
+  @@map("bill_of_materials")
+}
+
+model BomComponent {
+  id            String          @id @default(uuid())
+  bomId         String
+  bom           BillOfMaterials @relation(fields: [bomId], references: [id], onDelete: Cascade)
+  productId     String
+  product       Product         @relation("ComponentProductBOM", fields: [productId], references: [id], onDelete: Cascade)
+  qtyRequired   Float
+  wasteMargin   Float           @default(0.0)
+
+  @@map("bom_components")
+}
+
+model ProductionPlan {
+  id                  String           @id @default(uuid())
+  companyId           String
+  company             Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  salesOrderId        String?
+  salesOrder          SalesOrder?      @relation(fields: [salesOrderId], references: [id], onDelete: SetNull)
+  finishedProductId   String
+  finishedProduct     Product          @relation(fields: [finishedProductId], references: [id], onDelete: Cascade)
+  qtyToProduce        Float
+  startDate           DateTime
+  endDate             DateTime
+  status              String           @default("PENDING") // PENDING, SCHEDULED, RELEASED, COMPLETED
+  bomId               String
+  bom                 BillOfMaterials  @relation(fields: [bomId], references: [id], onDelete: Cascade)
+  workOrders          WorkOrder[]
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  @@map("production_plans")
+}
+
+model WorkOrder {
+  id                  String           @id @default(uuid())
+  companyId           String
+  company             Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  woNo                String           @unique
+  planId              String
+  plan                ProductionPlan   @relation(fields: [planId], references: [id], onDelete: Cascade)
+  qtyTarget           Float
+  qtyProduced         Float            @default(0.0)
+  priority            String           @default("NORMAL") // URGENT, HIGH, NORMAL
+  status              String           @default("RELEASED") // DRAFT, RELEASED, IN_PROGRESS, COMPLETED
+  routingStage        String           @default("Scheduled Routing")
+  jobCards            JobCard[]
+  productionLogs      ProductionLog[]
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  @@map("work_orders")
+}
+
+model JobCard {
+  id                String          @id @default(uuid())
+  companyId         String
+  company           Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  woId              String
+  workOrder         WorkOrder       @relation(fields: [woId], references: [id], onDelete: Cascade)
+  operationName     String
+  workCenterId      String?
+  workCenter        WorkCenter?     @relation(fields: [workCenterId], references: [id], onDelete: SetNull)
+  assignedOperatorId String?
+  assignedOperator   User?          @relation("AssignedOperator", fields: [assignedOperatorId], references: [id], onDelete: SetNull)
+  status            String          @default("PENDING") // PENDING, RUNNING, COMPLETED, PAUSED
+  startTime         DateTime?
+  endTime           DateTime?
+  cycleTimeMinutes  Float           @default(0.0)
+  qtyTarget         Float
+  qtyAccepted       Float           @default(0.0)
+  qtyScrapped       Float           @default(0.0)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@map("job_cards")
+}
+
+model ProductionLog {
+  id                String          @id @default(uuid())
+  companyId         String
+  company           Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  woId              String
+  workOrder         WorkOrder       @relation(fields: [woId], references: [id], onDelete: Cascade)
+  qtyCompleted      Float
+  qtyScrapped       Float           @default(0.0)
+  operatorName      String
+  consumptionStatus String          @default("CONSUMED") // CONSUMED, PENDING
+  dateLog           DateTime        @default(now())
+  createdAt         DateTime        @default(now())
+
+  @@map("production_logs")
+}
+
+model QualityControlRecord {
+  id              String          @id @default(uuid())
+  companyId       String
+  company         Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  batchNo         String
+  productId       String
+  product         Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  totalInspected  Float
+  qtyPassed       Float
+  qtyFailed       Float           @default(0.0)
+  inspectorName   String
+  status          String          @default("PASSED") // PASSED, FAILED, REWORK_REQUIRED
+  remarks         String?
+  checkDate       DateTime        @default(now())
+  reworkCards     ReworkCard[]
+  createdAt       DateTime        @default(now())
+
+  @@map("quality_control_records")
+}
+
+model ReworkCard {
+  id                String               @id @default(uuid())
+  companyId         String
+  company           Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  qcRecordId        String
+  qcRecord          QualityControlRecord @relation(fields: [qcRecordId], references: [id], onDelete: Cascade)
+  batchNo           String
+  productId         String
+  product           Product              @relation(fields: [productId], references: [id], onDelete: Cascade)
+  qtyToRepair       Float
+  reworkOperation   String
+  assignedOperatorId String?
+  assignedOperator   User?               @relation("AssignedReworkOperator", fields: [assignedOperatorId], references: [id], onDelete: SetNull)
+  status            String               @default("OPEN") // OPEN, REPAIRED_PASSED, SCRAPPED
+  notes             String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  @@map("rework_cards")
+}
+
+model WorkCenter {
+  id              String          @id @default(uuid())
+  companyId       String
+  company         Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name            String
+  code            String
+  capacityHours   Float
+  runtimeLogged   Float           @default(0.0)
+  efficiencyScore Float           @default(100.0)
+  electricityKw   Float           @default(0.0)
+  status          String          @default("OPERATIONAL") // OPERATIONAL, MAINTENANCE, OFFLINE
+  jobCards        JobCard[]
+  factoryShifts   FactoryShift[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@unique([companyId, code])
+  @@map("work_centers")
+}
+
+model FactoryShift {
+  id              String          @id @default(uuid())
+  companyId       String
+  company         Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  operatorId      String
+  operator        User            @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  workCenterId    String
+  workCenter      WorkCenter      @relation(fields: [workCenterId], references: [id], onDelete: Cascade)
+  shiftName       String
+  shiftHours      String
+  assignedMachine String
+  dateScheduled   DateTime
+  createdAt       DateTime        @default(now())
+
+  @@map("factory_shifts")
+}
+

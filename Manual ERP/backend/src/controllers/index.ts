@@ -562,7 +562,8 @@ export async function createCompany(req: AuthenticatedRequest, res: Response) {
           CRM: ["read", "write", "delete"],
           HR: ["read", "write", "delete"],
           FINANCE: ["read", "write", "delete"],
-          NOTIFICATIONS: ["read", "write", "delete"]
+          NOTIFICATIONS: ["read", "write", "delete"],
+          MANUFACTURING: ["read", "write", "delete"]
         })
       }
     });
@@ -1338,6 +1339,9 @@ export async function resetPassword(req: Request, res: Response) {
     return res.status(500).json({ error: error.message });
   }
 }
+
+export * from './manufacturing';
+
 
 
 

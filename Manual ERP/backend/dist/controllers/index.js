@@ -523,7 +523,8 @@ async function createCompany(req, res) {
                     CRM: ["read", "write", "delete"],
                     HR: ["read", "write", "delete"],
                     FINANCE: ["read", "write", "delete"],
-                    NOTIFICATIONS: ["read", "write", "delete"]
+                    NOTIFICATIONS: ["read", "write", "delete"],
+                    MANUFACTURING: ["read", "write", "delete"]
                 })
             }
         });
@@ -1204,4 +1205,5 @@ async function resetPassword(req, res) {
         return res.status(500).json({ error: error.message });
     }
 }
+__exportStar(require("./manufacturing"), exports);
 //# sourceMappingURL=index.js.map

@@ -462,8 +462,16 @@ export default function ProductMaster({
                 >
                   <option value="PCS">PCS (Pieces)</option>
                   <option value="KG">KG (Kilograms)</option>
+                  <option value="GRAM">GRAM (Grams)</option>
                   <option value="LTR">LTR (Litres)</option>
+                  <option value="ML">ML (Millilitres)</option>
                   <option value="MTR">MTR (Meters)</option>
+                  <option value="CM">CM (Centimeters)</option>
+                  <option value="MM">MM (Millimeters)</option>
+                  <option value="IN">IN (Inches)</option>
+                  <option value="FT">FT (Feet)</option>
+                  <option value="SQM">SQM (Square Meters)</option>
+                  <option value="CFT">CFT (Cubic Feet)</option>
                   <option value="BOX">BOX (Box Packaging)</option>
                   <option value="SET">SET (Stock sets)</option>
                 </select>
