@@ -636,6 +636,7 @@ async function getCompanyChatStats(req, res) {
         });
         let totalCompanyExpense = 0;
         let individualTotalExpense = 0;
+        let individualTotalSent = 0;
         let individualTotalReceived = 0;
         // Group the messages and members by groupId for faster access
         const messagesByGroup = {};
@@ -694,7 +695,7 @@ async function getCompanyChatStats(req, res) {
                             netBalances[from] = (netBalances[from] || 0) - amount;
                             netBalances[to] = (netBalances[to] || 0) + amount;
                             if (from === user.userId) {
-                                individualTotalExpense += amount; // Transfer by me
+                                individualTotalSent += amount; // Transfer by me (Sent)
                             }
                             if (to === user.userId) {
                                 individualTotalReceived += amount; // Received by me
@@ -706,10 +707,9 @@ async function getCompanyChatStats(req, res) {
                     }
                 }
             });
-            // Add this group's user balance to individualNetSum
         });
-        // Compute Net balance globally using User's custom formula: Net = Expense - Received
-        const individualNetSum = individualTotalExpense - individualTotalReceived;
+        // Compute Net balance globally using User's custom formula: Net = Received - Expense - Sent
+        const individualNetSum = individualTotalReceived - individualTotalExpense - individualTotalSent;
         res.json({
             totalCompanyExpense,
             individualNetSum,
@@ -816,11 +816,19 @@ async function downloadExpenseSheet(req, res) {
         });
         // Compute balances
         let totalExpense = 0;
+        const expenseSpent = {};
+        const shareConsumed = {};
+        const paymentSent = {};
+        const paymentReceived = {};
         const netBalances = {};
-        const totalPaid = {};
+        const settleBalances = {};
         members.forEach(m => {
+            expenseSpent[m.userId] = 0;
+            shareConsumed[m.userId] = 0;
+            paymentSent[m.userId] = 0;
+            paymentReceived[m.userId] = 0;
             netBalances[m.userId] = 0;
-            totalPaid[m.userId] = 0;
+            settleBalances[m.userId] = 0;
         });
         messages.forEach(msg => {
             if (msg.type === 'EXPENSE') {
@@ -831,10 +839,13 @@ async function downloadExpenseSheet(req, res) {
                         const paidBy = data.paidBy || msg.senderId;
                         const splits = data.splits || {};
                         totalExpense += amount;
-                        totalPaid[paidBy] = (totalPaid[paidBy] || 0) + amount;
-                        netBalances[paidBy] = (netBalances[paidBy] || 0) + amount;
+                        if (expenseSpent[paidBy] !== undefined) {
+                            expenseSpent[paidBy] += amount;
+                        }
                         Object.entries(splits).forEach(([uId, share]) => {
-                            netBalances[uId] = (netBalances[uId] || 0) - Number(share || 0);
+                            if (shareConsumed[uId] !== undefined) {
+                                shareConsumed[uId] += Number(share || 0);
+                            }
                         });
                     }
                 }
@@ -847,23 +858,31 @@ async function downloadExpenseSheet(req, res) {
                         const amount = Number(data.amount || 0);
                         const from = data.from;
                         const to = data.to;
-                        netBalances[from] = (netBalances[from] || 0) - amount;
-                        netBalances[to] = (netBalances[to] || 0) + amount;
+                        if (paymentSent[from] !== undefined) {
+                            paymentSent[from] += amount;
+                        }
+                        if (paymentReceived[to] !== undefined) {
+                            paymentReceived[to] += amount;
+                        }
                     }
                 }
                 catch (e) { }
             }
         });
+        members.forEach(m => {
+            netBalances[m.userId] = paymentReceived[m.userId] - expenseSpent[m.userId] - paymentSent[m.userId];
+            settleBalances[m.userId] = shareConsumed[m.userId] + netBalances[m.userId];
+        });
         // Greedy debt settlement calculation
         const debtors = [];
         const creditors = [];
-        Object.entries(netBalances).forEach(([uId, bal]) => {
+        Object.entries(settleBalances).forEach(([uId, bal]) => {
             const name = userMap.get(uId)?.username || 'Unknown Colleague';
-            if (bal < -0.01) {
-                debtors.push({ userId: uId, username: name, amount: -bal });
+            if (bal > 0.01) {
+                debtors.push({ userId: uId, username: name, amount: bal });
             }
-            else if (bal > 0.01) {
-                creditors.push({ userId: uId, username: name, amount: bal });
+            else if (bal < -0.01) {
+                creditors.push({ userId: uId, username: name, amount: -bal });
             }
         });
         debtors.sort((a, b) => b.amount - a.amount);
@@ -894,12 +913,12 @@ async function downloadExpenseSheet(req, res) {
         csv += `Total Expenditure,$${totalExpense.toFixed(2)}\n`;
         csv += `Total Members,${members.length}\n\n`;
         csv += `--- MEMBER SUMMARY ---\n`;
-        csv += `Member Name,Role,Total Paid,Net Balance\n`;
+        csv += `Member Name,Role,Total Expense,Net Balance\n`;
         members.forEach(m => {
             const username = userMap.get(m.userId)?.username || 'Unknown';
             const bal = netBalances[m.userId] || 0;
             const balText = bal > 0.01 ? `+$${bal.toFixed(2)}` : bal < -0.01 ? `-$${Math.abs(bal).toFixed(2)}` : '$0.00';
-            csv += `"${username}","${m.role}","$${(totalPaid[m.userId] || 0).toFixed(2)}","${balText}"\n`;
+            csv += `"${username}","${m.role}","$${(expenseSpent[m.userId] || 0).toFixed(2)}","${balText}"\n`;
         });
         csv += `\n`;
         csv += `--- RECOMMENDED SETTLEMENTS ---\n`;

@@ -22,11 +22,12 @@ const modeEnv = parseEnv(path.resolve(__dirname, `../.env.${mode}`));
 // Combine env configurations (process.env takes ultimate priority)
 const env = { ...baseEnv, ...modeEnv, ...process.env };
 
-// Base allowlist (always include localhosts)
+// Base allowlist (always include localhosts and connectivity check domains)
 const baseAllow = [
   "http://localhost:5000/*",
   "http://localhost:6000/*",
-  "http://localhost:6001/*"
+  "http://localhost:6001/*",
+  "https://clients3.google.com/*"
 ];
 
 // Extract custom URLs from env

@@ -30,8 +30,7 @@
               "RelativeToolTip": "frontend\\src-tauri\\tauri.conf.json",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAAAQAAAAjAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
-              "WhenOpened": "2026-05-23T19:07:24.608Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-05-23T19:07:24.608Z"
             },
             {
               "$type": "Document",
@@ -39,9 +38,9 @@
               "Title": "README.md",
               "DocumentMoniker": "D:\\ERP\\Manual ERP\\README.md",
               "RelativeDocumentMoniker": "README.md",
-              "ToolTip": "D:\\ERP\\Manual ERP\\README.md*",
-              "RelativeToolTip": "README.md*",
-              "ViewState": "AgIAANIAAAAAAAAAAAAkwNMAAAAAAAAAAAAAAA==",
+              "ToolTip": "D:\\ERP\\Manual ERP\\README.md",
+              "RelativeToolTip": "README.md",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAQwKACAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
               "WhenOpened": "2026-05-23T18:52:08.678Z",
               "EditorCaption": ""

@@ -32,6 +32,20 @@ interface BomManagementProps {
 }
 
 export default function BomManagement({ products = [] }: BomManagementProps) {
+  const formatLaborTime = (hours: number): string => {
+    if (hours === 0) return '0h';
+    const totalSeconds = Math.round(hours * 3600);
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    
+    const parts: string[] = [];
+    if (h > 0) parts.push(`${h}h`);
+    if (m > 0) parts.push(`${m}m`);
+    if (s > 0) parts.push(`${s}s`);
+    return parts.join(' ');
+  };
+
   const [activeTab, setActiveTab] = useState<'list' | 'costing'>('list');
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -88,7 +102,8 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
   // State for creating new BOM
   const [newBomFinishedProductId, setNewBomFinishedProductId] = useState('');
   const [newBomVersion, setNewBomVersion] = useState('v1.0');
-  const [newBomLaborHours, setNewBomLaborHours] = useState(8);
+  const [newBomLaborTime, setNewBomLaborTime] = useState<number>(8);
+  const [newBomLaborTimeUnit, setNewBomLaborTimeUnit] = useState<'HOURS' | 'MINUTES' | 'SECONDS'>('HOURS');
   const [newBomLaborRate, setNewBomLaborRate] = useState(25);
   const [newBomOverhead, setNewBomOverhead] = useState(100);
   const [newBomComponents, setNewBomComponents] = useState<ComponentItem[]>([]);
@@ -145,10 +160,17 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
       return;
     }
 
+    let calculatedHours = Number(newBomLaborTime);
+    if (newBomLaborTimeUnit === 'MINUTES') {
+      calculatedHours = Number(newBomLaborTime) / 60;
+    } else if (newBomLaborTimeUnit === 'SECONDS') {
+      calculatedHours = Number(newBomLaborTime) / 3600;
+    }
+
     const payload = {
       finishedProductId: newBomFinishedProductId,
       version: newBomVersion,
-      laborHours: Number(newBomLaborHours),
+      laborHours: calculatedHours,
       laborRate: Number(newBomLaborRate),
       overheadAllocation: Number(newBomOverhead),
       components: newBomComponents.map(c => ({
@@ -180,7 +202,23 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
   const handleEditBOM = (bom: BOM) => {
     setNewBomFinishedProductId(bom.finishedProductId);
     setNewBomVersion(bom.version);
-    setNewBomLaborHours(bom.laborHours);
+
+    // Convert decimal hours back to a friendly time unit
+    const hours = bom.laborHours;
+    if (hours === 0) {
+      setNewBomLaborTime(0);
+      setNewBomLaborTimeUnit('HOURS');
+    } else if (hours >= 1 && Number.isInteger(hours)) {
+      setNewBomLaborTime(hours);
+      setNewBomLaborTimeUnit('HOURS');
+    } else if (hours * 60 >= 1 && Number.isInteger(hours * 60)) {
+      setNewBomLaborTime(hours * 60);
+      setNewBomLaborTimeUnit('MINUTES');
+    } else {
+      setNewBomLaborTime(Math.round(hours * 3600 * 100) / 100);
+      setNewBomLaborTimeUnit('SECONDS');
+    }
+
     setNewBomLaborRate(bom.laborRate);
     setNewBomOverhead(bom.overheadAllocation);
     setNewBomComponents(bom.components);
@@ -310,8 +348,8 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
                         <span className="text-[11px] font-bold text-slate-300">₹{matCost.toFixed(1)}</span>
                       </div>
                       <div>
-                        <span className="text-[9px] text-slate-500 block uppercase font-bold tracking-wider">Labor (hrs)</span>
-                        <span className="text-[11px] font-bold text-slate-300">₹{laborCost.toFixed(1)} <span className="text-[9px] text-slate-500">({bom.laborHours}h)</span></span>
+                        <span className="text-[9px] text-slate-500 block uppercase font-bold tracking-wider">Labor Time</span>
+                        <span className="text-[11px] font-bold text-slate-300">₹{laborCost.toFixed(1)} <span className="text-[9px] text-slate-500">({formatLaborTime(bom.laborHours)})</span></span>
                       </div>
                       <div>
                         <span className="text-[9px] text-slate-500 block uppercase font-bold tracking-wider">Overhead</span>
@@ -536,18 +574,29 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
                 )}
               </div>
 
-              {/* Labor hours and Overheads */}
-              <div className="grid grid-cols-3 gap-4 pt-2">
-                <div>
-                  <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Labor (hrs)</label>
-                  <input
-                    type="number"
-                    value={newBomLaborHours}
-                    step="0.1"
-                    onChange={e => setNewBomLaborHours(Number(e.target.value))}
-                    min="0"
-                    className="w-full bg-slate-950 border border-slate-850 p-2 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
-                  />
+              {/* Labor time and Overheads */}
+              <div className="grid grid-cols-4 gap-4 pt-2">
+                <div className="col-span-2">
+                  <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Labor Time</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      value={newBomLaborTime}
+                      step="any"
+                      onChange={e => setNewBomLaborTime(Number(e.target.value))}
+                      min="0"
+                      className="w-2/3 bg-slate-950 border border-slate-850 p-2 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
+                    />
+                    <select
+                      value={newBomLaborTimeUnit}
+                      onChange={e => setNewBomLaborTimeUnit(e.target.value as any)}
+                      className="w-1/3 bg-slate-950 border border-slate-850 p-2 rounded-lg text-[10px] text-white focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value="HOURS">Hours</option>
+                      <option value="MINUTES">Minutes</option>
+                      <option value="SECONDS">Seconds</option>
+                    </select>
+                  </div>
                 </div>
                 <div>
                   <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Labor Rate/hr (₹)</label>

@@ -6424,39 +6424,69 @@ export default function App() {
                   {/* Calculations */}
                   <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 text-xs select-none">
                     {(() => {
+                      const expenseSpent: Record<string, number> = {};
+                      const shareConsumed: Record<string, number> = {};
+                      const paymentSent: Record<string, number> = {};
+                      const paymentReceived: Record<string, number> = {};
                       const netBalances: Record<string, number> = {};
-                      selectedChatGroup.members.forEach((m: any) => netBalances[m.userId] = 0);
+                      const settleBalances: Record<string, number> = {};
+
+                      selectedChatGroup.members.forEach((m: any) => {
+                        expenseSpent[m.userId] = 0;
+                        shareConsumed[m.userId] = 0;
+                        paymentSent[m.userId] = 0;
+                        paymentReceived[m.userId] = 0;
+                        netBalances[m.userId] = 0;
+                        settleBalances[m.userId] = 0;
+                      });
 
                       chatMessages.forEach(msg => {
                         if (msg.type === 'EXPENSE') {
                           const data = typeof msg.expenseData === 'string' ? JSON.parse(msg.expenseData) : msg.expenseData;
                           if (data) {
+                            const amount = Number(data.amount || 0);
+                            const paidBy = data.paidBy || msg.senderId;
                             const splits = data.splits || {};
-                            const paidBy = data.paidBy;
-                            netBalances[paidBy] = (netBalances[paidBy] || 0) + (data.amount || 0);
+                            if (expenseSpent[paidBy] !== undefined) {
+                              expenseSpent[paidBy] += amount;
+                            }
                             Object.entries(splits).forEach(([uId, share]) => {
-                              netBalances[uId] = (netBalances[uId] || 0) - (share as number);
+                              if (shareConsumed[uId] !== undefined) {
+                                shareConsumed[uId] += Number(share || 0);
+                              }
                             });
                           }
                         } else if (msg.type === 'PAYMENT') {
                           const data = typeof msg.expenseData === 'string' ? JSON.parse(msg.expenseData) : msg.expenseData;
                           if (data) {
-                            netBalances[data.from] = (netBalances[data.from] || 0) - (data.amount || 0);
-                            netBalances[data.to] = (netBalances[data.to] || 0) + (data.amount || 0);
+                            const amount = Number(data.amount || 0);
+                            const from = data.from;
+                            const to = data.to;
+                            if (paymentSent[from] !== undefined) {
+                              paymentSent[from] += amount;
+                            }
+                            if (paymentReceived[to] !== undefined) {
+                              paymentReceived[to] += amount;
+                            }
                           }
                         }
+                      });
+
+                      selectedChatGroup.members.forEach((m: any) => {
+                        netBalances[m.userId] = paymentReceived[m.userId] - expenseSpent[m.userId] - paymentSent[m.userId];
+                        settleBalances[m.userId] = shareConsumed[m.userId] + netBalances[m.userId];
                       });
 
                       // GREEDY ENGINE SETTLEMENT TRANSACTION RESOLUTIONS
                       const debtors: { userId: string; username: string; amount: number }[] = [];
                       const creditors: { userId: string; username: string; amount: number }[] = [];
 
-                      Object.entries(netBalances).forEach(([uId, bal]) => {
+                      Object.entries(settleBalances).forEach(([uId, bal]) => {
                         const name = selectedChatGroup.members.find((m: any) => m.userId === uId)?.username || 'Unknown Colleague';
-                        if (bal < -0.01) {
-                          debtors.push({ userId: uId, username: name, amount: -bal });
-                        } else if (bal > 0.01) {
-                          creditors.push({ userId: uId, username: name, amount: bal });
+                        if (bal > 0.01) {
+                          debtors.push({ userId: uId, username: name, amount: bal });
+                        } else if (bal < -0.01) {
+                          creditors.push({ userId: uId, username: name, amount: -bal });
                         }
                       });
 
@@ -6495,16 +6525,27 @@ export default function App() {
                       return (
                         <div className="flex flex-col gap-4 text-left">
                           <div>
-                            <h4 className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-2">Member Net Status</h4>
+                            <h4 className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-2">Member Net Status & Expenses</h4>
                             <div className="flex flex-col gap-1.5">
-                              {Object.entries(netBalances).map(([uId, bal]) => {
-                                const name = selectedChatGroup.members.find((m: any) => m.userId === uId)?.username || 'Someone';
+                              {selectedChatGroup.members.map((m: any) => {
+                                const uId = m.userId;
+                                const expense = expenseSpent[uId] || 0;
+                                const net = netBalances[uId] || 0;
                                 return (
-                                  <div key={uId} className="flex justify-between items-center p-2 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-color)]">
-                                    <span className="font-semibold">{name}</span>
-                                    <span className={`font-bold ${bal > 0.01 ? 'text-emerald-500' : bal < -0.01 ? 'text-rose-500' : 'text-[var(--text-muted)]'}`}>
-                                      {bal > 0.01 ? `+$${bal.toFixed(2)}` : bal < -0.01 ? `-$${Math.abs(bal).toFixed(2)}` : 'Settle/Cleared'}
-                                    </span>
+                                  <div key={uId} className="flex justify-between items-center p-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-color)]">
+                                    <span className="font-semibold text-[13px] text-[var(--text-primary)]">{m.username}</span>
+                                    <div className="flex items-center gap-6 text-right">
+                                      <div>
+                                        <span className="text-[8px] text-[var(--text-secondary)] block uppercase tracking-wider font-bold">Total Expense</span>
+                                        <span className="font-bold text-[12px] text-[var(--text-primary)]">{currencySymbol}{expense.toFixed(2)}</span>
+                                      </div>
+                                      <div>
+                                        <span className="text-[8px] text-[var(--text-secondary)] block uppercase tracking-wider font-bold">Net Balance</span>
+                                        <span className={`font-bold text-[12px] ${net > 0.01 ? 'text-emerald-500' : net < -0.01 ? 'text-rose-500' : 'text-[var(--text-muted)]'}`}>
+                                          {net > 0.01 ? `+${currencySymbol}${net.toFixed(2)}` : net < -0.01 ? `-${currencySymbol}${Math.abs(net).toFixed(2)}` : `${currencySymbol}0.00`}
+                                        </span>
+                                      </div>
+                                    </div>
                                   </div>
                                 );
                               })}
@@ -6524,7 +6565,7 @@ export default function App() {
                                   return (
                                     <div key={idx} className="p-2.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] flex items-center justify-between text-[11.5px]">
                                       <div className="flex-1">
-                                        <span className="font-bold text-[var(--text-primary)]">{t.fromName}</span> owes <span className="font-bold text-[var(--text-primary)]">{t.toName}</span> <span className="font-extrabold text-rose-500">${t.amount.toFixed(2)}</span>
+                                        <span className="font-bold text-[var(--text-primary)]">{t.fromName}</span> owes <span className="font-bold text-[var(--text-primary)]">{t.toName}</span> <span className="font-extrabold text-rose-500">{currencySymbol}{t.amount.toFixed(2)}</span>
                                       </div>
                                       {amIDebtor && (
                                         <button
