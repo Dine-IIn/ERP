@@ -22,6 +22,7 @@ interface LoginProps {
   setConflictModalOpen: (open: boolean) => void;
   conflictDeviceModel: string;
   handleForceLogin: () => void;
+  onSwitchWorkspace?: () => void;
 }
 
 export default function Login({
@@ -37,6 +38,7 @@ export default function Login({
   setConflictModalOpen,
   conflictDeviceModel,
   handleForceLogin,
+  onSwitchWorkspace,
 }: LoginProps) {
   return (
     <div className="w-full max-w-md bg-[var(--bg-card)] border border-[var(--border-color)] p-8 rounded-2xl shadow-xl relative animate-fade-in">
@@ -144,6 +146,18 @@ export default function Login({
           Join Tenant Company
         </button>
       </div>
+
+      {typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__ !== undefined && onSwitchWorkspace && (
+        <div className="mt-3 text-center border-t border-[var(--border-color)]/50 pt-3">
+          <button
+            type="button"
+            onClick={onSwitchWorkspace}
+            className="text-indigo-500 hover:underline font-bold text-xs cursor-pointer font-display bg-transparent border-0"
+          >
+            Switch Workspace / Company
+          </button>
+        </div>
+      )}
 
       {/* Concurrent Session Conflict Modal */}
       {conflictModalOpen && (

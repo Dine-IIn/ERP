@@ -480,38 +480,41 @@ export default function App() {
     if (isTauriClient()) {
       const code = localStorage.getItem('erp_company_code');
       const url = localStorage.getItem('erp_server_url');
-      
       if (code) {
-        logToConsole('info', `[Tauri Startup] Re-validating company code "${code}"...`);
-        const targetUrl = getDiscoveryServiceUrl();
-        console.log("=== DISCOVERY DEBUG (STARTUP VALIDATION) ===");
-        console.log("Discovery URL:", targetUrl);
-        console.log("Environment URL:", import.meta.env.VITE_DISCOVERY_SERVICE_URL);
-        console.log("=======================");
-        getActiveFetch()(targetUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ companyCode: code })
-        })
-        .then(res => {
-          if (!res.ok) throw new Error(`Discovery server returned status: ${res.status}`);
-          return res.json();
-        })
-        .then(data => {
-          if (data && data.success && data.serverUrl) {
-            if (data.serverUrl !== url) {
-              localStorage.setItem('erp_server_url', data.serverUrl);
-              logToConsole('info', `[Tauri Startup] Discovery URL updated from "${url}" to "${data.serverUrl}"`);
+        if (code.toUpperCase() === 'SUPERADMIN') {
+          logToConsole('info', `[Tauri Startup] Bypassing discovery re-validation for static SUPERADMIN`);
+        } else {
+          logToConsole('info', `[Tauri Startup] Re-validating company code "${code}"...`);
+          const targetUrl = getDiscoveryServiceUrl();
+          console.log("=== DISCOVERY DEBUG (STARTUP VALIDATION) ===");
+          console.log("Discovery URL:", targetUrl);
+          console.log("Environment URL:", import.meta.env.VITE_DISCOVERY_SERVICE_URL);
+          console.log("=======================");
+          getActiveFetch()(targetUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ companyCode: code })
+          })
+          .then(res => {
+            if (!res.ok) throw new Error(`Discovery server returned status: ${res.status}`);
+            return res.json();
+          })
+          .then(data => {
+            if (data && data.success && data.serverUrl) {
+              if (data.serverUrl !== url) {
+                localStorage.setItem('erp_server_url', data.serverUrl);
+                logToConsole('info', `[Tauri Startup] Discovery URL updated from "${url}" to "${data.serverUrl}"`);
+              } else {
+                logToConsole('info', `[Tauri Startup] Discovery URL verified active: "${data.serverUrl}"`);
+              }
             } else {
-              logToConsole('info', `[Tauri Startup] Discovery URL verified active: "${data.serverUrl}"`);
+              logToConsole('warn', `[Tauri Startup] Discovery response was unsuccessful: ${JSON.stringify(data)}`);
             }
-          } else {
-            logToConsole('warn', `[Tauri Startup] Discovery response was unsuccessful: ${JSON.stringify(data)}`);
-          }
-        })
-        .catch(err => {
-          logToConsole('error', `[Tauri Startup] Discovery revalidation failed: ${err.message || err.toString()}`);
-        });
+          })
+          .catch(err => {
+            logToConsole('error', `[Tauri Startup] Discovery revalidation failed: ${err.message || err.toString()}`);
+          });
+        }
       }
       
       checkForUpdates(false);
@@ -3461,6 +3464,7 @@ export default function App() {
                   loading={loading}
                   errorMsg={errorMsg}
                   successMsg={successMsg}
+                  onSwitchWorkspace={handleTauriChangeCompanyCode}
                   onRegisterClick={() => { setView('signup'); setSignupStep(1); setErrorMsg(null); setSuccessMsg(null); }}
                   onForgotPasswordClick={() => {
                     setShowForgotPasswordModal(true);

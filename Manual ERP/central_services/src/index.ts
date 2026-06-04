@@ -152,6 +152,16 @@ try {
   }
 }
 
+// Ensure SUPERADMIN is registered in discovery mapping
+if (!discoveryRegistry.has('SUPERADMIN') && config.fallbackServerUrl) {
+  discoveryRegistry.set('SUPERADMIN', {
+    companyName: 'Super Admin Console',
+    serverUrl: config.fallbackServerUrl,
+    status: 'ACTIVE'
+  });
+  console.log(`🔍 [Static Seeding] Registered static SUPERADMIN mapping to fallback URL: "${config.fallbackServerUrl}"`);
+}
+
 // ==================================================
 // 1. COMPANY DISCOVERY ROUTE
 // ==================================================

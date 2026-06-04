@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Building, Shield, AlertCircle, Loader2 } from 'lucide-react';
 import { getActiveFetch, getCentralServicesUrl, getDiscoveryServiceUrl, isTauriClient, logToConsole } from '../../utils/apiService';
+import { config } from '../../config';
 
 interface TauriSetupProps {
   onSuccess: (companyCode: string, serverUrl: string) => void;
@@ -20,6 +21,13 @@ export default function TauriSetup({ onSuccess }: TauriSetupProps) {
     if (!trimmedCode) {
       console.warn('[DISCOVERY] Validation failure: Company Code is empty');
       logToConsole('warn', '[DISCOVERY] Validation failure: Company Code is empty');
+      return;
+    }
+
+    if (trimmedCode.toUpperCase() === 'SUPERADMIN') {
+      console.log('[DISCOVERY] Superadmin bypass triggered');
+      logToConsole('info', '[DISCOVERY] Superadmin bypass triggered, using API URL: ' + config.apiUrl);
+      onSuccess('SUPERADMIN', config.apiUrl);
       return;
     }
 
