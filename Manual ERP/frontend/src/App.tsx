@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { config } from './config';
 import { io, Socket } from 'socket.io-client';
 import { MASTER_FEATURES_HIERARCHY, getCategoryKeys, getChildKeys, getParentKey } from './features';
 const Login = React.lazy(() => import('./components/auth/Login'));
@@ -10,6 +11,7 @@ const AuditLogs = React.lazy(() => import('./components/administration/AuditLogs
 const SnapshotBackups = React.lazy(() => import('./components/administration/SnapshotBackups'));
 const EmployeeRegistry = React.lazy(() => import('./components/administration/EmployeeRegistry'));
 const CorporateDepartments = React.lazy(() => import('./components/administration/CorporateDepartments'));
+const CentralServices = React.lazy(() => import('./components/administration/CentralServices'));
 const EmployeeMaster = React.lazy(() => import('./components/master_data_management/EmployeeMaster'));
 const CustomerMaster = React.lazy(() => import('./components/master_data_management/CustomerMaster'));
 const VendorMaster = React.lazy(() => import('./components/master_data_management/VendorMaster'));
@@ -137,19 +139,17 @@ import {
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { PushNotifications } from '@capacitor/push-notifications';
-import { apiClient, ApiError } from './utils/apiService';
+import { apiClient, ApiError, getActiveBaseUrl, isTauriClient, getActiveFetch, getCentralServicesUrl, logToConsole } from './utils/apiService';
+import TauriSetup from './components/auth/TauriSetup';
+import { invoke } from '@tauri-apps/api/core';
+import { check } from '@tauri-apps/plugin-updater';
 
 const getBackendUrl = () => {
-  const url = import.meta.env.VITE_API_URL;
-  if (Capacitor.isNativePlatform()) {
-    // if (url.includes('localhost') || url.includes('127.0.0.1')) {
-    //   return url.replace('localhost', '10.0.2.2').replace('127.0.0.1', '10.0.2.2');
-    // }
-  }
-  return url;
+  return getActiveBaseUrl();
 };
 
-const BACKEND_URL = getBackendUrl();
+// We define a getter helper to dynamically resolve BACKEND_URL where it is accessed
+const getDynamicBackendUrl = () => getActiveBaseUrl();
 
 interface UserProfile {
   id?: string;
@@ -315,6 +315,200 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
 };
 
 export default function App() {
+  // --- TAURI CLIENT STATES & HOOKS ---
+  const [showTauriSetup, setShowTauriSetup] = useState<boolean>(() => {
+    if (isTauriClient()) {
+      return !localStorage.getItem('erp_company_code') || !localStorage.getItem('erp_server_url');
+    }
+    return false;
+  });
+  const [updateAvailable, setUpdateAvailable] = useState<boolean>(false);
+  const [updateManifest, setUpdateManifest] = useState<any>(null);
+  const [showUpdateModal, setShowUpdateModal] = useState<boolean>(false);
+  const [updating, setUpdating] = useState<boolean>(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [lastUpdateCheck, setLastUpdateCheck] = useState<string>(() => {
+    return localStorage.getItem('erp_last_update_check') || 'Never';
+  });
+
+  const checkForUpdates = async (manual = false) => {
+    if (!isTauriClient()) return;
+    logToConsole('info', `[Tauri Update Check] Initializing update check (manual = ${manual})...`);
+    try {
+      setUpdateError(null);
+      const update = await check();
+      const checkTime = new Date().toLocaleString();
+      setLastUpdateCheck(checkTime);
+      localStorage.setItem('erp_last_update_check', checkTime);
+
+      if (update && update.available) {
+        logToConsole('info', `[Tauri Update Check] Update is available! Version: "${update.version}"`);
+        setUpdateAvailable(true);
+        setUpdateManifest(update);
+        setShowUpdateModal(true);
+      } else {
+        logToConsole('info', `[Tauri Update Check] No updates available. System is up to date.`);
+        setUpdateAvailable(false);
+        setUpdateManifest(null);
+        setShowUpdateModal(false);
+        if (manual) {
+          setActiveToast({
+            title: 'Software Update',
+            message: 'Your system is fully up to date with the latest version.'
+          });
+        }
+      }
+    } catch (err: any) {
+      logToConsole('error', `[Tauri Update Check Failed]: ${err.message || err.toString()}`);
+      setUpdateError(err.message || 'Failed to check for updates.');
+      if (manual) {
+        setActiveToast({
+          title: 'Update Check Failed',
+          message: err.message || 'Unable to connect to the updates server.'
+        });
+      }
+    }
+  };
+
+  const handleInstallUpdate = async () => {
+    if (!updateManifest) return;
+    setUpdating(true);
+    setUpdateError(null);
+    try {
+      await updateManifest.downloadAndInstall();
+      await invoke('restart_app');
+    } catch (err: any) {
+      console.error('Failed to install updates:', err);
+      setUpdateError(err.message || 'Failed during download/installation.');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleTauriReconnect = async () => {
+    if (!isTauriClient()) return;
+    const code = localStorage.getItem('erp_company_code');
+    if (!code) {
+      setShowTauriSetup(true);
+      return;
+    }
+    
+    setProfileLoading(true);
+    setProfileError(null);
+    setProfileSuccess(null);
+
+    const targetUrl = `${getCentralServicesUrl()}/api/discovery`;
+    logToConsole('info', `[Tauri Reconnect] Attempting workspace discovery for code "${code}" at: "${targetUrl}"`);
+    
+    try {
+      const response = await getActiveFetch()(targetUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ companyCode: code }),
+      });
+
+      logToConsole('info', `[Tauri Reconnect Response Status]: ${response.status} (${response.statusText})`);
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'No response body');
+        logToConsole('error', `[Tauri Reconnect Discovery Failed]: Status ${response.status}. Body: ${errorText}`);
+        throw new Error(`Discovery service connection failed. Status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      logToConsole('info', `[Tauri Reconnect Success Payload]: ${JSON.stringify(data)}`);
+
+      if (data && data.success && data.serverUrl) {
+        localStorage.setItem('erp_server_url', data.serverUrl);
+        setProfileSuccess(`Connection re-established with ${data.companyName || 'Workspace'}`);
+      } else {
+        throw new Error(data.message || 'Invalid Company Code or server URL.');
+      }
+    } catch (err: any) {
+      logToConsole('error', `[Tauri Reconnect Error]: ${err.message || err.toString()}`);
+      setProfileError(err.message || 'Failed to reconnect workspace.');
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
+  const handleTauriChangeCompanyCode = () => {
+    localStorage.removeItem('erp_company_code');
+    localStorage.removeItem('erp_server_url');
+    localStorage.removeItem('erp_token');
+    localStorage.removeItem('erp_token_expires');
+    localStorage.removeItem('erp_user');
+    
+    setToken(null);
+    setUser(null);
+    setLoginForm({ companyCode: '', username: '', password: '' });
+    setShowTauriSetup(true);
+    setShowMyProfileModal(false);
+  };
+
+  const handleTauriSetupSuccess = (companyCode: string, serverUrl: string) => {
+    console.log('[DISCOVERY] handleTauriSetupSuccess callback triggered.');
+    console.log('[DISCOVERY] Storing to localStorage:');
+    console.log(`  - erp_company_code: "${companyCode}"`);
+    console.log(`  - erp_server_url: "${serverUrl}"`);
+    
+    logToConsole('info', `[DISCOVERY] handleTauriSetupSuccess callback triggered. Storing erp_company_code="${companyCode}" and erp_server_url="${serverUrl}"`);
+
+    try {
+      localStorage.setItem('erp_company_code', companyCode);
+      localStorage.setItem('erp_server_url', serverUrl);
+      console.log('[DISCOVERY] LocalStorage writes succeeded');
+      logToConsole('info', '[DISCOVERY] LocalStorage writes succeeded');
+    } catch (storeErr: any) {
+      console.error('[DISCOVERY] Storage failure during write:', storeErr);
+      logToConsole('error', `[DISCOVERY] Storage failure: ${storeErr.message || storeErr.toString()}`);
+    }
+
+    setLoginForm({ companyCode, username: '', password: '' });
+    setShowTauriSetup(false);
+    console.log('[DISCOVERY] State updated (showTauriSetup = false), login form prefilled.');
+    logToConsole('info', '[DISCOVERY] State updated (showTauriSetup = false), login form prefilled.');
+  };
+
+  useEffect(() => {
+    if (isTauriClient()) {
+      const code = localStorage.getItem('erp_company_code');
+      const url = localStorage.getItem('erp_server_url');
+      
+      if (code) {
+        logToConsole('info', `[Tauri Startup] Re-validating company code "${code}"...`);
+        getActiveFetch()(`${getCentralServicesUrl()}/api/discovery`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ companyCode: code })
+        })
+        .then(res => {
+          if (!res.ok) throw new Error(`Discovery server returned status: ${res.status}`);
+          return res.json();
+        })
+        .then(data => {
+          if (data && data.success && data.serverUrl) {
+            if (data.serverUrl !== url) {
+              localStorage.setItem('erp_server_url', data.serverUrl);
+              logToConsole('info', `[Tauri Startup] Discovery URL updated from "${url}" to "${data.serverUrl}"`);
+            } else {
+              logToConsole('info', `[Tauri Startup] Discovery URL verified active: "${data.serverUrl}"`);
+            }
+          } else {
+            logToConsole('warn', `[Tauri Startup] Discovery response was unsuccessful: ${JSON.stringify(data)}`);
+          }
+        })
+        .catch(err => {
+          logToConsole('error', `[Tauri Startup] Discovery revalidation failed: ${err.message || err.toString()}`);
+        });
+      }
+      
+      checkForUpdates(false);
+    }
+  }, []);
+
   // --- CORE SYSTEM STATES ---
   const getInitialToken = () => {
     const tok = localStorage.getItem('erp_token');
@@ -401,6 +595,7 @@ export default function App() {
 
   // --- COMPONENT DATA STATES ---
   const [companies, setCompanies] = useState<any[]>([]); // Super Admin company list
+  const [licenses, setLicenses] = useState<any[]>([]); // Central Service licenses
   const [selectedCompany, setSelectedCompany] = useState<any | null>(null); // Super Admin focused tenant profile
   const [selectedCompanyUsers, setSelectedCompanyUsers] = useState<any[]>([]); // Super Admin focused tenant's users list
   const [editCompanyFeatures, setEditCompanyFeatures] = useState<string[]>([]);
@@ -814,7 +1009,7 @@ export default function App() {
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 2500);
-        await fetch('https://clients3.google.com/generate_204', {
+        await getActiveFetch()('https://clients3.google.com/generate_204', {
           method: 'GET',
           mode: 'no-cors',
           signal: controller.signal,
@@ -868,9 +1063,7 @@ export default function App() {
       return;
     }
 
-    const timeoutMinutes = import.meta.env.VITE_INACTIVITY_TIMEOUT_MINUTES 
-      ? parseInt(import.meta.env.VITE_INACTIVITY_TIMEOUT_MINUTES, 10) 
-      : 15;
+    const timeoutMinutes = config.inactivityTimeoutMinutes || 15;
     const INACTIVITY_TIMEOUT = timeoutMinutes * 60 * 1000;
     let timeoutId: NodeJS.Timeout;
 
@@ -935,7 +1128,7 @@ export default function App() {
     document.addEventListener('mousedown', handleClickOutside);
 
     if (Capacitor.isNativePlatform()) {
-      const url = import.meta.env.VITE_API_URL || '';
+      const url = config.apiUrl || '';
       if (url.includes('localhost') || url.includes('127.0.0.1')) {
         setActiveToast({
           title: "Local Backend Configured",
@@ -1154,22 +1347,23 @@ export default function App() {
     }
     
     console.log(`🔌 [WebSockets Init] Starting connection to backend socket server...`);
-    console.log("socket URL:", BACKEND_URL);
+    const activeBackendUrl = getDynamicBackendUrl();
+    console.log("socket URL:", activeBackendUrl);
     console.log("token existence:", !!token);
-    console.log(`🔌 WebSockets Target URL (BACKEND_URL): "${BACKEND_URL}"`);
-    console.log(`🔌 WebSockets Secure connection (WSS) forced: ${BACKEND_URL.startsWith('https')}`);
+    console.log(`🔌 WebSockets Target URL (BACKEND_URL): "${activeBackendUrl}"`);
+    console.log(`🔌 WebSockets Secure connection (WSS) forced: ${activeBackendUrl.startsWith('https')}`);
     console.log(`🔌 WebSockets User context: id="${user.id}", username="${user.username}"`);
     console.log(`🔌 WebSockets Auth token length: ${token ? token.length : 0} characters`);
     console.log("CAPACITOR TEST");
     console.log("isNative:", Capacitor.isNativePlatform());
-    console.log("backend:", BACKEND_URL);
+    console.log("backend:", activeBackendUrl);
     console.log("origin:", window.location.origin);
     console.log("href:", window.location.href);
     console.log("userAgent:", navigator.userAgent);
-    socketRef.current = io(BACKEND_URL, {
+    socketRef.current = io(activeBackendUrl, {
       transports: ['polling', 'websocket'],
       upgrade: true,
-      secure: BACKEND_URL.startsWith('https'),
+      secure: activeBackendUrl.startsWith('https'),
       reconnection: true,
       reconnectionAttempts: 30,
       reconnectionDelay: 1000,
@@ -1417,7 +1611,7 @@ export default function App() {
   
   const apiRequest = async (url: string, method: 'GET' | 'POST' | 'PATCH' | 'DELETE' = 'GET', body?: any): Promise<any> => {
     console.log('================ API DEBUG ================');
-    console.log('FULL URL:', `${BACKEND_URL}${url}`);
+    console.log('FULL URL:', `${getDynamicBackendUrl()}${url}`);
     console.log('METHOD:', method);
     console.log('BODY:', body);
     console.log('window.location.origin:', window.location.origin);
@@ -1540,7 +1734,7 @@ export default function App() {
       setConflictModalOpen(false);
       setConflictDeviceModel('');
       setConflictDeviceType('');
-      setLoginForm({ companyCode: '', username: '', password: '' });
+      setLoginForm({ companyCode: isTauriClient() ? (localStorage.getItem('erp_company_code') || '') : '', username: '', password: '' });
     } catch (err: any) {
       if (err instanceof ApiError && err.status === 409 && err.data?.sessionConflict) {
         // Active concurrent session detected
@@ -1633,12 +1827,16 @@ export default function App() {
   // --- SUPER ADMIN PORTAL ACTIONS ---
   const fetchSuperAdminData = async () => {
     try {
-      const data = await apiRequest('/api/super/companies', 'GET');
-      setCompanies(data.companies);
+      const [companiesData, licensesData] = await Promise.all([
+        apiRequest('/api/super/companies', 'GET'),
+        apiRequest('/api/super/central/licenses', 'GET')
+      ]);
+      setCompanies(companiesData.companies || []);
+      setLicenses(licensesData || []);
       
       // If a company is currently selected, refresh its profile data & users list too
       if (selectedCompany) {
-        const freshCompany = data.companies.find((c: any) => c.id === selectedCompany.id);
+        const freshCompany = companiesData.companies.find((c: any) => c.id === selectedCompany.id);
         if (freshCompany) {
           setSelectedCompany(freshCompany);
           fetchCompanyAdminsList(freshCompany.id);
@@ -1653,6 +1851,11 @@ export default function App() {
       setSelectedCompanyUsers(data.users);
     } catch (e) {}
   };
+
+  const unspawnedLicenses = licenses.filter(lic => 
+    lic.status === 'ACTIVE' && 
+    !companies.some(c => c.companyCode.toUpperCase() === (lic.companyCode || '').toUpperCase())
+  );
 
   const handleCreateCompanySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -3192,7 +3395,7 @@ export default function App() {
   const handleDownloadExpenseSheet = () => {
     if (!selectedChatGroup) return;
     const activeToken = token || localStorage.getItem('erp_token');
-    const url = `${BACKEND_URL}/api/chat/group/${selectedChatGroup.id}/expense-sheet?token=${activeToken}`;
+    const url = `${getDynamicBackendUrl()}/api/chat/group/${selectedChatGroup.id}/expense-sheet?token=${activeToken}`;
     const a = document.createElement('a');
     a.href = url;
     a.download = `expense_sheet_${selectedChatGroup.name.replace(/[^a-zA-Z0-9]/g, '_')}.csv`;
@@ -3237,42 +3440,48 @@ export default function App() {
           <div className="absolute top-[20%] left-[20%] w-[300px] h-[300px] bg-indigo-500/5 rounded-full blur-[80px] pointer-events-none" />
           <div className="absolute bottom-[20%] right-[20%] w-[300px] h-[300px] bg-purple-500/5 rounded-full blur-[80px] pointer-events-none" />
 
-          {view === 'login' && (
-            <Login
-              loginForm={loginForm}
-              setLoginForm={setLoginForm}
-              handleLoginSubmit={handleLoginSubmit}
-              loading={loading}
-              errorMsg={errorMsg}
-              successMsg={successMsg}
-              onRegisterClick={() => { setView('signup'); setSignupStep(1); setErrorMsg(null); setSuccessMsg(null); }}
-              onForgotPasswordClick={() => {
-                setShowForgotPasswordModal(true);
-                setErrorMsg(null);
-                setSuccessMsg(null);
-              }}
-              conflictModalOpen={conflictModalOpen}
-              setConflictModalOpen={setConflictModalOpen}
-              conflictDeviceModel={conflictDeviceModel}
-              handleForceLogin={handleForceLogin}
-            />
-          )}
+          {showTauriSetup ? (
+            <TauriSetup onSuccess={handleTauriSetupSuccess} />
+          ) : (
+            <>
+              {view === 'login' && (
+                <Login
+                  loginForm={loginForm}
+                  setLoginForm={setLoginForm}
+                  handleLoginSubmit={handleLoginSubmit}
+                  loading={loading}
+                  errorMsg={errorMsg}
+                  successMsg={successMsg}
+                  onRegisterClick={() => { setView('signup'); setSignupStep(1); setErrorMsg(null); setSuccessMsg(null); }}
+                  onForgotPasswordClick={() => {
+                    setShowForgotPasswordModal(true);
+                    setErrorMsg(null);
+                    setSuccessMsg(null);
+                  }}
+                  conflictModalOpen={conflictModalOpen}
+                  setConflictModalOpen={setConflictModalOpen}
+                  conflictDeviceModel={conflictDeviceModel}
+                  handleForceLogin={handleForceLogin}
+                />
+              )}
 
-          {view === 'signup' && (
-            <Signup
-              signupForm={signupForm}
-              setSignupForm={setSignupForm}
-              signupStep={signupStep}
-              setSignupStep={setSignupStep}
-              signupVerificationMethod={signupVerificationMethod}
-              setSignupVerificationMethod={setSignupVerificationMethod}
-              triggerOtpRequest={triggerOtpRequest}
-              handleSignupSubmit={handleSignupSubmit}
-              loading={loading}
-              errorMsg={errorMsg}
-              successMsg={successMsg}
-              onBackToLoginClick={() => { setView('login'); setErrorMsg(null); setSuccessMsg(null); }}
-            />
+              {view === 'signup' && (
+                <Signup
+                  signupForm={signupForm}
+                  setSignupForm={setSignupForm}
+                  signupStep={signupStep}
+                  setSignupStep={setSignupStep}
+                  signupVerificationMethod={signupVerificationMethod}
+                  setSignupVerificationMethod={setSignupVerificationMethod}
+                  triggerOtpRequest={triggerOtpRequest}
+                  handleSignupSubmit={handleSignupSubmit}
+                  loading={loading}
+                  errorMsg={errorMsg}
+                  successMsg={successMsg}
+                  onBackToLoginClick={() => { setView('login'); setErrorMsg(null); setSuccessMsg(null); }}
+                />
+              )}
+            </>
           )}
         </div>
       ) : (
@@ -3403,6 +3612,20 @@ export default function App() {
                     <Plus className="w-4 h-4" style={{ flexShrink: 0 }} />
                     {!sidebarCollapsed && <span>Spawn Tenant</span>}
                   </button>
+
+                  <button
+                    onClick={() => { setActiveWorkspaceModule('central_services'); setSelectedCompany(null); }}
+                    className={`w-full py-2 px-3 rounded-lg text-left text-xs font-semibold transition-colors flex items-center gap-2 ${
+                      activeWorkspaceModule === 'central_services'
+                        ? 'bg-[var(--bg-tertiary)] text-indigo-500 font-bold border-l-2 border-indigo-500'
+                        : 'text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]'
+                    }`}
+                    title={sidebarCollapsed ? "Central Services" : ""}
+                  >
+                    <Settings className="w-4 h-4" style={{ flexShrink: 0 }} />
+                    {!sidebarCollapsed && <span>Central Services</span>}
+                  </button>
+
 
                   {/* Spawned Company List shortcut profiles */}
                   {companies.length > 0 && (
@@ -3896,7 +4119,7 @@ export default function App() {
                         backupRetentionDays={backupRetentionDays}
                         handleTriggerBackup={handleTriggerBackup}
                         handleUpdateBackupRetention={handleUpdateBackupRetention}
-                        BACKEND_URL={BACKEND_URL}
+                        BACKEND_URL={getDynamicBackendUrl()}
                         fetchBackups={fetchBackups}
                       />
                     )}
@@ -4551,15 +4774,34 @@ export default function App() {
                         />
                       </div>
                       <div>
-                        <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Unique Company Code</label>
-                        <input
-                          type="text"
-                          required
-                          placeholder="e.g. ACME"
-                          value={newCompany.companyCode}
-                          onChange={e => setNewCompany({ ...newCompany, companyCode: e.target.value.toUpperCase() })}
-                          className="w-full mt-1 bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs"
-                        />
+                        <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Select Active License</label>
+                        {unspawnedLicenses.length === 0 ? (
+                          <div className="text-[10px] text-amber-400 bg-amber-500/5 border border-amber-500/20 rounded-lg p-2 mt-1">
+                            ⚠ No unused licenses available. Issue a new license in Central Services first.
+                          </div>
+                        ) : (
+                          <select
+                            required
+                            value={newCompany.companyCode}
+                            onChange={e => {
+                              const val = e.target.value;
+                              const selectedLic = unspawnedLicenses.find(l => l.companyCode === val);
+                              setNewCompany({ 
+                                ...newCompany, 
+                                companyCode: val,
+                                name: selectedLic ? selectedLic.companyCode + ' Corporation' : ''
+                              });
+                            }}
+                            className="w-full mt-1 bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs"
+                          >
+                            <option value="">— Select an unspawned license —</option>
+                            {unspawnedLicenses.map(lic => (
+                              <option key={lic.licenseKey} value={lic.companyCode}>
+                                {lic.companyCode} ({lic.licenseKey})
+                              </option>
+                            ))}
+                          </select>
+                        )}
                       </div>
                           {/* Subscription Modules Toggle Switches - replaced flat view with hierarchical tree */}
                     <div className="col-span-1 md:col-span-2 text-left">
@@ -4714,13 +4956,20 @@ export default function App() {
 
                     <button
                       type="submit"
-                      disabled={loading}
-                      className="w-full mt-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-lg text-xs cursor-pointer"
+                      disabled={loading || unspawnedLicenses.length === 0}
+                      className="w-full mt-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-lg text-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {loading ? 'Provisioning Tenant Nodes...' : 'Provision Corporate Tenant'}
                     </button>
                   </form>
                 </div>
+              )}
+
+              {/* ==========================================
+                  SUPER ADMIN VIEW C: CENTRAL SERVICES PORTAL
+                  ========================================== */}
+              {user.isSuperAdmin && activeWorkspaceModule === 'central_services' && !selectedCompany && (
+                <CentralServices apiRequest={apiRequest} />
               )}
 
               {/* ==========================================
@@ -6929,7 +7178,7 @@ export default function App() {
               ========================================== */}
           {showMyProfileModal && user && (
             <div className="fixed inset-0 z-55 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 animate-fade-in select-none">
-              <div className="bg-[var(--bg-card)] border border-[var(--border-color)] p-6 rounded-2xl shadow-2xl w-full max-w-md animate-scale-up relative">
+              <div className="bg-[var(--bg-card)] border border-[var(--border-color)] p-6 rounded-2xl shadow-2xl w-full max-w-md animate-scale-up relative max-h-[90vh] overflow-y-auto">
                 <button 
                   onClick={() => setShowMyProfileModal(false)}
                   className="absolute top-4 right-4 text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer transition-colors"
@@ -7067,6 +7316,70 @@ export default function App() {
                     </button>
                   </div>
                 </form>
+
+                {isTauriClient() && (
+                  <div className="mt-6 pt-5 border-t border-[var(--border-color)] flex flex-col gap-5">
+                    {/* Connection Settings Section */}
+                    <div>
+                      <span className="text-[10px] font-bold text-indigo-400 tracking-wider uppercase block mb-3">Connection Settings</span>
+                      <div className="bg-[var(--bg-tertiary)] border border-[var(--border-color)] p-3 rounded-xl flex flex-col gap-2.5">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-[var(--text-secondary)] font-medium">Company Code</span>
+                          <span className="font-mono text-indigo-400 font-bold uppercase">{localStorage.getItem('erp_company_code') || 'N/A'}</span>
+                        </div>
+                        <div className="flex flex-col gap-1 text-[11px]">
+                          <span className="text-[var(--text-muted)] font-medium">Server Endpoint URL</span>
+                          <span className="font-mono text-[var(--text-secondary)] break-all bg-[var(--bg-primary)] p-2 rounded-lg border border-[var(--border-color)]">{localStorage.getItem('erp_server_url') || 'N/A'}</span>
+                        </div>
+                        <div className="flex gap-2 mt-1">
+                          <button
+                            type="button"
+                            onClick={handleTauriReconnect}
+                            disabled={profileLoading}
+                            className="flex-1 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 border border-indigo-500/20 font-bold py-1.5 rounded-lg text-[10px] cursor-pointer transition-all duration-200"
+                          >
+                            Reconnect
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleTauriChangeCompanyCode}
+                            className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 font-bold py-1.5 rounded-lg text-[10px] cursor-pointer transition-all duration-200"
+                          >
+                            Change Code
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Application Updates Section */}
+                    <div>
+                      <span className="text-[10px] font-bold text-indigo-400 tracking-wider uppercase block mb-3">Application Updates</span>
+                      <div className="bg-[var(--bg-tertiary)] border border-[var(--border-color)] p-3 rounded-xl flex flex-col gap-2.5">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-[var(--text-secondary)] font-medium">Current Version</span>
+                          <span className="font-mono font-bold text-[var(--text-primary)]">0.1.0</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-[var(--text-secondary)] font-medium">Last Checked</span>
+                          <span className="text-[var(--text-muted)] text-[11px]">{lastUpdateCheck}</span>
+                        </div>
+                        {updateError && (
+                          <div className="bg-red-500/10 border border-red-500/20 p-2 rounded-lg text-red-500 text-[10px]">
+                            {updateError}
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => checkForUpdates(true)}
+                          disabled={profileLoading}
+                          className="w-full bg-[var(--bg-primary)] hover:bg-[var(--bg-secondary)] text-[var(--text-primary)] border border-[var(--border-color)] font-bold py-1.5 rounded-lg text-[10px] cursor-pointer transition-all duration-200"
+                        >
+                          Check For Updates
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -7077,10 +7390,85 @@ export default function App() {
       <ForgotPasswordModal
         isOpen={showForgotPasswordModal}
         onClose={() => setShowForgotPasswordModal(false)}
-        BACKEND_URL={BACKEND_URL}
+        BACKEND_URL={getDynamicBackendUrl()}
         initialCompanyCode={loginForm.companyCode}
         initialUsername={loginForm.username}
       />
+
+      {/* ==========================================
+          MODAL: TAURI APPLICATION UPDATE
+          ========================================== */}
+      {showUpdateModal && updateManifest && (
+        <div className="fixed inset-0 z-[60] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6 animate-fade-in select-none">
+          <div className="bg-[var(--bg-card)] border border-indigo-500/30 p-6 rounded-2xl shadow-2xl flex flex-col gap-4 text-left max-w-sm w-full animate-scale-up">
+            <div className="flex items-center gap-3 pb-3 border-b border-[var(--border-color)]">
+              <div className="p-2.5 bg-indigo-500/10 text-indigo-400 rounded-xl border border-indigo-500/20">
+                <svg className="w-6 h-6 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+              </div>
+              <div>
+                <h4 className="font-bold text-base text-[var(--text-primary)] font-display">New Version Available</h4>
+                <p className="text-[var(--text-muted)] text-[10px]">A software update is ready for installation.</p>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 bg-[var(--bg-tertiary)] p-3.5 rounded-xl border border-[var(--border-color)] text-xs">
+              <div className="flex justify-between">
+                <span className="text-[var(--text-secondary)]">Current Version</span>
+                <span className="font-mono text-[var(--text-muted)]">0.1.0</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--text-secondary)]">Latest Version</span>
+                <span className="font-mono text-indigo-400 font-bold">{updateManifest.version}</span>
+              </div>
+              {updateManifest.body && (
+                <div className="mt-2 border-t border-[var(--border-color)] pt-2">
+                  <span className="text-[9px] font-bold text-[var(--text-secondary)] uppercase tracking-wider block mb-1">Release Notes</span>
+                  <div className="max-h-24 overflow-y-auto text-[10px] text-[var(--text-muted)] leading-relaxed font-mono whitespace-pre-line p-1 bg-[var(--bg-primary)] rounded border border-[var(--border-color)]">
+                    {updateManifest.body}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {updateError && (
+              <div className="bg-red-500/10 border border-red-500/20 p-2.5 rounded-lg text-red-500 text-xs">
+                {updateError}
+              </div>
+            )}
+
+            <div className="w-full flex gap-3 mt-1">
+              <button
+                type="button"
+                onClick={() => setShowUpdateModal(false)}
+                disabled={updating}
+                className="w-1/2 bg-[var(--bg-tertiary)] border border-[var(--border-color)] hover:bg-[var(--bg-primary)] hover:text-[var(--text-primary)] text-[var(--text-secondary)] font-bold py-2 rounded-lg text-xs cursor-pointer transition-colors"
+              >
+                Later
+              </button>
+              <button
+                type="button"
+                onClick={handleInstallUpdate}
+                disabled={updating}
+                className="w-1/2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 rounded-lg text-xs cursor-pointer shadow-md shadow-indigo-600/10 transition-all flex items-center justify-center gap-1.5"
+              >
+                {updating ? (
+                  <>
+                    <svg className="animate-spin h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Installing...</span>
+                  </>
+                ) : (
+                  <span>Install Now</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

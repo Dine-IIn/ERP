@@ -42,6 +42,23 @@ import {
   getCompanyFeatures,
   toggleCompanyFeature
 } from './controllers';
+
+import {
+  getCentralLicenses,
+  saveCentralLicense,
+  deleteCentralLicense,
+  getCentralDiscovery,
+  saveCentralDiscovery,
+  deleteCentralDiscovery,
+  getCentralUpdater,
+  saveCentralUpdater,
+  getCentralUpdaterStatus,
+  getCentralDevConfigs,
+  saveCentralDevConfig,
+  deleteCentralDevConfig,
+  getDbInfo
+} from './controllers';
+
 import {
   listChatGroups,
   createChatGroup,
@@ -151,6 +168,40 @@ import {
 } from './controllers/reports';
 
 dotenv.config();
+
+import fs from 'fs';
+import { initializeLicensing } from './services/licensing';
+import { initializeUpdater } from './services/updater';
+
+// Package check configuration
+const isPackaged = process.argv[0].endsWith('ERPServer.exe');
+const appRoot = isPackaged ? path.dirname(process.execPath) : process.cwd();
+const configEnvPath = path.resolve(appRoot, '../Data/Config/config.env');
+
+if (fs.existsSync(configEnvPath)) {
+  try {
+    const configContent = fs.readFileSync(configEnvPath, 'utf8');
+    configContent.split(/\r?\n/).forEach(line => {
+      const match = line.match(/^\s*([\w.-]+)\s*=\s*["']?([^\r\n"']+)["']?/);
+      if (match) {
+        process.env[match[1]] = match[2].trim();
+      }
+    });
+    console.log(`🔌 [Server Config] Dynamically loaded configuration keys from: "${configEnvPath}"`);
+  } catch (err: any) {
+    console.error("⚠️ Failed to parse config.env configuration file:", err.message);
+  }
+}
+
+// Trigger background daemon loops
+const licenseKey = process.env.LICENSE_KEY || '';
+initializeLicensing(licenseKey).catch(err => {
+  console.error("❌ Failed to initialize licensing daemon:", err);
+});
+initializeUpdater().catch(err => {
+  console.error("❌ Failed to initialize auto-updater daemon:", err);
+});
+
 if (!process.env.JWT_SECRET) {
   throw new Error('JWT_SECRET is missing in environment variables');
 }
@@ -318,8 +369,12 @@ io.on('connection', async (socket) => {
 // API ROUTING MODULES
 // ==========================================
 
-// Public Health Probe Route
+// Public Health Probe Routes
 app.get('/health', (req, res) => {
+  res.json({ status: "healthy", service: "Enterprise Multi-Tenant ERP", timestamp: new Date() });
+});
+// /api/health alias used by the backend auto-updater post-restart self-check
+app.get('/api/health', (req, res) => {
   res.json({ status: "healthy", service: "Enterprise Multi-Tenant ERP", timestamp: new Date() });
 });
 
@@ -340,6 +395,23 @@ app.get('/api/super/company/:id/users', authenticateToken, requireSuperAdmin, li
 app.post('/api/super/company/:id/admins', authenticateToken, requireSuperAdmin, createCompanyAdmin);
 app.patch('/api/super/company/:id/users/:userId', authenticateToken, requireSuperAdmin, updateCompanyUser);
 app.delete('/api/super/company/:id/users/:userId', authenticateToken, requireSuperAdmin, deleteCompanyUser);
+
+// Super Admin Central Services Mappings Proxy Routes
+app.get('/api/super/central/licenses', authenticateToken, requireSuperAdmin, getCentralLicenses);
+app.post('/api/super/central/licenses', authenticateToken, requireSuperAdmin, saveCentralLicense);
+app.delete('/api/super/central/licenses/:licenseKey', authenticateToken, requireSuperAdmin, deleteCentralLicense);
+app.get('/api/super/central/discovery', authenticateToken, requireSuperAdmin, getCentralDiscovery);
+app.post('/api/super/central/discovery', authenticateToken, requireSuperAdmin, saveCentralDiscovery);
+app.delete('/api/super/central/discovery/:companyCode', authenticateToken, requireSuperAdmin, deleteCentralDiscovery);
+app.get('/api/super/central/updater', authenticateToken, requireSuperAdmin, getCentralUpdater);
+app.post('/api/super/central/updater', authenticateToken, requireSuperAdmin, saveCentralUpdater);
+app.get('/api/super/central/updater-status', authenticateToken, requireSuperAdmin, getCentralUpdaterStatus);
+app.get('/api/super/central/dev-configs', authenticateToken, requireSuperAdmin, getCentralDevConfigs);
+app.post('/api/super/central/dev-configs', authenticateToken, requireSuperAdmin, saveCentralDevConfig);
+app.delete('/api/super/central/dev-configs/:companyCode', authenticateToken, requireSuperAdmin, deleteCentralDevConfig);
+// Read-only database introspection (for super admin infrastructure view)
+app.get('/api/super/db-info', authenticateToken, requireSuperAdmin, getDbInfo);
+
 
 // 3. Company Admin Routes (Approvals & RBAC Configurations)
 app.get('/api/admin/pending-signups', authenticateToken, listPendingSignups);

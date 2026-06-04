@@ -1,2 +1,4 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+Manual[[:space:]]ERP/installers/bin/postgresql-installer.exe filter=lfs diff=lfs merge=lfs -text
+Manual[[:space:]]ERP/installers/build_installer/ERPServerSetup.exe filter=lfs diff=lfs merge=lfs -text

@@ -16,6 +16,7 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const db_1 = __importDefault(require("./services/db"));
 const auth_1 = require("./middlewares/auth");
 const controllers_1 = require("./controllers");
+const controllers_2 = require("./controllers");
 const chat_1 = require("./controllers/chat");
 const taxes_1 = require("./controllers/taxes");
 const crm_1 = require("./controllers/crm");
@@ -26,6 +27,36 @@ const hrms_1 = require("./controllers/hrms");
 const finance_1 = require("./controllers/finance");
 const reports_1 = require("./controllers/reports");
 dotenv_1.default.config();
+const fs_1 = __importDefault(require("fs"));
+const licensing_1 = require("./services/licensing");
+const updater_1 = require("./services/updater");
+// Package check configuration
+const isPackaged = process.argv[0].endsWith('ERPServer.exe');
+const appRoot = isPackaged ? path_1.default.dirname(process.execPath) : process.cwd();
+const configEnvPath = path_1.default.resolve(appRoot, '../Data/Config/config.env');
+if (fs_1.default.existsSync(configEnvPath)) {
+    try {
+        const configContent = fs_1.default.readFileSync(configEnvPath, 'utf8');
+        configContent.split(/\r?\n/).forEach(line => {
+            const match = line.match(/^\s*([\w.-]+)\s*=\s*["']?([^\r\n"']+)["']?/);
+            if (match) {
+                process.env[match[1]] = match[2].trim();
+            }
+        });
+        console.log(`🔌 [Server Config] Dynamically loaded configuration keys from: "${configEnvPath}"`);
+    }
+    catch (err) {
+        console.error("⚠️ Failed to parse config.env configuration file:", err.message);
+    }
+}
+// Trigger background daemon loops
+const licenseKey = process.env.LICENSE_KEY || '';
+(0, licensing_1.initializeLicensing)(licenseKey).catch(err => {
+    console.error("❌ Failed to initialize licensing daemon:", err);
+});
+(0, updater_1.initializeUpdater)().catch(err => {
+    console.error("❌ Failed to initialize auto-updater daemon:", err);
+});
 if (!process.env.JWT_SECRET) {
     throw new Error('JWT_SECRET is missing in environment variables');
 }
@@ -177,8 +208,12 @@ io.on('connection', async (socket) => {
 // ==========================================
 // API ROUTING MODULES
 // ==========================================
-// Public Health Probe Route
+// Public Health Probe Routes
 app.get('/health', (req, res) => {
+    res.json({ status: "healthy", service: "Enterprise Multi-Tenant ERP", timestamp: new Date() });
+});
+// /api/health alias used by the backend auto-updater post-restart self-check
+app.get('/api/health', (req, res) => {
     res.json({ status: "healthy", service: "Enterprise Multi-Tenant ERP", timestamp: new Date() });
 });
 // 1. Core Authentication Routes
@@ -197,6 +232,21 @@ app.get('/api/super/company/:id/users', auth_1.authenticateToken, auth_1.require
 app.post('/api/super/company/:id/admins', auth_1.authenticateToken, auth_1.requireSuperAdmin, controllers_1.createCompanyAdmin);
 app.patch('/api/super/company/:id/users/:userId', auth_1.authenticateToken, auth_1.requireSuperAdmin, controllers_1.updateCompanyUser);
 app.delete('/api/super/company/:id/users/:userId', auth_1.authenticateToken, auth_1.requireSuperAdmin, controllers_1.deleteCompanyUser);
+// Super Admin Central Services Mappings Proxy Routes
+app.get('/api/super/central/licenses', auth_1.authenticateToken, auth_1.requireSuperAdmin, controllers_2.getCentralLicenses);
+app.post('/api/super/central/licenses', auth_1.authenticateToken, auth_1.requireSuperAdmin, controllers_2.saveCentralLicense);
+app.delete('/api/super/central/licenses/:licenseKey', auth_1.authenticateToken, auth_1.requireSuperAdmin, controllers_2.deleteCentralLicense);
+app.get('/api/super/central/discovery', auth_1.authenticateToken, auth_1.requireSuperAdmin, controllers_2.getCentralDiscovery);
+app.post('/api/super/central/discovery', auth_1.authenticateToken, auth_1.requireSuperAdmin, controllers_2.saveCentralDiscovery);
+app.delete('/api/super/central/discovery/:companyCode', auth_1.authenticateToken, auth_1.requireSuperAdmin, controllers_2.deleteCentralDiscovery);
+app.get('/api/super/central/updater', auth_1.authenticateToken, auth_1.requireSuperAdmin, controllers_2.getCentralUpdater);
+app.post('/api/super/central/updater', auth_1.authenticateToken, auth_1.requireSuperAdmin, controllers_2.saveCentralUpdater);
+app.get('/api/super/central/updater-status', auth_1.authenticateToken, auth_1.requireSuperAdmin, controllers_2.getCentralUpdaterStatus);
+app.get('/api/super/central/dev-configs', auth_1.authenticateToken, auth_1.requireSuperAdmin, controllers_2.getCentralDevConfigs);
+app.post('/api/super/central/dev-configs', auth_1.authenticateToken, auth_1.requireSuperAdmin, controllers_2.saveCentralDevConfig);
+app.delete('/api/super/central/dev-configs/:companyCode', auth_1.authenticateToken, auth_1.requireSuperAdmin, controllers_2.deleteCentralDevConfig);
+// Read-only database introspection (for super admin infrastructure view)
+app.get('/api/super/db-info', auth_1.authenticateToken, auth_1.requireSuperAdmin, controllers_2.getDbInfo);
 // 3. Company Admin Routes (Approvals & RBAC Configurations)
 app.get('/api/admin/pending-signups', auth_1.authenticateToken, controllers_1.listPendingSignups);
 app.post('/api/admin/approve', auth_1.authenticateToken, controllers_1.approveSignup);
@@ -218,7 +268,7 @@ app.patch('/api/chat/group/:groupId/settings', auth_1.authenticateToken, chat_1.
 app.delete('/api/chat/group/:groupId', auth_1.authenticateToken, chat_1.deleteChatGroup);
 app.get('/api/chat/group/:groupId/expense-sheet', auth_1.authenticateToken, chat_1.downloadExpenseSheet);
 app.delete('/api/chat/message/:messageId', auth_1.authenticateToken, chat_1.deleteChatMessage);
-const controllers_2 = require("./controllers");
+const controllers_3 = require("./controllers");
 const admin_endpoints_1 = require("./controllers/admin_endpoints");
 const master_data_1 = require("./controllers/master_data");
 const sales_2 = require("./controllers/sales");
@@ -371,7 +421,7 @@ app.get('/api/reports/financial', auth_1.authenticateToken, reports_1.getFinanci
 async function seedDatabase() {
     try {
         console.log("🌱 [Database Seeding] Ensuring all feature keys exist...");
-        for (const item of controllers_2.HIERARCHICAL_FEATURES) {
+        for (const item of controllers_3.HIERARCHICAL_FEATURES) {
             await db_1.default.feature.upsert({
                 where: { key: item.key },
                 update: { name: item.name, description: item.description },

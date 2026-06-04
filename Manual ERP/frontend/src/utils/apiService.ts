@@ -1,7 +1,56 @@
 import { Capacitor } from '@capacitor/core';
+import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
+import { invoke } from '@tauri-apps/api/core';
+
+export const isTauriClient = (): boolean => {
+  return typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__ !== undefined;
+};
+
+export const logToConsole = async (level: 'info' | 'warn' | 'error', message: string) => {
+  if (level === 'error') {
+    console.error(`[${level.toUpperCase()}] ${message}`);
+  } else if (level === 'warn') {
+    console.warn(`[${level.toUpperCase()}] ${message}`);
+  } else {
+    console.log(`[${level.toUpperCase()}] ${message}`);
+  }
+  if (isTauriClient()) {
+    try {
+      await invoke('log_message', { level, message });
+    } catch (e) {
+      // Ignore
+    }
+  }
+};
+
+export const getActiveFetch = (): typeof fetch => {
+  // === DIAGNOSTIC BYPASS TEST ===
+  // Toggle this flag to test standard browser fetch vs Tauri native http plugin fetch:
+  // - Set useBypass to true: returns window.fetch to bypass tauri-plugin-http permissions scope validation (works on localhost port 5173).
+  // - Set useBypass to false: returns tauriFetch to execute calls through Tauri's native Rust client (required for production WebView mixed content bypass).
+  const useBypass = false; 
+
+  if (isTauriClient() && !useBypass) {
+    return tauriFetch;
+  }
+  return (typeof window !== 'undefined' ? window.fetch.bind(window) : fetch);
+};
+
+import { config } from '../config';
+
+export const getCentralServicesUrl = (): string => {
+  return config.centralServicesUrl;
+};
+
 
 const getBaseUrl = () => {
-  const url = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+  // Prioritize the dynamically resolved discovery URL stored in localStorage
+  const savedUrl = localStorage.getItem('erp_server_url');
+  if (savedUrl) {
+    return savedUrl;
+  }
+  
+  const url = config.apiUrl;
   if (Capacitor.isNativePlatform()) {
     if (url.includes('localhost') || url.includes('127.0.0.1')) {
       return url.replace('localhost', '10.0.2.2').replace('127.0.0.1', '10.0.2.2');
@@ -10,7 +59,8 @@ const getBaseUrl = () => {
   return url;
 };
 
-const BASE_URL = getBaseUrl();
+// Define BASE_URL as a dynamic getter helper to avoid caching initial undefined parameters on load
+export const getActiveBaseUrl = () => getBaseUrl();
 
 interface RequestOptions extends RequestInit {
   params?: Record<string, string>;
@@ -39,7 +89,7 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
   }
 
   // Construct URL
-  let url = endpoint.startsWith('http') ? endpoint : `${BASE_URL}${endpoint}`;
+  let url = endpoint.startsWith('http') ? endpoint : `${getActiveBaseUrl()}${endpoint}`;
   if (options.params) {
     const searchParams = new URLSearchParams(options.params);
     url += `?${searchParams.toString()}`;
@@ -51,7 +101,7 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
   };
 
   try {
-    const response = await fetch(url, config);
+    const response = await getActiveFetch()(url, config);
 
     // If unauthorized or forbidden, handle automatic logout/redirect
     if (response.status === 401 || response.status === 403) {
@@ -111,5 +161,5 @@ export const apiClient = {
   delete: <T>(endpoint: string, options?: RequestOptions) => 
     request<T>(endpoint, { ...options, method: 'DELETE' }),
     
-  getBaseUrl: () => BASE_URL,
+  getBaseUrl: () => getActiveBaseUrl(),
 };

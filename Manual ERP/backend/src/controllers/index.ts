@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import prisma from '../services/db';
+import { config } from '../config';
 import {
   SignupSchema,
   LoginSchema,
@@ -465,6 +466,32 @@ export async function createCompany(req: AuthenticatedRequest, res: Response) {
     });
     if (existingCompany) {
       return res.status(409).json({ error: `Company Code '${companyCode}' already exists.` });
+    }
+
+    // Validate license in Central Services
+    try {
+      const centralUrl = config.centralUrl;
+      console.log(`📡 [License Enforcement] Validating license for code: ${companyCode} via Central Services at ${centralUrl}`);
+      const fetchResponse = await fetch(`${centralUrl}/admin/licenses`, {
+        headers: {
+          'X-Central-Admin-Secret': config.centralAdminSecret
+        }
+      });
+      if (!fetchResponse.ok) {
+        throw new Error(`Central Services returned status ${fetchResponse.status}`);
+      }
+      const licenses = await fetchResponse.json() as any[];
+      const lic = licenses.find((l: any) => (l.companyCode || '').toUpperCase() === companyCode.toUpperCase());
+      if (!lic) {
+        return res.status(400).json({ error: `No active license key registered for company code '${companyCode}'. Please issue a license in Central Services first.` });
+      }
+      if (lic.status !== 'ACTIVE') {
+        return res.status(400).json({ error: `The license key for '${companyCode}' is expired or inactive.` });
+      }
+      console.log(`🟢 [License Enforcement] Valid license verified for code: ${companyCode}`);
+    } catch (error: any) {
+      console.error(`🔴 [License Enforcement Error] Central Services validation failed:`, error);
+      return res.status(502).json({ error: `License verification failed: Central Services communication error (${error.message})` });
     }
 
     // Check if admin mobile already registered
@@ -1112,6 +1139,8 @@ export async function registerPushToken(req: AuthenticatedRequest, res: Response
 
 // Export all General Administration Controllers
 export * from './admin';
+export * from './central_admin';
+
 
 // ==========================================
 // 5. USER PROFILE & PASSWORD RESET CONTROLLERS

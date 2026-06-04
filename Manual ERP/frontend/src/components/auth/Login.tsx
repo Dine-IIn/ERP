@@ -70,20 +70,22 @@ export default function Login({
       )}
 
       <form onSubmit={handleLoginSubmit} className="mt-6 flex flex-col gap-4">
-        <div>
-          <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Company Tenant Code</label>
-          <div className="mt-1 relative">
-            <Building className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-            <input
-              type="text"
-              required
-              placeholder="e.g. APPLE, DINEIN, SUPERADMIN"
-              value={loginForm.companyCode}
-              onChange={e => setLoginForm({ ...loginForm, companyCode: e.target.value })}
-              className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2.5 pl-10 pr-4 rounded-lg text-xs focus:outline-none transition-colors"
-            />
+        {!(typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__ !== undefined) && (
+          <div>
+            <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Company Tenant Code</label>
+            <div className="mt-1 relative">
+              <Building className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+              <input
+                type="text"
+                required
+                placeholder="e.g. APPLE, DINEIN, SUPERADMIN"
+                value={loginForm.companyCode}
+                onChange={e => setLoginForm({ ...loginForm, companyCode: e.target.value })}
+                className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2.5 pl-10 pr-4 rounded-lg text-xs focus:outline-none transition-colors"
+              />
+            </div>
           </div>
-        </div>
+        )}
 
         <div>
           <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Username</label>

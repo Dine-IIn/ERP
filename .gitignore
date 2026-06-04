@@ -87,3 +87,5 @@ uploads/
 *.pem
 *.key
 *.crt
+
+.vs/
