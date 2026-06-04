@@ -99,6 +99,26 @@ try {
 
 // Seed initial discovery mappings from environment configuration or fall back to defaults
 try {
+  let loadedCount = 0;
+
+  // 1. Load from DISCOVERY_<COMPANY_CODE> environment variables
+  Object.keys(process.env).forEach(key => {
+    if (key.startsWith('DISCOVERY_')) {
+      const companyCode = key.substring('DISCOVERY_'.length).toUpperCase();
+      const serverUrl = process.env[key];
+      if (companyCode && serverUrl) {
+        discoveryRegistry.set(companyCode, {
+          companyName: `${companyCode} Enterprise`,
+          serverUrl: serverUrl.trim(),
+          status: 'ACTIVE'
+        });
+        loadedCount++;
+        console.log(`🔍 [Env Discovery] Registered company "${companyCode}" from env to target URL: "${serverUrl.trim()}"`);
+      }
+    }
+  });
+
+  // 2. Load from discoverySeeds if specified
   if (config.discoverySeeds) {
     const discovery = JSON.parse(config.discoverySeeds);
     if (Array.isArray(discovery)) {
@@ -109,18 +129,27 @@ try {
             serverUrl: disc.serverUrl,
             status: disc.status || 'ACTIVE'
           });
+          loadedCount++;
         }
       });
-      console.log(`🔍 [Seeding] Loaded ${discovery.length} discovery mapping(s) from environment configuration.`);
+      console.log(`🔍 [Seeding] Loaded ${discovery.length} discovery mapping(s) from DISCOVERY_SEEDS.`);
     }
-  } else {
-    // Default fallback seed if none specified
-    discoveryRegistry.set('ABC001', { companyName: 'ABC Industries', serverUrl: config.fallbackServerUrl, status: 'ACTIVE' });
-    console.log(`🔍 [Seeding] Loaded default discovery registry fallback.`);
+  }
+
+  // 3. Fall back ONLY if no mappings were loaded at all (and fallbackServerUrl is set)
+  if (loadedCount === 0) {
+    if (config.fallbackServerUrl) {
+      discoveryRegistry.set('ABC001', { companyName: 'ABC Industries', serverUrl: config.fallbackServerUrl, status: 'ACTIVE' });
+      console.log(`🔍 [Seeding] Loaded default discovery registry fallback to URL: "${config.fallbackServerUrl}"`);
+    } else {
+      console.log(`🔍 [Seeding] No discovery mappings loaded and fallbackServerUrl is empty.`);
+    }
   }
 } catch (err) {
-  console.error(`🔴 [Seeding Error] Failed to parse DISCOVERY_SEEDS:`, err);
-  discoveryRegistry.set('ABC001', { companyName: 'ABC Industries', serverUrl: config.fallbackServerUrl, status: 'ACTIVE' });
+  console.error(`🔴 [Seeding Error] Failed to parse discovery seeds:`, err);
+  if (discoveryRegistry.size === 0 && config.fallbackServerUrl) {
+    discoveryRegistry.set('ABC001', { companyName: 'ABC Industries', serverUrl: config.fallbackServerUrl, status: 'ACTIVE' });
+  }
 }
 
 // ==================================================

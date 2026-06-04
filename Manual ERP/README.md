@@ -42,13 +42,14 @@ To run a fully isolated local development sandbox without external production en
 ### Environment Configurations:
 - **Central Services (`central_services/.env` or `.env.development`):**
   ```env
-  PORT=6001
+  PORT=6000
   NODE_ENV=development
   LATEST_VERSION=1.1.0
-  DOWNLOAD_URL=http://localhost:6001/bin/ERPServer-v1.1.0.exe
+  DOWNLOAD_URL=http://localhost:6000/bin/ERPServer-v1.1.0.exe
   RELEASE_NOTES="Local sandbox testing hotfixes."
   LICENSE_SEEDS='[{"licenseKey":"ANB-LIC-2026-DEV","companyCode":"ABC001","status":"ACTIVE"}]'
-  DISCOVERY_SEEDS='[{"companyCode":"ABC001","companyName":"ABC Dev Corp","serverUrl":"http://localhost:5000","status":"ACTIVE"}]'
+  FALLBACK_SERVER_URL=http://localhost:5000
+  DISCOVERY_ABC001=http://localhost:5000
   ```
 - **Frontend Client (`frontend/.env` or `.env.development`):**
   ```env
@@ -217,15 +218,17 @@ Run these commands on **both** VM instances:
 ##### **VM Instance 2 (Central Services - `/var/www/erp/central_services/.env`):**
 Create the file:
 ```env
-PORT=6001
+PORT=6000
 NODE_ENV=production
 CENTRAL_ADMIN_SECRET="secure-central-admin-secret-2026"
 LATEST_VERSION="1.1.0"
-DOWNLOAD_URL="https://license.example.com/bin/ERPServer-v1.1.0.exe"
+DOWNLOAD_URL="https://updates.xyz.com/bin/ERPServer-v1.1.0.exe"
 RELEASE_NOTES="Production Release 1.1.0 with dynamic updates."
 TAURI_UPDATE_SIGNATURE="dW51c2VkX3NhbmRib3hfc2lnbmF0dXJlX3BsYWNlaG9sZGVy=="
 LICENSE_SEEDS='[{"licenseKey":"ANB-LIC-PROD-001","companyCode":"ABC001","status":"ACTIVE"}]'
-DISCOVERY_SEEDS='[{"companyCode":"ABC001","companyName":"ABC Corporation","serverUrl":"https://api.example.com","status":"ACTIVE"}]'
+FALLBACK_SERVER_URL="https://erp.anbindustries.com"
+DISCOVERY_ABC001="https://api.anbindustries.com"
+DISCOVERY_ANB001="https://api.anbindustries.com"
 ```
 
 ##### **VM Instance 1 (Main ERP Backend - `/var/www/erp/backend/.env`):**

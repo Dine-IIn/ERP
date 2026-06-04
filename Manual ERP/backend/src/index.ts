@@ -193,6 +193,14 @@ if (fs.existsSync(configEnvPath)) {
   }
 }
 
+if (!process.env.CENTRAL_SERVICES_URL) {
+  throw new Error("CENTRAL_SERVICES_URL environment variable is required");
+}
+
+if (!process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET is missing in environment variables');
+}
+
 // Trigger background daemon loops
 const licenseKey = process.env.LICENSE_KEY || '';
 initializeLicensing(licenseKey).catch(err => {
@@ -202,9 +210,6 @@ initializeUpdater().catch(err => {
   console.error("❌ Failed to initialize auto-updater daemon:", err);
 });
 
-if (!process.env.JWT_SECRET) {
-  throw new Error('JWT_SECRET is missing in environment variables');
-}
 const app = express();
 const port = process.env.PORT || 5000;
 

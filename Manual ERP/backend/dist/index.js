@@ -49,6 +49,12 @@ if (fs_1.default.existsSync(configEnvPath)) {
         console.error("⚠️ Failed to parse config.env configuration file:", err.message);
     }
 }
+if (!process.env.CENTRAL_SERVICES_URL) {
+    throw new Error("CENTRAL_SERVICES_URL environment variable is required");
+}
+if (!process.env.JWT_SECRET) {
+    throw new Error('JWT_SECRET is missing in environment variables');
+}
 // Trigger background daemon loops
 const licenseKey = process.env.LICENSE_KEY || '';
 (0, licensing_1.initializeLicensing)(licenseKey).catch(err => {
@@ -57,9 +63,6 @@ const licenseKey = process.env.LICENSE_KEY || '';
 (0, updater_1.initializeUpdater)().catch(err => {
     console.error("❌ Failed to initialize auto-updater daemon:", err);
 });
-if (!process.env.JWT_SECRET) {
-    throw new Error('JWT_SECRET is missing in environment variables');
-}
 const app = (0, express_1.default)();
 const port = process.env.PORT || 5000;
 // Production security and performance middlewares
