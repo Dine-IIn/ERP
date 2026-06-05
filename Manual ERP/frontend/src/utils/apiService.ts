@@ -167,3 +167,10 @@ export const apiClient = {
     
   getBaseUrl: () => getActiveBaseUrl(),
 };
+
+export const formatNumber = (val: number | string | undefined | null): string => {
+  if (val === undefined || val === null) return '';
+  const num = Number(val);
+  if (isNaN(num)) return String(val);
+  return String(parseFloat(num.toFixed(3)));
+};

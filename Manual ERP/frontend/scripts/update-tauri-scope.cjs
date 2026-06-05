@@ -15,12 +15,15 @@ function parseEnv(filePath) {
   return env;
 }
 
-const mode = process.env.NODE_ENV || 'development';
 const baseEnv = parseEnv(path.resolve(__dirname, '../.env'));
+const devEnv = parseEnv(path.resolve(__dirname, '../.env.development'));
+const prodEnv = parseEnv(path.resolve(__dirname, '../.env.production'));
+const mode = process.env.NODE_ENV || 'development';
 const modeEnv = parseEnv(path.resolve(__dirname, `../.env.${mode}`));
-
-// Combine env configurations (process.env takes ultimate priority)
 const env = { ...baseEnv, ...modeEnv, ...process.env };
+
+// Merge envs to find all variables
+const allEnvs = [baseEnv, devEnv, prodEnv, process.env];
 
 // Base allowlist (always include localhosts and connectivity check domains)
 const baseAllow = [
@@ -33,18 +36,32 @@ const baseAllow = [
 // Extract custom URLs from env
 const customUrls = [];
 
-if (env.TAURI_ALLOWED_REMOTE_URL) {
-  env.TAURI_ALLOWED_REMOTE_URL.split(',').forEach(url => {
-    if (url.trim()) customUrls.push(url.trim());
-  });
-}
+allEnvs.forEach(env => {
+  if (env.TAURI_ALLOWED_REMOTE_URL) {
+    env.TAURI_ALLOWED_REMOTE_URL.split(',').forEach(url => {
+      const trimmed = url.trim();
+      if (trimmed && !customUrls.includes(trimmed)) {
+        customUrls.push(trimmed);
+      }
+    });
+  }
+  if (env.VITE_ALLOWED_REMOTE_URL) {
+    env.VITE_ALLOWED_REMOTE_URL.split(',').forEach(url => {
+      const trimmed = url.trim();
+      if (trimmed && !customUrls.includes(trimmed)) {
+        customUrls.push(trimmed);
+      }
+    });
+  }
+});
 
 // Auto-extract host patterns from API and Central Service variables
-const autoVars = [
-  env.VITE_CENTRAL_SERVICES_URL,
-  env.VITE_DISCOVERY_SERVICE_URL,
-  env.VITE_API_URL
-];
+const autoVars = [];
+allEnvs.forEach(env => {
+  if (env.VITE_CENTRAL_SERVICES_URL) autoVars.push(env.VITE_CENTRAL_SERVICES_URL);
+  if (env.VITE_DISCOVERY_SERVICE_URL) autoVars.push(env.VITE_DISCOVERY_SERVICE_URL);
+  if (env.VITE_API_URL) autoVars.push(env.VITE_API_URL);
+});
 
 autoVars.forEach(v => {
   if (v && v.startsWith('http')) {

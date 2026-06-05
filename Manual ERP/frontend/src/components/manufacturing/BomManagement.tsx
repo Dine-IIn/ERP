@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ClipboardList, Plus, Search, DollarSign, Calculator, Layers, Trash2, Edit2 } from 'lucide-react';
-import { apiClient } from '../../utils/apiService';
+import { apiClient, formatNumber } from '../../utils/apiService';
 
 interface ComponentItem {
   id?: string;
@@ -183,10 +183,8 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
     try {
       if (isEditing && editingId) {
         await apiClient.put(`/api/manufacturing/boms/${editingId}`, payload);
-        alert('BOM updated successfully!');
       } else {
         await apiClient.post('/api/manufacturing/boms', payload);
-        alert('BOM published successfully!');
       }
       setShowAddModal(false);
       setIsEditing(false);
@@ -232,7 +230,6 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
       try {
         await apiClient.delete(`/api/manufacturing/boms/${id}`);
         fetchBOMs();
-        alert('BOM formulation removed.');
       } catch (err: any) {
         alert(err.message || 'Failed to delete BOM');
       }
@@ -336,7 +333,7 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
                         {bom.components.map((comp, idx) => (
                           <div key={idx} className="flex justify-between items-center text-[11px]">
                             <span className="text-slate-300 font-medium">{comp.name}</span>
-                            <span className="font-mono text-slate-400">{comp.qtyRequired} {comp.unit} <span className="text-[10px] text-amber-500/80">(+{comp.wasteMargin}% waste)</span></span>
+                            <span className="font-mono text-slate-400">{formatNumber(comp.qtyRequired)} {comp.unit} <span className="text-[10px] text-amber-500/80">(+{comp.wasteMargin}% waste)</span></span>
                           </div>
                         ))}
                       </div>
@@ -559,7 +556,7 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
                       <div key={idx} className="flex justify-between items-center bg-slate-900/50 p-2 border border-slate-850 rounded-lg text-[11px]">
                         <span className="font-semibold text-slate-200">{item.name}</span>
                         <div className="flex items-center gap-3">
-                          <span className="font-mono text-slate-400">{item.qtyRequired} {item.unit} (Waste: {item.wasteMargin}%)</span>
+                          <span className="font-mono text-slate-400">{formatNumber(item.qtyRequired)} {item.unit} (Waste: {item.wasteMargin}%)</span>
                           <button
                             type="button"
                             onClick={() => removeComponentFromDraft(item.productId)}

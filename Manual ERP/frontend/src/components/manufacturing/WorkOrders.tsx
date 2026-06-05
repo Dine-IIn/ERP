@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ClipboardSignature, Plus, Search, Layers, Play, CheckCircle2, Trash2, Edit2, Users, Clock, Cpu } from 'lucide-react';
-import { apiClient } from '../../utils/apiService';
+import { apiClient, formatNumber } from '../../utils/apiService';
 
 interface WorkOrder {
   id: string;
@@ -170,7 +170,6 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
         await apiClient.put(`/api/manufacturing/work-orders/${editingId}`, {
           priority: woPriority
         });
-        alert('Work Order priority updated.');
       } else {
         const payload = {
           planId: selectedPlanId,
@@ -179,7 +178,6 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
           priority: woPriority
         };
         await apiClient.post('/api/manufacturing/work-orders', payload);
-        alert('Work Order dispatched to floor successfully!');
       }
       setShowAddModal(false);
       setIsEditing(false);
@@ -205,10 +203,8 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
     try {
       if (isEditingJob && editingJobId) {
         await apiClient.put(`/api/manufacturing/job-cards/${editingJobId}`, payload);
-        alert('Job Card updated successfully.');
       } else {
         await apiClient.post('/api/manufacturing/job-cards', payload);
-        alert('Job Card rostered successfully.');
       }
       setShowAddJobModal(false);
       setIsEditingJob(false);
@@ -233,7 +229,6 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
       try {
         await apiClient.delete(`/api/manufacturing/work-orders/${id}`);
         fetchWorkOrders();
-        alert('Work Order deleted.');
       } catch (err: any) {
         alert(err.message || 'Failed to delete Work Order');
       }
@@ -256,7 +251,6 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
         qtyScrapped: Number(scrapped)
       });
       fetchJobCards();
-      alert('Job results compiled.');
     } catch (err: any) {
       alert(err.message || 'Failed to complete job');
     }
@@ -267,7 +261,6 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
       try {
         await apiClient.delete(`/api/manufacturing/job-cards/${id}`);
         fetchJobCards();
-        alert('Job Card deleted.');
       } catch (err: any) {
         alert(err.message || 'Failed to delete Job Card');
       }
@@ -377,7 +370,7 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
                     </div>
                     <div className="text-right">
                       <span className="text-[9px] text-slate-500 block uppercase font-semibold">Yield Target</span>
-                      <span className="text-base font-extrabold text-white mt-1 block">{wo.qtyTarget} units</span>
+                      <span className="text-base font-extrabold text-white mt-1 block">{formatNumber(wo.qtyTarget)} units</span>
                     </div>
                   </div>
 
@@ -390,7 +383,7 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
                     </div>
                     <div className="flex justify-between items-center text-slate-400">
                       <span>Production Yield Progress</span>
-                      <span className="text-slate-200 font-bold">{wo.qtyProduced} / {wo.qtyTarget} completed</span>
+                      <span className="text-slate-200 font-bold">{formatNumber(wo.qtyProduced)} / {formatNumber(wo.qtyTarget)} completed</span>
                     </div>
                     <div className="flex justify-between items-center text-slate-400">
                       <span>Dispatched Date</span>
@@ -527,7 +520,7 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
                       {job.status === 'COMPLETED' && (
                         <div className="text-right">
                           <span className="text-[9px] text-slate-500 block uppercase font-bold tracking-wider">Completed Logs</span>
-                          <span className="text-xs font-bold text-emerald-400 mt-1 block">Accepted: {job.qtyAccepted} | Scrap: {job.qtyScrapped}</span>
+                          <span className="text-xs font-bold text-emerald-400 mt-1 block">Accepted: {formatNumber(job.qtyAccepted)} | Scrap: {formatNumber(job.qtyScrapped)}</span>
                           <span className="text-[9px] text-slate-650 font-mono mt-0.5 block">Ended at: {job.endTime}</span>
                         </div>
                       )}

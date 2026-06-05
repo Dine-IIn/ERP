@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Layers, Search, Calendar, Info, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import { formatNumber } from '../../utils/apiService';
 
 interface StockAdjustment {
   id: string;
@@ -137,11 +138,11 @@ export default function StockOverview({
                           ) : (
                             <ArrowDownLeft className="w-3.5 h-3.5 flex-shrink-0 text-red-450" />
                           )}
-                          <span>{isInward ? '+' : ''}{adj.quantity} <span className="text-[10px] text-slate-500 font-normal">{adj.product.uom}</span></span>
+                          <span>{isInward ? '+' : ''}{formatNumber(adj.quantity)} <span className="text-[10px] text-slate-500 font-normal">{adj.product.uom}</span></span>
                         </div>
                       </td>
                       <td className="py-4 px-6 text-slate-400">
-                        {adj.previousStock} <span className="text-[10px] text-slate-600">to</span> <span className="text-white font-bold">{adj.newStock}</span>
+                        {formatNumber(adj.previousStock)} <span className="text-[10px] text-slate-600">to</span> <span className="text-white font-bold">{formatNumber(adj.newStock)}</span>
                       </td>
                       <td className="py-4 px-6 max-w-xs font-sans text-slate-400">
                         {adj.reason && (

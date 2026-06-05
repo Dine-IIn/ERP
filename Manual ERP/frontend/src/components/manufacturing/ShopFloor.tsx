@@ -233,6 +233,11 @@ export default function ShopFloor({ employees = [] }: ShopFloorProps) {
     }
   };
 
+  const filteredCenters = centersList.filter(wc =>
+    wc.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    wc.code.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
     <div className="space-y-6">
       {/* Header */}

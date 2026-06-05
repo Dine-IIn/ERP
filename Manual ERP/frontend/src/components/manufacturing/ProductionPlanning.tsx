@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { CalendarRange, Plus, Search, AlertTriangle, ShieldCheck, BarChart2, Edit2, Trash2 } from 'lucide-react';
-import { apiClient } from '../../utils/apiService';
+import { apiClient, formatNumber } from '../../utils/apiService';
 
 interface ProductionPlan {
   id: string;
@@ -146,10 +146,8 @@ export default function ProductionPlanning({ salesOrders = [], products = [], cu
     try {
       if (isEditing && editingId) {
         await apiClient.put(`/api/manufacturing/plans/${editingId}`, payload);
-        alert('Production Plan updated successfully.');
       } else {
         await apiClient.post('/api/manufacturing/plans', payload);
-        alert('Production Plan scheduled successfully.');
       }
       setShowAddModal(false);
       setIsEditing(false);
@@ -163,7 +161,6 @@ export default function ProductionPlanning({ salesOrders = [], products = [], cu
   const handleReleaseToFactory = async (planId: string) => {
     try {
       await apiClient.post(`/api/manufacturing/plans/${planId}/release`);
-      alert('Plan released to shop floor successfully!');
       fetchPlans();
     } catch (err: any) {
       alert(err.message || 'Failed to release plan');
@@ -175,7 +172,6 @@ export default function ProductionPlanning({ salesOrders = [], products = [], cu
       try {
         await apiClient.delete(`/api/manufacturing/plans/${id}`);
         fetchPlans();
-        alert('Plan deleted.');
       } catch (err: any) {
         alert(err.message || 'Failed to delete plan');
       }
@@ -301,7 +297,7 @@ export default function ProductionPlanning({ salesOrders = [], products = [], cu
                     </div>
                     <div className="text-right">
                       <span className="text-[9px] text-slate-500 block uppercase font-semibold">Qty Target</span>
-                      <span className="text-base font-extrabold text-white mt-1 block">{plan.qtyToProduce} units</span>
+                      <span className="text-base font-extrabold text-white mt-1 block">{formatNumber(plan.qtyToProduce)} units</span>
                     </div>
                   </div>
 
@@ -387,7 +383,7 @@ export default function ProductionPlanning({ salesOrders = [], products = [], cu
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-850 pb-3 gap-3">
                       <div className="text-left">
                         <h4 className="font-bold text-sm text-white">{plan.finishedProductName}</h4>
-                        <p className="text-[10px] text-slate-500 font-mono mt-0.5">Linked SO: {plan.salesOrderNo} | Qty: {plan.qtyToProduce} units</p>
+                        <p className="text-[10px] text-slate-500 font-mono mt-0.5">Linked SO: {plan.salesOrderNo} | Qty: {formatNumber(plan.qtyToProduce)} units</p>
                       </div>
                       <div className="flex items-center gap-3">
                         {hasDeficit ? (
@@ -408,9 +404,9 @@ export default function ProductionPlanning({ salesOrders = [], products = [], cu
                         <thead>
                           <tr className="border-b border-slate-900 text-slate-500 font-bold uppercase tracking-wider text-[9px]">
                             <th className="py-2 px-3 text-left">Material Component</th>
-                            <th className="py-2 px-3 text-center">Required (Total)</th>
-                            <th className="py-2 px-3 text-center">Available Stock</th>
-                            <th className="py-2 px-3 text-center">Calculated Deficit</th>
+                            <th className="py-2 px-3 text-center">Required (units)</th>
+                            <th className="py-2 px-3 text-center">Available (units)</th>
+                            <th className="py-2 px-3 text-center">Calculated Deficit (units)</th>
                             <th className="py-2 px-3 text-right">Actions</th>
                           </tr>
                         </thead>
@@ -418,10 +414,10 @@ export default function ProductionPlanning({ salesOrders = [], products = [], cu
                           {mrpSheet.map((item, idx) => (
                             <tr key={idx} className="border-b border-slate-900/50 hover:bg-slate-950/20 transition-colors">
                               <td className="py-3 px-3 font-semibold text-slate-200">{item.name}</td>
-                              <td className="py-3 px-3 text-center font-mono">{item.qtyRequired}</td>
-                              <td className="py-3 px-3 text-center font-mono">{item.available}</td>
+                              <td className="py-3 px-3 text-center font-mono">{formatNumber(item.qtyRequired)}</td>
+                              <td className="py-3 px-3 text-center font-mono">{formatNumber(item.available)}</td>
                               <td className={`py-3 px-3 text-center font-mono font-bold ${item.deficit > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
-                                {item.deficit > 0 ? `-${item.deficit}` : 'Sufficient'}
+                                {item.deficit > 0 ? `-${formatNumber(item.deficit)}` : 'Sufficient'}
                               </td>
                               <td className="py-3 px-3 text-right">
                                 {item.deficit > 0 && (

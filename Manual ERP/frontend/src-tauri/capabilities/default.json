@@ -16,7 +16,9 @@
         "http://localhost:6000/*",
         "http://localhost:6001/*",
         "https://clients3.google.com/*",
-        "https://centeralservice.anbindustries.com/*"
+        "https://centeralservice.anbindustries.com/*",
+        "https://erp.anbindustries.com/*",
+        "https://api.anbindustries.com/*"
       ]
     },
     {
@@ -26,7 +28,9 @@
         "http://localhost:6000/*",
         "http://localhost:6001/*",
         "https://clients3.google.com/*",
-        "https://centeralservice.anbindustries.com/*"
+        "https://centeralservice.anbindustries.com/*",
+        "https://erp.anbindustries.com/*",
+        "https://api.anbindustries.com/*"
       ]
     },
     {
@@ -36,7 +40,9 @@
         "http://localhost:6000/*",
         "http://localhost:6001/*",
         "https://clients3.google.com/*",
-        "https://centeralservice.anbindustries.com/*"
+        "https://centeralservice.anbindustries.com/*",
+        "https://erp.anbindustries.com/*",
+        "https://api.anbindustries.com/*"
       ]
     }
   ]

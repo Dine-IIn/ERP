@@ -82,6 +82,7 @@ import {
   ShieldAlert,
   Wrench,
   Factory,
+  Cpu,
   ShoppingCart,
   Box,
   FileText,
@@ -150,6 +151,22 @@ const getBackendUrl = () => {
 
 // We define a getter helper to dynamically resolve BACKEND_URL where it is accessed
 const getDynamicBackendUrl = () => getActiveBaseUrl();
+
+const ensureManufacturingFeatures = (featuresList: any) => {
+  const list = Array.isArray(featuresList) ? featuresList : [];
+  const manufacturingKeys = [
+    'MANUFACTURING',
+    'MANUFACTURING_BOM',
+    'MANUFACTURING_PLAN',
+    'MANUFACTURING_WORK_ORDER',
+    'MANUFACTURING_PRODUCTION',
+    'MANUFACTURING_QC',
+    'MANUFACTURING_SHOP_FLOOR',
+    'MANUFACTURING_REPORTS',
+    'MANUFACTURING_COSTING'
+  ];
+  return Array.from(new Set([...list, ...manufacturingKeys]));
+};
 
 interface UserProfile {
   id?: string;
@@ -1570,9 +1587,12 @@ export default function App() {
       case 'MASTER_VENDOR': import('./components/master_data_management/VendorMaster'); break;
       case 'MASTER_PRODUCT': import('./components/master_data_management/ProductMaster'); break;
       case 'MASTER_TAX': import('./components/master_data/TaxMaster'); break;
-      case 'CRM_LEADS': import('./components/crm/Leads'); break;
-      case 'CRM_OPPORTUNITIES': import('./components/crm/Opportunities'); break;
-      case 'CRM_FOLLOWUPS': import('./components/crm/FollowUps'); break;
+      case 'CRM_LEADS':
+      case 'CRM_LEAD': import('./components/crm/Leads'); break;
+      case 'CRM_OPPORTUNITIES':
+      case 'CRM_OPPORTUNITY': import('./components/crm/Opportunities'); break;
+      case 'CRM_FOLLOWUPS':
+      case 'CRM_FOLLOWUP': import('./components/crm/FollowUps'); break;
       case 'CRM_DASHBOARD': import('./components/crm/CrmDashboard'); break;
       case 'SALES_ORDER': import('./components/sales/SalesOrder'); break;
       case 'SALES_PROFORMA': import('./components/sales/ProformaInvoice'); break;
@@ -1580,15 +1600,23 @@ export default function App() {
       case 'SALES_CHALLAN': import('./components/sales/DeliveryChallan'); break;
       case 'SALES_DISPATCH': import('./components/sales/DispatchManagement'); break;
       case 'SALES_QUOTATION': import('./components/sales/Quotations'); break;
-      case 'SALES_POSTSALES': import('./components/sales/PostSalesService'); break;
-      case 'PURCHASE_QUOTATIONS': import('./components/purchase/VendorQuotations'); break;
-      case 'PURCHASE_ORDERS': import('./components/purchase/PurchaseOrders'); break;
+      case 'SALES_POSTSALES':
+      case 'SALES_POST_SERVICE': import('./components/sales/PostSalesService'); break;
+      case 'PURCHASE_QUOTATIONS':
+      case 'PURCHASE_VENDOR_QUOTE': import('./components/purchase/VendorQuotations'); break;
+      case 'PURCHASE_ORDERS':
+      case 'PURCHASE_ORDER': import('./components/purchase/PurchaseOrders'); break;
       case 'PURCHASE_GRN': import('./components/purchase/Grn'); break;
-      case 'PURCHASE_RETURNS': import('./components/purchase/PurchaseReturns'); break;
-      case 'PURCHASE_PAYMENTS': import('./components/purchase/VendorPayments'); break;
-      case 'INVENTORY_PRODUCTS': import('./components/inventory/InventoryProducts'); break;
-      case 'INVENTORY_OVERVIEW': import('./components/inventory/StockOverview'); break;
-      case 'INVENTORY_ALERTS': import('./components/inventory/LowStockAlerts'); break;
+      case 'PURCHASE_RETURNS':
+      case 'PURCHASE_RETURN': import('./components/purchase/PurchaseReturns'); break;
+      case 'PURCHASE_PAYMENTS':
+      case 'PURCHASE_PAYMENT': import('./components/purchase/VendorPayments'); break;
+      case 'INVENTORY_PRODUCTS':
+      case 'INVENTORY_PRODUCT': import('./components/inventory/InventoryProducts'); break;
+      case 'INVENTORY_OVERVIEW':
+      case 'INVENTORY_STOCK_OVERVIEW': import('./components/inventory/StockOverview'); break;
+      case 'INVENTORY_ALERTS':
+      case 'INVENTORY_LOW_ALERT': import('./components/inventory/LowStockAlerts'); break;
       case 'HRMS_EMPLOYEES': import('./components/hrms/Employees'); break;
       case 'HRMS_ATTENDANCE': import('./components/hrms/Attendance'); break;
       case 'HRMS_LEAVES': import('./components/hrms/LeaveManagement'); break;
@@ -1604,15 +1632,24 @@ export default function App() {
       case 'REPORTS_PURCHASE': import('./components/reports/PurchaseReports'); break;
       case 'REPORTS_INVENTORY': import('./components/reports/InventoryReports'); break;
       case 'REPORTS_HR': import('./components/reports/HrReports'); break;
-      case 'REPORTS_FINANCIAL': import('./components/reports/FinancialReports'); break;
-      case 'MRP_BOM': import('./components/manufacturing/BomManagement'); break;
-      case 'MRP_PLANNING': import('./components/manufacturing/ProductionPlanning'); break;
-      case 'MRP_WORKORDERS': import('./components/manufacturing/WorkOrders'); break;
-      case 'MRP_EXECUTION': import('./components/manufacturing/ProductionExecution'); break;
-      case 'MRP_QUALITY': import('./components/manufacturing/QualityControl'); break;
-      case 'MRP_SHOPFLOOR': import('./components/manufacturing/ShopFloor'); break;
-      case 'REPORTS_MRP': import('./components/reports/ManufacturingReports'); break;
-      case 'REPORTS_COSTING': import('./components/reports/ManufacturingCosting'); break;
+      case 'REPORTS_FINANCIAL':
+      case 'REPORTS_FINANCE': import('./components/reports/FinancialReports'); break;
+      case 'MRP_BOM':
+      case 'MANUFACTURING_BOM': import('./components/manufacturing/BomManagement'); break;
+      case 'MRP_PLANNING':
+      case 'MANUFACTURING_PLAN': import('./components/manufacturing/ProductionPlanning'); break;
+      case 'MRP_WORKORDERS':
+      case 'MANUFACTURING_WORK_ORDER': import('./components/manufacturing/WorkOrders'); break;
+      case 'MRP_EXECUTION':
+      case 'MANUFACTURING_PRODUCTION': import('./components/manufacturing/ProductionExecution'); break;
+      case 'MRP_QUALITY':
+      case 'MANUFACTURING_QC': import('./components/manufacturing/QualityControl'); break;
+      case 'MRP_SHOPFLOOR':
+      case 'MANUFACTURING_SHOP_FLOOR': import('./components/manufacturing/ShopFloor'); break;
+      case 'REPORTS_MRP':
+      case 'MANUFACTURING_REPORTS': import('./components/reports/ManufacturingReports'); break;
+      case 'REPORTS_COSTING':
+      case 'MANUFACTURING_COSTING': import('./components/reports/ManufacturingCosting'); break;
       default: break;
     }
   };
@@ -2063,7 +2100,7 @@ export default function App() {
       const dashboardData = await apiRequest('/api/admin/dashboard', 'GET');
       setCompanyUsers(dashboardData.users);
       setCompanyRoles(dashboardData.roles);
-      setCompanyFeatures(dashboardData.features);
+      setCompanyFeatures(ensureManufacturingFeatures(dashboardData.features));
       
       fetchMasterData();
       fetchSalesData();
@@ -2130,7 +2167,7 @@ export default function App() {
   const fetchUserWorkspaceData = async () => {
     try {
       const dashboardData = await apiRequest('/api/admin/dashboard', 'GET');
-      setCompanyFeatures(dashboardData.features || []);
+      setCompanyFeatures(ensureManufacturingFeatures(dashboardData.features || []));
       setCompanyUsers(dashboardData.users || []);
       setCompanyRoles(dashboardData.roles || []);
       
@@ -3242,9 +3279,11 @@ export default function App() {
     }
 
     const paidByUserId = expensePaidBy || user?.id || '';
-    const splits: Record<string, number> = {
-      [paidByUserId]: amt
-    };
+    const share = amt / members.length;
+    const splits: Record<string, number> = {};
+    members.forEach((m: any) => {
+      splits[m.userId] = share;
+    });
 
     const expenseData = {
       amount: amt,
@@ -6211,19 +6250,19 @@ export default function App() {
                     });
 
                     const totalExp = totalOfExpenseByMe + transferByMe;
-                    const myBal = totalExp - totalReceivedByMe;
+                    const myBal = totalReceivedByMe - totalOfExpenseByMe - transferByMe;
 
                     return (
                       <div className="bg-emerald-500/5 border-b border-[var(--border-color)] px-4 py-2 flex items-center justify-between text-[11px] select-none">
                         <div>
-                          <span className="text-[8px] font-bold text-[var(--text-muted)] uppercase block">Total Expenditure</span>
-                          <span className="font-extrabold text-emerald-500">${totalExp.toFixed(2)}</span>
+                          <span className="text-[8px] font-bold text-[var(--text-muted)] uppercase block">My Expense + Transfers</span>
+                          <span className="font-extrabold text-rose-400">{currencySymbol}{totalExp.toFixed(2)}</span>
                         </div>
                         <div className="text-right flex items-center gap-2">
                           <div>
                             <span className="text-[8px] font-bold text-[var(--text-muted)] uppercase block">My Net Balance</span>
                             <span className={`font-extrabold ${myBal > 0.01 ? 'text-emerald-500' : myBal < -0.01 ? 'text-rose-500' : 'text-[var(--text-secondary)]'}`}>
-                              {myBal > 0.01 ? `+$${myBal.toFixed(2)}` : myBal < -0.01 ? `-$${Math.abs(myBal).toFixed(2)}` : '$0.00'}
+                              {myBal > 0.01 ? `+${currencySymbol}${myBal.toFixed(2)}` : myBal < -0.01 ? `-${currencySymbol}${Math.abs(myBal).toFixed(2)}` : `${currencySymbol}0.00`}
                             </span>
                           </div>
                           <button
@@ -6296,7 +6335,7 @@ export default function App() {
                               <div className="bg-indigo-500/5 border border-indigo-500/10 rounded-xl p-3 max-w-[280px] w-full text-xs relative">
                                 <div className="flex items-center justify-between mb-1">
                                   <div className="flex items-center gap-1.5 text-indigo-400 font-extrabold text-[9px] tracking-wider uppercase">
-                                    <CheckCircle className="w-3.5 h-3.5" /> PAYMENT RECORDED
+                                    <CheckCircle className="w-3.5 h-3.5" /> TRANSFER
                                   </div>
                                   {canUndo && (
                                     <button
@@ -6309,8 +6348,12 @@ export default function App() {
                                   )}
                                 </div>
                                 <p className="text-[10px] text-[var(--text-secondary)] font-semibold leading-relaxed">
-                                  <span className="font-bold text-[var(--text-primary)]">{payerName}</span> paid <span className="font-bold text-[var(--text-primary)]">{recipientName}</span> <span className="font-bold text-indigo-400">${(data?.amount || 0).toFixed(2)}</span> to settle debts.
+                                  <span className="font-bold text-[var(--text-primary)]">{payerName}</span> transferred <span className="font-bold text-indigo-400">{currencySymbol}{(data?.amount || 0).toFixed(2)}</span> to <span className="font-bold text-[var(--text-primary)]">{recipientName}</span>
                                 </p>
+                                <div className="mt-2 pt-2 border-t border-[var(--border-color)]/30 flex justify-between text-[9px] font-bold">
+                                  <span className="text-rose-400">📤 {payerName}: −{currencySymbol}{(data?.amount || 0).toFixed(2)} net &amp; expense</span>
+                                  <span className="text-emerald-400">📥 {recipientName}: +{currencySymbol}{(data?.amount || 0).toFixed(2)} net</span>
+                                </div>
                               </div>
                             </div>
                           );
@@ -6533,14 +6576,14 @@ export default function App() {
                             <div className="flex flex-col gap-1.5">
                               {selectedChatGroup.members.map((m: any) => {
                                 const uId = m.userId;
-                                const expense = expenseSpent[uId] || 0;
+                                const expense = (expenseSpent[uId] || 0) + (paymentSent[uId] || 0);
                                 const net = netBalances[uId] || 0;
                                 return (
                                   <div key={uId} className="flex justify-between items-center p-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-color)]">
                                     <span className="font-semibold text-[13px] text-[var(--text-primary)]">{m.username}</span>
                                     <div className="flex items-center gap-6 text-right">
                                       <div>
-                                        <span className="text-[8px] text-[var(--text-secondary)] block uppercase tracking-wider font-bold">Total Expense</span>
+                                        <span className="text-[8px] text-[var(--text-secondary)] block uppercase tracking-wider font-bold">Expenses + Transfers</span>
                                         <span className="font-bold text-[12px] text-[var(--text-primary)]">{currencySymbol}{expense.toFixed(2)}</span>
                                       </div>
                                       <div>

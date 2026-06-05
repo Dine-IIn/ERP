@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Package, Search, Plus, Trash2, X, AlertCircle, CheckCircle2, Sliders, Warehouse, Edit } from 'lucide-react';
+import { formatNumber } from '../../utils/apiService';
 
 interface Product {
   id: string;
@@ -198,9 +199,9 @@ export default function InventoryProducts({
                       )}
                     </td>
                     <td className="py-4 px-6 font-mono text-white text-base font-bold">
-                      {p.stock} <span className="text-xs text-slate-500 font-medium">{p.uom}</span>
+                      {formatNumber(p.stock)} <span className="text-xs text-slate-500 font-medium">{p.uom}</span>
                     </td>
-                    <td className="py-4 px-6 font-mono text-slate-400">{p.reorderLevel} {p.uom}</td>
+                    <td className="py-4 px-6 font-mono text-slate-400">{formatNumber(p.reorderLevel)} {p.uom}</td>
                     <td className="py-4 px-6 text-right">
                       <button
                         onClick={() => openLocationModal(p)}

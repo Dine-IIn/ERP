@@ -9,7 +9,7 @@ import { config } from '../config';
 // CONSTANTS & PATH RESOLUTION
 // ============================================================
 
-const currentVersion = '1.0.0';
+const currentVersion = '0.0.1';
 
 const isPackaged = process.argv[0].endsWith('ERPServer.exe');
 const appRoot = isPackaged
