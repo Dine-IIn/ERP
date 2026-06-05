@@ -7454,7 +7454,7 @@ export default function App() {
                       <div className="bg-[var(--bg-tertiary)] border border-[var(--border-color)] p-3 rounded-xl flex flex-col gap-2.5">
                         <div className="flex justify-between items-center text-xs">
                           <span className="text-[var(--text-secondary)] font-medium">Current Version</span>
-                          <span className="font-mono font-bold text-[var(--text-primary)]">0.1.0</span>
+                          <span className="font-mono font-bold text-[var(--text-primary)]">0.0.1</span>
                         </div>
                         <div className="flex justify-between items-center text-xs">
                           <span className="text-[var(--text-secondary)] font-medium">Last Checked</span>
@@ -7513,7 +7513,7 @@ export default function App() {
             <div className="flex flex-col gap-2 bg-[var(--bg-tertiary)] p-3.5 rounded-xl border border-[var(--border-color)] text-xs">
               <div className="flex justify-between">
                 <span className="text-[var(--text-secondary)]">Current Version</span>
-                <span className="font-mono text-[var(--text-muted)]">0.1.0</span>
+                <span className="font-mono text-[var(--text-muted)]">0.0.1</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-[var(--text-secondary)]">Latest Version</span>
