@@ -18,9 +18,9 @@ import { config } from './config';
 const app = express();
 const port = config.port;
 
-// Serve update binaries statically from the ../bin and ../uploads folders
+// Serve update binaries statically from the ../bin and ../updates folders
 app.use('/bin', express.static(path.join(__dirname, '../bin')));
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+app.use('/updates', express.static(path.join(__dirname, '../updates')));
 
 interface UpdateInfo {
   latestVersion: string;
@@ -31,7 +31,7 @@ interface UpdateInfo {
 }
 
 function getLatestUpdateInfo(req: express.Request, type: 'tauri' | 'backend'): UpdateInfo {
-  const uploadsDir = path.join(__dirname, '../uploads');
+  const updatesDir = path.join(__dirname, '../updates');
   const fallbackInfo: UpdateInfo = {
     latestVersion: config.latestVersion,
     downloadUrl: config.downloadUrl,
@@ -40,13 +40,13 @@ function getLatestUpdateInfo(req: express.Request, type: 'tauri' | 'backend'): U
     releaseNotes: config.releaseNotes
   };
 
-  if (!fs.existsSync(uploadsDir)) {
+  if (!fs.existsSync(updatesDir)) {
     return fallbackInfo;
   }
 
   try {
-    const folders = fs.readdirSync(uploadsDir).filter(f => {
-      const stats = fs.statSync(path.join(uploadsDir, f));
+    const folders = fs.readdirSync(updatesDir).filter(f => {
+      const stats = fs.statSync(path.join(updatesDir, f));
       return stats.isDirectory() && /^v\d+\.\d+\.\d+$/.test(f);
     });
 
@@ -78,7 +78,7 @@ function getLatestUpdateInfo(req: express.Request, type: 'tauri' | 'backend'): U
     let notesFile = '';
 
     for (const folder of folders) {
-      const folderPath = path.join(uploadsDir, folder);
+      const folderPath = path.join(updatesDir, folder);
       const files = fs.readdirSync(folderPath);
       
       const hasMsi = files.some(f => f.endsWith('.msi'));
@@ -122,8 +122,8 @@ function getLatestUpdateInfo(req: express.Request, type: 'tauri' | 'backend'): U
     const proto = req.headers['x-forwarded-proto'] || req.protocol;
     const baseUrl = `${proto}://${req.get('host')}`;
 
-    const tauriUrl = msiFile ? `${baseUrl}/uploads/${latestFolder}/${msiFile}` : '';
-    const downloadUrl = zipFile ? `${baseUrl}/uploads/${latestFolder}/${zipFile}` : '';
+    const tauriUrl = msiFile ? `${baseUrl}/updates/${latestFolder}/${msiFile}` : '';
+    const downloadUrl = zipFile ? `${baseUrl}/updates/${latestFolder}/${zipFile}` : '';
 
     return {
       latestVersion,
@@ -133,7 +133,7 @@ function getLatestUpdateInfo(req: express.Request, type: 'tauri' | 'backend'): U
       releaseNotes
     };
   } catch (err) {
-    console.error(`Error scanning uploads directory:`, err);
+    console.error(`Error scanning updates directory:`, err);
     return fallbackInfo;
   }
 }
@@ -437,10 +437,14 @@ app.get('/api/updater/:target/:version', (req, res) => {
   // Return official Tauri 2.0 updater JSON response structure
   return res.json({
     version: updateInfo.latestVersion,
+    notes: updateInfo.releaseNotes,
     pub_date: new Date().toISOString(),
-    url: updateInfo.tauriUrl,
-    signature: updateInfo.tauriUpdateSignature,
-    notes: updateInfo.releaseNotes
+    platforms: {
+      [target]: {
+        signature: updateInfo.tauriUpdateSignature,
+        url: updateInfo.tauriUrl
+      }
+    }
   });
 });
 
