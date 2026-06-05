@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 
 // Load environment-specific config file based on NODE_ENV, falling back to standard .env
 const nodeEnv = process.env.NODE_ENV || 'development';
@@ -17,8 +18,125 @@ import { config } from './config';
 const app = express();
 const port = config.port;
 
-// Serve update binaries statically from the ../bin folder
+// Serve update binaries statically from the ../bin and ../uploads folders
 app.use('/bin', express.static(path.join(__dirname, '../bin')));
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
+interface UpdateInfo {
+  latestVersion: string;
+  downloadUrl: string;
+  tauriUrl: string;
+  tauriUpdateSignature: string;
+  releaseNotes: string;
+}
+
+function getLatestUpdateInfo(req: express.Request, type: 'tauri' | 'backend'): UpdateInfo {
+  const uploadsDir = path.join(__dirname, '../uploads');
+  const fallbackInfo: UpdateInfo = {
+    latestVersion: config.latestVersion,
+    downloadUrl: config.downloadUrl,
+    tauriUrl: config.downloadUrl,
+    tauriUpdateSignature: config.tauriUpdateSignature,
+    releaseNotes: config.releaseNotes
+  };
+
+  if (!fs.existsSync(uploadsDir)) {
+    return fallbackInfo;
+  }
+
+  try {
+    const folders = fs.readdirSync(uploadsDir).filter(f => {
+      const stats = fs.statSync(path.join(uploadsDir, f));
+      return stats.isDirectory() && /^v\d+\.\d+\.\d+$/.test(f);
+    });
+
+    if (folders.length === 0) {
+      return fallbackInfo;
+    }
+
+    // Sort folders by version (semver-like descending: e.g. v0.0.2 first)
+    folders.sort((a, b) => {
+      const partsA = a.substring(1).split('.').map(Number);
+      const partsB = b.substring(1).split('.').map(Number);
+      for (let i = 0; i < 3; i++) {
+        const valA = isNaN(partsA[i]) ? 0 : partsA[i];
+        const valB = isNaN(partsB[i]) ? 0 : partsB[i];
+        if (valA !== valB) {
+          return valB - valA;
+        }
+      }
+      return 0;
+    });
+
+    // Find the latest folder that actually contains the requested update files
+    let targetFolder = '';
+    let latestFolder = '';
+    let latestVersion = '';
+    let msiFile = '';
+    let sigFile = '';
+    let zipFile = '';
+    let notesFile = '';
+
+    for (const folder of folders) {
+      const folderPath = path.join(uploadsDir, folder);
+      const files = fs.readdirSync(folderPath);
+      
+      const hasMsi = files.some(f => f.endsWith('.msi'));
+      const hasZip = files.some(f => f.endsWith('.zip'));
+
+      if ((type === 'tauri' && hasMsi) || (type === 'backend' && hasZip)) {
+        latestFolder = folder;
+        latestVersion = folder.substring(1);
+        targetFolder = folderPath;
+        
+        msiFile = files.find(f => f.endsWith('.msi')) || '';
+        sigFile = files.find(f => f.endsWith('.msi.sig')) || '';
+        zipFile = files.find(f => f.endsWith('.zip')) || '';
+        notesFile = files.find(f => f.toLowerCase() === 'release_notes.txt') || '';
+        break;
+      }
+    }
+
+    if (!latestFolder) {
+      return fallbackInfo;
+    }
+
+    let tauriUpdateSignature = config.tauriUpdateSignature;
+    if (sigFile) {
+      try {
+        tauriUpdateSignature = fs.readFileSync(path.join(targetFolder, sigFile), 'utf-8').trim();
+      } catch (err) {
+        console.error(`Error reading signature file:`, err);
+      }
+    }
+
+    let releaseNotes = config.releaseNotes;
+    if (notesFile) {
+      try {
+        releaseNotes = fs.readFileSync(path.join(targetFolder, notesFile), 'utf-8').trim();
+      } catch (err) {
+        console.error(`Error reading release notes file:`, err);
+      }
+    }
+
+    const proto = req.headers['x-forwarded-proto'] || req.protocol;
+    const baseUrl = `${proto}://${req.get('host')}`;
+
+    const tauriUrl = msiFile ? `${baseUrl}/uploads/${latestFolder}/${msiFile}` : '';
+    const downloadUrl = zipFile ? `${baseUrl}/uploads/${latestFolder}/${zipFile}` : '';
+
+    return {
+      latestVersion,
+      downloadUrl,
+      tauriUrl,
+      tauriUpdateSignature,
+      releaseNotes
+    };
+  } catch (err) {
+    console.error(`Error scanning uploads directory:`, err);
+    return fallbackInfo;
+  }
+}
 
 app.use(cors());
 app.use(express.json());
@@ -290,37 +408,39 @@ app.post('/license/validate', (req, res) => {
 // ==================================================
 app.get('/updates/check', (req, res) => {
   const clientVersion = req.query.version as string;
+  const updateInfo = getLatestUpdateInfo(req, 'tauri');
   
-  if (clientVersion === config.latestVersion) {
+  if (clientVersion === updateInfo.latestVersion) {
     return res.json({ updateAvailable: false });
   }
 
-  console.log(`📥 [Updates] Update available. Client version: "${clientVersion}" -> Latest: "${config.latestVersion}"`);
+  console.log(`📥 [Updates] Update available. Client version: "${clientVersion}" -> Latest: "${updateInfo.latestVersion}"`);
   return res.json({
     updateAvailable: true,
-    latestVersion: config.latestVersion,
-    downloadUrl: config.downloadUrl,
-    releaseNotes: config.releaseNotes
+    latestVersion: updateInfo.latestVersion,
+    downloadUrl: updateInfo.downloadUrl,
+    releaseNotes: updateInfo.releaseNotes
   });
 });
 
 app.get('/api/updater/:target/:version', (req, res) => {
   const { target, version } = req.params;
+  const updateInfo = getLatestUpdateInfo(req, 'tauri');
   
-  if (version === config.latestVersion) {
+  if (version === updateInfo.latestVersion) {
     console.log(`📥 [Updater API] Client target "${target}" version "${version}" is up-to-date.`);
     return res.status(204).send(); // 204 No Content
   }
 
-  console.log(`📥 [Updater API] Client target "${target}" version "${version}" needs update to "${config.latestVersion}".`);
+  console.log(`📥 [Updater API] Client target "${target}" version "${version}" needs update to "${updateInfo.latestVersion}".`);
   
   // Return official Tauri 2.0 updater JSON response structure
   return res.json({
-    version: config.latestVersion,
+    version: updateInfo.latestVersion,
     pub_date: new Date().toISOString(),
-    url: config.downloadUrl,
-    signature: config.tauriUpdateSignature,
-    notes: config.releaseNotes
+    url: updateInfo.tauriUrl,
+    signature: updateInfo.tauriUpdateSignature,
+    notes: updateInfo.releaseNotes
   });
 });
 
@@ -414,11 +534,12 @@ app.delete('/admin/discovery/:companyCode', requireAdminSecret, (req, res) => {
 
 // Dynamic Auto-Updater settings
 app.get('/admin/updater', requireAdminSecret, (req, res) => {
+  const updateInfo = getLatestUpdateInfo(req, 'tauri');
   return res.json({
-    latestVersion: config.latestVersion,
-    downloadUrl: config.downloadUrl,
-    releaseNotes: config.releaseNotes,
-    tauriUpdateSignature: config.tauriUpdateSignature
+    latestVersion: updateInfo.latestVersion,
+    downloadUrl: updateInfo.downloadUrl,
+    releaseNotes: updateInfo.releaseNotes,
+    tauriUpdateSignature: updateInfo.tauriUpdateSignature
   });
 });
 
@@ -443,7 +564,8 @@ app.get('/api/updater/check', (req, res) => {
   const companyName = req.query.companyName as string || 'Enterprise Partner';
   const licenseStatus = req.query.licenseStatus as string || 'ACTIVE';
 
-  const updateAvailable = clientVersion !== config.latestVersion;
+  const updateInfo = getLatestUpdateInfo(req, 'backend');
+  const updateAvailable = clientVersion !== updateInfo.latestVersion;
   
   // Register telemetry heartbeat
   const existing = clientUpdaterRegistry.get(companyCode);
@@ -451,7 +573,7 @@ app.get('/api/updater/check', (req, res) => {
     companyCode,
     companyName,
     installedVersion: clientVersion,
-    latestVersion: config.latestVersion,
+    latestVersion: updateInfo.latestVersion,
     lastUpdateTime: existing?.lastUpdateTime || new Date().toISOString(),
     status: existing?.status || (updateAvailable ? 'PENDING_UPDATE' : 'UP-TO-DATE'),
     rollbackStatus: existing?.rollbackStatus || 'NONE',
@@ -461,10 +583,10 @@ app.get('/api/updater/check', (req, res) => {
 
   return res.json({
     updateAvailable,
-    latestVersion: config.latestVersion,
-    downloadUrl: config.downloadUrl,
+    latestVersion: updateInfo.latestVersion,
+    downloadUrl: updateInfo.downloadUrl,
     migrationRequired: true,
-    sha256: config.tauriUpdateSignature // Reuse signature parameter as file hash verify
+    sha256: updateInfo.tauriUpdateSignature // Reuse signature parameter as file hash verify
   });
 });
 

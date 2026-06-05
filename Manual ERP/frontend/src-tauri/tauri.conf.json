@@ -45,7 +45,7 @@
         "http://localhost:6001/api/updater/{{target}}/{{current_version}}",
         "https://centeralservice.anbindustries.com/api/updater/{{target}}/{{current_version}}"
       ],
-      "pubkey": "dW51c2VkX3NhbmRib3hfcHVibGljX2tleV9wbGFjZWhvbGRlcg==",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDMxNEFEMjIzNkJFMjY1RTcKUldUblplSnJJOUpLTVZ3NGhuWkViOHk3ODJkOW0xakdoSVEwd2pZQlcwcUNTNFBjVFl5NU5sYloK",
       "dangerousInsecureTransportProtocol": true
     }
   }
