@@ -31,7 +31,10 @@ interface UpdateInfo {
 }
 
 function getLatestUpdateInfo(req: express.Request, type: 'tauri' | 'backend'): UpdateInfo {
-  const updatesDir = path.join(__dirname, '../updates');
+  let updatesDir = '/var/www/updates';
+  if (!fs.existsSync(updatesDir)) {
+    updatesDir = path.join(__dirname, '../updates');
+  }
   const fallbackInfo: UpdateInfo = {
     latestVersion: config.latestVersion,
     downloadUrl: config.downloadUrl,

@@ -11,12 +11,14 @@
       "max_memory_restart": "1G",
       "env": {
         "NODE_ENV": "development",
-        "PORT": 5000
+        "PORT": 5000,
+        "CENTRAL_SERVICES_URL": "http://localhost:6000"
       },
       "env_production": {
         "NODE_ENV": "production",
         "PORT": 5000,
-        "FRONTEND_URL": "https://erp.anbindustries.com"
+        "FRONTEND_URL": "https://erp.anbindustries.com",
+        "CENTRAL_SERVICES_URL": "https://centeralservice.anbindustries.com"
       }
     }
   ]
