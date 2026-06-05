@@ -144,6 +144,7 @@ import { apiClient, ApiError, getActiveBaseUrl, isTauriClient, getActiveFetch, g
 import TauriSetup from './components/auth/TauriSetup';
 import { invoke } from '@tauri-apps/api/core';
 import { check } from '@tauri-apps/plugin-updater';
+import { getVersion } from '@tauri-apps/api/app';
 
 const getBackendUrl = () => {
   return getActiveBaseUrl();
@@ -348,6 +349,8 @@ export default function App() {
     return localStorage.getItem('erp_last_update_check') || 'Never';
   });
 
+  const [appVersion, setAppVersion] = useState<string>('...');
+
   const checkForUpdates = async (manual = false) => {
     if (!isTauriClient()) return;
     logToConsole('info', `[Tauri Update Check] Initializing update check (manual = ${manual})...`);
@@ -535,6 +538,13 @@ export default function App() {
       }
       
       checkForUpdates(false);
+    }
+
+    // Fetch app version dynamically from tauri.conf.json
+    if (isTauriClient()) {
+      getVersion().then(setAppVersion).catch(() => setAppVersion('0.0.1'));
+    } else {
+      setAppVersion('0.0.1');
     }
   }, []);
 
@@ -7454,7 +7464,7 @@ export default function App() {
                       <div className="bg-[var(--bg-tertiary)] border border-[var(--border-color)] p-3 rounded-xl flex flex-col gap-2.5">
                         <div className="flex justify-between items-center text-xs">
                           <span className="text-[var(--text-secondary)] font-medium">Current Version</span>
-                          <span className="font-mono font-bold text-[var(--text-primary)]">0.0.1</span>
+                          <span className="font-mono font-bold text-[var(--text-primary)]">{appVersion}</span>
                         </div>
                         <div className="flex justify-between items-center text-xs">
                           <span className="text-[var(--text-secondary)] font-medium">Last Checked</span>
@@ -7513,7 +7523,7 @@ export default function App() {
             <div className="flex flex-col gap-2 bg-[var(--bg-tertiary)] p-3.5 rounded-xl border border-[var(--border-color)] text-xs">
               <div className="flex justify-between">
                 <span className="text-[var(--text-secondary)]">Current Version</span>
-                <span className="font-mono text-[var(--text-muted)]">0.0.1</span>
+                <span className="font-mono text-[var(--text-muted)]">{appVersion}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-[var(--text-secondary)]">Latest Version</span>

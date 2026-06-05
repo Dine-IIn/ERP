@@ -89,3 +89,6 @@ uploads/
 *.crt
 
 .vs/
+
+**/tauri-update.key
+**/tauri-update.key.pub
