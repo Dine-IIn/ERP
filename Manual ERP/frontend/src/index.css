@@ -30,10 +30,10 @@
   --bg-tertiary: #f1f5f9;
   --bg-card: #ffffff;
   --text-primary: #0f172a;
-  --text-secondary: #475569;
+  --text-secondary: #334155;
   --text-muted: #64748b;
-  --border-color: #e2e8f0;
-  --border-active: #cbd5e1;
+  --border-color: #cbd5e1; /* Clear borders */
+  --border-active: #94a3b8;
   --accent-primary: #4f46e5;
   --accent-hover: #4338ca;
   --accent-light: rgba(79, 70, 229, 0.08);
@@ -72,98 +72,270 @@ h1, h2, h3, h4, h5, h6, .font-display {
   background: var(--border-active);
 }
 
-/* Optimize touch interactions by overriding the 300ms delay on mobile WebViews (Capacitor/Tauri) */
+/* Optimize touch interactions */
 a, button, select, input, [role="button"] {
   touch-action: manipulation;
 }
 
-/* --- HIGH-CONTRAST LIGHT THEME TEXT OVERRIDES --- */
-:root.light .text-slate-100,
-:root.light .text-slate-200,
-:root.light .text-slate-250,
-:root.light .text-gray-100,
-:root.light .text-gray-200 {
+/* --- HIGH-CONTRAST LIGHT THEME RE-ESTABLISHMENT & CORRECTIONS --- */
+
+/* Override utility backgrounds in light mode to prevent dark blobs and ensure shadows */
+.light .bg-slate-900,
+.light .bg-slate-950,
+.light .bg-slate-850,
+.light .bg-gray-900,
+.light .bg-gray-950 {
+  background-color: var(--bg-card) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03) !important;
+}
+
+/* Transparent overlays, table headers, wrappers, and panels */
+.light [class*="bg-slate-950/"],
+.light [class*="bg-slate-900/"],
+.light [class*="bg-slate-850/"],
+.light [class*="bg-slate-800/"],
+.light [class*="bg-gray-950/"],
+.light [class*="bg-gray-900/"],
+.light thead tr,
+.light tr.bg-slate-950\/40 {
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-color) !important;
+}
+
+.light tr.hover\:bg-slate-800\/20:hover {
+  background-color: var(--accent-light) !important;
+}
+
+/* Override utility borders inside light mode */
+.light .border-slate-800,
+.light .border-slate-800\/80,
+.light .border-slate-800\/60,
+.light .border-slate-850,
+.light .border-slate-700,
+.light .border-gray-800,
+.light [class*="border-slate-"] {
+  border-color: var(--border-color) !important;
+}
+
+/* Force light mode inputs, selects, and textareas to look clear, crisp and visible */
+.light input,
+.light select,
+.light textarea,
+.light input.bg-slate-950,
+.light select.bg-slate-950,
+.light textarea.bg-slate-950,
+.light input.bg-slate-950\/40,
+.light select.bg-slate-950\/40 {
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-color) !important;
+}
+
+.light input::placeholder,
+.light textarea::placeholder {
+  color: var(--text-muted) !important;
+}
+
+.light input:focus,
+.light select:focus,
+.light textarea:focus {
+  border-color: var(--accent-primary) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 1px var(--accent-primary) !important;
+}
+
+/* Overwrite text-white and text-slate to preserve contrast in light mode */
+.light .text-white,
+.light .text-slate-50,
+.light .text-slate-100,
+.light .text-slate-200,
+.light .text-slate-250,
+.light .text-gray-100,
+.light .text-gray-200 {
   color: var(--text-primary) !important;
 }
 
-:root.light .text-slate-300,
-:root.light .text-slate-350,
-:root.light .text-slate-400,
-:root.light .text-slate-450,
-:root.light .text-slate-500,
-:root.light .text-slate-550,
-:root.light .text-slate-600,
-:root.light .text-slate-650,
-:root.light .text-gray-350,
-:root.light .text-gray-400,
-:root.light .text-gray-450,
-:root.light .text-gray-500 {
+.light .text-slate-300,
+.light .text-slate-350,
+.light .text-slate-400,
+.light .text-slate-450,
+.light .text-slate-550,
+.light .text-slate-600,
+.light .text-slate-650,
+.light .text-gray-300,
+.light .text-gray-350,
+.light .text-gray-400,
+.light .text-gray-450,
+.light .text-gray-500 {
   color: var(--text-secondary) !important;
 }
 
-/* --- COMPACT RESPONSIVE LAYOUT OVERRIDES (PREVENTS COMPRESSED FEELING) --- */
-@media (max-width: 1024px) {
-  .gap-6, .gap-y-6, .gap-x-6 {
-    gap: 0.875rem !important; /* Tighten gaps from 24px to 14px */
-  }
-  .p-6, .px-6, .py-6 {
-    padding: 0.875rem !important; /* Tighten paddings from 24px to 14px */
-  }
-  .p-8, .px-8, .py-8 {
-    padding: 1.25rem !important; /* Tighten paddings from 32px to 20px */
-  }
-  .space-y-6 > :not([hidden]) ~ :not([hidden]) {
-    --tw-space-y-reverse: 0;
-    margin-top: calc(0.875rem * calc(1 - var(--tw-space-y-reverse))) !important;
-    margin-bottom: calc(0.875rem * var(--tw-space-y-reverse)) !important;
-  }
+/* Convert light pastel text colors to rich, highly readable values in light mode */
+.light .text-indigo-400 {
+  color: var(--accent-primary) !important;
+}
+.light .text-purple-400 {
+  color: var(--accent-primary) !important;
+}
+.light .text-emerald-400 {
+  color: var(--success-color) !important;
+}
+.light .text-emerald-450 {
+  color: var(--success-color) !important;
+}
+.light .text-red-400 {
+  color: var(--danger-color) !important;
+}
+.light .text-blue-400 {
+  color: #1d4ed8 !important; /* Deep blue */
+}
+.light .text-amber-400,
+.light .text-amber-500 {
+  color: var(--warning-color) !important;
 }
 
-@media (min-width: 1025px) {
-  .gap-6, .gap-y-6, .gap-x-6 {
-    gap: 1.125rem !important; /* Tighten gaps from 24px to 18px */
-  }
-  .gap-8, .gap-y-8, .gap-x-8 {
-    gap: 1.375rem !important; /* Tighten gaps from 32px to 22px */
-  }
-  .p-6, .px-6, .py-6 {
-    padding: 1.125rem !important; /* Tighten paddings from 24px to 18px */
-  }
-  .p-8, .px-8, .py-8 {
-    padding: 1.375rem !important; /* Tighten paddings from 32px to 22px */
-  }
-  .space-y-6 > :not([hidden]) ~ :not([hidden]) {
-    --tw-space-y-reverse: 0;
-    margin-top: calc(1.125rem * calc(1 - var(--tw-space-y-reverse))) !important;
-    margin-bottom: calc(1.125rem * var(--tw-space-y-reverse)) !important;
-  }
+/* Fix text-white on hover/background issues in light mode */
+.light .hover\:text-white:hover,
+.light .hover\:text-slate-100:hover,
+.light .hover\:text-slate-200:hover,
+.light .hover\:text-slate-50:hover,
+.light [class*="hover:text-white"]:hover,
+.light [class*="hover:text-slate-100"]:hover {
+  color: var(--text-primary) !important;
 }
 
-/* --- UI SIZING SYSTEM --- */
+/* Map hover backgrounds inside light mode to clean light greys */
+.light [class*="hover:bg-slate-"]:hover,
+.light [class*="hover:bg-gray-"]:hover {
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Exclude primary action buttons and badges from getting text color overridden to dark */
+.light .bg-indigo-500,
+.light .bg-indigo-550,
+.light .bg-indigo-600,
+.light .bg-emerald-500,
+.light .bg-emerald-600,
+.light .bg-red-500,
+.light .bg-red-600,
+.light .bg-blue-500,
+.light .bg-rose-500,
+.light .bg-purple-500,
+.light [class*="bg-indigo-"] *,
+.light [class*="bg-emerald-"] *,
+.light [class*="bg-red-"] *,
+.light [class*="bg-blue-"] *,
+.light [class*="bg-rose-"] *,
+.light [class*="bg-purple-"] *,
+.light button .text-white,
+.light a .text-white,
+.light .btn .text-white,
+.light button.text-white,
+.light a.text-white,
+.light [role="button"] .text-white,
+.light [role="button"].text-white {
+  color: #ffffff !important;
+}
+
+
+/* --- HIGH-DENSITY ERP LAYOUT SPACING (ADAPTIVE SYSTEM) --- */
+
+/* Default view spacing (clean and structured, safe bounds, no elements touch boundaries) */
+table th,
+table td {
+  padding-top: 0.625rem;   /* ~10px */
+  padding-bottom: 0.625rem;
+  padding-left: 1rem;      /* ~16px */
+  padding-right: 1rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+
+/* --- ADAPTIVE DENSITY UNDER SIZE THEMES --- */
+
+/* Small UI Sizing (Maximum Space Squeezing for Advanced Users) */
 html.size-small {
-  font-size: 13px !important;
+  font-size: 12.5px !important;
 }
+
+html.size-small table th,
+html.size-small table td {
+  padding-top: 0.25rem !important;   /* 4px top/bottom */
+  padding-bottom: 0.25rem !important;
+  padding-left: 0.5rem !important;   /* 8px left/right */
+  padding-right: 0.5rem !important;
+  font-size: 0.75rem !important;
+}
+
 html.size-small .p-6,
 html.size-small .px-6,
 html.size-small .py-6,
 html.size-small .p-8,
 html.size-small .px-8,
 html.size-small .py-8 {
-  padding: 0.75rem !important;
+  padding: 0.625rem !important; /* Compresses to 10px outer space */
 }
+
 html.size-small .gap-6,
 html.size-small .gap-8 {
-  gap: 0.75rem !important;
-}
-html.size-small .space-y-6 > :not([hidden]) ~ :not([hidden]) {
-  margin-top: 0.75rem !important;
+  gap: 0.5rem !important;
 }
 
+html.size-small .space-y-6 > :not([hidden]) ~ :not([hidden]),
+html.size-small .space-y-8 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 0.5rem !important;
+}
+
+/* Medium UI Sizing (Default ERP density - safe margins, standard grid layout) */
 html.size-medium {
-  font-size: 15px !important;
+  font-size: 14px !important;
 }
 
+html.size-medium table th,
+html.size-medium table td {
+  padding-top: 0.45rem !important;   /* ~7px top/bottom */
+  padding-bottom: 0.45rem !important;
+  padding-left: 0.75rem !important;  /* ~12px left/right */
+  padding-right: 0.75rem !important;
+  font-size: 0.825rem !important;
+}
+
+html.size-medium .p-6,
+html.size-medium .px-6,
+html.size-medium .py-6 {
+  padding: 1rem !important; /* 16px */
+}
+
+html.size-medium .p-8,
+html.size-medium .px-8,
+html.size-medium .py-8 {
+  padding: 1.25rem !important; /* 20px */
+}
+
+html.size-medium .gap-6,
+html.size-medium .gap-8 {
+  gap: 0.875rem !important; /* 14px */
+}
+
+html.size-medium .space-y-6 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 0.875rem !important;
+}
+
+/* Large UI Sizing (Spacious visual layouts) */
 html.size-large {
-  font-size: 17.5px !important;
+  font-size: 16px !important;
 }
 
+html.size-large table th,
+html.size-large table td {
+  padding-top: 0.625rem !important;
+  padding-bottom: 0.625rem !important;
+  padding-left: 1rem !important;
+  padding-right: 1rem !important;
+  font-size: 0.9rem !important;
+}

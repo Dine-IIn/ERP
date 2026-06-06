@@ -377,7 +377,7 @@ app.patch('/api/purchase/vendor-quotes/:id', auth_1.authenticateToken, purchases
 app.delete('/api/purchase/vendor-quotes/:id', auth_1.authenticateToken, purchases_1.deleteVendorQuotation);
 app.get('/api/purchase/orders', auth_1.authenticateToken, purchases_1.listPurchaseOrders);
 app.post('/api/purchase/orders', auth_1.authenticateToken, purchases_1.createPurchaseOrder);
-app.patch('/api/purchase/orders/:id', auth_1.authenticateToken, purchases_1.updatePurchaseOrderStatus);
+app.patch('/api/purchase/orders/:id', auth_1.authenticateToken, purchases_1.updatePurchaseOrder);
 app.delete('/api/purchase/orders/:id', auth_1.authenticateToken, purchases_1.deletePurchaseOrder);
 app.get('/api/purchase/grns', auth_1.authenticateToken, purchases_1.listGrns);
 app.post('/api/purchase/grns', auth_1.authenticateToken, purchases_1.createGrn);

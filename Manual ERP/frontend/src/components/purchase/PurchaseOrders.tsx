@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShoppingCart, Search, Plus, Trash2, X, AlertCircle, CheckCircle2, DollarSign, Calendar, Tag, Trash } from 'lucide-react';
+import { ShoppingCart, Search, Plus, Trash2, X, AlertCircle, CheckCircle2, DollarSign, Calendar, Tag, Trash, Eye, Edit } from 'lucide-react';
 
 interface PurchaseOrderItem {
   id?: string;
@@ -30,6 +30,7 @@ interface PurchaseOrdersProps {
   vendors: any[];
   products: any[];
   onCreateOrder: (payload: any) => Promise<void>;
+  onUpdateOrder: (id: string, payload: any) => Promise<void>;
   onUpdateOrderStatus: (id: string, payload: { status: string }) => Promise<void>;
   onDeleteOrder: (id: string) => Promise<void>;
   currencySymbol?: string;
@@ -47,12 +48,16 @@ export default function PurchaseOrders({
   vendors,
   products,
   onCreateOrder,
+  onUpdateOrder,
   onUpdateOrderStatus,
   onDeleteOrder,
   currencySymbol = '$'
 }: PurchaseOrdersProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editOrderId, setEditOrderId] = useState<string | null>(null);
+  const [selectedDetailOrder, setSelectedDetailOrder] = useState<PurchaseOrder | null>(null);
 
   const [vendorId, setVendorId] = useState('');
   const [poNo, setPoNo] = useState('');
@@ -68,8 +73,9 @@ export default function PurchaseOrders({
   const [loading, setLoading] = useState(false);
 
   const openAddModal = () => {
+    setIsEditing(false);
+    setEditOrderId(null);
     setVendorId(vendors[0]?.id || '');
-    // Generate a beautiful preview PO no
     setPoNo(`PO-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`);
     setDate(new Date().toISOString().substring(0, 10));
     setDeliveryDate('');
@@ -77,6 +83,27 @@ export default function PurchaseOrders({
     setTaxPercent('18.00');
     setStatus('PENDING');
     setItems([{ productId: products[0]?.id || '', quantity: '1', price: String(products[0]?.pricing || 0), discount: '0.00' }]);
+    setLocalErr(null);
+    setLocalSuccess(null);
+    setShowModal(true);
+  };
+
+  const openEditModal = (po: PurchaseOrder) => {
+    setIsEditing(true);
+    setEditOrderId(po.id);
+    setVendorId(po.vendorId);
+    setPoNo(po.poNo);
+    setDate(po.date ? po.date.substring(0, 10) : '');
+    setDeliveryDate(po.deliveryDate ? po.deliveryDate.substring(0, 10) : '');
+    setDiscountPercent(String(po.discount));
+    setTaxPercent(String(po.tax));
+    setStatus(po.status);
+    setItems(po.items.map(it => ({
+      productId: it.productId,
+      quantity: String(it.quantity),
+      price: String(it.price),
+      discount: String(it.discount || 0)
+    })));
     setLocalErr(null);
     setLocalSuccess(null);
     setShowModal(true);
@@ -150,13 +177,18 @@ export default function PurchaseOrders({
     };
 
     try {
-      await onCreateOrder(payload);
-      setLocalSuccess("Corporate Purchase Order created successfully!");
+      if (isEditing && editOrderId) {
+        await onUpdateOrder(editOrderId, payload);
+        setLocalSuccess("Corporate Purchase Order updated successfully!");
+      } else {
+        await onCreateOrder(payload);
+        setLocalSuccess("Corporate Purchase Order created successfully!");
+      }
       setTimeout(() => {
         setShowModal(false);
       }, 1000);
     } catch (err: any) {
-      setLocalErr(err.message || "Failed to issue Purchase Order sheet.");
+      setLocalErr(err.message || "Failed to save Purchase Order sheet.");
     } finally {
       setLoading(false);
     }
@@ -261,18 +293,36 @@ export default function PurchaseOrders({
                         o.status === 'APPROVED' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
                         o.status === 'COMPLETED' ? 'bg-emerald-500/10 text-emerald-450 border-emerald-500/20' :
                         o.status === 'SHIPPED' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
-                        'bg-slate-800 border-slate-700 text-slate-400'
+                        'bg-slate-880 border-slate-700 text-slate-400'
                       }`}>
                         {o.status}
                       </span>
                     </td>
                     <td className="py-4 px-6 text-right space-x-2">
+                      <button
+                        onClick={() => setSelectedDetailOrder(o)}
+                        className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-indigo-400 transition-all rounded-lg"
+                        title="View PO Details"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+
+                      {o.status !== 'COMPLETED' && (
+                        <button
+                          onClick={() => openEditModal(o)}
+                          className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-amber-500 transition-all rounded-lg"
+                          title="Edit Purchase Order"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                      )}
+
                       {o.status === 'PENDING' && (
                         <button
                           onClick={() => handleToggleStatus(o.id, 'APPROVED')}
                           className="px-2 py-1 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 text-indigo-455 text-xs font-bold rounded-lg transition-all"
                         >
-                          Approve PO
+                          Approve
                         </button>
                       )}
                       {o.status === 'APPROVED' && (
@@ -299,13 +349,15 @@ export default function PurchaseOrders({
         </div>
       </div>
 
-      {/* Add Modal */}
+      {/* Add/Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-          <div className="w-full max-w-4xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden transform transition-all max-h-[90vh] flex flex-col">
+          <div className="w-full max-w-4xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden transform transition-all max-h-[95vh] flex flex-col">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-slate-800 bg-slate-950/20">
-              <h3 className="text-lg font-bold text-white">Create Sourcing Purchase Order Sheet</h3>
+              <h3 className="text-lg font-bold text-white">
+                {isEditing ? `Edit Purchase Order: ${poNo}` : 'Create Sourcing Purchase Order Sheet'}
+              </h3>
               <button
                 onClick={() => setShowModal(false)}
                 className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-all"
@@ -355,6 +407,7 @@ export default function PurchaseOrders({
                     onChange={(e) => setPoNo(e.target.value)}
                     className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white outline-none focus:border-indigo-500 transition-all text-sm font-mono"
                     required
+                    disabled={isEditing}
                   />
                 </div>
 
@@ -534,10 +587,150 @@ export default function PurchaseOrders({
                   disabled={loading}
                   className="px-5 py-2 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white transition-all text-sm font-bold rounded-xl shadow-lg shadow-indigo-500/20"
                 >
-                  {loading ? 'Processing...' : 'Confirm & Issue PO'}
+                  {loading ? 'Processing...' : isEditing ? 'Save Changes' : 'Confirm & Issue PO'}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Detail Modal */}
+      {selectedDetailOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+          <div className="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden transform transition-all max-h-[90vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-slate-800 bg-slate-950/20">
+              <div className="flex items-center gap-2">
+                <ShoppingCart className="w-5 h-5 text-indigo-400" />
+                <h3 className="text-lg font-bold text-white">
+                  Purchase Order Details — <span className="font-mono text-indigo-300 font-extrabold">{selectedDetailOrder.poNo}</span>
+                </h3>
+              </div>
+              <button
+                onClick={() => setSelectedDetailOrder(null)}
+                className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 space-y-6 overflow-y-auto flex-1 text-left">
+              {/* Header Grid */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-slate-950/20 p-4 rounded-xl border border-slate-800">
+                <div>
+                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Vendor Supplier</span>
+                  <span className="text-sm font-bold text-slate-200">{selectedDetailOrder.vendor.name}</span>
+                  {selectedDetailOrder.vendor.contactNo && (
+                    <span className="text-[10px] text-slate-500 block font-mono">{selectedDetailOrder.vendor.contactNo}</span>
+                  )}
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">PO Issue Date</span>
+                  <span className="text-sm font-semibold text-slate-200 font-mono">
+                    {new Date(selectedDetailOrder.date).toLocaleDateString()}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Delivery Date</span>
+                  <span className="text-sm font-semibold text-slate-200 font-mono">
+                    {selectedDetailOrder.deliveryDate ? new Date(selectedDetailOrder.deliveryDate).toLocaleDateString() : 'N/A'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">PO Status</span>
+                  <span className={`inline-block mt-1 px-2.5 py-0.5 text-xs font-bold rounded-full border ${
+                    selectedDetailOrder.status === 'APPROVED' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
+                    selectedDetailOrder.status === 'COMPLETED' ? 'bg-emerald-500/10 text-emerald-450 border-emerald-500/20' :
+                    selectedDetailOrder.status === 'SHIPPED' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                    'bg-slate-850 border-slate-700 text-slate-400'
+                  }`}>
+                    {selectedDetailOrder.status}
+                  </span>
+                </div>
+              </div>
+
+              {/* Items Table */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Itemized Breakdown</h4>
+                <div className="border border-slate-800 rounded-xl overflow-hidden bg-slate-950/20">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="bg-slate-950/40 border-b border-slate-800 text-slate-450 uppercase font-semibold">
+                        <th className="py-2.5 px-4">Product Catalog Item</th>
+                        <th className="py-2.5 px-4 text-right">Unit Price</th>
+                        <th className="py-2.5 px-4 text-right">Quantity</th>
+                        <th className="py-2.5 px-4 text-right">Discount</th>
+                        <th className="py-2.5 px-4 text-right">Line Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60">
+                      {selectedDetailOrder.items.map((it, idx) => {
+                        const base = it.quantity * it.price;
+                        const disc = base * ((it.discount || 0) / 100);
+                        const lineTotal = base - disc;
+                        return (
+                          <tr key={idx} className="hover:bg-slate-800/10">
+                            <td className="py-2.5 px-4 font-bold text-slate-200">
+                              {it.product?.name || "Unknown Product"}
+                            </td>
+                            <td className="py-2.5 px-4 text-right font-mono text-slate-300">
+                              {currencySymbol}{it.price.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="py-2.5 px-4 text-right font-mono text-slate-350">
+                              {it.quantity} {it.product?.uom || ""}
+                            </td>
+                            <td className="py-2.5 px-4 text-right font-mono text-amber-500">
+                              {it.discount > 0 ? `${it.discount}%` : '-'}
+                            </td>
+                            <td className="py-2.5 px-4 text-right font-mono font-bold text-slate-200">
+                              {currencySymbol}{lineTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Totals */}
+              <div className="flex justify-end">
+                <div className="w-64 space-y-1.5 text-xs font-mono bg-slate-950/20 p-4 rounded-xl border border-slate-800">
+                  <div className="flex justify-between text-slate-450">
+                    <span>Gross items cost:</span>
+                    <span>{currencySymbol}{selectedDetailOrder.subtotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  {selectedDetailOrder.discount > 0 && (
+                    <div className="flex justify-between text-red-400/80">
+                      <span>Sourcing discount ({selectedDetailOrder.discount}%):</span>
+                      <span>-{currencySymbol}{(selectedDetailOrder.subtotal * (selectedDetailOrder.discount / 100)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
+                  {selectedDetailOrder.tax > 0 && (
+                    <div className="flex justify-between text-slate-450">
+                      <span>Sourcing GST ({selectedDetailOrder.tax}%):</span>
+                      <span>{currencySymbol}{((selectedDetailOrder.subtotal * (1 - selectedDetailOrder.discount / 100)) * (selectedDetailOrder.tax / 100)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-white text-sm font-bold border-t border-slate-800 pt-2 mt-2">
+                    <span>Total PO Valuation:</span>
+                    <span className="text-indigo-400">{currencySymbol}{selectedDetailOrder.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-slate-950/40 border-t border-slate-800 flex justify-end">
+              <button
+                onClick={() => setSelectedDetailOrder(null)}
+                className="px-5 py-2 bg-slate-850 hover:bg-slate-800 text-white transition-all text-xs font-bold rounded-xl"
+              >
+                Close View
+              </button>
+            </div>
           </div>
         </div>
       )}

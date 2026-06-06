@@ -2127,6 +2127,11 @@ export default function App() {
       
       fetchMasterData();
       fetchSalesData();
+      fetchTaxesData();
+      fetchCrmData();
+      fetchPurchasesData();
+      fetchInventoryData();
+      fetchSalesExtensionsData();
       fetchHrmsData();
       fetchFinanceData();
       fetchReportsData();
@@ -2277,18 +2282,45 @@ export default function App() {
 
   const fetchPurchasesData = async () => {
     try {
-      const vqRes = await apiRequest('/api/purchase/quotations', 'GET');
-      setVendorQuotationsList(vqRes.quotations || []);
-      const poRes = await apiRequest('/api/purchase/orders', 'GET');
-      setPurchaseOrdersList(poRes.purchaseOrders || []);
-      const grnRes = await apiRequest('/api/purchase/grns', 'GET');
-      setGrnsList(grnRes.grns || []);
-      const retRes = await apiRequest('/api/purchase/returns', 'GET');
-      setPurchaseReturnsList(retRes.returns || []);
-      const payRes = await apiRequest('/api/purchase/payments', 'GET');
-      setVendorPaymentsList(payRes.payments || []);
+      const results = await Promise.allSettled([
+        apiRequest('/api/purchase/vendor-quotes', 'GET'),
+        apiRequest('/api/purchase/orders', 'GET'),
+        apiRequest('/api/purchase/grns', 'GET'),
+        apiRequest('/api/purchase/returns', 'GET'),
+        apiRequest('/api/purchase/payments', 'GET')
+      ]);
+
+      if (results[0].status === 'fulfilled') {
+        setVendorQuotationsList(results[0].value.quotations || []);
+      } else {
+        console.error("Failed to fetch vendor quotes:", results[0].reason);
+      }
+
+      if (results[1].status === 'fulfilled') {
+        setPurchaseOrdersList(results[1].value.purchaseOrders || []);
+      } else {
+        console.error("Failed to fetch purchase orders:", results[1].reason);
+      }
+
+      if (results[2].status === 'fulfilled') {
+        setGrnsList(results[2].value.grns || []);
+      } else {
+        console.error("Failed to fetch GRNs:", results[2].reason);
+      }
+
+      if (results[3].status === 'fulfilled') {
+        setPurchaseReturnsList(results[3].value.returns || []);
+      } else {
+        console.error("Failed to fetch purchase returns:", results[3].reason);
+      }
+
+      if (results[4].status === 'fulfilled') {
+        setVendorPaymentsList(results[4].value.payments || []);
+      } else {
+        console.error("Failed to fetch vendor payments:", results[4].reason);
+      }
     } catch (e) {
-      console.error(e);
+      console.error("Unexpected error in fetchPurchasesData:", e);
     }
   };
 
@@ -2590,17 +2622,17 @@ export default function App() {
 
   // --- VENDOR QUOTATIONS OPERATIONS ---
   const handleCreateVendorQuotation = async (payload: any) => {
-    const res = await apiRequest('/api/purchase/quotations', 'POST', payload);
+    const res = await apiRequest('/api/purchase/vendor-quotes', 'POST', payload);
     setSuccessMsg(res.message || "Vendor Quotation saved");
     fetchPurchasesData();
   };
   const handleUpdateVendorQuotationStatus = async (id: string, payload: any) => {
-    const res = await apiRequest(`/api/purchase/quotations/${id}/status`, 'PATCH', payload);
+    const res = await apiRequest(`/api/purchase/vendor-quotes/${id}`, 'PATCH', payload);
     setSuccessMsg(res.message || "Status updated");
     fetchPurchasesData();
   };
   const handleDeleteVendorQuotation = async (id: string) => {
-    const res = await apiRequest(`/api/purchase/quotations/${id}`, 'DELETE');
+    const res = await apiRequest(`/api/purchase/vendor-quotes/${id}`, 'DELETE');
     setSuccessMsg(res.message || "Quotation removed");
     fetchPurchasesData();
   };
@@ -2609,12 +2641,17 @@ export default function App() {
   const handleCreatePurchaseOrder = async (payload: any) => {
     const res = await apiRequest('/api/purchase/orders', 'POST', payload);
     setSuccessMsg(res.message || "PO registered");
-    fetchPurchasesData();
+    await fetchPurchasesData();
   };
   const handleUpdatePurchaseOrderStatus = async (id: string, payload: any) => {
-    const res = await apiRequest(`/api/purchase/orders/${id}/status`, 'PATCH', payload);
+    const res = await apiRequest(`/api/purchase/orders/${id}`, 'PATCH', payload);
     setSuccessMsg(res.message || "PO Status updated");
-    fetchPurchasesData();
+    await fetchPurchasesData();
+  };
+  const handleUpdatePurchaseOrder = async (id: string, payload: any) => {
+    const res = await apiRequest(`/api/purchase/orders/${id}`, 'PATCH', payload);
+    setSuccessMsg(res.message || "Purchase Order updated successfully");
+    await fetchPurchasesData();
   };
   const handleDeletePurchaseOrder = async (id: string) => {
     const res = await apiRequest(`/api/purchase/orders/${id}`, 'DELETE');
@@ -2668,7 +2705,7 @@ export default function App() {
 
   // --- INVENTORY AUDIT OPERATIONS ---
   const handleAdjustStock = async (payload: any) => {
-    const res = await apiRequest('/api/inventory/adjustments', 'POST', payload);
+    const res = await apiRequest('/api/inventory/adjust', 'POST', payload);
     setSuccessMsg(res.message || "Physical audit stock adjusted");
     fetchInventoryData();
     fetchMasterData();
@@ -2987,6 +3024,30 @@ export default function App() {
       fetchAdminConsoleData();
     }
   }, [activeWorkspaceModule, activeWorkspaceSubModule, auditFilterModule, debouncedSearchActor]);
+
+  // Reactively sync data when the active workspace submodule changes to keep UI fresh and ensure all roles fetch necessary records
+  useEffect(() => {
+    if (!token || !user) return;
+    
+    if (activeWorkspaceSubModule.startsWith('PURCHASE_')) {
+      fetchPurchasesData();
+    } else if (activeWorkspaceSubModule.startsWith('INVENTORY_')) {
+      fetchInventoryData();
+    } else if (activeWorkspaceSubModule.startsWith('CRM_')) {
+      fetchCrmData();
+    } else if (activeWorkspaceSubModule.startsWith('SALES_')) {
+      fetchSalesData();
+      fetchSalesExtensionsData();
+    } else if (activeWorkspaceSubModule.startsWith('HRMS_')) {
+      fetchHrmsData();
+    } else if (activeWorkspaceSubModule.startsWith('FINANCE_')) {
+      fetchFinanceData();
+    } else if (activeWorkspaceSubModule.startsWith('MASTER_')) {
+      fetchMasterData();
+    } else if (activeWorkspaceSubModule.startsWith('REPORTS_')) {
+      fetchReportsData();
+    }
+  }, [activeWorkspaceSubModule, token, user]);
 
   // --- CONTROLLER ACTION HANDLERS ---
 
@@ -4481,6 +4542,7 @@ export default function App() {
                         vendors={vendorsList}
                         products={productsList}
                         onCreateOrder={handleCreatePurchaseOrder}
+                        onUpdateOrder={handleUpdatePurchaseOrder}
                         onUpdateOrderStatus={handleUpdatePurchaseOrderStatus}
                         onDeleteOrder={handleDeletePurchaseOrder}
                         currencySymbol={currencySymbol}

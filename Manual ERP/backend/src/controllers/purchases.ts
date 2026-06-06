@@ -697,3 +697,77 @@ export async function deleteVendorPayment(req: AuthenticatedRequest, res: Respon
     return res.status(500).json({ error: error.message });
   }
 }
+
+export async function updatePurchaseOrder(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { id } = req.params;
+    const { vendorId, poNo, date, deliveryDate, subtotal, discount, tax, total, status, items } = req.body;
+
+    const poToUpdate = await prisma.purchaseOrder.findFirst({
+      where: { id, companyId }
+    });
+    if (!poToUpdate) {
+      return res.status(404).json({ error: "Purchase Order not found" });
+    }
+
+    if (poToUpdate.status === "COMPLETED") {
+      return res.status(400).json({ error: "Completed Purchase Orders cannot be modified." });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.purchaseOrder.update({
+        where: { id },
+        data: {
+          ...(vendorId && { vendorId }),
+          ...(poNo && { poNo }),
+          ...(date !== undefined && { date: date ? new Date(date) : new Date() }),
+          ...(deliveryDate !== undefined && { deliveryDate: deliveryDate ? new Date(deliveryDate) : null }),
+          ...(subtotal !== undefined && { subtotal: parseFloat(subtotal) || 0.0 }),
+          ...(discount !== undefined && { discount: parseFloat(discount) || 0.0 }),
+          ...(tax !== undefined && { tax: parseFloat(tax) || 0.0 }),
+          ...(total !== undefined && { total: parseFloat(total) || 0.0 }),
+          ...(status && { status })
+        }
+      });
+
+      if (items && Array.isArray(items)) {
+        await tx.purchaseOrderItem.deleteMany({ where: { poId: id } });
+        const validItems = items.filter((item: any) => item.productId && item.quantity && item.price).map((item: any) => ({
+          poId: id,
+          productId: item.productId,
+          quantity: parseFloat(item.quantity),
+          price: parseFloat(item.price),
+          discount: parseFloat(item.discount) || 0.0
+        }));
+        if (validItems.length > 0) {
+          await tx.purchaseOrderItem.createMany({ data: validItems });
+        }
+      }
+    });
+
+    const finalPo = await prisma.purchaseOrder.findUnique({
+      where: { id },
+      include: { vendor: true, items: { include: { product: true } } }
+    });
+
+    await logAudit(
+      companyId,
+      req.user?.userId || null,
+      req.user?.username || null,
+      'purchase_order',
+      'UPDATE',
+      poToUpdate,
+      finalPo,
+      req.ip,
+      req.headers['user-agent']
+    );
+
+    return res.json({ message: `Purchase Order updated successfully`, purchaseOrder: finalPo });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+

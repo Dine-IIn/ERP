@@ -102,7 +102,7 @@ import {
   deleteVendorQuotation,
   listPurchaseOrders,
   createPurchaseOrder,
-  updatePurchaseOrderStatus,
+  updatePurchaseOrder,
   deletePurchaseOrder,
   listGrns,
   createGrn,
@@ -649,7 +649,7 @@ app.delete('/api/purchase/vendor-quotes/:id', authenticateToken, deleteVendorQuo
 
 app.get('/api/purchase/orders', authenticateToken, listPurchaseOrders);
 app.post('/api/purchase/orders', authenticateToken, createPurchaseOrder);
-app.patch('/api/purchase/orders/:id', authenticateToken, updatePurchaseOrderStatus);
+app.patch('/api/purchase/orders/:id', authenticateToken, updatePurchaseOrder);
 app.delete('/api/purchase/orders/:id', authenticateToken, deletePurchaseOrder);
 
 app.get('/api/purchase/grns', authenticateToken, listGrns);
