@@ -3,6 +3,49 @@ import { AuthenticatedRequest } from '../middlewares/auth';
 import prisma from '../services/db';
 import { logAudit } from '../utils/audit';
 
+interface ExplodedComponent {
+  productId: string;
+  qtyRequired: number;
+  hasBom: boolean;
+  bomId?: string;
+}
+
+async function explodeBOM(bomId: string, qty: number, companyId: string, visited: string[] = []): Promise<ExplodedComponent[]> {
+  if (visited.includes(bomId)) return [];
+  visited.push(bomId);
+
+  const bom = await prisma.billOfMaterials.findUnique({
+    where: { id: bomId },
+    include: { components: true }
+  });
+  if (!bom) return [];
+
+  const exploded: ExplodedComponent[] = [];
+  for (const comp of bom.components) {
+    const totalQty = comp.qtyRequired * qty;
+    const subBom = await prisma.billOfMaterials.findFirst({
+      where: { finishedProductId: comp.productId, status: 'ACTIVE', companyId }
+    });
+    if (subBom) {
+      exploded.push({
+        productId: comp.productId,
+        qtyRequired: totalQty,
+        hasBom: true,
+        bomId: subBom.id
+      });
+      const subExploded = await explodeBOM(subBom.id, totalQty, companyId, [...visited]);
+      exploded.push(...subExploded);
+    } else {
+      exploded.push({
+        productId: comp.productId,
+        qtyRequired: totalQty,
+        hasBom: false
+      });
+    }
+  }
+  return exploded;
+}
+
 // Helper to check company authentication
 const getCompanyId = (req: AuthenticatedRequest, res: Response): string | null => {
   const companyId = req.user?.companyId;
@@ -251,6 +294,15 @@ export async function createPlan(req: AuthenticatedRequest, res: Response) {
       return res.status(400).json({ error: 'finishedProductId, qtyToProduce, startDate, endDate, and bomId are required' });
     }
 
+    if (salesOrderId) {
+      const existingPlan = await prisma.productionPlan.findFirst({
+        where: { salesOrderId, companyId }
+      });
+      if (existingPlan) {
+        return res.status(409).json({ error: 'A production plan has already been scheduled for this Sales Order.' });
+      }
+    }
+
     const plan = await prisma.productionPlan.create({
       data: {
         companyId,
@@ -443,17 +495,93 @@ export async function createWorkOrder(req: AuthenticatedRequest, res: Response) 
       return res.status(409).json({ error: `Work Order number '${woNo}' is already taken.` });
     }
 
-    const workOrder = await prisma.workOrder.create({
-      data: {
-        companyId,
-        woNo,
-        planId,
-        qtyTarget: parseFloat(qtyTarget),
-        qtyProduced: 0.0,
-        priority: priority || 'NORMAL',
-        routingStage: routingStage || 'Scheduled Routing',
-        status: 'RELEASED'
+    const workOrder = await prisma.$transaction(async (tx) => {
+      const plan = await tx.productionPlan.findFirst({
+        where: { id: planId, companyId },
+        include: { bom: true }
+      });
+      if (!plan) throw new Error("Production Plan not found");
+
+      const finishedProductId = plan.finishedProductId;
+
+      const wo = await tx.workOrder.create({
+        data: {
+          companyId,
+          woNo,
+          planId,
+          qtyTarget: parseFloat(qtyTarget),
+          qtyProduced: 0.0,
+          priority: priority || 'NORMAL',
+          routingStage: routingStage || 'Scheduled Routing',
+          status: 'RELEASED'
+        }
+      });
+
+      // 1. Generate Job Cards from configured routing
+      const routing = await tx.routing.findFirst({
+        where: { productId: finishedProductId, companyId },
+        include: { operations: { orderBy: { sequenceNo: 'asc' } } }
+      });
+      if (routing && routing.operations.length > 0) {
+        for (const op of routing.operations) {
+          await tx.jobCard.create({
+            data: {
+              companyId,
+              woId: wo.id,
+              operationName: op.operationName,
+              workCenterId: op.workCenterId,
+              qtyTarget: parseFloat(qtyTarget),
+              status: 'PENDING',
+              cycleTimeMinutes: op.setupTimeMins + (op.runTimePerUnit * parseFloat(qtyTarget))
+            }
+          });
+        }
       }
+
+      // 2. Explode BOM and create dependent sub-assembly work orders for any component with an active BOM
+      const exploded = await explodeBOM(plan.bomId, parseFloat(qtyTarget), companyId);
+      for (const comp of exploded) {
+        if (comp.hasBom && comp.bomId) {
+          const subWoNo = `${woNo}-SUB-${comp.productId.substring(0, 5)}`;
+          const checkSub = await tx.workOrder.findUnique({ where: { woNo: subWoNo } });
+          if (!checkSub) {
+            const subWo = await tx.workOrder.create({
+              data: {
+                companyId,
+                woNo: subWoNo,
+                planId,
+                qtyTarget: comp.qtyRequired,
+                qtyProduced: 0.0,
+                priority: priority || 'NORMAL',
+                routingStage: 'Scheduled Routing',
+                status: 'RELEASED'
+              }
+            });
+
+            const subRouting = await tx.routing.findFirst({
+              where: { productId: comp.productId, companyId },
+              include: { operations: { orderBy: { sequenceNo: 'asc' } } }
+            });
+            if (subRouting && subRouting.operations.length > 0) {
+              for (const op of subRouting.operations) {
+                await tx.jobCard.create({
+                  data: {
+                    companyId,
+                    woId: subWo.id,
+                    operationName: op.operationName,
+                    workCenterId: op.workCenterId,
+                    qtyTarget: comp.qtyRequired,
+                    status: 'PENDING',
+                    cycleTimeMinutes: op.setupTimeMins + (op.runTimePerUnit * comp.qtyRequired)
+                  }
+                });
+              }
+            }
+          }
+        }
+      }
+
+      return wo;
     });
 
     return res.status(201).json({ message: 'Work Order dispatched successfully', workOrder });
@@ -910,38 +1038,80 @@ export async function createQcRecord(req: AuthenticatedRequest, res: Response) {
 
     const failedQty = Math.max(0, parseFloat(totalInspected) - parseFloat(qtyPassed));
 
-    const qcRecord = await prisma.qualityControlRecord.create({
-      data: {
-        companyId,
-        batchNo,
-        productId,
-        totalInspected: parseFloat(totalInspected),
-        qtyPassed: parseFloat(qtyPassed),
-        qtyFailed: failedQty,
-        inspectorName: inspectorName || 'Quality Auditor',
-        status: status || (failedQty === 0 ? 'PASSED' : 'REWORK_REQUIRED'),
-        remarks: remarks || ''
-      },
-      include: {
-        product: true
-      }
-    });
-
-    // Automatically trigger rework card if defectives detected
-    if (failedQty > 0) {
-      await prisma.reworkCard.create({
+    const qcRecord = await prisma.$transaction(async (tx) => {
+      const rec = await tx.qualityControlRecord.create({
         data: {
           companyId,
-          qcRecordId: qcRecord.id,
           batchNo,
           productId,
-          qtyToRepair: failedQty,
-          reworkOperation: 'Manual sand routing & surface inspection',
-          status: 'OPEN',
-          notes: remarks || 'Failed stresses/weld tolerances during QC checklists.'
+          totalInspected: parseFloat(totalInspected),
+          qtyPassed: parseFloat(qtyPassed),
+          qtyFailed: failedQty,
+          inspectorName: inspectorName || 'Quality Auditor',
+          status: status || (failedQty === 0 ? 'PASSED' : 'REWORK_REQUIRED'),
+          remarks: remarks || ''
+        },
+        include: {
+          product: true
         }
       });
-    }
+
+      const passedVal = parseFloat(qtyPassed);
+      if (passedVal > 0) {
+        // Subtract passed quantity from quarantineStock and add to active physical stock
+        await tx.product.update({
+          where: { id: productId },
+          data: {
+            quarantineStock: { decrement: passedVal },
+            stock: { increment: passedVal }
+          }
+        });
+
+        const prod = await tx.product.findUnique({ where: { id: productId } });
+        const previousStock = prod ? prod.stock - passedVal : 0.0;
+        const newStock = prod ? prod.stock : 0.0;
+
+        await tx.stockAdjustment.create({
+          data: {
+            companyId,
+            productId,
+            adjustmentNo: `ADJ-QC-PASS-${Date.now()}`,
+            type: "MANUAL_ADD",
+            quantity: passedVal,
+            previousStock,
+            newStock,
+            reason: `Passed QC Inspection - Batch: ${batchNo}`,
+            referenceNo: batchNo
+          }
+        });
+      }
+
+      if (failedQty > 0) {
+        // Remove failed quantity from quarantine
+        await tx.product.update({
+          where: { id: productId },
+          data: {
+            quarantineStock: { decrement: failedQty }
+          }
+        });
+
+        // Automatically trigger rework card if defectives detected
+        await tx.reworkCard.create({
+          data: {
+            companyId,
+            qcRecordId: rec.id,
+            batchNo,
+            productId,
+            qtyToRepair: failedQty,
+            reworkOperation: 'Manual sand routing & surface inspection',
+            status: 'OPEN',
+            notes: remarks || 'Failed stresses/weld tolerances during QC checklists.'
+          }
+        });
+      }
+
+      return rec;
+    });
 
     return res.status(201).json({ message: 'Quality control record created successfully', qcRecord });
   } catch (error: any) {
@@ -1275,6 +1445,327 @@ export async function deleteShift(req: AuthenticatedRequest, res: Response) {
     await prisma.factoryShift.delete({ where: { id } });
 
     return res.json({ message: 'Shift roster cancelled' });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+// ==========================================
+// 10. ROUTINGS & OPERATIONS CRUD
+// ==========================================
+
+export async function listRoutings(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = getCompanyId(req, res);
+    if (!companyId) return;
+
+    const routings = await prisma.routing.findMany({
+      where: { companyId },
+      include: {
+        product: true,
+        operations: {
+          include: { workCenter: true },
+          orderBy: { sequenceNo: 'asc' }
+        }
+      }
+    });
+
+    return res.json({ routings });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function createRouting(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = getCompanyId(req, res);
+    if (!companyId) return;
+
+    const { productId, name, operations } = req.body;
+    if (!productId || !name) {
+      return res.status(400).json({ error: "productId and name are required" });
+    }
+
+    const existing = await prisma.routing.findFirst({
+      where: { productId, companyId }
+    });
+    if (existing) {
+      return res.status(409).json({ error: "A routing already exists for this product" });
+    }
+
+    const routing = await prisma.routing.create({
+      data: {
+        companyId,
+        productId,
+        name,
+        operations: {
+          create: (operations || []).map((op: any) => ({
+            sequenceNo: parseInt(op.sequenceNo) || 10,
+            operationName: op.operationName,
+            workCenterId: op.workCenterId || null,
+            setupTimeMins: parseFloat(op.setupTimeMins) || 0.0,
+            runTimePerUnit: parseFloat(op.runTimePerUnit) || 0.0
+          }))
+        }
+      },
+      include: { operations: true }
+    });
+
+    return res.status(201).json({ message: "Routing created successfully", routing });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function updateRouting(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = getCompanyId(req, res);
+    if (!companyId) return;
+
+    const { id } = req.params;
+    const { name, operations } = req.body;
+
+    const existing = await prisma.routing.findFirst({ where: { id, companyId } });
+    if (!existing) return res.status(404).json({ error: "Routing not found" });
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const r = await tx.routing.update({
+        where: { id },
+        data: { ...(name && { name }) }
+      });
+
+      if (operations && Array.isArray(operations)) {
+        await tx.routingOperation.deleteMany({ where: { routingId: id } });
+        await tx.routingOperation.createMany({
+          data: operations.map((op: any) => ({
+            routingId: id,
+            sequenceNo: parseInt(op.sequenceNo) || 10,
+            operationName: op.operationName,
+            workCenterId: op.workCenterId || null,
+            setupTimeMins: parseFloat(op.setupTimeMins) || 0.0,
+            runTimePerUnit: parseFloat(op.runTimePerUnit) || 0.0
+          }))
+        });
+      }
+
+      return r;
+    });
+
+    const finalRouting = await prisma.routing.findUnique({
+      where: { id },
+      include: { operations: true }
+    });
+
+    return res.json({ message: "Routing updated successfully", routing: finalRouting });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function deleteRouting(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = getCompanyId(req, res);
+    if (!companyId) return;
+
+    const { id } = req.params;
+    const routing = await prisma.routing.findFirst({ where: { id, companyId } });
+    if (!routing) return res.status(404).json({ error: "Routing not found" });
+
+    await prisma.routing.delete({ where: { id } });
+    return res.json({ message: "Routing deleted successfully" });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+// ==========================================
+// 11. MATERIAL ISSUE (GOODS ISSUE) CRUD
+// ==========================================
+
+export async function listMaterialIssues(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = getCompanyId(req, res);
+    if (!companyId) return;
+
+    const issues = await prisma.materialIssue.findMany({
+      where: {
+        workOrder: { companyId }
+      },
+      include: {
+        product: true,
+        workOrder: true
+      },
+      orderBy: { issuedDate: 'desc' }
+    });
+
+    return res.json({ issues });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function issueMaterialsToWorkOrder(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = getCompanyId(req, res);
+    if (!companyId) return;
+
+    const { woId, productId, quantity } = req.body;
+    if (!woId || !productId || !quantity) {
+      return res.status(400).json({ error: "woId, productId, and quantity are required" });
+    }
+
+    const qty = parseFloat(quantity);
+    if (isNaN(qty) || qty <= 0) {
+      return res.status(400).json({ error: "Quantity must be greater than zero" });
+    }
+
+    const wo = await prisma.workOrder.findFirst({ where: { id: woId, companyId } });
+    if (!wo) return res.status(404).json({ error: "Work Order not found" });
+
+    const prod = await prisma.product.findFirst({ where: { id: productId, companyId } });
+    if (!prod) return res.status(404).json({ error: "Product not found" });
+
+    if (prod.stock < qty) {
+      return res.status(400).json({ error: `Insufficient stock. Available: ${prod.stock}` });
+    }
+
+    const issue = await prisma.$transaction(async (tx) => {
+      // 1. Decrement raw product stock
+      await tx.product.update({
+        where: { id: productId },
+        data: { stock: { decrement: qty } }
+      });
+
+      // 2. Log stock adjustment
+      await tx.stockAdjustment.create({
+        data: {
+          companyId,
+          productId,
+          adjustmentNo: `ADJ-RAW-ISSUE-${Date.now()}`,
+          type: 'MANUAL_SUB',
+          quantity: -qty,
+          previousStock: prod.stock,
+          newStock: prod.stock - qty,
+          reason: `Material issue to Work Order ${wo.woNo}`,
+          referenceNo: wo.woNo
+        }
+      });
+
+      // 3. Create MaterialIssue
+      const mi = await tx.materialIssue.create({
+        data: {
+          companyId,
+          woId,
+          productId,
+          quantity: qty,
+          issuedDate: new Date()
+        }
+      });
+
+      return mi;
+    });
+
+    return res.status(201).json({ message: "Materials issued successfully", issue });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+// ==========================================
+// 12. ACTUAL VS STANDARD COSTING ENGINE
+// ==========================================
+
+export async function getWorkOrderActualCosting(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = getCompanyId(req, res);
+    if (!companyId) return;
+
+    const { id } = req.params; // Work Order ID
+
+    const wo = await prisma.workOrder.findFirst({
+      where: { id, companyId },
+      include: {
+        plan: {
+          include: {
+            finishedProduct: true,
+            bom: {
+              include: {
+                components: { include: { product: true } }
+              }
+            }
+          }
+        },
+        materialIssues: { include: { product: true } },
+        jobCards: true
+      }
+    });
+
+    if (!wo) return res.status(404).json({ error: "Work Order not found" });
+
+    const bom = wo.plan.bom;
+    const qtyTarget = wo.qtyTarget;
+
+    // 1. Calculate Standard Cost from BOM recipe
+    let standardMaterialCost = 0;
+    if (bom && bom.components) {
+      for (const comp of bom.components) {
+        const grossQty = comp.qtyRequired * (1 + comp.wasteMargin / 100);
+        standardMaterialCost += grossQty * comp.product.pricing * qtyTarget;
+      }
+    }
+    const standardLaborCost = bom ? (bom.laborHours * bom.laborRate * qtyTarget) : 0;
+    const standardOverheadCost = bom ? (bom.overheadAllocation * qtyTarget) : 0;
+    const standardTotalCost = standardMaterialCost + standardLaborCost + standardOverheadCost;
+
+    // 2. Calculate Actual Cost from Issued Materials, Job Cards cycle times
+    let actualMaterialCost = 0;
+    for (const issue of wo.materialIssues) {
+      actualMaterialCost += issue.quantity * issue.product.pricing;
+    }
+
+    let actualLaborCost = 0;
+    let actualOverheadCost = 0;
+    const laborRate = bom ? bom.laborRate : 15.0; // default operator rate
+    const overheadRate = bom ? bom.overheadAllocation : 10.0; // default work center rate
+
+    for (const card of wo.jobCards) {
+      const hours = card.cycleTimeMinutes / 60.0;
+      actualLaborCost += hours * laborRate;
+      actualOverheadCost += hours * overheadRate;
+    }
+    const actualTotalCost = actualMaterialCost + actualLaborCost + actualOverheadCost;
+
+    // 3. Compute Variances
+    const materialVariance = actualMaterialCost - standardMaterialCost;
+    const laborVariance = actualLaborCost - standardLaborCost;
+    const overheadVariance = actualOverheadCost - standardOverheadCost;
+    const totalVariance = actualTotalCost - standardTotalCost;
+
+    return res.json({
+      workOrderNo: wo.woNo,
+      qtyTarget,
+      qtyProduced: wo.qtyProduced,
+      costing: {
+        standard: {
+          materialCost: Math.round(standardMaterialCost * 100) / 100,
+          laborCost: Math.round(standardLaborCost * 100) / 100,
+          overheadCost: Math.round(standardOverheadCost * 100) / 100,
+          totalCost: Math.round(standardTotalCost * 100) / 100
+        },
+        actual: {
+          materialCost: Math.round(actualMaterialCost * 100) / 100,
+          laborCost: Math.round(actualLaborCost * 100) / 100,
+          overheadCost: Math.round(actualOverheadCost * 100) / 100,
+          totalCost: Math.round(actualTotalCost * 100) / 100
+        },
+        variance: {
+          material: Math.round(materialVariance * 100) / 100,
+          labor: Math.round(laborVariance * 100) / 100,
+          overhead: Math.round(overheadVariance * 100) / 100,
+          total: Math.round(totalVariance * 100) / 100
+        }
+      }
+    });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }

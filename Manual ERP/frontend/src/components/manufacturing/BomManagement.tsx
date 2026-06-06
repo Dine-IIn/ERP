@@ -48,6 +48,7 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
 
   const [activeTab, setActiveTab] = useState<'list' | 'costing'>('list');
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
   const [showAddModal, setShowAddModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -243,10 +244,13 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
     }, 0);
   };
 
-  const filteredBOMs = bomsList.filter(bom =>
-    bom.finishedProductName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    bom.finishedProductCode.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredBOMs = bomsList.filter(bom => {
+    const matchesSearch = bom.finishedProductName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      bom.finishedProductCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      bom.version.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === 'ALL' || bom.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
 
   return (
     <div className="space-y-6">
@@ -288,15 +292,27 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
       ) : activeTab === 'list' ? (
         <div className="space-y-4 animate-fade-in text-left">
           {/* Controls */}
-          <div className="flex items-center relative w-full max-w-sm">
-            <Search className="w-4 h-4 absolute left-3 text-slate-500" />
-            <input
-              type="text"
-              placeholder="Search formulations..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="w-full bg-slate-900/40 border border-slate-800/80 focus:border-indigo-500/50 py-2.5 pl-10 pr-4 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none transition-all"
-            />
+          <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xl">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input
+                type="text"
+                placeholder="Search formulations by product or version..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="w-full bg-slate-900/40 border border-slate-800/80 focus:border-indigo-500/50 py-2 pl-10 pr-4 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none transition-all"
+              />
+            </div>
+            <select
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              className="bg-slate-900/40 border border-slate-800/80 text-xs text-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500/50 cursor-pointer"
+            >
+              <option value="ALL">All Statuses</option>
+              <option value="ACTIVE">Active</option>
+              <option value="ARCHIVED">Archived</option>
+              <option value="DRAFT">Draft</option>
+            </select>
           </div>
 
           {/* BOM List Grid */}

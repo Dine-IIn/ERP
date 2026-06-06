@@ -439,9 +439,10 @@ model Product {
   deliveryChallanItems DeliveryChallanItem[]
 
   // --- INVENTORY MANAGEMENT ADDITIONS ---
-  stock        Float            @default(0.0)   // Active physical stock level
-  reorderLevel Float            @default(5.0)   // Alert threshold for low stock
-  warehouseLoc String?          // Warehouse rack designation, e.g. "Rack A-3"
+  stock            Float            @default(0.0)   // Active physical stock level
+  quarantineStock  Float            @default(0.0)   // Raw materials in incoming quality quarantine hold
+  reorderLevel     Float            @default(5.0)   // Alert threshold for low stock
+  warehouseLoc     String?          // Warehouse rack designation, e.g. "Rack A-3"
   quotationItems       QuotationItem[]
   serviceTickets       ServiceTicket[]
   vendorQuotationItems VendorQuotationItem[]
@@ -456,8 +457,12 @@ model Product {
   productionPlans ProductionPlan[]
   qcRecords QualityControlRecord[]
   reworkCards ReworkCard[]
+  routing Routing?
+  materialIssues MaterialIssue[]
 
   @@unique([companyId, name])
+  @@index([categoryId])
+  @@index([brandId])
   @@map("products")
 }
 
@@ -493,6 +498,7 @@ model SalesOrder {
   productionPlans ProductionPlan[]
 
   @@unique([companyId, orderNo])
+  @@index([customerId])
   @@map("sales_orders")
 }
 
@@ -816,6 +822,7 @@ model PurchaseOrder {
   updatedAt    DateTime            @updatedAt
 
   @@unique([companyId, poNo])
+  @@index([vendorId])
   @@map("purchase_orders")
 }
 
@@ -850,6 +857,7 @@ model Grn {
   updatedAt      DateTime   @updatedAt
 
   @@unique([companyId, grnNo])
+  @@index([poId])
   @@map("grns")
 }
 
@@ -951,6 +959,7 @@ model Attendance {
   status       String   @default("PRESENT") // PRESENT, LATE, HALFDAY, ABSENT
   createdAt    DateTime @default(now())
 
+  @@index([userId, date])
   @@map("attendances")
 }
 
@@ -970,6 +979,7 @@ model LeaveRequest {
   notes        String?
   createdAt    DateTime @default(now())
 
+  @@index([userId])
   @@map("leave_requests")
 }
 
@@ -1005,6 +1015,7 @@ model PayrollPeriod {
   createdAt    DateTime @default(now())
 
   @@unique([companyId, userId, month, year])
+  @@index([userId])
   @@map("payroll_periods")
 }
 
@@ -1150,6 +1161,7 @@ model WorkOrder {
   routingStage        String           @default("Scheduled Routing")
   jobCards            JobCard[]
   productionLogs      ProductionLog[]
+  materialIssues      MaterialIssue[]
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 
@@ -1250,6 +1262,7 @@ model WorkCenter {
   status          String          @default("OPERATIONAL") // OPERATIONAL, MAINTENANCE, OFFLINE
   jobCards        JobCard[]
   factoryShifts   FactoryShift[]
+  routingOperations RoutingOperation[]
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
@@ -1272,5 +1285,46 @@ model FactoryShift {
   createdAt       DateTime        @default(now())
 
   @@map("factory_shifts")
+}
+
+model Routing {
+  id              String             @id @default(uuid())
+  companyId       String
+  productId       String             @unique
+  product         Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name            String
+  operations      RoutingOperation[]
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@map("routings")
+}
+
+model RoutingOperation {
+  id              String      @id @default(uuid())
+  routingId       String
+  routing         Routing     @relation(fields: [routingId], references: [id], onDelete: Cascade)
+  sequenceNo      Int         // e.g. 10, 20, 30
+  operationName   String
+  workCenterId    String?
+  workCenter      WorkCenter? @relation(fields: [workCenterId], references: [id], onDelete: SetNull)
+  setupTimeMins   Float       @default(0.0)
+  runTimePerUnit  Float       @default(0.0)
+
+  @@map("routing_operations")
+}
+
+model MaterialIssue {
+  id            String      @id @default(uuid())
+  companyId     String
+  woId          String
+  workOrder     WorkOrder   @relation(fields: [woId], references: [id], onDelete: Cascade)
+  productId     String      // Raw material
+  product       Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity      Float
+  issuedDate    DateTime    @default(now())
+
+  @@index([woId])
+  @@map("material_issues")
 }
 

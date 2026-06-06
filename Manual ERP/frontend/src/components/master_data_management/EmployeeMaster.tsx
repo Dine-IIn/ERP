@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, User, Shield, Briefcase, Calendar, Lock, Plus, Trash2, Edit, Check, AlertCircle, X } from 'lucide-react';
+import { Users, User, Shield, Briefcase, Calendar, Lock, Plus, Trash2, Edit, Check, AlertCircle, X, Search } from 'lucide-react';
 
 interface EmployeeMasterProps {
   companyUsers: any[];
@@ -33,6 +33,8 @@ const EmployeeMaster = React.memo(function EmployeeMaster({
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [showFormModal, setShowFormModal] = useState(false);
   const [localErr, setLocalErr] = useState<string | null>(null);
+  const [employeeSearch, setEmployeeSearch] = useState('');
+  const [departmentFilter, setDepartmentFilter] = useState('ALL');
 
   // Local state for structured identity documents
   const [docForm, setDocForm] = useState({
@@ -160,6 +162,18 @@ const EmployeeMaster = React.memo(function EmployeeMaster({
   // Filter manager dropdown options to exclude the active employee themselves
   const potentialManagers = companyUsers.filter(u => u.id !== editingAdminUserId);
 
+  const filteredEmployees = companyUsers.filter(emp => {
+    const roleName = getRoleName(emp.roleId).toLowerCase();
+    const deptName = getDeptName(emp.departmentId).toLowerCase();
+    const matchesSearch = emp.username.toLowerCase().includes(employeeSearch.toLowerCase()) ||
+      (emp.email || '').toLowerCase().includes(employeeSearch.toLowerCase()) ||
+      (emp.mobileNo || '').toLowerCase().includes(employeeSearch.toLowerCase()) ||
+      roleName.includes(employeeSearch.toLowerCase()) ||
+      deptName.includes(employeeSearch.toLowerCase());
+    const matchesDept = departmentFilter === 'ALL' || emp.departmentId === departmentFilter;
+    return matchesSearch && matchesDept;
+  });
+
   return (
     <div className="animate-fade-in flex flex-col gap-4 text-left select-none">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-[var(--border-color)] pb-3">
@@ -183,10 +197,33 @@ const EmployeeMaster = React.memo(function EmployeeMaster({
         
         {/* Employees Listing Pane */}
         <div className="lg:col-span-2 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-xl p-4 min-h-[400px]">
-          <span className="text-[10px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-3 text-left">Active Employees Registry ({companyUsers.length})</span>
+          <span className="text-[10px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-3 text-left">Active Employees Registry ({filteredEmployees.length} / {companyUsers.length})</span>
           
+          <div className="flex flex-col sm:flex-row gap-3 mb-4 w-full max-w-xl">
+            <div className="relative flex-1">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+              <input
+                type="text"
+                placeholder="Search employees by name, role, email..."
+                value={employeeSearch}
+                onChange={e => setEmployeeSearch(e.target.value)}
+                className="w-full bg-[var(--bg-secondary)]/50 border border-[var(--border-color)] focus:border-indigo-500/50 py-1.5 pl-9 pr-4 rounded-lg text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none transition-all"
+              />
+            </div>
+            <select
+              value={departmentFilter}
+              onChange={e => setDepartmentFilter(e.target.value)}
+              className="bg-[var(--bg-secondary)]/50 border border-[var(--border-color)] text-xs text-[var(--text-secondary)] rounded-lg px-3 py-1.5 focus:outline-none focus:border-indigo-500/50 cursor-pointer"
+            >
+              <option value="ALL">All Departments</option>
+              {departmentList.map(d => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+            </select>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {companyUsers.map(emp => {
+            {filteredEmployees.map(emp => {
               const isActive = selectedUser?.id === emp.id;
               const roleName = getRoleName(emp.roleId);
               

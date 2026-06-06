@@ -31,7 +31,10 @@ interface ProductionExecutionProps {
 
 export default function ProductionExecution({ products = [] }: ProductionExecutionProps) {
   const [activeTab, setActiveTab] = useState<'execution' | 'consumption' | 'ledger'>('execution');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [yieldSearch, setYieldSearch] = useState('');
+  const [consumptionSearch, setConsumptionSearch] = useState('');
+  const [ledgerSearch, setLedgerSearch] = useState('');
+  const [ledgerTypeFilter, setLedgerTypeFilter] = useState<'ALL' | 'FG_RECEIPT' | 'RAW_CONSUMPTION'>('ALL');
   const [showLogModal, setShowLogModal] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -139,9 +142,26 @@ export default function ProductionExecution({ products = [] }: ProductionExecuti
   };
 
   const filteredLogs = logsList.filter(log =>
-    log.finishedProductName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    log.woNo.toLowerCase().includes(searchTerm.toLowerCase())
+    log.finishedProductName.toLowerCase().includes(yieldSearch.toLowerCase()) ||
+    log.woNo.toLowerCase().includes(yieldSearch.toLowerCase()) ||
+    log.operatorName.toLowerCase().includes(yieldSearch.toLowerCase())
   );
+
+  const filteredConsumption = stockLedger
+    .filter(entry => entry.transactionType === 'RAW_CONSUMPTION')
+    .filter(entry =>
+      entry.referenceNo.toLowerCase().includes(consumptionSearch.toLowerCase()) ||
+      entry.productName.toLowerCase().includes(consumptionSearch.toLowerCase()) ||
+      entry.productCode.toLowerCase().includes(consumptionSearch.toLowerCase())
+    );
+
+  const filteredLedger = stockLedger
+    .filter(entry => ledgerTypeFilter === 'ALL' || entry.transactionType === ledgerTypeFilter)
+    .filter(entry =>
+      entry.referenceNo.toLowerCase().includes(ledgerSearch.toLowerCase()) ||
+      entry.productName.toLowerCase().includes(ledgerSearch.toLowerCase()) ||
+      entry.productCode.toLowerCase().includes(ledgerSearch.toLowerCase())
+    );
 
   return (
     <div className="space-y-6">
@@ -206,10 +226,10 @@ export default function ProductionExecution({ products = [] }: ProductionExecuti
               <Search className="w-4 h-4 absolute left-3 text-slate-500" />
               <input
                 type="text"
-                placeholder="Search yield logs..."
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                className="w-full bg-slate-900/40 border border-slate-800/80 focus:border-indigo-500/50 py-2.5 pl-10 pr-4 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none transition-all"
+                placeholder="Search yield logs by product, WO, or operator..."
+                value={yieldSearch}
+                onChange={e => setYieldSearch(e.target.value)}
+                className="w-full bg-slate-900/40 border border-slate-800/80 focus:border-indigo-500/50 py-2 pl-10 pr-4 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none transition-all"
               />
             </div>
           </div>
@@ -250,10 +270,10 @@ export default function ProductionExecution({ products = [] }: ProductionExecuti
                         <td className="py-3 px-3 text-right">
                           <button
                             onClick={() => handleDeleteLog(log.id)}
-                            className="text-rose-550 hover:text-rose-450 p-1 hover:bg-slate-950/45 rounded transition-all cursor-pointer border-0 bg-transparent"
+                            className="text-rose-550 hover:text-rose-455 p-1.5 hover:bg-slate-950/45 rounded transition-all cursor-pointer border-0 bg-transparent"
                             title="Discard Yield Log"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </td>
                       </tr>
@@ -268,17 +288,29 @@ export default function ProductionExecution({ products = [] }: ProductionExecuti
 
       {activeTab === 'consumption' && (
         <div className="bg-slate-900/35 border border-slate-800/80 p-6 rounded-2xl space-y-4 backdrop-blur-xl animate-fade-in text-left">
-          <div>
-            <h3 className="text-sm font-bold text-white flex items-center gap-1.5 uppercase tracking-wider">
-              <Layers className="w-4.5 h-4.5 text-indigo-400" />
-              Double-Entry Materials Raw Consumption Logs
-            </h3>
-            <p className="text-slate-500 text-xs mt-1">
-              Live audit logs tracking component stock drawdowns mapped to finished goods production recipes.
-            </p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-850 pb-4">
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center gap-1.5 uppercase tracking-wider">
+                <Layers className="w-4.5 h-4.5 text-indigo-400" />
+                Double-Entry Materials Raw Consumption Logs
+              </h3>
+              <p className="text-slate-500 text-xs mt-1">
+                Live audit logs tracking component stock drawdowns mapped to finished goods production recipes.
+              </p>
+            </div>
+            <div className="flex items-center relative w-full max-w-sm shrink-0">
+              <Search className="w-4 h-4 absolute left-3 text-slate-500" />
+              <input
+                type="text"
+                placeholder="Search drawdowns by WO or component..."
+                value={consumptionSearch}
+                onChange={e => setConsumptionSearch(e.target.value)}
+                className="w-full bg-slate-900/40 border border-slate-800/80 focus:border-indigo-500/50 py-2 pl-10 pr-4 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none transition-all"
+              />
+            </div>
           </div>
 
-          {stockLedger.filter(entry => entry.transactionType === 'RAW_CONSUMPTION').length === 0 ? (
+          {filteredConsumption.length === 0 ? (
             <div className="p-16 text-center text-slate-500 border border-dashed border-slate-800 rounded-2xl bg-slate-900/10 flex flex-col items-center justify-center">
               <Layers className="w-12 h-12 text-slate-750 mb-3" />
               <p className="font-semibold text-sm">No Materials Drawdown logs</p>
@@ -286,7 +318,7 @@ export default function ProductionExecution({ products = [] }: ProductionExecuti
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {stockLedger.filter(entry => entry.transactionType === 'RAW_CONSUMPTION').map(entry => (
+              {filteredConsumption.map(entry => (
                 <div key={entry.id} className="p-4 bg-slate-950/30 border border-slate-850 rounded-xl space-y-3">
                   <div className="flex justify-between items-start border-b border-slate-900 pb-2">
                     <div className="text-left">
@@ -300,7 +332,7 @@ export default function ProductionExecution({ products = [] }: ProductionExecuti
                       <span>Primary Core Material component</span>
                       <span className="font-mono text-rose-450 font-bold">{entry.qtyChange} {entry.productCode}</span>
                     </div>
-                    <div className="flex justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-900/40">
+                    <div className="flex justify-between text-[10px] text-slate-550 pt-1 border-t border-slate-900/40">
                       <span>Audit Time</span>
                       <span className="font-mono">{entry.timestamp}</span>
                     </div>
@@ -314,17 +346,40 @@ export default function ProductionExecution({ products = [] }: ProductionExecuti
 
       {activeTab === 'ledger' && (
         <div className="bg-slate-900/35 border border-slate-800/80 p-6 rounded-2xl space-y-4 backdrop-blur-xl animate-fade-in text-left">
-          <div>
-            <h3 className="text-sm font-bold text-white flex items-center gap-1.5 uppercase tracking-wider">
-              <Database className="w-4.5 h-4.5 text-indigo-400" />
-              Corporate Warehouse Stock Ledger & Audit Trails
-            </h3>
-            <p className="text-slate-500 text-xs mt-1">
-              Historical ledger of physical warehouse adjustments resulting directly from finished receipts and materials consumption.
-            </p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-850 pb-4">
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center gap-1.5 uppercase tracking-wider">
+                <Database className="w-4.5 h-4.5 text-indigo-400" />
+                Corporate Warehouse Stock Ledger & Audit Trails
+              </h3>
+              <p className="text-slate-500 text-xs mt-1">
+                Historical ledger of physical warehouse adjustments resulting directly from finished receipts and materials consumption.
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xl shrink-0">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                <input
+                  type="text"
+                  placeholder="Search ledger by ref, name, or code..."
+                  value={ledgerSearch}
+                  onChange={e => setLedgerSearch(e.target.value)}
+                  className="w-full bg-slate-900/40 border border-slate-800/80 focus:border-indigo-500/50 py-2 pl-10 pr-4 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none transition-all"
+                />
+              </div>
+              <select
+                value={ledgerTypeFilter}
+                onChange={e => setLedgerTypeFilter(e.target.value as any)}
+                className="bg-slate-900/40 border border-slate-800/80 text-xs text-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500/50 cursor-pointer"
+              >
+                <option value="ALL">All Transactions</option>
+                <option value="FG_RECEIPT">Receipts Only</option>
+                <option value="RAW_CONSUMPTION">Drawdowns Only</option>
+              </select>
+            </div>
           </div>
 
-          {stockLedger.length === 0 ? (
+          {filteredLedger.length === 0 ? (
             <div className="p-16 text-center text-slate-500 border border-dashed border-slate-800 rounded-2xl bg-slate-900/10 flex flex-col items-center justify-center">
               <Database className="w-12 h-12 text-slate-750 mb-3" />
               <p className="font-semibold text-sm">Stock Ledger empty</p>
@@ -344,7 +399,7 @@ export default function ProductionExecution({ products = [] }: ProductionExecuti
                   </tr>
                 </thead>
                 <tbody>
-                  {stockLedger.map((entry, idx) => (
+                  {filteredLedger.map((entry, idx) => (
                     <tr key={idx} className="border-b border-slate-900/50 hover:bg-slate-950/20 transition-colors">
                       <td className="py-3 px-3 font-mono font-semibold text-indigo-400">{entry.referenceNo}</td>
                       <td className="py-3 px-3 text-left">

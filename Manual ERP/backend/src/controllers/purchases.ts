@@ -3,6 +3,84 @@ import { AuthenticatedRequest } from '../middlewares/auth';
 import prisma from '../services/db';
 import { logAudit } from '../utils/audit';
 
+// Shared purchases financial helpers
+async function handleOutwardPayment(
+  tx: any,
+  companyId: string,
+  amount: number,
+  vendorId: string,
+  paymentNo: string,
+  referenceNo: string | null
+) {
+  const vendor = await tx.vendor.findUnique({ where: { id: vendorId }, select: { name: true } });
+  const vendorName = vendor?.name || "Vendor";
+
+  await tx.companyExpense.create({
+    data: {
+      companyId,
+      amount,
+      description: `Vendor Payment: to ${vendorName} [No: ${paymentNo}]`,
+      category: "PROCUREMENT",
+      date: new Date(),
+      referenceNo: paymentNo
+    }
+  });
+
+  const bankAccount = await tx.companyBankAccount.findFirst({ where: { companyId } });
+  if (bankAccount) {
+    await tx.companyBankAccount.update({
+      where: { id: bankAccount.id },
+      data: { balance: { decrement: amount } }
+    });
+  }
+
+  const lastVoucher = await tx.cashbookVoucher.findFirst({
+    where: { companyId },
+    orderBy: { createdAt: 'desc' }
+  });
+  const previousBal = lastVoucher ? lastVoucher.currentBal : 0.0;
+  const currentBal = previousBal - amount;
+
+  const count = await tx.cashbookVoucher.count({ where: { companyId } });
+  const voucherNo = `VCH-${new Date().getFullYear()}-${(count + 1).toString().padStart(5, '0')}`;
+
+  await tx.cashbookVoucher.create({
+    data: {
+      companyId,
+      voucherNo,
+      entryType: 'OUTWARD_PAYMENT',
+      amount,
+      previousBal,
+      currentBal,
+      description: `Vendor Payment: to ${vendorName} [No: ${paymentNo}]`,
+      referenceNo: paymentNo
+    }
+  });
+}
+
+async function handleVoidOutwardPayment(
+  tx: any,
+  companyId: string,
+  amount: number,
+  paymentNo: string
+) {
+  await tx.companyExpense.deleteMany({
+    where: { companyId, referenceNo: paymentNo }
+  });
+
+  const bankAccount = await tx.companyBankAccount.findFirst({ where: { companyId } });
+  if (bankAccount) {
+    await tx.companyBankAccount.update({
+      where: { id: bankAccount.id },
+      data: { balance: { increment: amount } }
+    });
+  }
+
+  await tx.cashbookVoucher.deleteMany({
+    where: { companyId, referenceNo: paymentNo }
+  });
+}
+
 // ==========================================
 // 1. VENDOR QUOTATIONS CONTROLLER
 // ==========================================
@@ -81,6 +159,8 @@ export async function updateVendorQuotationStatus(req: AuthenticatedRequest, res
     const { id } = req.params;
     const { status } = req.body;
 
+    const quote = await prisma.vendorQuotation.findFirst({ where: { id, companyId } });
+    if (!quote) return res.status(404).json({ error: "Vendor Quotation not found" });
     const updated = await prisma.vendorQuotation.update({
       where: { id },
       data: { status }
@@ -98,6 +178,8 @@ export async function deleteVendorQuotation(req: AuthenticatedRequest, res: Resp
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
+    const quote = await prisma.vendorQuotation.findFirst({ where: { id, companyId } });
+    if (!quote) return res.status(404).json({ error: "Vendor Quotation not found" });
     await prisma.vendorQuotation.delete({ where: { id } });
     return res.json({ message: "Vendor Quotation deleted successfully." });
   } catch (error: any) {
@@ -185,6 +267,8 @@ export async function updatePurchaseOrderStatus(req: AuthenticatedRequest, res: 
     const { id } = req.params;
     const { status } = req.body;
 
+    const poExist = await prisma.purchaseOrder.findFirst({ where: { id, companyId } });
+    if (!poExist) return res.status(404).json({ error: "Purchase Order not found" });
     const po = await prisma.purchaseOrder.update({
       where: { id },
       data: { status }
@@ -202,6 +286,8 @@ export async function deletePurchaseOrder(req: AuthenticatedRequest, res: Respon
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
+    const poExist = await prisma.purchaseOrder.findFirst({ where: { id, companyId } });
+    if (!poExist) return res.status(404).json({ error: "Purchase Order not found" });
     await prisma.purchaseOrder.delete({ where: { id } });
     return res.json({ message: "Purchase Order voided and deleted." });
   } catch (error: any) {
@@ -277,7 +363,7 @@ export async function createGrn(req: AuthenticatedRequest, res: Response) {
         include: { items: true }
       });
 
-      // Update product inventory levels and stock adjustments ledger logs
+      // Update product inventory levels (quarantine stock) and stock adjustments ledger logs
       for (const item of items) {
         const prod = await tx.product.findUnique({
           where: { id: item.productId }
@@ -285,12 +371,12 @@ export async function createGrn(req: AuthenticatedRequest, res: Response) {
         if (prod) {
           const qtyToAdd = parseFloat(item.qtyAccepted) || 0.0;
           const previousStock = prod.stock || 0.0;
-          const newStock = previousStock + qtyToAdd;
+          const newStock = previousStock; // physical stock remains unchanged until QC passes
 
-          // 1. Update product active physical stock level
+          // 1. Update product quarantine stock level atomically
           await tx.product.update({
             where: { id: item.productId },
-            data: { stock: newStock }
+            data: { quarantineStock: { increment: qtyToAdd } }
           });
 
           // 2. Generate stock adjustment ledger transaction
@@ -303,7 +389,7 @@ export async function createGrn(req: AuthenticatedRequest, res: Response) {
               quantity: qtyToAdd,
               previousStock,
               newStock,
-              reason: `Supply inward via Goods Receipt Note '${grnNo}' linked to PO.`,
+              reason: `Supply inward via Goods Receipt Note '${grnNo}' linked to PO (Placed in Quarantine Hold).`,
               referenceNo: grnNo
             }
           });
@@ -339,11 +425,10 @@ export async function deleteGrn(req: AuthenticatedRequest, res: Response) {
         if (prod) {
           const qtyToSub = item.qtyAccepted;
           const previousStock = prod.stock || 0.0;
-          const newStock = Math.max(0, previousStock - qtyToSub);
 
           await tx.product.update({
             where: { id: item.productId },
-            data: { stock: newStock }
+            data: { quarantineStock: { decrement: qtyToSub } }
           });
 
           await tx.stockAdjustment.create({
@@ -354,8 +439,8 @@ export async function deleteGrn(req: AuthenticatedRequest, res: Response) {
               type: "MANUAL_SUB",
               quantity: -qtyToSub,
               previousStock,
-              newStock,
-              reason: `Stock deduction due to deletion/voiding of GRN '${grn.grnNo}'.`,
+              newStock: previousStock,
+              reason: `Stock deduction due to deletion/voiding of GRN '${grn.grnNo}' (Removed from Quarantine Hold).`,
               referenceNo: grn.grnNo
             }
           });
@@ -443,7 +528,7 @@ export async function createPurchaseReturn(req: AuthenticatedRequest, res: Respo
 
           await tx.product.update({
             where: { id: item.productId },
-            data: { stock: newStock }
+            data: { stock: { decrement: qtyToSub } }
           });
 
           await tx.stockAdjustment.create({
@@ -495,7 +580,7 @@ export async function deletePurchaseReturn(req: AuthenticatedRequest, res: Respo
 
           await tx.product.update({
             where: { id: item.productId },
-            data: { stock: newStock }
+            data: { stock: { increment: qtyToAdd } }
           });
 
           await tx.stockAdjustment.create({
@@ -562,19 +647,27 @@ export async function createVendorPayment(req: AuthenticatedRequest, res: Respon
       return res.status(409).json({ error: `Payment receipt number '${paymentNo}' is already registered.` });
     }
 
-    const payment = await prisma.vendorPayment.create({
-      data: {
-        companyId,
-        vendorId,
-        paymentNo,
-        paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
-        amount: parseFloat(amount) || 0.0,
-        paymentMethod,
-        referenceNo: referenceNo || null,
-        bankDetails: bankDetails || null,
-        status: status || "COMPLETED",
-        notes: notes || null
+    const payment = await prisma.$transaction(async (tx) => {
+      const p = await tx.vendorPayment.create({
+        data: {
+          companyId,
+          vendorId,
+          paymentNo,
+          paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
+          amount: parseFloat(amount) || 0.0,
+          paymentMethod,
+          referenceNo: referenceNo || null,
+          bankDetails: bankDetails || null,
+          status: status || "COMPLETED",
+          notes: notes || null
+        }
+      });
+
+      if ((status || "COMPLETED") === "COMPLETED") {
+        await handleOutwardPayment(tx, companyId, parseFloat(amount) || 0.0, vendorId, paymentNo, referenceNo || null);
       }
+
+      return p;
     });
 
     return res.status(201).json({ message: "Vendor payment recorded successfully", payment });
@@ -589,7 +682,16 @@ export async function deleteVendorPayment(req: AuthenticatedRequest, res: Respon
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
-    await prisma.vendorPayment.delete({ where: { id } });
+    const payment = await prisma.vendorPayment.findFirst({ where: { id, companyId } });
+    if (!payment) return res.status(404).json({ error: "Vendor payment not found" });
+
+    await prisma.$transaction(async (tx) => {
+      if (payment.status === "COMPLETED") {
+        await handleVoidOutwardPayment(tx, companyId, payment.amount, payment.paymentNo);
+      }
+      await tx.vendorPayment.delete({ where: { id } });
+    });
+
     return res.json({ message: "Vendor payment voucher voided and removed." });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });

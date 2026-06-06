@@ -17,6 +17,7 @@ export default function CustomerMaster({
   currencySymbol = '$',
 }: CustomerMasterProps) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [customerGroupFilter, setCustomerGroupFilter] = useState('ALL');
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -120,11 +121,20 @@ export default function CustomerMaster({
     }
   };
 
-  const filtered = customers.filter(c => 
-    c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.contactNo.includes(searchTerm) ||
-    (c.email && c.email.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  // Extract unique customer groups
+  const customerGroups = Array.from(
+    new Set(customers.map(c => c.customerGroup).filter(Boolean))
+  ) as string[];
+
+  const filtered = customers.filter(c => {
+    const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.contactNo.includes(searchTerm) ||
+      (c.email && c.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (c.contactPerson && c.contactPerson.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    const matchesGroup = customerGroupFilter === 'ALL' || c.customerGroup === customerGroupFilter;
+    return matchesSearch && matchesGroup;
+  });
 
   return (
     <div className="animate-fade-in flex flex-col gap-4 text-left select-none">
@@ -136,22 +146,33 @@ export default function CustomerMaster({
           <p className="text-[var(--text-secondary)] text-[10px] mt-0.5">Administer accounts details, billing destinations, and credit ratings for sales clients</p>
         </div>
         
-        <div className="flex items-center gap-3 w-full md:w-auto shrink-0">
-          <div className="relative flex-1 md:w-64">
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto shrink-0">
+          <div className="relative flex-1 md:w-64 w-full">
             <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
             <input
               type="text"
-              placeholder="Search customers..."
+              placeholder="Search customers by name, phone, email, contact..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               className="w-full pl-9 pr-3 py-1.5 bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none"
             />
           </div>
+
+          <select
+            value={customerGroupFilter}
+            onChange={e => setCustomerGroupFilter(e.target.value)}
+            className="bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-secondary)] rounded-lg px-3 py-1.5 focus:outline-none focus:border-indigo-500/50 cursor-pointer w-full sm:w-auto"
+          >
+            <option value="ALL">All Groups</option>
+            {customerGroups.map(g => (
+              <option key={g} value={g}>{g}</option>
+            ))}
+          </select>
           
           <button
             type="button"
             onClick={openAddModal}
-            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-xs cursor-pointer flex items-center gap-1.5 border-0 bg-transparent transition-all shadow-md active:scale-95 shrink-0"
+            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-xs cursor-pointer flex items-center gap-1.5 border-0 bg-transparent transition-all shadow-md active:scale-95 shrink-0 w-full sm:w-auto justify-center"
           >
             <Plus className="w-3.5 h-3.5" /> Onboard Customer
           </button>

@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { apiClient } from '../../utils/apiService';
 import { Package, Search, Plus, Edit, Trash2, X, AlertCircle, DollarSign, Tag, Image, FileText, Ruler, ListPlus, Sliders, Layers } from 'lucide-react';
 
 interface ProductVariantForm {
@@ -35,6 +36,23 @@ export default function ProductMaster({
   currencySymbol = '$',
 }: ProductMasterProps) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [boms, setBoms] = useState<any[]>([]);
+  const [bomSearch, setBomSearch] = useState('');
+  const [showBomDropdown, setShowBomDropdown] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [brandFilter, setBrandFilter] = useState('');
+
+  useEffect(() => {
+    const fetchBoms = async () => {
+      try {
+        const data = await apiClient.get<{ boms: any[] }>('/api/manufacturing/boms');
+        setBoms(data.boms || []);
+      } catch (err) {
+        console.error('Failed to load BOMs inside ProductMaster:', err);
+      }
+    };
+    fetchBoms();
+  }, []);
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -222,12 +240,15 @@ export default function ProductMaster({
   const getCategoryName = (id: string) => categories.find(c => c.id === id)?.name || '';
   const getBrandName = (id: string) => brands.find(b => b.id === id)?.name || '';
 
-  const filtered = products.filter(p =>
-    p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (p.hsnSacCode && p.hsnSacCode.includes(searchTerm)) ||
-    (p.category && p.category.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (p.brand && p.brand.name.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filtered = products.filter(p => {
+    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (p.hsnSacCode && p.hsnSacCode.includes(searchTerm)) ||
+      (p.category && p.category.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (p.brand && p.brand.name.toLowerCase().includes(searchTerm.toLowerCase()));
+    const matchesCategory = categoryFilter === '' || p.categoryId === categoryFilter;
+    const matchesBrand = brandFilter === '' || p.brandId === brandFilter;
+    return matchesSearch && matchesCategory && matchesBrand;
+  });
 
   return (
     <div className="animate-fade-in flex flex-col gap-4 text-left select-none">
@@ -241,15 +262,37 @@ export default function ProductMaster({
         </div>
 
         <div className="flex items-center gap-3 w-full md:w-auto shrink-0">
-          <div className="relative flex-1 md:w-64">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-            <input
-              type="text"
-              placeholder="Search products, brands..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none"
-            />
+          <div className="flex flex-wrap items-center gap-2 flex-1 md:flex-initial">
+            <div className="relative w-full md:w-48">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+              <input
+                type="text"
+                placeholder="Search products, brands..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none"
+              />
+            </div>
+            <select
+              value={categoryFilter}
+              onChange={e => setCategoryFilter(e.target.value)}
+              className="bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-secondary)] rounded-lg px-2 py-1.5 focus:outline-none cursor-pointer"
+            >
+              <option value="">All Categories</option>
+              {categories.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            <select
+              value={brandFilter}
+              onChange={e => setBrandFilter(e.target.value)}
+              className="bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-secondary)] rounded-lg px-2 py-1.5 focus:outline-none cursor-pointer"
+            >
+              <option value="">All Brands</option>
+              {brands.map(b => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
           </div>
 
           <button
@@ -533,15 +576,69 @@ export default function ProductMaster({
               </div>
 
               {/* BOM Reference & Minimum Order Quantity (MOQ) */}
-              <div>
+              <div className="relative">
                 <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">BOM Reference (Bill of Materials)</label>
-                <input
-                  type="text"
-                  value={form.bomReference}
-                  onChange={e => setForm({ ...form, bomReference: e.target.value })}
-                  className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none"
-                  placeholder="e.g. BOM-COPPER-ROD-V1"
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={form.bomReference}
+                    readOnly
+                    onClick={() => setShowBomDropdown(!showBomDropdown)}
+                    className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none cursor-pointer"
+                    placeholder="Search & choose BOM..."
+                  />
+                  {form.bomReference && (
+                    <button
+                      type="button"
+                      onClick={() => setForm({ ...form, bomReference: '' })}
+                      className="px-2 bg-[var(--bg-tertiary)] hover:bg-rose-500/10 text-slate-400 hover:text-rose-500 rounded-lg text-xs border-0 cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                {showBomDropdown && (
+                  <div className="absolute z-50 mt-1 w-full bg-[var(--bg-card)] border border-[var(--border-color)] rounded-lg shadow-xl p-2.5 space-y-2">
+                    <input
+                      type="text"
+                      placeholder="Type to filter BOMs..."
+                      value={bomSearch}
+                      onChange={e => setBomSearch(e.target.value)}
+                      className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] p-1.5 rounded text-xs text-[var(--text-primary)] focus:outline-none"
+                    />
+                    <div className="max-h-40 overflow-y-auto space-y-1">
+                      {boms
+                        .filter(bom =>
+                          bom.version.toLowerCase().includes(bomSearch.toLowerCase()) ||
+                          (bom.finishedProduct?.name || '').toLowerCase().includes(bomSearch.toLowerCase())
+                        )
+                        .map(bom => {
+                          const refString = `BOM: ${bom.finishedProduct?.name || 'Product'} - v${bom.version}`;
+                          return (
+                            <button
+                              key={bom.id}
+                              type="button"
+                              onClick={() => {
+                                setForm({ ...form, bomReference: refString });
+                                setShowBomDropdown(false);
+                                setBomSearch('');
+                              }}
+                              className="w-full text-left px-2 py-1.5 hover:bg-indigo-600/10 hover:text-indigo-400 text-xs rounded transition-colors text-[var(--text-primary)] bg-transparent border-0 cursor-pointer"
+                            >
+                              <div className="font-semibold text-slate-200">{bom.finishedProduct?.name || 'Product'}</div>
+                              <div className="text-[10px] text-[var(--text-secondary)]">Version: {bom.version} | ID: {bom.id.slice(0, 8)}...</div>
+                            </button>
+                          );
+                        })}
+                      {boms.filter(bom =>
+                        bom.version.toLowerCase().includes(bomSearch.toLowerCase()) ||
+                        (bom.finishedProduct?.name || '').toLowerCase().includes(bomSearch.toLowerCase())
+                      ).length === 0 && (
+                        <div className="text-center py-2 text-[var(--text-muted)] text-[10px] italic">No matching BOM found</div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>

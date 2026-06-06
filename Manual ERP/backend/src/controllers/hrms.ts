@@ -402,9 +402,50 @@ export async function generatePayroll(req: AuthenticatedRequest, res: Response) 
     const parsedYear = parseInt(year);
     const parsedBasic = parseFloat(basicSalary);
     const parsedAllowances = allowances !== undefined ? parseFloat(allowances) : 0.0;
-    const parsedDeductions = deductions !== undefined ? parseFloat(deductions) : 0.0;
+    const parsedDeductionsInput = deductions !== undefined ? parseFloat(deductions) : 0.0;
 
-    const netSalary = parsedBasic + parsedAllowances - parsedDeductions;
+    // --- Dynamic Deductions Calculations ---
+    const startDate = new Date(parsedYear, parsedMonth - 1, 1);
+    const endDate = new Date(parsedYear, parsedMonth, 0, 23, 59, 59);
+    const dailyRate = parsedBasic / 30.0;
+
+    // 1. Calculate Unpaid Leaves (SICK, CASUAL, ANNUAL approved leaves count as daily deductions)
+    const approvedLeaves = await prisma.leaveRequest.findMany({
+      where: {
+        companyId,
+        userId,
+        status: "APPROVED",
+        type: { in: ["SICK", "CASUAL", "ANNUAL"] },
+        OR: [
+          { startDate: { gte: startDate, lte: endDate } },
+          { endDate: { gte: startDate, lte: endDate } }
+        ]
+      }
+    });
+
+    let totalLeaveDays = 0;
+    for (const leave of approvedLeaves) {
+      const leaveStart = new Date(Math.max(leave.startDate.getTime(), startDate.getTime()));
+      const leaveEnd = new Date(Math.min(leave.endDate.getTime(), endDate.getTime()));
+      const diffTime = Math.abs(leaveEnd.getTime() - leaveStart.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+      totalLeaveDays += diffDays;
+    }
+    const leaveDeduction = totalLeaveDays * dailyRate;
+
+    // 2. Calculate Late check-ins (10% of daily rate per check-in marked as LATE)
+    const lateArrivalsCount = await prisma.attendance.count({
+      where: {
+        companyId,
+        userId,
+        status: "LATE",
+        date: { gte: startDate, lte: endDate }
+      }
+    });
+    const lateDeduction = lateArrivalsCount * (dailyRate * 0.1);
+
+    const totalCalculatedDeductions = parsedDeductionsInput + leaveDeduction + lateDeduction;
+    const netSalary = parsedBasic + parsedAllowances - totalCalculatedDeductions;
 
     // Create or update payroll record
     const payroll = await prisma.payrollPeriod.upsert({
@@ -423,14 +464,14 @@ export async function generatePayroll(req: AuthenticatedRequest, res: Response) 
         year: parsedYear,
         basicSalary: parsedBasic,
         allowances: parsedAllowances,
-        deductions: parsedDeductions,
+        deductions: totalCalculatedDeductions,
         netSalary,
         status: "PENDING"
       },
       update: {
         basicSalary: parsedBasic,
         allowances: parsedAllowances,
-        deductions: parsedDeductions,
+        deductions: totalCalculatedDeductions,
         netSalary,
         status: "PENDING"
       }
@@ -451,18 +492,73 @@ export async function disbursePayroll(req: AuthenticatedRequest, res: Response) 
     const { referenceNo, notes } = req.body;
 
     const payroll = await prisma.payrollPeriod.findFirst({
-      where: { id, companyId }
+      where: { id, companyId },
+      include: { user: true }
     });
     if (!payroll) return res.status(404).json({ error: "Payroll record not found" });
+    if (payroll.status === "DISBURSED") {
+      return res.status(400).json({ error: "Payroll already disbursed" });
+    }
 
-    const updated = await prisma.payrollPeriod.update({
-      where: { id },
-      data: {
-        status: "DISBURSED",
-        paymentDate: new Date(),
-        referenceNo: referenceNo || null,
-        notes: notes || null
+    const updated = await prisma.$transaction(async (tx) => {
+      const up = await tx.payrollPeriod.update({
+        where: { id },
+        data: {
+          status: "DISBURSED",
+          paymentDate: new Date(),
+          referenceNo: referenceNo || null,
+          notes: notes || null
+        }
+      });
+
+      const desc = `Salary Disbursement for ${payroll.user.username} (Month: ${payroll.month}/${payroll.year})`;
+
+      // 1. Create CompanyExpense record
+      await tx.companyExpense.create({
+        data: {
+          companyId,
+          amount: payroll.netSalary,
+          description: desc,
+          category: "SALARY",
+          date: new Date(),
+          referenceNo: referenceNo || `PAYROLL-${payroll.id}`
+        }
+      });
+
+      // 2. Deduct from Bank Account Balance
+      const bankAccount = await tx.companyBankAccount.findFirst({ where: { companyId } });
+      if (bankAccount) {
+        await tx.companyBankAccount.update({
+          where: { id: bankAccount.id },
+          data: { balance: { decrement: payroll.netSalary } }
+        });
       }
+
+      // 3. Create CashbookVoucher
+      const lastVoucher = await tx.cashbookVoucher.findFirst({
+        where: { companyId },
+        orderBy: { createdAt: 'desc' }
+      });
+      const previousBal = lastVoucher ? lastVoucher.currentBal : 0.0;
+      const currentBal = previousBal - payroll.netSalary;
+
+      const count = await tx.cashbookVoucher.count({ where: { companyId } });
+      const voucherNo = `VCH-${new Date().getFullYear()}-${(count + 1).toString().padStart(5, '0')}`;
+
+      await tx.cashbookVoucher.create({
+        data: {
+          companyId,
+          voucherNo,
+          entryType: 'OUTWARD_EXPENSE',
+          amount: payroll.netSalary,
+          previousBal,
+          currentBal,
+          description: desc,
+          referenceNo: referenceNo || `PAYROLL-${payroll.id}`
+        }
+      });
+
+      return up;
     });
 
     await logAudit(

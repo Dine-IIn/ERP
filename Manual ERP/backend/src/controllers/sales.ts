@@ -10,6 +10,85 @@ async function generateDocNo(companyId: string, prefix: string, modelName: 'sale
   return `${prefix}-${new Date().getFullYear()}-${rand}`;
 }
 
+// Shared financial integration helpers
+async function handleInwardReceipt(
+  tx: any,
+  companyId: string,
+  amount: number,
+  customerId: string,
+  invoiceNo: string,
+  description: string
+) {
+  const customer = await tx.customer.findUnique({ where: { id: customerId }, select: { name: true } });
+  const payerName = customer?.name || "Customer";
+
+  await tx.companyReceipt.create({
+    data: {
+      companyId,
+      amount,
+      payerName,
+      category: "SALES_REVENUE",
+      paymentMethod: "BANK_TRANSFER",
+      referenceNo: invoiceNo,
+      notes: `Payment for Invoice ${invoiceNo}`
+    }
+  });
+
+  const bankAccount = await tx.companyBankAccount.findFirst({ where: { companyId } });
+  if (bankAccount) {
+    await tx.companyBankAccount.update({
+      where: { id: bankAccount.id },
+      data: { balance: { increment: amount } }
+    });
+  }
+
+  const lastVoucher = await tx.cashbookVoucher.findFirst({
+    where: { companyId },
+    orderBy: { createdAt: 'desc' }
+  });
+  const previousBal = lastVoucher ? lastVoucher.currentBal : 0.0;
+  const currentBal = previousBal + amount;
+
+  const count = await tx.cashbookVoucher.count({ where: { companyId } });
+  const voucherNo = `VCH-${new Date().getFullYear()}-${(count + 1).toString().padStart(5, '0')}`;
+
+  await tx.cashbookVoucher.create({
+    data: {
+      companyId,
+      voucherNo,
+      entryType: 'INWARD_RECEIPT',
+      amount,
+      previousBal,
+      currentBal,
+      description,
+      referenceNo: invoiceNo
+    }
+  });
+}
+
+async function handleVoidInwardReceipt(
+  tx: any,
+  companyId: string,
+  amount: number,
+  invoiceNo: string
+) {
+  await tx.companyReceipt.deleteMany({
+    where: { companyId, referenceNo: invoiceNo }
+  });
+
+  const bankAccount = await tx.companyBankAccount.findFirst({ where: { companyId } });
+  if (bankAccount) {
+    await tx.companyBankAccount.update({
+      where: { id: bankAccount.id },
+      data: { balance: { decrement: amount } }
+    });
+  }
+
+  await tx.cashbookVoucher.deleteMany({
+    where: { companyId, referenceNo: invoiceNo }
+  });
+}
+
 // ==========================================
 // 1. SALES ORDER HUB CONTROLLERS
 // ==========================================
@@ -62,18 +141,16 @@ export async function createSalesOrder(req: AuthenticatedRequest, res: Response)
         }
       });
 
-      for (const item of items) {
-        if (!item.productId || !item.quantity || !item.price) continue;
-        await tx.salesOrderItem.create({
-          data: {
-            orderId: newOrder.id,
-            productId: item.productId,
-            quantity: parseFloat(item.quantity),
-            price: parseFloat(item.price),
-            deliveryDate: item.deliveryDate ? new Date(item.deliveryDate) : (deliveryDate ? new Date(deliveryDate) : null),
-            discount: parseFloat(item.discount) || 0.0
-          }
-        });
+      const validItems = items.filter((item: any) => item.productId && item.quantity && item.price).map((item: any) => ({
+        orderId: newOrder.id,
+        productId: item.productId,
+        quantity: parseFloat(item.quantity),
+        price: parseFloat(item.price),
+        deliveryDate: item.deliveryDate ? new Date(item.deliveryDate) : (deliveryDate ? new Date(deliveryDate) : null),
+        discount: parseFloat(item.discount) || 0.0
+      }));
+      if (validItems.length > 0) {
+        await tx.salesOrderItem.createMany({ data: validItems });
       }
 
       return newOrder;
@@ -130,18 +207,16 @@ export async function updateSalesOrder(req: AuthenticatedRequest, res: Response)
 
       if (items && Array.isArray(items)) {
         await tx.salesOrderItem.deleteMany({ where: { orderId: id } });
-        for (const item of items) {
-          if (!item.productId || !item.quantity || !item.price) continue;
-          await tx.salesOrderItem.create({
-            data: {
-              orderId: id,
-              productId: item.productId,
-              quantity: parseFloat(item.quantity),
-              price: parseFloat(item.price),
-              deliveryDate: item.deliveryDate ? new Date(item.deliveryDate) : null,
-              discount: parseFloat(item.discount) || 0.0
-            }
-          });
+        const validItems = items.filter((item: any) => item.productId && item.quantity && item.price).map((item: any) => ({
+          orderId: id,
+          productId: item.productId,
+          quantity: parseFloat(item.quantity),
+          price: parseFloat(item.price),
+          deliveryDate: item.deliveryDate ? new Date(item.deliveryDate) : null,
+          discount: parseFloat(item.discount) || 0.0
+        }));
+        if (validItems.length > 0) {
+          await tx.salesOrderItem.createMany({ data: validItems });
         }
       }
     });
@@ -257,17 +332,15 @@ export async function createProformaInvoice(req: AuthenticatedRequest, res: Resp
         }
       });
 
-      for (const item of items) {
-        if (!item.productId || !item.quantity || !item.price) continue;
-        await tx.proformaInvoiceItem.create({
-          data: {
-            invoiceId: newInvoice.id,
-            productId: item.productId,
-            quantity: parseFloat(item.quantity),
-            price: parseFloat(item.price),
-            discount: parseFloat(item.discount) || 0.0
-          }
-        });
+      const validItems = items.filter((item: any) => item.productId && item.quantity && item.price).map((item: any) => ({
+        invoiceId: newInvoice.id,
+        productId: item.productId,
+        quantity: parseFloat(item.quantity),
+        price: parseFloat(item.price),
+        discount: parseFloat(item.discount) || 0.0
+      }));
+      if (validItems.length > 0) {
+        await tx.proformaInvoiceItem.createMany({ data: validItems });
       }
 
       return newInvoice;
@@ -311,17 +384,15 @@ export async function updateProformaInvoice(req: AuthenticatedRequest, res: Resp
 
       if (items && Array.isArray(items)) {
         await tx.proformaInvoiceItem.deleteMany({ where: { invoiceId: id } });
-        for (const item of items) {
-          if (!item.productId || !item.quantity || !item.price) continue;
-          await tx.proformaInvoiceItem.create({
-            data: {
-              invoiceId: id,
-              productId: item.productId,
-              quantity: parseFloat(item.quantity),
-              price: parseFloat(item.price),
-              discount: parseFloat(item.discount) || 0.0
-            }
-          });
+        const validItems = items.filter((item: any) => item.productId && item.quantity && item.price).map((item: any) => ({
+          invoiceId: id,
+          productId: item.productId,
+          quantity: parseFloat(item.quantity),
+          price: parseFloat(item.price),
+          discount: parseFloat(item.discount) || 0.0
+        }));
+        if (validItems.length > 0) {
+          await tx.proformaInvoiceItem.createMany({ data: validItems });
         }
       }
     });
@@ -343,6 +414,8 @@ export async function deleteProformaInvoice(req: AuthenticatedRequest, res: Resp
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
+    const invoice = await prisma.proformaInvoice.findFirst({ where: { id, companyId } });
+    if (!invoice) return res.status(404).json({ error: "Proforma Invoice not found or access denied" });
     await prisma.proformaInvoice.delete({ where: { id } });
     return res.json({ message: "Proforma Invoice deleted successfully" });
   } catch (error: any) {
@@ -433,17 +506,19 @@ export async function createSalesInvoice(req: AuthenticatedRequest, res: Respons
         }
       });
 
-      for (const item of items) {
-        if (!item.productId || !item.quantity || !item.price) continue;
-        await tx.salesInvoiceItem.create({
-          data: {
-            invoiceId: newInvoice.id,
-            productId: item.productId,
-            quantity: parseFloat(item.quantity),
-            price: parseFloat(item.price),
-            discount: parseFloat(item.discount) || 0.0
-          }
-        });
+      const validItems = items.filter((item: any) => item.productId && item.quantity && item.price).map((item: any) => ({
+        invoiceId: newInvoice.id,
+        productId: item.productId,
+        quantity: parseFloat(item.quantity),
+        price: parseFloat(item.price),
+        discount: parseFloat(item.discount) || 0.0
+      }));
+      if (validItems.length > 0) {
+        await tx.salesInvoiceItem.createMany({ data: validItems });
+      }
+
+      if ((status || 'UNPAID') === 'PAID') {
+        await handleInwardReceipt(tx, companyId, parseFloat(total) || 0.0, customerId, invoiceNo, `Invoice Payment ${invoiceNo}`);
       }
 
       return newInvoice;
@@ -470,6 +545,8 @@ export async function updateSalesInvoice(req: AuthenticatedRequest, res: Respons
 
     const invoice = await prisma.salesInvoice.findFirst({ where: { id, companyId } });
     if (!invoice) return res.status(404).json({ error: "Sales Invoice not found" });
+    const oldStatus = invoice.status;
+    const oldTotal = invoice.total;
 
     await prisma.$transaction(async (tx) => {
       await tx.salesInvoice.update({
@@ -487,18 +564,28 @@ export async function updateSalesInvoice(req: AuthenticatedRequest, res: Respons
 
       if (items && Array.isArray(items)) {
         await tx.salesInvoiceItem.deleteMany({ where: { invoiceId: id } });
-        for (const item of items) {
-          if (!item.productId || !item.quantity || !item.price) continue;
-          await tx.salesInvoiceItem.create({
-            data: {
-              invoiceId: id,
-              productId: item.productId,
-              quantity: parseFloat(item.quantity),
-              price: parseFloat(item.price),
-              discount: parseFloat(item.discount) || 0.0
-            }
-          });
+        const validItems = items.filter((item: any) => item.productId && item.quantity && item.price).map((item: any) => ({
+          invoiceId: id,
+          productId: item.productId,
+          quantity: parseFloat(item.quantity),
+          price: parseFloat(item.price),
+          discount: parseFloat(item.discount) || 0.0
+        }));
+        if (validItems.length > 0) {
+          await tx.salesInvoiceItem.createMany({ data: validItems });
         }
+      }
+
+      const newStatus = status || oldStatus;
+      const newTotal = total !== undefined ? parseFloat(total) : oldTotal;
+
+      if (oldStatus === 'PAID' && newStatus !== 'PAID') {
+        await handleVoidInwardReceipt(tx, companyId, oldTotal, invoice.invoiceNo);
+      } else if (oldStatus !== 'PAID' && newStatus === 'PAID') {
+        await handleInwardReceipt(tx, companyId, newTotal, customerId || invoice.customerId, invoice.invoiceNo, `Invoice Payment ${invoice.invoiceNo}`);
+      } else if (oldStatus === 'PAID' && newStatus === 'PAID' && oldTotal !== newTotal) {
+        await handleVoidInwardReceipt(tx, companyId, oldTotal, invoice.invoiceNo);
+        await handleInwardReceipt(tx, companyId, newTotal, customerId || invoice.customerId, invoice.invoiceNo, `Invoice Payment ${invoice.invoiceNo}`);
       }
     });
 
@@ -519,7 +606,15 @@ export async function deleteSalesInvoice(req: AuthenticatedRequest, res: Respons
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
-    await prisma.salesInvoice.delete({ where: { id } });
+    const invoice = await prisma.salesInvoice.findFirst({ where: { id, companyId } });
+    if (!invoice) return res.status(404).json({ error: "Sales Invoice not found" });
+
+    await prisma.$transaction(async (tx) => {
+      if (invoice.status === 'PAID') {
+        await handleVoidInwardReceipt(tx, companyId, invoice.total, invoice.invoiceNo);
+      }
+      await tx.salesInvoice.delete({ where: { id } });
+    });
     return res.json({ message: "Sales Invoice deleted successfully" });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
@@ -604,16 +699,14 @@ export async function createDeliveryChallan(req: AuthenticatedRequest, res: Resp
         }
       });
 
-      for (const item of items) {
-        if (!item.productId || !item.quantity) continue;
-        await tx.deliveryChallanItem.create({
-          data: {
-            challanId: newChallan.id,
-            productId: item.productId,
-            quantity: parseFloat(item.quantity),
-            price: parseFloat(item.price) || 0.0
-          }
-        });
+      const validItems = items.filter((item: any) => item.productId && item.quantity).map((item: any) => ({
+        challanId: newChallan.id,
+        productId: item.productId,
+        quantity: parseFloat(item.quantity),
+        price: parseFloat(item.price) || 0.0
+      }));
+      if (validItems.length > 0) {
+        await tx.deliveryChallanItem.createMany({ data: validItems });
       }
 
       return newChallan;
@@ -652,16 +745,14 @@ export async function updateDeliveryChallan(req: AuthenticatedRequest, res: Resp
 
       if (items && Array.isArray(items)) {
         await tx.deliveryChallanItem.deleteMany({ where: { challanId: id } });
-        for (const item of items) {
-          if (!item.productId || !item.quantity) continue;
-          await tx.deliveryChallanItem.create({
-            data: {
-              challanId: id,
-              productId: item.productId,
-              quantity: parseFloat(item.quantity),
-              price: parseFloat(item.price) || 0.0
-            }
-          });
+        const validItems = items.filter((item: any) => item.productId && item.quantity).map((item: any) => ({
+          challanId: id,
+          productId: item.productId,
+          quantity: parseFloat(item.quantity),
+          price: parseFloat(item.price) || 0.0
+        }));
+        if (validItems.length > 0) {
+          await tx.deliveryChallanItem.createMany({ data: validItems });
         }
       }
     });
@@ -683,6 +774,8 @@ export async function deleteDeliveryChallan(req: AuthenticatedRequest, res: Resp
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
+    const challan = await prisma.deliveryChallan.findFirst({ where: { id, companyId } });
+    if (!challan) return res.status(404).json({ error: "Delivery Challan not found or access denied" });
     await prisma.deliveryChallan.delete({ where: { id } });
     return res.json({ message: "Delivery Challan deleted successfully" });
   } catch (error: any) {
@@ -776,6 +869,43 @@ export async function createDispatch(req: AuthenticatedRequest, res: Response) {
         data: { status: 'DISPATCHED' }
       });
 
+      // Adjust stock levels and log adjustments
+      const order = await tx.salesOrder.findUnique({
+        where: { id: orderId },
+        include: { items: true }
+      });
+      if (order) {
+        for (const item of order.items) {
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { stock: { decrement: item.quantity } }
+          });
+
+          const updatedProd = await tx.product.findUnique({
+            where: { id: item.productId },
+            select: { stock: true }
+          });
+          const newStock = updatedProd ? updatedProd.stock : 0.0;
+          const previousStock = newStock + item.quantity;
+
+          const adjCount = await tx.stockAdjustment.count({ where: { companyId } });
+          const adjustmentNo = `ADJ-${new Date().getFullYear()}-${(adjCount + 1).toString().padStart(5, '0')}`;
+          await tx.stockAdjustment.create({
+            data: {
+              companyId,
+              productId: item.productId,
+              adjustmentNo,
+              type: 'OUTWARD_SO',
+              quantity: -item.quantity,
+              previousStock,
+              newStock,
+              reason: `Sales Dispatch ${dispatchNo}`,
+              referenceNo: dispatchNo
+            }
+          });
+        }
+      }
+
       return newDisp;
     });
 
@@ -830,7 +960,53 @@ export async function deleteDispatch(req: AuthenticatedRequest, res: Response) {
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
-    await prisma.dispatch.delete({ where: { id } });
+    const dispatch = await prisma.dispatch.findFirst({
+      where: { id, companyId },
+      include: { order: { include: { items: true } } }
+    });
+    if (!dispatch) return res.status(404).json({ error: "Dispatch record not found" });
+
+    await prisma.$transaction(async (tx) => {
+      if (dispatch.order) {
+        for (const item of dispatch.order.items) {
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { stock: { increment: item.quantity } }
+          });
+
+          const updatedProd = await tx.product.findUnique({
+            where: { id: item.productId },
+            select: { stock: true }
+          });
+          const newStock = updatedProd ? updatedProd.stock : 0.0;
+          const previousStock = newStock - item.quantity;
+
+          const adjCount = await tx.stockAdjustment.count({ where: { companyId } });
+          const adjustmentNo = `ADJ-${new Date().getFullYear()}-${(adjCount + 1).toString().padStart(5, '0')}`;
+          await tx.stockAdjustment.create({
+            data: {
+              companyId,
+              productId: item.productId,
+              adjustmentNo,
+              type: 'INWARD_RETURN',
+              quantity: item.quantity,
+              previousStock,
+              newStock,
+              reason: `Reversal of Dispatch ${dispatch.dispatchNo}`,
+              referenceNo: dispatch.dispatchNo
+            }
+          });
+        }
+
+        await tx.salesOrder.update({
+          where: { id: dispatch.orderId },
+          data: { status: 'PENDING' }
+        });
+      }
+
+      await tx.dispatch.delete({ where: { id } });
+    });
+
     return res.json({ message: "Dispatch record permanently removed." });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
@@ -912,6 +1088,8 @@ export async function updateQuotationStatus(req: AuthenticatedRequest, res: Resp
     const { id } = req.params;
     const { status } = req.body;
 
+    const quote = await prisma.quotation.findFirst({ where: { id, companyId } });
+    if (!quote) return res.status(404).json({ error: "Quotation not found" });
     const quotation = await prisma.quotation.update({
       where: { id },
       data: { status }
@@ -929,6 +1107,8 @@ export async function deleteQuotation(req: AuthenticatedRequest, res: Response) 
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
+    const quote = await prisma.quotation.findFirst({ where: { id, companyId } });
+    if (!quote) return res.status(404).json({ error: "Quotation not found" });
     await prisma.quotation.delete({ where: { id } });
     return res.json({ message: "Quotation permanently removed." });
   } catch (error: any) {
@@ -1003,6 +1183,8 @@ export async function updateServiceTicket(req: AuthenticatedRequest, res: Respon
     const { id } = req.params;
     const { status, resolutionNotes, scheduledDate, priority } = req.body;
 
+    const exist = await prisma.serviceTicket.findFirst({ where: { id, companyId } });
+    if (!exist) return res.status(404).json({ error: "Service ticket not found" });
     const ticket = await prisma.serviceTicket.update({
       where: { id },
       data: {
@@ -1025,6 +1207,8 @@ export async function deleteServiceTicket(req: AuthenticatedRequest, res: Respon
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
+    const exist = await prisma.serviceTicket.findFirst({ where: { id, companyId } });
+    if (!exist) return res.status(404).json({ error: "Service ticket not found" });
     await prisma.serviceTicket.delete({ where: { id } });
     return res.json({ message: "Service ticket deleted successfully." });
   } catch (error: any) {

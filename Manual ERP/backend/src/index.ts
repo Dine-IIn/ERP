@@ -129,7 +129,10 @@ import {
   listQcRecords, createQcRecord, updateQcRecord, deleteQcRecord,
   listReworkCards, updateReworkCard, deleteReworkCard,
   listWorkCenters, createWorkCenter, updateWorkCenter, deleteWorkCenter,
-  listShifts, createShift, updateShift, deleteShift
+  listShifts, createShift, updateShift, deleteShift,
+  listRoutings, createRouting, updateRouting, deleteRouting,
+  listMaterialIssues, issueMaterialsToWorkOrder,
+  getWorkOrderActualCosting
 } from './controllers';
 
 import {
@@ -712,6 +715,16 @@ app.get('/api/manufacturing/shifts', authenticateToken, listShifts);
 app.post('/api/manufacturing/shifts', authenticateToken, createShift);
 app.put('/api/manufacturing/shifts/:id', authenticateToken, updateShift);
 app.delete('/api/manufacturing/shifts/:id', authenticateToken, deleteShift);
+
+app.get('/api/manufacturing/routings', authenticateToken, listRoutings);
+app.post('/api/manufacturing/routings', authenticateToken, createRouting);
+app.put('/api/manufacturing/routings/:id', authenticateToken, updateRouting);
+app.delete('/api/manufacturing/routings/:id', authenticateToken, deleteRouting);
+
+app.get('/api/manufacturing/material-issues', authenticateToken, listMaterialIssues);
+app.post('/api/manufacturing/material-issue', authenticateToken, issueMaterialsToWorkOrder);
+
+app.get('/api/manufacturing/work-orders/:id/actual-costing', authenticateToken, getWorkOrderActualCosting);
 
 // 9.6 HRMS Module Routes
 app.get('/api/hrms/employees', authenticateToken, listEmployees);

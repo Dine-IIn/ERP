@@ -15,6 +15,7 @@ export default function VendorMaster({
   onDeleteVendor,
 }: VendorMasterProps) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [vendorTypeFilter, setVendorTypeFilter] = useState('ALL');
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -139,11 +140,18 @@ export default function VendorMaster({
     }
   };
 
-  const filtered = vendors.filter(v =>
-    v.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    v.contactNo.includes(searchTerm) ||
-    (v.email && v.email.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filtered = vendors.filter(v => {
+    const matchesSearch = v.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      v.contactNo.includes(searchTerm) ||
+      (v.email && v.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (v.gstDetails && v.gstDetails.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    const matchesType = vendorTypeFilter === 'ALL' ||
+      (vendorTypeFilter === 'VENDOR' && v.isVendor) ||
+      (vendorTypeFilter === 'SUPPLIER' && !v.isVendor);
+      
+    return matchesSearch && matchesType;
+  });
 
   return (
     <div className="animate-fade-in flex flex-col gap-4 text-left select-none">
@@ -155,22 +163,32 @@ export default function VendorMaster({
           <p className="text-[var(--text-secondary)] text-[10px] mt-0.5">Administer supply directories, GST registration numbers, structured bank details, and billing policies</p>
         </div>
 
-        <div className="flex items-center gap-3 w-full md:w-auto shrink-0">
-          <div className="relative flex-1 md:w-64">
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto shrink-0 font-sans">
+          <div className="relative flex-1 md:w-64 w-full">
             <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
             <input
               type="text"
-              placeholder="Search vendors/suppliers..."
+              placeholder="Search by name, phone, email, GSTIN..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               className="w-full pl-9 pr-3 py-1.5 bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none"
             />
           </div>
 
+          <select
+            value={vendorTypeFilter}
+            onChange={e => setVendorTypeFilter(e.target.value)}
+            className="bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-secondary)] rounded-lg px-3 py-1.5 focus:outline-none focus:border-indigo-500/50 cursor-pointer w-full sm:w-auto"
+          >
+            <option value="ALL">All Types</option>
+            <option value="VENDOR">Vendors Only</option>
+            <option value="SUPPLIER">Suppliers Only</option>
+          </select>
+          
           <button
             type="button"
             onClick={openAddModal}
-            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-xs cursor-pointer flex items-center gap-1.5 border-0 bg-transparent transition-all shadow-md active:scale-95 shrink-0"
+            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-xs cursor-pointer flex items-center gap-1.5 border-0 bg-transparent transition-all shadow-md active:scale-95 shrink-0 w-full sm:w-auto justify-center"
           >
             <Plus className="w-3.5 h-3.5" /> Onboard Supplier
           </button>

@@ -586,6 +586,19 @@ export default function App() {
     return (localTheme === 'light' || localTheme === 'dark') ? localTheme : 'dark';
   });
 
+  // Stateful UI Font Size manager
+  const [uiSize, setUiSize] = useState<'small' | 'medium' | 'large'>(() => {
+    const localSize = localStorage.getItem('ui_size');
+    return (localSize === 'small' || localSize === 'medium' || localSize === 'large') ? localSize : 'medium';
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.remove('size-small', 'size-medium', 'size-large');
+    root.classList.add(`size-${uiSize}`);
+    localStorage.setItem('ui_size', uiSize);
+  }, [uiSize]);
+
   // Expandable Category Sidebar States
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
     crm: true,
@@ -7361,6 +7374,19 @@ export default function App() {
                         className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 pl-10 pr-4 rounded-lg text-xs focus:outline-none transition-colors"
                       />
                     </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">UI Interface Sizing</label>
+                    <select
+                      value={uiSize}
+                      onChange={e => setUiSize(e.target.value as any)}
+                      className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none cursor-pointer mt-1"
+                    >
+                      <option value="small">Small (Compact, Max Space)</option>
+                      <option value="medium">Medium (Balanced)</option>
+                      <option value="large">Large (Magnified)</option>
+                    </select>
                   </div>
 
                   <div className="border-t border-[var(--border-color)] pt-3 mt-1">

@@ -108,13 +108,20 @@ export default function ProductionPlanning({ salesOrders = [], products = [], cu
   const [selectedSoId, setSelectedSoId] = useState('');
   const [planStartDate, setPlanStartDate] = useState('2026-06-01');
   const [planEndDate, setPlanEndDate] = useState('2026-06-10');
+  const [statusFilter, setStatusFilter] = useState('ALL');
 
-  // Set default dropdown selections when catalog loads
+  // Set default dropdown selections when catalog loads (filtering out already scheduled Sales Orders)
   useEffect(() => {
-    if (activeSalesOrders.length > 0 && !selectedSoId) {
-      setSelectedSoId(activeSalesOrders[0].id);
+    const scheduledSoIds = plansList.map(p => p.salesOrderId).filter(Boolean);
+    const selectable = activeSalesOrders.filter(so => isEditing ? so.id === selectedSoId : !scheduledSoIds.includes(so.id));
+    if (selectable.length > 0) {
+      if (!selectedSoId || (!isEditing && !selectable.some(s => s.id === selectedSoId))) {
+        setSelectedSoId(selectable[0].id);
+      }
+    } else {
+      setSelectedSoId('');
     }
-  }, [activeSalesOrders, selectedSoId]);
+  }, [activeSalesOrders, plansList, isEditing, selectedSoId]);
 
   const handleCreatePlanSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -210,11 +217,16 @@ export default function ProductionPlanning({ salesOrders = [], products = [], cu
     });
   };
 
-  const filteredPlans = plansList.filter(plan =>
-    plan.finishedProductName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    plan.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    plan.salesOrderNo.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const scheduledSoIds = plansList.map(p => p.salesOrderId).filter(Boolean);
+  const selectableSalesOrders = activeSalesOrders.filter(so => isEditing ? so.id === selectedSoId : !scheduledSoIds.includes(so.id));
+
+  const filteredPlans = plansList.filter(plan => {
+    const matchesSearch = plan.finishedProductName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      plan.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      plan.salesOrderNo.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === 'ALL' || plan.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
 
   return (
     <div className="space-y-6">
@@ -259,15 +271,28 @@ export default function ProductionPlanning({ salesOrders = [], products = [], cu
       ) : activeTab === 'schedule' ? (
         <div className="space-y-4 animate-fade-in text-left">
           {/* Controls */}
-          <div className="flex items-center relative w-full max-w-sm">
-            <Search className="w-4 h-4 absolute left-3 text-slate-500" />
-            <input
-              type="text"
-              placeholder="Search scheduled plans..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="w-full bg-slate-900/40 border border-slate-800/80 focus:border-indigo-500/50 py-2.5 pl-10 pr-4 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none transition-all"
-            />
+          <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xl">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input
+                type="text"
+                placeholder="Search scheduled plans..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="w-full bg-slate-900/40 border border-slate-800/80 focus:border-indigo-500/50 py-2 pl-10 pr-4 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none transition-all"
+              />
+            </div>
+            <select
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              className="bg-slate-900/40 border border-slate-800/80 text-xs text-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500/50 cursor-pointer"
+            >
+              <option value="ALL">All Statuses</option>
+              <option value="PENDING">PENDING</option>
+              <option value="SCHEDULED">SCHEDULED</option>
+              <option value="RELEASED">RELEASED</option>
+              <option value="COMPLETED">COMPLETED</option>
+            </select>
           </div>
 
           {/* Schedule List */}
@@ -463,18 +488,24 @@ export default function ProductionPlanning({ salesOrders = [], products = [], cu
             <form onSubmit={handleCreatePlanSubmit} className="p-6 space-y-4">
               <div>
                 <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Select Customer Sales Order</label>
-                <select
-                  value={selectedSoId}
-                  onChange={e => setSelectedSoId(e.target.value)}
-                  disabled={isEditing}
-                  className="w-full bg-slate-950 border border-slate-850 p-2.5 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500 disabled:opacity-55"
-                >
-                  {activeSalesOrders.map(so => (
-                    <option key={so.id} value={so.id}>
-                      {so.orderNo} - {so.customerName} ({so.product} x {so.qty})
-                    </option>
-                  ))}
-                </select>
+                {selectableSalesOrders.length > 0 ? (
+                  <select
+                    value={selectedSoId}
+                    onChange={e => setSelectedSoId(e.target.value)}
+                    disabled={isEditing}
+                    className="w-full bg-slate-950 border border-slate-850 p-2.5 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500 disabled:opacity-55"
+                  >
+                    {selectableSalesOrders.map(so => (
+                      <option key={so.id} value={so.id}>
+                        {so.orderNo} - {so.customerName} ({so.product} x {so.qty})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="text-amber-500 bg-amber-500/10 border border-amber-500/20 p-3 rounded-lg text-xs font-semibold mt-1">
+                    No unscheduled Sales Orders available. All Sales Orders have already been planned!
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">

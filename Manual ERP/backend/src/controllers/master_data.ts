@@ -394,6 +394,9 @@ export async function deleteCategory(req: AuthenticatedRequest, res: Response) {
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
+    const category = await prisma.productCategory.findFirst({ where: { id, companyId } });
+    if (!category) return res.status(404).json({ error: "Category not found or access denied" });
+
     await prisma.productCategory.delete({ where: { id } });
     return res.json({ message: "Category deleted successfully" });
   } catch (error: any) {
@@ -443,6 +446,9 @@ export async function deleteBrand(req: AuthenticatedRequest, res: Response) {
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
+    const brand = await prisma.brand.findFirst({ where: { id, companyId } });
+    if (!brand) return res.status(404).json({ error: "Brand not found or access denied" });
+
     await prisma.brand.delete({ where: { id } });
     return res.json({ message: "Brand deleted successfully" });
   } catch (error: any) {
@@ -519,17 +525,15 @@ export async function createProduct(req: AuthenticatedRequest, res: Response) {
     // Create variants if any
     const createdVariants: any[] = [];
     if (variants && Array.isArray(variants)) {
-      for (const v of variants) {
-        if (!v.name) continue;
-        const variant = await prisma.productVariant.create({
-          data: {
-            productId: product.id,
-            name: v.name,
-            sku: v.sku || null,
-            priceAddon: v.priceAddon ? parseFloat(v.priceAddon) : 0.0
-          }
-        });
-        createdVariants.push(variant);
+      const validVariants = variants.filter(v => v.name).map(v => ({
+        productId: product.id,
+        name: v.name,
+        sku: v.sku || null,
+        priceAddon: v.priceAddon ? parseFloat(v.priceAddon) : 0.0
+      }));
+      if (validVariants.length > 0) {
+        await prisma.productVariant.createMany({ data: validVariants });
+        createdVariants.push(...validVariants);
       }
     }
 
@@ -595,16 +599,14 @@ export async function updateProduct(req: AuthenticatedRequest, res: Response) {
     // Handle variant replacements (simpler transaction: wipe and recreate)
     if (variants && Array.isArray(variants)) {
       await prisma.productVariant.deleteMany({ where: { productId: id } });
-      for (const v of variants) {
-        if (!v.name) continue;
-        await prisma.productVariant.create({
-          data: {
-            productId: id,
-            name: v.name,
-            sku: v.sku || null,
-            priceAddon: v.priceAddon ? parseFloat(v.priceAddon) : 0.0
-          }
-        });
+      const validVariants = variants.filter(v => v.name).map(v => ({
+        productId: id,
+        name: v.name,
+        sku: v.sku || null,
+        priceAddon: v.priceAddon ? parseFloat(v.priceAddon) : 0.0
+      }));
+      if (validVariants.length > 0) {
+        await prisma.productVariant.createMany({ data: validVariants });
       }
     }
 

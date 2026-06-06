@@ -36,7 +36,10 @@ interface QualityControlProps {
 
 export default function QualityControl({ products = [], employees = [] }: QualityControlProps) {
   const [activeTab, setActiveTab] = useState<'inspections' | 'reworks'>('inspections');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [inspectionsSearch, setInspectionsSearch] = useState('');
+  const [reworkSearch, setReworkSearch] = useState('');
+  const [inspectionsStatus, setInspectionsStatus] = useState<string>('ALL');
+  const [reworkStatus, setReworkStatus] = useState<string>('ALL');
   const [showAddModal, setShowAddModal] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -240,10 +243,23 @@ export default function QualityControl({ products = [], employees = [] }: Qualit
     });
   };
 
-  const filteredQC = qcRecordsList.filter(rec =>
-    rec.productName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    rec.batchNo.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredQC = qcRecordsList.filter(rec => {
+    const matchesSearch = rec.productName.toLowerCase().includes(inspectionsSearch.toLowerCase()) ||
+      rec.batchNo.toLowerCase().includes(inspectionsSearch.toLowerCase()) ||
+      rec.productCode.toLowerCase().includes(inspectionsSearch.toLowerCase()) ||
+      rec.inspectorName.toLowerCase().includes(inspectionsSearch.toLowerCase());
+    const matchesStatus = inspectionsStatus === 'ALL' || rec.status === inspectionsStatus;
+    return matchesSearch && matchesStatus;
+  });
+
+  const filteredRework = reworkCardsList.filter(card => {
+    const matchesSearch = card.productName.toLowerCase().includes(reworkSearch.toLowerCase()) ||
+      card.batchNo.toLowerCase().includes(reworkSearch.toLowerCase()) ||
+      card.assignedOperator.toLowerCase().includes(reworkSearch.toLowerCase()) ||
+      card.reworkOperation.toLowerCase().includes(reworkSearch.toLowerCase());
+    const matchesStatus = reworkStatus === 'ALL' || card.status === reworkStatus;
+    return matchesSearch && matchesStatus;
+  });
 
   return (
     <div className="space-y-6">
@@ -277,16 +293,28 @@ export default function QualityControl({ products = [], employees = [] }: Qualit
 
       {activeTab === 'inspections' ? (
         <div className="space-y-4 animate-fade-in text-left">
-          {/* Search */}
-          <div className="flex items-center relative w-full max-w-sm">
-            <Search className="w-4 h-4 absolute left-3 text-slate-500" />
-            <input
-              type="text"
-              placeholder="Search inspections..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="w-full bg-slate-900/40 border border-slate-800/80 focus:border-indigo-500/50 py-2.5 pl-10 pr-4 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none transition-all"
-            />
+          {/* Controls */}
+          <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xl">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input
+                type="text"
+                placeholder="Search inspections by product, batch or inspector..."
+                value={inspectionsSearch}
+                onChange={e => setInspectionsSearch(e.target.value)}
+                className="w-full bg-slate-900/40 border border-slate-800/80 focus:border-indigo-500/50 py-2 pl-10 pr-4 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none transition-all"
+              />
+            </div>
+            <select
+              value={inspectionsStatus}
+              onChange={e => setInspectionsStatus(e.target.value)}
+              className="bg-slate-900/40 border border-slate-800/80 text-xs text-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500/50 cursor-pointer"
+            >
+              <option value="ALL">All Inspection Statuses</option>
+              <option value="PASSED">Passed</option>
+              <option value="FAILED">Failed</option>
+              <option value="REWORK_REQUIRED">Rework Required</option>
+            </select>
           </div>
 
           {/* Cards list */}
@@ -329,7 +357,7 @@ export default function QualityControl({ products = [], employees = [] }: Qualit
                         </button>
                         <button
                           onClick={() => handleDeleteQC(rec.id)}
-                          className="text-rose-450 hover:text-rose-400 p-1.5 hover:bg-slate-950/45 rounded transition-all cursor-pointer border-0 bg-transparent"
+                          className="text-rose-455 hover:text-rose-400 p-1.5 hover:bg-slate-950/45 rounded transition-all cursor-pointer border-0 bg-transparent"
                           title="Delete QC Audit"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -360,17 +388,41 @@ export default function QualityControl({ products = [], employees = [] }: Qualit
       ) : (
         /* Rework Repairs Console */
         <div className="bg-slate-900/35 border border-slate-800/80 p-6 rounded-2xl space-y-4 backdrop-blur-xl animate-fade-in text-left">
-          <div>
-            <h3 className="text-sm font-bold text-white flex items-center gap-1.5 uppercase tracking-wider">
-              <Wrench className="w-4.5 h-4.5 text-indigo-400" />
-              Corporate Rework routing & Scrap Logs
-            </h3>
-            <p className="text-slate-500 text-xs mt-1">
-              Track lots routed for shop floor repairs and audit completion status rates.
-            </p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-855 pb-4">
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center gap-1.5 uppercase tracking-wider">
+                <Wrench className="w-4.5 h-4.5 text-indigo-400" />
+                Corporate Rework routing & Scrap Logs
+              </h3>
+              <p className="text-slate-500 text-xs mt-1">
+                Track lots routed for shop floor repairs and audit completion status rates.
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xl shrink-0">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                <input
+                  type="text"
+                  placeholder="Search reworks by product, batch or operator..."
+                  value={reworkSearch}
+                  onChange={e => setReworkSearch(e.target.value)}
+                  className="w-full bg-slate-900/40 border border-slate-800/80 focus:border-indigo-500/50 py-2 pl-10 pr-4 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none transition-all"
+                />
+              </div>
+              <select
+                value={reworkStatus}
+                onChange={e => setReworkStatus(e.target.value)}
+                className="bg-slate-900/40 border border-slate-800/80 text-xs text-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500/50 cursor-pointer"
+              >
+                <option value="ALL">All Rework Statuses</option>
+                <option value="OPEN">Open</option>
+                <option value="REPAIRED_PASSED">Repaired Passed</option>
+                <option value="SCRAPPED">Scrapped</option>
+              </select>
+            </div>
           </div>
 
-          {reworkCardsList.length === 0 ? (
+          {filteredRework.length === 0 ? (
             <div className="p-16 text-center text-slate-500 border border-dashed border-slate-800 rounded-2xl bg-slate-900/10 flex flex-col items-center justify-center">
               <Wrench className="w-12 h-12 text-slate-750 mb-3" />
               <p className="font-semibold text-sm">No active Rework repairs</p>
@@ -378,7 +430,7 @@ export default function QualityControl({ products = [], employees = [] }: Qualit
             </div>
           ) : (
             <div className="space-y-4">
-              {reworkCardsList.map(card => (
+              {filteredRework.map(card => (
                 <div key={card.id} className="p-5 bg-slate-950/30 border border-slate-850 rounded-2xl flex flex-col md:flex-row gap-5 items-start md:items-center justify-between">
                   <div className="space-y-2 text-left flex-1">
                     <div className="flex items-center gap-2">

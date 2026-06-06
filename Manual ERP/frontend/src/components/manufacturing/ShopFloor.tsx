@@ -31,7 +31,10 @@ interface ShopFloorProps {
 
 export default function ShopFloor({ employees = [] }: ShopFloorProps) {
   const [activeTab, setActiveTab] = useState<'centers' | 'shifts'>('centers');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [wcSearch, setWcSearch] = useState('');
+  const [shiftSearch, setShiftSearch] = useState('');
+  const [wcStatusFilter, setWcStatusFilter] = useState('ALL');
+  const [shiftNameFilter, setShiftNameFilter] = useState('ALL');
   const [showAddModal, setShowAddModal] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -233,10 +236,21 @@ export default function ShopFloor({ employees = [] }: ShopFloorProps) {
     }
   };
 
-  const filteredCenters = centersList.filter(wc =>
-    wc.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    wc.code.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredCenters = centersList.filter(wc => {
+    const matchesSearch = wc.name.toLowerCase().includes(wcSearch.toLowerCase()) ||
+      wc.code.toLowerCase().includes(wcSearch.toLowerCase());
+    const matchesStatus = wcStatusFilter === 'ALL' || wc.status === wcStatusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const filteredShifts = shiftsList.filter(sh => {
+    const matchesSearch = sh.operatorName.toLowerCase().includes(shiftSearch.toLowerCase()) ||
+      sh.workCenterName.toLowerCase().includes(shiftSearch.toLowerCase()) ||
+      sh.shiftName.toLowerCase().includes(shiftSearch.toLowerCase()) ||
+      sh.assignedMachine.toLowerCase().includes(shiftSearch.toLowerCase());
+    const matchesStatus = shiftNameFilter === 'ALL' || sh.shiftName === shiftNameFilter;
+    return matchesSearch && matchesStatus;
+  });
 
   return (
     <div className="space-y-6">
@@ -288,15 +302,27 @@ export default function ShopFloor({ employees = [] }: ShopFloorProps) {
       {activeTab === 'centers' ? (
         <div className="space-y-4 animate-fade-in text-left">
           {/* Controls */}
-          <div className="flex items-center relative w-full max-w-sm">
-            <Search className="w-4 h-4 absolute left-3 text-slate-500" />
-            <input
-              type="text"
-              placeholder="Search work centers..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="w-full bg-slate-900/40 border border-slate-800/80 focus:border-indigo-500/50 py-2.5 pl-10 pr-4 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none transition-all"
-            />
+          <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xl">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input
+                type="text"
+                placeholder="Search work centers by name or code..."
+                value={wcSearch}
+                onChange={e => setWcSearch(e.target.value)}
+                className="w-full bg-slate-900/40 border border-slate-800/80 focus:border-indigo-500/50 py-2 pl-10 pr-4 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none transition-all"
+              />
+            </div>
+            <select
+              value={wcStatusFilter}
+              onChange={e => setWcStatusFilter(e.target.value)}
+              className="bg-slate-900/40 border border-slate-800/80 text-xs text-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500/50 cursor-pointer"
+            >
+              <option value="ALL">All Statuses</option>
+              <option value="OPERATIONAL">Operational</option>
+              <option value="MAINTENANCE">Maintenance</option>
+              <option value="OFFLINE">Offline</option>
+            </select>
           </div>
 
           {/* Grid list */}
@@ -334,7 +360,7 @@ export default function ShopFloor({ employees = [] }: ShopFloorProps) {
                       </button>
                       <button
                         onClick={() => handleDeleteWC(wc.id)}
-                        className="text-rose-450 hover:text-rose-400 p-1.5 hover:bg-slate-950/45 rounded transition-all cursor-pointer border-0 bg-transparent"
+                        className="text-rose-455 hover:text-rose-400 p-1.5 hover:bg-slate-950/45 rounded transition-all cursor-pointer border-0 bg-transparent"
                         title="Delete Work Center"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -352,11 +378,11 @@ export default function ShopFloor({ employees = [] }: ShopFloorProps) {
                       <span className="text-emerald-400 font-bold">{wc.efficiencyScore}% Score</span>
                     </div>
 
-                    {/* Load/runtime capacity bars */}
+                    {/* Uptime capacity progress bars */}
                     <div className="pt-2">
                       <div className="flex justify-between text-[10px] text-slate-550 font-bold mb-1">
                         <span>Uptime Capacity Logged</span>
-                        <span className="font-mono text-slate-350">{wc.runtimeLogged}h / {wc.capacityHours}h</span>
+                        <span className="font-mono text-slate-355">{wc.runtimeLogged}h / {wc.capacityHours}h</span>
                       </div>
                       <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden">
                         <div className="bg-indigo-500 h-full rounded-full" style={{ width: `${(wc.runtimeLogged / wc.capacityHours) * 100}%` }}></div>
@@ -371,17 +397,42 @@ export default function ShopFloor({ employees = [] }: ShopFloorProps) {
       ) : (
         /* Factory Shift Timetables Roster sheets */
         <div className="bg-slate-900/35 border border-slate-800/80 p-6 rounded-2xl space-y-4 backdrop-blur-xl animate-fade-in text-left">
-          <div>
-            <h3 className="text-sm font-bold text-white flex items-center gap-1.5 uppercase tracking-wider">
-              <Users className="w-4.5 h-4.5 text-indigo-400" />
-              Corporate Factory Shifts Rosters & Timetables
-            </h3>
-            <p className="text-slate-500 text-xs mt-1">
-              Organize and view shift calendars for machine technicians scheduled on workstations today.
-            </p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-850 pb-4">
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center gap-1.5 uppercase tracking-wider">
+                <Users className="w-4.5 h-4.5 text-indigo-400" />
+                Corporate Factory Shifts Rosters & Timetables
+              </h3>
+              <p className="text-slate-550 text-xs mt-1">
+                Organize and view shift calendars for machine technicians scheduled on workstations today.
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xl shrink-0">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                <input
+                  type="text"
+                  placeholder="Search shifts by operator, center, roster..."
+                  value={shiftSearch}
+                  onChange={e => setShiftSearch(e.target.value)}
+                  className="w-full bg-slate-900/40 border border-slate-800/80 focus:border-indigo-500/50 py-2 pl-10 pr-4 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none transition-all"
+                />
+              </div>
+              <select
+                value={shiftNameFilter}
+                onChange={e => setShiftNameFilter(e.target.value)}
+                className="bg-slate-900/40 border border-slate-800/80 text-xs text-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500/50 cursor-pointer"
+              >
+                <option value="ALL">All Shift Names</option>
+                <option value="Morning">Morning</option>
+                <option value="Afternoon">Afternoon</option>
+                <option value="Night">Night</option>
+                <option value="General Morning Shift">General Morning Shift</option>
+              </select>
+            </div>
           </div>
 
-          {shiftsList.length === 0 ? (
+          {filteredShifts.length === 0 ? (
             <div className="p-16 text-center text-slate-500 border border-dashed border-slate-800 rounded-2xl bg-slate-900/10 flex flex-col items-center justify-center">
               <Sliders className="w-12 h-12 text-slate-750 mb-3" />
               <p className="font-semibold text-sm">No Factory Shifts scheduled</p>
@@ -402,7 +453,7 @@ export default function ShopFloor({ employees = [] }: ShopFloorProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {shiftsList.map((shift) => (
+                  {filteredShifts.map((shift) => (
                     <tr key={shift.id} className="border-b border-slate-900/50 hover:bg-slate-950/20 transition-colors">
                       <td className="py-3 px-3 font-bold text-slate-200">{shift.operatorName}</td>
                       <td className="py-3 px-3 text-left">{shift.workCenterName}</td>

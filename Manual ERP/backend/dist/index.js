@@ -430,6 +430,13 @@ app.get('/api/manufacturing/shifts', auth_1.authenticateToken, controllers_3.lis
 app.post('/api/manufacturing/shifts', auth_1.authenticateToken, controllers_3.createShift);
 app.put('/api/manufacturing/shifts/:id', auth_1.authenticateToken, controllers_3.updateShift);
 app.delete('/api/manufacturing/shifts/:id', auth_1.authenticateToken, controllers_3.deleteShift);
+app.get('/api/manufacturing/routings', auth_1.authenticateToken, controllers_3.listRoutings);
+app.post('/api/manufacturing/routings', auth_1.authenticateToken, controllers_3.createRouting);
+app.put('/api/manufacturing/routings/:id', auth_1.authenticateToken, controllers_3.updateRouting);
+app.delete('/api/manufacturing/routings/:id', auth_1.authenticateToken, controllers_3.deleteRouting);
+app.get('/api/manufacturing/material-issues', auth_1.authenticateToken, controllers_3.listMaterialIssues);
+app.post('/api/manufacturing/material-issue', auth_1.authenticateToken, controllers_3.issueMaterialsToWorkOrder);
+app.get('/api/manufacturing/work-orders/:id/actual-costing', auth_1.authenticateToken, controllers_3.getWorkOrderActualCosting);
 // 9.6 HRMS Module Routes
 app.get('/api/hrms/employees', auth_1.authenticateToken, hrms_1.listEmployees);
 app.patch('/api/hrms/employees/:id', auth_1.authenticateToken, hrms_1.updateEmployee);
