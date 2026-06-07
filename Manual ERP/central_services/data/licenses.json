@@ -1,0 +1,26 @@
+[
+  [
+    "ANB-LIC-2026-DEV",
+    {
+      "fingerprint": "",
+      "companyCode": "ABC001",
+      "status": "ACTIVE"
+    }
+  ],
+  [
+    "ANB-LIC-2026-PROD",
+    {
+      "fingerprint": "",
+      "companyCode": "ABC001",
+      "status": "ACTIVE"
+    }
+  ],
+  [
+    "TEST-LICENSE-12345",
+    {
+      "fingerprint": "",
+      "companyCode": "TST001",
+      "status": "ACTIVE"
+    }
+  ]
+]

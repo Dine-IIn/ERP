@@ -191,36 +191,82 @@ const devRegistry = new Map<string, {
   createdAt: string;
 }>();
 
+// Persistent storage directory setup
+const persistDir = path.resolve(__dirname, '../data');
+try {
+  fs.mkdirSync(persistDir, { recursive: true });
+} catch {}
+
+function loadRegistry<K, V>(fileName: string, registryMap: Map<K, V>) {
+  const filePath = path.join(persistDir, fileName);
+  try {
+    if (fs.existsSync(filePath)) {
+      const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+      if (Array.isArray(data)) {
+        data.forEach(([key, val]) => {
+          registryMap.set(key, val);
+        });
+        console.log(`💾 [Persistence] Loaded ${registryMap.size} entries for registry file: "${fileName}"`);
+      }
+    }
+  } catch (err: any) {
+    console.error(`⚠️ [Persistence Error] Failed to load registry "${fileName}":`, err.message);
+  }
+}
+
+export function saveRegistry<K, V>(fileName: string, registryMap: Map<K, V>) {
+  const filePath = path.join(persistDir, fileName);
+  try {
+    const data = Array.from(registryMap.entries());
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+    console.log(`💾 [Persistence] Saved ${registryMap.size} entries to registry file: "${fileName}"`);
+  } catch (err: any) {
+    console.error(`❌ [Persistence Error] Failed to save registry "${fileName}":`, err.message);
+  }
+}
+
+// Load persisted state from disk
+loadRegistry('licenses.json', licenseRegistry);
+loadRegistry('discovery.json', discoveryRegistry);
+loadRegistry('updater_status.json', clientUpdaterRegistry);
+loadRegistry('dev_configs.json', devRegistry);
 
 // Seed initial mock licenses from environment configuration or fall back to defaults
 try {
-  if (config.licenseSeeds) {
-    const licenses = JSON.parse(config.licenseSeeds);
-    if (Array.isArray(licenses)) {
-      licenses.forEach((lic: any) => {
-        if (lic.licenseKey && lic.companyCode) {
-          licenseRegistry.set(lic.licenseKey, {
-            fingerprint: lic.fingerprint || '',
-            companyCode: lic.companyCode.toUpperCase(),
-            status: lic.status || 'ACTIVE'
-          });
-        }
-      });
-      console.log(`🔑 [Seeding] Loaded ${licenses.length} license(s) from environment configuration.`);
+  if (licenseRegistry.size === 0) {
+    if (config.licenseSeeds) {
+      const licenses = JSON.parse(config.licenseSeeds);
+      if (Array.isArray(licenses)) {
+        licenses.forEach((lic: any) => {
+          if (lic.licenseKey && lic.companyCode) {
+            licenseRegistry.set(lic.licenseKey, {
+              fingerprint: lic.fingerprint || '',
+              companyCode: lic.companyCode.toUpperCase(),
+              status: lic.status || 'ACTIVE'
+            });
+          }
+        });
+        console.log(`🔑 [Seeding] Loaded ${licenses.length} license(s) from environment configuration.`);
+      }
+    } else {
+      // Default fallback seed if none specified
+      licenseRegistry.set('ANB-LIC-2026-DEV', { fingerprint: '', companyCode: 'ABC001', status: 'ACTIVE' });
+      console.log(`🔑 [Seeding] Loaded default licensing registry fallback.`);
     }
-  } else {
-    // Default fallback seed if none specified
-    licenseRegistry.set('ANB-LIC-2026-DEV', { fingerprint: '', companyCode: 'ABC001', status: 'ACTIVE' });
-    console.log(`🔑 [Seeding] Loaded default licensing registry fallback.`);
+    // Save the seeded licenses to disk immediately
+    saveRegistry('licenses.json', licenseRegistry);
   }
 } catch (err) {
   console.error(`🔴 [Seeding Error] Failed to parse LICENSE_SEEDS:`, err);
-  licenseRegistry.set('ANB-LIC-2026-DEV', { fingerprint: '', companyCode: 'ABC001', status: 'ACTIVE' });
+  if (licenseRegistry.size === 0) {
+    licenseRegistry.set('ANB-LIC-2026-DEV', { fingerprint: '', companyCode: 'ABC001', status: 'ACTIVE' });
+    saveRegistry('licenses.json', licenseRegistry);
+  }
 }
 
 // Seed initial discovery mappings from environment configuration or fall back to defaults
 try {
-  let loadedCount = 0;
+  let loadedCount = discoveryRegistry.size;
 
   // 1. Load from DISCOVERY_<COMPANY_CODE> environment variables
   Object.keys(process.env).forEach(key => {
@@ -240,36 +286,41 @@ try {
   });
 
   // 2. Load from discoverySeeds if specified
-  if (config.discoverySeeds) {
-    const discovery = JSON.parse(config.discoverySeeds);
-    if (Array.isArray(discovery)) {
-      discovery.forEach((disc: any) => {
-        if (disc.companyCode && disc.serverUrl) {
-          discoveryRegistry.set(disc.companyCode.toUpperCase(), {
-            companyName: disc.companyName || 'Enterprise Partner',
-            serverUrl: disc.serverUrl,
-            status: disc.status || 'ACTIVE'
-          });
-          loadedCount++;
-        }
-      });
-      console.log(`🔍 [Seeding] Loaded ${discovery.length} discovery mapping(s) from DISCOVERY_SEEDS.`);
+  if (discoveryRegistry.size === loadedCount && discoveryRegistry.size === 0) {
+    if (config.discoverySeeds) {
+      const discovery = JSON.parse(config.discoverySeeds);
+      if (Array.isArray(discovery)) {
+        discovery.forEach((disc: any) => {
+          if (disc.companyCode && disc.serverUrl) {
+            discoveryRegistry.set(disc.companyCode.toUpperCase(), {
+              companyName: disc.companyName || 'Enterprise Partner',
+              serverUrl: disc.serverUrl,
+              status: disc.status || 'ACTIVE'
+            });
+            loadedCount++;
+          }
+        });
+        console.log(`🔍 [Seeding] Loaded ${discovery.length} discovery mapping(s) from DISCOVERY_SEEDS.`);
+      }
     }
-  }
 
-  // 3. Fall back ONLY if no mappings were loaded at all (and fallbackServerUrl is set)
-  if (loadedCount === 0) {
-    if (config.fallbackServerUrl) {
-      discoveryRegistry.set('ABC001', { companyName: 'ABC Industries', serverUrl: config.fallbackServerUrl, status: 'ACTIVE' });
-      console.log(`🔍 [Seeding] Loaded default discovery registry fallback to URL: "${config.fallbackServerUrl}"`);
-    } else {
-      console.log(`🔍 [Seeding] No discovery mappings loaded and fallbackServerUrl is empty.`);
+    // 3. Fall back ONLY if no mappings were loaded at all (and fallbackServerUrl is set)
+    if (loadedCount === 0) {
+      if (config.fallbackServerUrl) {
+        discoveryRegistry.set('ABC001', { companyName: 'ABC Industries', serverUrl: config.fallbackServerUrl, status: 'ACTIVE' });
+        console.log(`🔍 [Seeding] Loaded default discovery registry fallback to URL: "${config.fallbackServerUrl}"`);
+      } else {
+        console.log(`🔍 [Seeding] No discovery mappings loaded and fallbackServerUrl is empty.`);
+      }
     }
+
+    saveRegistry('discovery.json', discoveryRegistry);
   }
 } catch (err) {
   console.error(`🔴 [Seeding Error] Failed to parse discovery seeds:`, err);
   if (discoveryRegistry.size === 0 && config.fallbackServerUrl) {
     discoveryRegistry.set('ABC001', { companyName: 'ABC Industries', serverUrl: config.fallbackServerUrl, status: 'ACTIVE' });
+    saveRegistry('discovery.json', discoveryRegistry);
   }
 }
 
@@ -281,6 +332,7 @@ if (!discoveryRegistry.has('SUPERADMIN') && config.fallbackServerUrl) {
     status: 'ACTIVE'
   });
   console.log(`🔍 [Static Seeding] Registered static SUPERADMIN mapping to fallback URL: "${config.fallbackServerUrl}"`);
+  saveRegistry('discovery.json', discoveryRegistry);
 }
 
 // ==================================================
@@ -355,6 +407,8 @@ app.post('/license/activate', (req, res) => {
         serverUrl: serverUrl || config.fallbackServerUrl, 
         status: 'ACTIVE' 
       });
+      saveRegistry('licenses.json', licenseRegistry);
+      saveRegistry('discovery.json', discoveryRegistry);
       console.log(`🔑 [Licensing] Provisioned sandbox trial license: "${licenseKey}" for fingerprint: "${fingerprint}"`);
       return res.json({ status: 'VALID', message: 'Trial license activated successfully' });
     }
@@ -376,8 +430,10 @@ app.post('/license/activate', (req, res) => {
         serverUrl,
         status: 'ACTIVE'
       });
+      saveRegistry('discovery.json', discoveryRegistry);
     }
   }
+  saveRegistry('licenses.json', licenseRegistry);
 
   console.log(`🔑 [Licensing] Activated key "${licenseKey}" on motherboard fingerprint: "${fingerprint}"`);
   return res.json({ status: 'VALID', message: 'License key successfully locked and activated' });
@@ -492,6 +548,7 @@ app.post('/admin/licenses', requireAdminSecret, (req, res) => {
     companyCode: (companyCode || '').toUpperCase(),
     status: status || 'ACTIVE'
   });
+  saveRegistry('licenses.json', licenseRegistry);
   console.log(`🔑 [Admin] Saved license registry entry: "${licenseKey}" -> Company: "${companyCode}"`);
   return res.json({ success: true, message: 'License key registry updated successfully' });
 });
@@ -500,6 +557,7 @@ app.delete('/admin/licenses/:licenseKey', requireAdminSecret, (req, res) => {
   const { licenseKey } = req.params;
   const deleted = licenseRegistry.delete(licenseKey);
   if (deleted) {
+    saveRegistry('licenses.json', licenseRegistry);
     console.log(`🔑 [Admin] Removed license key entry: "${licenseKey}"`);
     return res.json({ success: true, message: 'License key removed from registry' });
   }
@@ -525,6 +583,7 @@ app.post('/admin/discovery', requireAdminSecret, (req, res) => {
     serverUrl,
     status: status || 'ACTIVE'
   });
+  saveRegistry('discovery.json', discoveryRegistry);
   console.log(`🔍 [Admin] Saved discovery registry entry: "${companyCode}" -> "${serverUrl}"`);
   return res.json({ success: true, message: 'Discovery company mapping updated successfully' });
 });
@@ -533,6 +592,7 @@ app.delete('/admin/discovery/:companyCode', requireAdminSecret, (req, res) => {
   const { companyCode } = req.params;
   const deleted = discoveryRegistry.delete(companyCode.toUpperCase());
   if (deleted) {
+    saveRegistry('discovery.json', discoveryRegistry);
     console.log(`🔍 [Admin] Removed discovery entry for code: "${companyCode}"`);
     return res.json({ success: true, message: 'Company discovery mapping removed' });
   }
@@ -587,6 +647,7 @@ app.get('/api/updater/check', (req, res) => {
     message: existing?.message || 'Standard server checking loop',
     licenseStatus
   });
+  saveRegistry('updater_status.json', clientUpdaterRegistry);
 
   return res.json({
     updateAvailable,
@@ -617,6 +678,7 @@ app.post('/api/updater/status', (req, res) => {
     message: message || '',
     licenseStatus: licenseStatus || existing?.licenseStatus || 'ACTIVE'
   });
+  saveRegistry('updater_status.json', clientUpdaterRegistry);
 
   console.log(`📥 [Telemetry] Status updated for company "${companyCodeUpper}": status="${status}", rollback="${rollbackStatus}"`);
   return res.json({ success: true });
@@ -658,6 +720,8 @@ app.post('/admin/dev-configs', requireAdminSecret, (req, res) => {
     serverUrl: backendUrl,
     status: status || 'ACTIVE'
   });
+  saveRegistry('dev_configs.json', devRegistry);
+  saveRegistry('discovery.json', discoveryRegistry);
   console.log(`🛠️ [Dev Config] Saved dev backend for company "${codeUpper}" → "${backendUrl}"`);
   return res.json({ success: true, message: 'Developer backend config saved and discovery registry synced' });
 });
@@ -666,6 +730,7 @@ app.delete('/admin/dev-configs/:companyCode', requireAdminSecret, (req, res) => 
   const code = req.params.companyCode.toUpperCase();
   const deleted = devRegistry.delete(code);
   if (deleted) {
+    saveRegistry('dev_configs.json', devRegistry);
     console.log(`🛠️ [Dev Config] Removed dev backend config for: "${code}"`);
     return res.json({ success: true, message: 'Developer backend config removed' });
   }

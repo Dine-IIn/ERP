@@ -266,12 +266,17 @@ pm2 startup
 ```bash
 cd /var/www/erp/backend
 pnpm install
-npx prisma db push
+# Note: For production, use migrate deploy. Only run db push in a local sandbox or dev environment where data loss is acceptable.
+npx prisma migrate deploy
 pnpm run build
 pm2 start dist/index.js --name "erp-backend"
 pm2 save
 pm2 startup
 ```
+
+> [!WARNING]
+> **Database Data Safety:**
+> Never run `npx prisma db push` directly in a production environment as it drops schema constraints and deletes columns if structural changes are made, leading to permanent data loss of your companies, users, and transactions. Always generate migrations in development via `npx prisma migrate dev` and deploy them in production using `npx prisma migrate deploy`.
 
 #### Step 5: Nginx SSL Proxy Setup (Certbot)
 Execute on **both** VM instances:
@@ -632,12 +637,12 @@ Whenever you push changes to GitHub and need to update the VM instances:
    cd /var/www/erp
    git pull origin main
    ```
-2. Re-install packages, run database push (for VM 1 Backend), rebuild, and restart:
+2. Re-install packages, deploy database migrations (for VM 1 Backend), rebuild, and restart:
    - **For VM Instance 1 (Main Backend):**
      ```bash
      cd /var/www/erp/backend
      pnpm install
-     npx prisma db push
+     npx prisma migrate deploy
      pnpm run build
      pm2 restart erp-backend
      ```
