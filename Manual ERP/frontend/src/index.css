@@ -29,9 +29,9 @@
   --bg-secondary: #ffffff;
   --bg-tertiary: #f1f5f9;
   --bg-card: #ffffff;
-  --text-primary: #0f172a;
-  --text-secondary: #334155;
-  --text-muted: #64748b;
+  --text-primary: #000000; /* Pure black for maximum contrast */
+  --text-secondary: #1e293b; /* Dark slate for high contrast secondary text */
+  --text-muted: #475569; /* Slate grey for legible muted text */
   --border-color: #cbd5e1; /* Clear borders */
   --border-active: #94a3b8;
   --accent-primary: #4f46e5;
@@ -91,6 +91,17 @@ a, button, select, input, [role="button"] {
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03) !important;
 }
 
+/* Secondary surfaces: map medium dark utilities to soft light-grey surfaces */
+.light .bg-slate-800,
+.light .bg-slate-700,
+.light .bg-slate-880,
+.light .bg-gray-800,
+.light .bg-gray-700 {
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-color) !important;
+}
+
 /* Transparent overlays, table headers, wrappers, and panels */
 .light [class*="bg-slate-950/"],
 .light [class*="bg-slate-900/"],
@@ -103,6 +114,19 @@ a, button, select, input, [role="button"] {
   background-color: var(--bg-tertiary) !important;
   color: var(--text-primary) !important;
   border-color: var(--border-color) !important;
+}
+
+/* Custom modal backdrop overrides to retain beautiful transparent blur in light mode instead of solid grey */
+.light .fixed.inset-0.bg-slate-950\/80,
+.light .fixed.inset-0.bg-slate-950\/90,
+.light .fixed.inset-0.bg-black\/60,
+.light [class*="fixed"][class*="inset-0"][class*="bg-slate-950/"],
+.light [class*="fixed"][class*="inset-0"][class*="bg-black/"] {
+  background-color: rgba(15, 23, 42, 0.45) !important;
+  backdrop-filter: blur(4px) !important;
+  color: inherit !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 .light tr.hover\:bg-slate-800\/20:hover {
@@ -162,6 +186,7 @@ a, button, select, input, [role="button"] {
 .light .text-slate-350,
 .light .text-slate-400,
 .light .text-slate-450,
+.light .text-slate-500,
 .light .text-slate-550,
 .light .text-slate-600,
 .light .text-slate-650,
@@ -169,76 +194,357 @@ a, button, select, input, [role="button"] {
 .light .text-gray-350,
 .light .text-gray-400,
 .light .text-gray-450,
-.light .text-gray-500 {
+.light .text-gray-500,
+.light .text-gray-600 {
   color: var(--text-secondary) !important;
 }
 
 /* Convert light pastel text colors to rich, highly readable values in light mode */
-.light .text-indigo-400 {
+.light .text-indigo-400,
+.light .text-indigo-450,
+.light .text-indigo-455,
+.light .text-indigo-500,
+.light .text-indigo-600 {
   color: var(--accent-primary) !important;
 }
-.light .text-purple-400 {
+.light .text-purple-400,
+.light .text-purple-500 {
   color: var(--accent-primary) !important;
 }
-.light .text-emerald-400 {
+.light .text-emerald-400,
+.light .text-emerald-450,
+.light .text-emerald-500,
+.light .text-emerald-600,
+.light .text-green-400,
+.light .text-green-500,
+.light .text-green-600 {
   color: var(--success-color) !important;
 }
-.light .text-emerald-450 {
-  color: var(--success-color) !important;
-}
-.light .text-red-400 {
+.light .text-red-400,
+.light .text-red-500,
+.light .text-red-600,
+.light .text-rose-400,
+.light .text-rose-405,
+.light .text-rose-450,
+.light .text-rose-500,
+.light .text-rose-600 {
   color: var(--danger-color) !important;
 }
-.light .text-blue-400 {
+.light .text-blue-400,
+.light .text-blue-500,
+.light .text-blue-600 {
   color: #1d4ed8 !important; /* Deep blue */
 }
 .light .text-amber-400,
-.light .text-amber-500 {
+.light .text-amber-500,
+.light .text-amber-600,
+.light .text-yellow-500,
+.light .text-yellow-600 {
   color: var(--warning-color) !important;
 }
 
-/* Fix text-white on hover/background issues in light mode */
+/* Fix text colors on hover in light mode to keep them high-contrast and readable */
+.light [class*="hover:text-slate-"]:hover,
+.light [class*="hover:text-gray-"]:hover,
+.light [class*="hover:text-white"]:hover,
 .light .hover\:text-white:hover,
 .light .hover\:text-slate-100:hover,
 .light .hover\:text-slate-200:hover,
-.light .hover\:text-slate-50:hover,
-.light [class*="hover:text-white"]:hover,
-.light [class*="hover:text-slate-100"]:hover {
-  color: var(--text-primary) !important;
+.light .hover\:text-slate-50:hover {
+  color: #000000 !important;
 }
 
-/* Map hover backgrounds inside light mode to clean light greys */
+.light [class*="hover:text-indigo-"]:hover,
+.light [class*="hover:text-purple-"]:hover {
+  color: var(--accent-hover) !important;
+}
+
+.light [class*="hover:text-emerald-"]:hover,
+.light [class*="hover:text-green-"]:hover {
+  color: var(--success-color) !important;
+}
+
+.light [class*="hover:text-red-"]:hover,
+.light [class*="hover:text-rose-"]:hover {
+  color: var(--danger-color) !important;
+}
+
+.light [class*="hover:text-amber-"]:hover,
+.light [class*="hover:text-yellow-"]:hover {
+  color: var(--warning-color) !important;
+}
+
+/* Map hover backgrounds inside light mode to clean light slate-200 (for distinct hover contrast) */
 .light [class*="hover:bg-slate-"]:hover,
-.light [class*="hover:bg-gray-"]:hover {
-  background-color: var(--bg-tertiary) !important;
-  color: var(--text-primary) !important;
+.light [class*="hover:bg-gray-"]:hover,
+.light .hover\:bg-slate-800:hover,
+.light .hover\:bg-slate-750:hover,
+.light .hover\:bg-slate-700:hover {
+  background-color: #e2e8f0 !important;
+  color: #000000 !important;
 }
 
-/* Exclude primary action buttons and badges from getting text color overridden to dark */
+/* Sidebar menu selected button highlight in light mode to ensure distinct active contrast */
+.light aside button.text-indigo-500,
+.light aside button.text-indigo-400,
+.light aside button[class*="text-indigo-"],
+.light aside a.text-indigo-500,
+.light aside [class*="text-indigo-"] {
+  background-color: var(--accent-light) !important;
+  color: #000000 !important;
+  border-left-color: var(--accent-primary) !important;
+  font-weight: 700 !important;
+}
+
+.light aside button.text-indigo-500 *,
+.light aside button.text-indigo-400 *,
+.light aside button[class*="text-indigo-"] *,
+.light aside a.text-indigo-500 *,
+.light aside [class*="text-indigo-"] * {
+  color: #000000 !important;
+}
+
+/* --- BUTTONS & BADGES LIGHT MODE TRANSFORMS (PASTEL OUTLINE SYSTEM WITH BLACK TEXT) --- */
+
+/* Indigo buttons/badges */
 .light .bg-indigo-500,
 .light .bg-indigo-550,
 .light .bg-indigo-600,
+.light .bg-indigo-650,
+.light .bg-indigo-655,
+.light .bg-indigo-700,
+.light .hover\:bg-indigo-500:hover,
+.light .hover\:bg-indigo-600:hover,
+.light .hover\:bg-indigo-650:hover,
+.light .hover\:bg-indigo-700:hover {
+  background-color: var(--accent-light) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--accent-primary) !important;
+}
+.light .bg-indigo-500 *,
+.light .bg-indigo-550 *,
+.light .bg-indigo-600 *,
+.light .bg-indigo-650 *,
+.light .bg-indigo-655 *,
+.light .bg-indigo-700 *,
+.light .hover\:bg-indigo-500:hover *,
+.light .hover\:bg-indigo-600:hover *,
+.light .hover\:bg-indigo-650:hover *,
+.light .hover\:bg-indigo-700:hover * {
+  color: var(--text-primary) !important;
+}
+
+/* Emerald/Green buttons/badges */
 .light .bg-emerald-500,
 .light .bg-emerald-600,
+.light .bg-emerald-650,
+.light .bg-emerald-700,
+.light .hover\:bg-emerald-500:hover,
+.light .hover\:bg-emerald-600:hover,
+.light .hover\:bg-emerald-650:hover,
+.light .hover\:bg-emerald-700:hover {
+  background-color: rgba(16, 185, 129, 0.08) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--success-color) !important;
+}
+.light .bg-emerald-500 *,
+.light .bg-emerald-600 *,
+.light .bg-emerald-650 *,
+.light .bg-emerald-700 *,
+.light .hover\:bg-emerald-500:hover *,
+.light .hover\:bg-emerald-600:hover *,
+.light .hover\:bg-emerald-650:hover *,
+.light .hover\:bg-emerald-700:hover * {
+  color: var(--text-primary) !important;
+}
+
+/* Red/Rose buttons/badges */
 .light .bg-red-500,
 .light .bg-red-600,
-.light .bg-blue-500,
+.light .bg-red-650,
 .light .bg-rose-500,
+.light .bg-rose-600,
+.light .bg-rose-655,
+.light .bg-rose-650,
+.light .hover\:bg-red-500:hover,
+.light .hover\:bg-red-600:hover,
+.light .hover\:bg-red-650:hover,
+.light .hover\:bg-rose-500:hover,
+.light .hover\:bg-rose-600:hover,
+.light .hover\:bg-rose-650:hover {
+  background-color: rgba(239, 68, 68, 0.08) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--danger-color) !important;
+}
+.light .bg-red-500 *,
+.light .bg-red-600 *,
+.light .bg-red-650 *,
+.light .bg-rose-500 *,
+.light .bg-rose-600 *,
+.light .bg-rose-655 *,
+.light .bg-rose-650 *,
+.light .hover\:bg-red-500:hover *,
+.light .hover\:bg-red-600:hover *,
+.light .hover\:bg-red-650:hover *,
+.light .hover\:bg-rose-500:hover *,
+.light .hover\:bg-rose-600:hover *,
+.light .hover\:bg-rose-650:hover * {
+  color: var(--text-primary) !important;
+}
+
+/* Blue buttons/badges */
+.light .bg-blue-500,
+.light .bg-blue-550,
+.light .bg-blue-600,
+.light .hover\:bg-blue-500:hover,
+.light .hover\:bg-blue-600:hover {
+  background-color: rgba(59, 130, 246, 0.08) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid #2563eb !important;
+}
+.light .bg-blue-500 *,
+.light .bg-blue-550 *,
+.light .bg-blue-600 *,
+.light .hover\:bg-blue-500:hover *,
+.light .hover\:bg-blue-600:hover * {
+  color: var(--text-primary) !important;
+}
+
+/* Purple buttons/badges */
 .light .bg-purple-500,
-.light [class*="bg-indigo-"] *,
-.light [class*="bg-emerald-"] *,
-.light [class*="bg-red-"] *,
-.light [class*="bg-blue-"] *,
-.light [class*="bg-rose-"] *,
-.light [class*="bg-purple-"] *,
-.light button .text-white,
-.light a .text-white,
-.light .btn .text-white,
-.light button.text-white,
-.light a.text-white,
-.light [role="button"] .text-white,
-.light [role="button"].text-white {
-  color: #ffffff !important;
+.light .bg-purple-600,
+.light .hover\:bg-purple-500:hover,
+.light .hover\:bg-purple-600:hover {
+  background-color: rgba(139, 92, 246, 0.08) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid #7c3aed !important;
+}
+.light .bg-purple-500 *,
+.light .bg-purple-600 *,
+.light .hover\:bg-purple-500:hover *,
+.light .hover\:bg-purple-600:hover * {
+  color: var(--text-primary) !important;
+}
+
+/* Amber/Yellow buttons/badges */
+.light .bg-amber-500,
+.light .bg-amber-550,
+.light .bg-amber-600,
+.light .hover\:bg-amber-500:hover,
+.light .hover\:bg-amber-600:hover {
+  background-color: rgba(245, 158, 11, 0.08) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--warning-color) !important;
+}
+.light .bg-amber-500 *,
+.light .bg-amber-550 *,
+.light .bg-amber-600 *,
+.light .hover\:bg-amber-500:hover *,
+.light .hover\:bg-amber-600:hover * {
+  color: var(--text-primary) !important;
+}
+
+/* Sky buttons/badges */
+.light .bg-sky-500,
+.light .bg-sky-600,
+.light .hover\:bg-sky-500:hover,
+.light .hover\:bg-sky-600:hover {
+  background-color: rgba(14, 165, 233, 0.08) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid #0284c7 !important;
+}
+.light .bg-sky-500 *,
+.light .bg-sky-600 *,
+.light .hover\:bg-sky-500:hover *,
+.light .hover\:bg-sky-600:hover * {
+  color: var(--text-primary) !important;
+}
+
+/* Violet buttons/badges */
+.light .bg-violet-500,
+.light .bg-violet-600,
+.light .hover\:bg-violet-500:hover,
+.light .hover\:bg-violet-600:hover {
+  background-color: rgba(109, 40, 217, 0.08) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid #6d28d9 !important;
+}
+.light .bg-violet-500 *,
+.light .bg-violet-600 *,
+.light .hover\:bg-violet-500:hover *,
+.light .hover\:bg-violet-600:hover * {
+  color: var(--text-primary) !important;
+}
+
+/* Hover transitions for interactive feedback */
+.light .bg-indigo-500:hover,
+.light .bg-indigo-550:hover,
+.light .bg-indigo-600:hover,
+.light .bg-indigo-650:hover,
+.light .bg-indigo-655:hover,
+.light .bg-indigo-700:hover,
+.light .hover\:bg-indigo-500:hover:hover,
+.light .hover\:bg-indigo-600:hover:hover,
+.light .hover\:bg-indigo-650:hover:hover,
+.light .hover\:bg-indigo-700:hover:hover {
+  background-color: rgba(79, 70, 229, 0.16) !important;
+}
+.light .bg-emerald-500:hover,
+.light .bg-emerald-600:hover,
+.light .bg-emerald-650:hover,
+.light .bg-emerald-700:hover,
+.light .hover\:bg-emerald-500:hover:hover,
+.light .hover\:bg-emerald-600:hover:hover,
+.light .hover\:bg-emerald-650:hover:hover,
+.light .hover\:bg-emerald-700:hover:hover {
+  background-color: rgba(16, 185, 129, 0.16) !important;
+}
+.light .bg-red-500:hover,
+.light .bg-red-600:hover,
+.light .bg-red-650:hover,
+.light .bg-rose-500:hover,
+.light .bg-rose-600:hover,
+.light .bg-rose-655:hover,
+.light .bg-rose-650:hover,
+.light .hover\:bg-red-500:hover:hover,
+.light .hover\:bg-red-600:hover:hover,
+.light .hover\:bg-red-650:hover:hover,
+.light .hover\:bg-rose-500:hover:hover,
+.light .hover\:bg-rose-600:hover:hover,
+.light .hover\:bg-rose-650:hover:hover {
+  background-color: rgba(239, 68, 68, 0.16) !important;
+}
+.light .bg-blue-500:hover,
+.light .bg-blue-550:hover,
+.light .bg-blue-600:hover,
+.light .hover\:bg-blue-500:hover:hover,
+.light .hover\:bg-blue-600:hover:hover {
+  background-color: rgba(59, 130, 246, 0.16) !important;
+}
+.light .bg-purple-500:hover,
+.light .bg-purple-600:hover,
+.light .hover\:bg-purple-500:hover:hover,
+.light .hover\:bg-purple-600:hover:hover {
+  background-color: rgba(139, 92, 246, 0.16) !important;
+}
+.light .bg-amber-500:hover,
+.light .bg-amber-550:hover,
+.light .bg-amber-600:hover,
+.light .hover\:bg-amber-500:hover:hover,
+.light .hover\:bg-amber-600:hover:hover {
+  background-color: rgba(245, 158, 11, 0.16) !important;
+}
+.light .bg-sky-500:hover,
+.light .bg-sky-600:hover,
+.light .hover\:bg-sky-500:hover:hover,
+.light .hover\:bg-sky-600:hover:hover {
+  background-color: rgba(14, 165, 233, 0.16) !important;
+}
+.light .bg-violet-500:hover,
+.light .bg-violet-600:hover,
+.light .hover\:bg-violet-500:hover:hover,
+.light .hover\:bg-violet-600:hover:hover {
+  background-color: rgba(109, 40, 217, 0.16) !important;
 }
 
 
