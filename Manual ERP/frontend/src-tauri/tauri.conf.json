@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "ERP",
-  "version": "0.0.3",
+  "version": "0.0.1",
   "identifier": "com.ERP.enterprise",
   "build": {
     "frontendDist": "../dist",
@@ -35,7 +35,8 @@
     ],
     "android": {
       "debugApplicationIdSuffix": ".debug"
-    }
+    },
+    "createUpdaterArtifacts": true
   },
   "plugins": {
     "updater": {
@@ -45,7 +46,7 @@
         "http://localhost:6001/api/updater/{{target}}/{{current_version}}",
         "https://centeralservice.anbindustries.com/api/updater/{{target}}/{{current_version}}"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDMxNEFEMjIzNkJFMjY1RTcKUldUblplSnJJOUpLTVZ3NGhuWkViOHk3ODJkOW0xakdoSVEwd2pZQlcwcUNTNFBjVFl5NU5sYloK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEIzM0MyMTI3NUY0REVEM0QKUldROTdVMWZKeUU4czkxcFBrUSt1cTRQSlZNOFljOEQ5dTE5WW5yaGlBcVgxQW8rR1VZUWxsVXkK",
       "dangerousInsecureTransportProtocol": true
     }
   }
