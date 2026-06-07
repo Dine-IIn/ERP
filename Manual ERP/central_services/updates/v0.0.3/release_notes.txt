@@ -1,0 +1,5 @@
+Enterprise ERP Hotfix Release v0.0.3.
+Includes:
+- Fix for dynamic update checks.
+- Zero-config localhost SaaS sandbox compatibility.
+- Telemetry routing improvements.

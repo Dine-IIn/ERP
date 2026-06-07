@@ -116,24 +116,19 @@ if (fs.existsSync(tauriConfPath)) {
   try {
     const tauriConf = JSON.parse(fs.readFileSync(tauriConfPath, 'utf8'));
     
-    const baseEndpoints = [
-      "http://localhost:6000/api/updater/{{target}}/{{current_version}}",
-      "http://localhost:6001/api/updater/{{target}}/{{current_version}}"
-    ];
-
-    const customEndpoints = [];
+    const finalEndpoints = [];
     const centralUrl = env.VITE_CENTRAL_SERVICES_URL;
     if (centralUrl && centralUrl.startsWith('http')) {
       try {
         const urlObj = new URL(centralUrl);
         const updateEndpoint = `${urlObj.origin}/api/updater/{{target}}/{{current_version}}`;
-        if (!baseEndpoints.includes(updateEndpoint)) {
-          customEndpoints.push(updateEndpoint);
-        }
+        finalEndpoints.push(updateEndpoint);
       } catch (e) {}
     }
 
-    const finalEndpoints = [...baseEndpoints, ...customEndpoints];
+    if (finalEndpoints.length === 0) {
+      finalEndpoints.push("http://localhost:6000/api/updater/{{target}}/{{current_version}}");
+    }
 
     if (tauriConf.plugins && tauriConf.plugins.updater) {
       tauriConf.plugins.updater.endpoints = finalEndpoints;
