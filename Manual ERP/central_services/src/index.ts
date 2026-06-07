@@ -30,11 +30,24 @@ interface UpdateInfo {
   releaseNotes: string;
 }
 
-function getLatestUpdateInfo(req: express.Request, type: 'tauri' | 'backend'): UpdateInfo {
-  let updatesDir = '/var/www/updates';
-  if (!fs.existsSync(updatesDir)) {
-    updatesDir = path.join(__dirname, '../updates');
+function semverCompare(v1: string, v2: string): number {
+  const cleanV1 = (v1 || '').replace(/^v/i, '').trim();
+  const cleanV2 = (v2 || '').replace(/^v/i, '').trim();
+  const parts1 = cleanV1.split('.').map(Number);
+  const parts2 = cleanV2.split('.').map(Number);
+  const maxLen = Math.max(parts1.length, parts2.length);
+  for (let i = 0; i < maxLen; i++) {
+    const num1 = isNaN(parts1[i]) ? 0 : parts1[i];
+    const num2 = isNaN(parts2[i]) ? 0 : parts2[i];
+    if (num1 !== num2) {
+      return num1 - num2;
+    }
   }
+  return 0;
+}
+
+function getLatestUpdateInfo(req: express.Request, type: 'tauri' | 'backend'): UpdateInfo {
+  const updatesDir = path.join(__dirname, '../updates');
   const fallbackInfo: UpdateInfo = {
     latestVersion: config.latestVersion,
     downloadUrl: config.downloadUrl,
@@ -57,19 +70,8 @@ function getLatestUpdateInfo(req: express.Request, type: 'tauri' | 'backend'): U
       return fallbackInfo;
     }
 
-    // Sort folders by version (semver-like descending: e.g. v0.0.2 first)
-    folders.sort((a, b) => {
-      const partsA = a.substring(1).split('.').map(Number);
-      const partsB = b.substring(1).split('.').map(Number);
-      for (let i = 0; i < 3; i++) {
-        const valA = isNaN(partsA[i]) ? 0 : partsA[i];
-        const valB = isNaN(partsB[i]) ? 0 : partsB[i];
-        if (valA !== valB) {
-          return valB - valA;
-        }
-      }
-      return 0;
-    });
+    // Sort folders by version (semver-like descending: e.g. v0.0.3 first)
+    folders.sort((a, b) => semverCompare(b, a));
 
     // Find the latest folder that actually contains the requested update files
     let targetFolder = '';
@@ -122,8 +124,12 @@ function getLatestUpdateInfo(req: express.Request, type: 'tauri' | 'backend'): U
       }
     }
 
-    const proto = req.headers['x-forwarded-proto'] || req.protocol;
-    const baseUrl = `${proto}://${req.get('host')}`;
+    const host = req.get('host') || 'localhost';
+    const isLocal = host.includes('localhost') || 
+                    host.includes('127.0.0.1') || 
+                    /^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[0-1])\.)/.test(host);
+    const proto = isLocal ? 'http' : 'https';
+    const baseUrl = `${proto}://${host}`;
 
     const tauriUrl = msiFile ? `${baseUrl}/updates/${latestFolder}/${msiFile}` : '';
     const downloadUrl = zipFile ? `${baseUrl}/updates/${latestFolder}/${zipFile}` : '';
@@ -466,10 +472,10 @@ app.post('/license/validate', (req, res) => {
 // 4. AUTO-UPDATE INTEGRATION ROUTE
 // ==================================================
 app.get('/updates/check', (req, res) => {
-  const clientVersion = req.query.version as string;
+  const clientVersion = (req.query.version as string) || '0.0.0';
   const updateInfo = getLatestUpdateInfo(req, 'tauri');
   
-  if (clientVersion === updateInfo.latestVersion) {
+  if (semverCompare(clientVersion, updateInfo.latestVersion) >= 0) {
     return res.json({ updateAvailable: false });
   }
 
@@ -486,7 +492,7 @@ app.get('/api/updater/:target/:version', (req, res) => {
   const { target, version } = req.params;
   const updateInfo = getLatestUpdateInfo(req, 'tauri');
   
-  if (version === updateInfo.latestVersion) {
+  if (semverCompare(version, updateInfo.latestVersion) >= 0) {
     console.log(`📥 [Updater API] Client target "${target}" version "${version}" is up-to-date.`);
     return res.status(204).send(); // 204 No Content
   }
@@ -632,7 +638,7 @@ app.get('/api/updater/check', (req, res) => {
   const licenseStatus = req.query.licenseStatus as string || 'ACTIVE';
 
   const updateInfo = getLatestUpdateInfo(req, 'backend');
-  const updateAvailable = clientVersion !== updateInfo.latestVersion;
+  const updateAvailable = semverCompare(clientVersion, updateInfo.latestVersion) < 0;
   
   // Register telemetry heartbeat
   const existing = clientUpdaterRegistry.get(companyCode);
