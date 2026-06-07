@@ -379,12 +379,25 @@ export default function App() {
         }
       }
     } catch (err: any) {
-      logToConsole('error', `[Tauri Update Check Failed]: ${err.message || err.toString()}`);
-      setUpdateError(err.message || 'Failed to check for updates.');
+      const errMsg = err.message || err.toString();
+      logToConsole('error', `[Tauri Update Check Failed]: ${errMsg}`);
+      try {
+        fetch('http://localhost:6000/api/updater/status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            companyCode: 'DEBUG',
+            companyName: 'Frontend Debugger',
+            status: 'CHECK_FAILED',
+            message: `Updater error: ${errMsg}`
+          })
+        });
+      } catch (e) {}
+      setUpdateError(errMsg || 'Failed to check for updates.');
       if (manual) {
         setActiveToast({
           title: 'Update Check Failed',
-          message: err.message || 'Unable to connect to the updates server.'
+          message: errMsg || 'Unable to connect to the updates server.'
         });
       }
     }
