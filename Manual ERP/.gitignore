@@ -1,0 +1,24 @@
+# Node & dependencies
+node_modules/
+pnpm-lock.yaml
+package-lock.json
+
+# Builds & compiled code
+dist/
+build/
+backend/dist/
+backend/build/
+central_services/dist/
+frontend/dist/
+
+# Persistent database storage
+central_services/data/
+
+# IDE & Editor files
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.db
+*.sqlite
