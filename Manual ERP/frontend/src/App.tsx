@@ -178,6 +178,32 @@ interface UserProfile {
   isSuperAdmin: boolean;
 }
 
+const TAURI_APP_VERSION_KEY = 'erp_tauri_app_version';
+const TAURI_WORKSPACE_SESSION_KEYS = [
+  'erp_company_code',
+  'erp_server_url',
+  'erp_token',
+  'erp_token_expires',
+  'erp_user'
+];
+
+const clearTauriWorkspaceSession = () => {
+  TAURI_WORKSPACE_SESSION_KEYS.forEach(key => localStorage.removeItem(key));
+};
+
+const shouldShowInitialTauriSetup = () => {
+  if (!isTauriClient()) return false;
+  return (
+    !localStorage.getItem('erp_company_code') ||
+    !localStorage.getItem('erp_server_url') ||
+    !localStorage.getItem(TAURI_APP_VERSION_KEY)
+  );
+};
+
+const getStoredTauriCompanyCode = () => {
+  return isTauriClient() ? (localStorage.getItem('erp_company_code') || '') : '';
+};
+
 interface NotificationItem {
   id: string;
   title: string;
@@ -334,12 +360,7 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
 
 export default function App() {
   // --- TAURI CLIENT STATES & HOOKS ---
-  const [showTauriSetup, setShowTauriSetup] = useState<boolean>(() => {
-    if (isTauriClient()) {
-      return !localStorage.getItem('erp_company_code') || !localStorage.getItem('erp_server_url');
-    }
-    return false;
-  });
+  const [showTauriSetup, setShowTauriSetup] = useState<boolean>(shouldShowInitialTauriSetup);
   const [updateAvailable, setUpdateAvailable] = useState<boolean>(false);
   const [updateManifest, setUpdateManifest] = useState<any>(null);
   const [showUpdateModal, setShowUpdateModal] = useState<boolean>(false);
@@ -350,6 +371,7 @@ export default function App() {
   });
 
   const [appVersion, setAppVersion] = useState<string>('...');
+  const [tauriStartupChecked, setTauriStartupChecked] = useState<boolean>(() => !isTauriClient());
 
   const checkForUpdates = async (manual = false) => {
     if (!isTauriClient()) return;
@@ -525,6 +547,9 @@ export default function App() {
     try {
       localStorage.setItem('erp_company_code', companyCode);
       localStorage.setItem('erp_server_url', serverUrl);
+      if (appVersion && appVersion !== '...') {
+        localStorage.setItem(TAURI_APP_VERSION_KEY, appVersion);
+      }
       console.log('[DISCOVERY] LocalStorage writes succeeded');
       logToConsole('info', '[DISCOVERY] LocalStorage writes succeeded');
     } catch (storeErr: any) {
@@ -540,53 +565,86 @@ export default function App() {
 
   useEffect(() => {
     if (isTauriClient()) {
-      const code = localStorage.getItem('erp_company_code');
-      const url = localStorage.getItem('erp_server_url');
-      if (code) {
-        if (code.toUpperCase() === 'SUPERADMIN') {
-          logToConsole('info', `[Tauri Startup] Bypassing discovery re-validation for static SUPERADMIN`);
-        } else {
-          logToConsole('info', `[Tauri Startup] Re-validating company code "${code}"...`);
-          const targetUrl = getDiscoveryServiceUrl();
-          console.log("=== DISCOVERY DEBUG (STARTUP VALIDATION) ===");
-          console.log("Discovery URL:", targetUrl);
-          console.log("Environment URL:", import.meta.env.VITE_DISCOVERY_SERVICE_URL);
-          console.log("=======================");
-          getActiveFetch()(targetUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ companyCode: code })
-          })
-          .then(res => {
-            if (!res.ok) throw new Error(`Discovery server returned status: ${res.status}`);
-            return res.json();
-          })
-          .then(data => {
-            if (data && data.success && data.serverUrl) {
-              if (data.serverUrl !== url) {
-                localStorage.setItem('erp_server_url', data.serverUrl);
-                logToConsole('info', `[Tauri Startup] Discovery URL updated from "${url}" to "${data.serverUrl}"`);
-              } else {
-                logToConsole('info', `[Tauri Startup] Discovery URL verified active: "${data.serverUrl}"`);
-              }
-            } else {
-              logToConsole('warn', `[Tauri Startup] Discovery response was unsuccessful: ${JSON.stringify(data)}`);
-            }
-          })
-          .catch(err => {
-            logToConsole('error', `[Tauri Startup] Discovery revalidation failed: ${err.message || err.toString()}`);
-          });
-        }
-      }
-      
-      checkForUpdates(false);
-    }
+      const reconcileTauriVersionGate = async () => {
+        try {
+          const currentVersion = await getVersion();
+          const storedVersion = localStorage.getItem(TAURI_APP_VERSION_KEY);
+          setAppVersion(currentVersion);
 
-    // Fetch app version dynamically from tauri.conf.json
-    if (isTauriClient()) {
-      getVersion().then(setAppVersion).catch(() => setAppVersion('0.0.1'));
+          if (storedVersion !== currentVersion) {
+            logToConsole(
+              'info',
+              `[Tauri Startup] App version changed from "${storedVersion || 'untracked'}" to "${currentVersion}". Resetting workspace setup.`
+            );
+            clearTauriWorkspaceSession();
+            localStorage.setItem(TAURI_APP_VERSION_KEY, currentVersion);
+            setToken(null);
+            setUser(null);
+            setLoginForm({ companyCode: '', username: '', password: '' });
+            setShowTauriSetup(true);
+            return;
+          }
+
+          const code = localStorage.getItem('erp_company_code');
+          const url = localStorage.getItem('erp_server_url');
+
+          if (!code || !url) {
+            setShowTauriSetup(true);
+            return;
+          }
+
+          setLoginForm(prev => ({ ...prev, companyCode: code }));
+
+          if (code.toUpperCase() === 'SUPERADMIN') {
+            logToConsole('info', `[Tauri Startup] Bypassing discovery re-validation for static SUPERADMIN`);
+          } else {
+            logToConsole('info', `[Tauri Startup] Re-validating company code "${code}"...`);
+            const targetUrl = getDiscoveryServiceUrl();
+            console.log("=== DISCOVERY DEBUG (STARTUP VALIDATION) ===");
+            console.log("Discovery URL:", targetUrl);
+            console.log("Environment URL:", import.meta.env.VITE_DISCOVERY_SERVICE_URL);
+            console.log("=======================");
+            getActiveFetch()(targetUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ companyCode: code })
+            })
+            .then(res => {
+              if (!res.ok) throw new Error(`Discovery server returned status: ${res.status}`);
+              return res.json();
+            })
+            .then(data => {
+              if (data && data.success && data.serverUrl) {
+                if (data.serverUrl !== url) {
+                  localStorage.setItem('erp_server_url', data.serverUrl);
+                  logToConsole('info', `[Tauri Startup] Discovery URL updated from "${url}" to "${data.serverUrl}"`);
+                } else {
+                  logToConsole('info', `[Tauri Startup] Discovery URL verified active: "${data.serverUrl}"`);
+                }
+              } else {
+                logToConsole('warn', `[Tauri Startup] Discovery response was unsuccessful: ${JSON.stringify(data)}`);
+              }
+            })
+            .catch(err => {
+              logToConsole('error', `[Tauri Startup] Discovery revalidation failed: ${err.message || err.toString()}`);
+            });
+          }
+        } catch (err: any) {
+          setAppVersion('0.0.1');
+          logToConsole('error', `[Tauri Startup] Failed to read app version: ${err.message || err.toString()}`);
+          if (!localStorage.getItem('erp_company_code') || !localStorage.getItem('erp_server_url')) {
+            setShowTauriSetup(true);
+          }
+        } finally {
+          setTauriStartupChecked(true);
+        }
+      };
+
+      reconcileTauriVersionGate();
+      checkForUpdates(false);
     } else {
       setAppVersion('0.0.1');
+      setTauriStartupChecked(true);
     }
   }, []);
 
@@ -842,7 +900,7 @@ export default function App() {
 
   // --- FORM STATES ---
   // Login Form
-  const [loginForm, setLoginForm] = useState({ companyCode: '', username: '', password: '' });
+  const [loginForm, setLoginForm] = useState({ companyCode: getStoredTauriCompanyCode(), username: '', password: '' });
   // Signup Workflow Forms
   const [signupStep, setSignupStep] = useState<1 | 2 | 3>(1); // 1 = Details, 2 = OTP, 3 = Pending Approval
   const [signupVerificationMethod, setSignupVerificationMethod] = useState<'SMS' | 'EMAIL'>('SMS');
@@ -3610,7 +3668,17 @@ export default function App() {
       {/* ==========================================
           WORKSPACE AUTH VIEWPORTS (LOGIN & SIGNUP)
           ========================================== */}
-      {!user ? (
+      {isTauriClient() && !tauriStartupChecked ? (
+        <div className="flex-1 flex items-center justify-center p-6 min-h-screen">
+          <div className="w-full max-w-md bg-[var(--bg-card)] border border-[var(--border-color)] p-8 rounded-2xl shadow-xl text-center animate-fade-in">
+            <span className="text-[10px] font-bold text-indigo-500 tracking-wider uppercase">ERP Desktop Launcher</span>
+            <h2 className="text-xl font-bold text-[var(--text-primary)] mt-2 font-display">Preparing Workspace</h2>
+            <p className="text-[var(--text-secondary)] text-xs mt-2 leading-normal">
+              Checking the installed app version before opening your workspace.
+            </p>
+          </div>
+        </div>
+      ) : !user ? (
         <div className="flex-1 flex items-center justify-center p-6 min-h-screen">
           
           {/* Dynamic Background Glows */}
