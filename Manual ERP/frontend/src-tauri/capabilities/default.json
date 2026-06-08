@@ -13,7 +13,7 @@
       "identifier": "http:allow-fetch",
       "allow": [
         "http://localhost:5000/*",
-        "http://localhost:6000/*",
+        "http://localhost:6500/*",
         "http://localhost:6001/*",
         "https://clients3.google.com/*",
         "https://centeralservice.anbindustries.com/*",
@@ -25,7 +25,7 @@
       "identifier": "http:allow-fetch-send",
       "allow": [
         "http://localhost:5000/*",
-        "http://localhost:6000/*",
+        "http://localhost:6500/*",
         "http://localhost:6001/*",
         "https://clients3.google.com/*",
         "https://centeralservice.anbindustries.com/*",
@@ -37,7 +37,7 @@
       "identifier": "http:allow-fetch-read-body",
       "allow": [
         "http://localhost:5000/*",
-        "http://localhost:6000/*",
+        "http://localhost:6500/*",
         "http://localhost:6001/*",
         "https://clients3.google.com/*",
         "https://centeralservice.anbindustries.com/*",

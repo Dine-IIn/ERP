@@ -382,7 +382,7 @@ export default function App() {
       const errMsg = err.message || err.toString();
       logToConsole('error', `[Tauri Update Check Failed]: ${errMsg}`);
       try {
-        fetch('http://localhost:6000/api/updater/status', {
+        fetch('http://localhost:6500/api/updater/status', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -417,6 +417,35 @@ export default function App() {
       setUpdating(false);
     }
   };
+  // const handleInstallUpdate = async () => {
+  //   if (!updateManifest) return;
+
+  //   setUpdating(true);
+  //   setUpdateError(null);
+
+  //   try {
+  //     console.log("UPDATE MANIFEST:", updateManifest);
+
+  //     await updateManifest.downloadAndInstall();
+
+  //     console.log("INSTALL SUCCESS");
+
+  //     await invoke("restart_app");
+  //   } catch (err: any) {
+  //     console.error("FULL UPDATE ERROR:", err);
+
+  //     const msg =
+  //       typeof err === "string"
+  //         ? err
+  //         : JSON.stringify(err, null, 2);
+
+  //     alert(msg);
+
+  //     setUpdateError(msg);
+  //   } finally {
+  //     setUpdating(false);
+  //   }
+  // };
 
   const handleTauriReconnect = async () => {
     if (!isTauriClient()) return;

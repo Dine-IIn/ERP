@@ -12,7 +12,7 @@
       "env": {
         "NODE_ENV": "development",
         "PORT": 5000,
-        "CENTRAL_SERVICES_URL": "http://localhost:6000"
+        "CENTRAL_SERVICES_URL": "http://localhost:6500"
       },
       "env_production": {
         "NODE_ENV": "production",

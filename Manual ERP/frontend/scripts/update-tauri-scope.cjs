@@ -28,7 +28,7 @@ const allEnvs = [baseEnv, devEnv, prodEnv, process.env];
 // Base allowlist (always include localhosts and connectivity check domains)
 const baseAllow = [
   "http://localhost:5000/*",
-  "http://localhost:6000/*",
+  "http://localhost:6500/*",
   "http://localhost:6001/*",
   "https://clients3.google.com/*"
 ];
@@ -127,7 +127,7 @@ if (fs.existsSync(tauriConfPath)) {
     }
 
     if (finalEndpoints.length === 0) {
-      finalEndpoints.push("http://localhost:6000/api/updater/{{target}}/{{current_version}}");
+      finalEndpoints.push("http://localhost:6500/api/updater/{{target}}/{{current_version}}");
     }
 
     if (tauriConf.plugins && tauriConf.plugins.updater) {

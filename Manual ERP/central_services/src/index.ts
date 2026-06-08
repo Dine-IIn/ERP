@@ -103,13 +103,20 @@ function getLatestUpdateInfo(req: express.Request, type: 'tauri' | 'backend'): U
     }
 
     if (!latestFolder) {
+      console.log(`🔍 [Updater API] [Diagnostic] No update folder matched the criteria.`);
       return fallbackInfo;
     }
+
+    console.log(`🔍 [Updater API] [Diagnostic] Selected Update Folder: "${latestFolder}"`);
+    console.log(`🔍 [Updater API] [Diagnostic] Selected MSI File: "${msiFile}"`);
+    console.log(`🔍 [Updater API] [Diagnostic] Selected SIG File: "${sigFile}"`);
+    console.log(`🔍 [Updater API] [Diagnostic] Selected ZIP File: "${zipFile}"`);
 
     let tauriUpdateSignature = config.tauriUpdateSignature;
     if (sigFile) {
       try {
         tauriUpdateSignature = fs.readFileSync(path.join(targetFolder, sigFile), 'utf-8').trim();
+        console.log(`🔍 [Updater API] [Diagnostic] Loaded raw signature from file:\n${tauriUpdateSignature}`);
       } catch (err) {
         console.error(`Error reading signature file:`, err);
       }
@@ -118,6 +125,7 @@ function getLatestUpdateInfo(req: express.Request, type: 'tauri' | 'backend'): U
     if (tauriUpdateSignature && tauriUpdateSignature.startsWith('dW50cnVzdGVk')) {
       try {
         tauriUpdateSignature = Buffer.from(tauriUpdateSignature, 'base64').toString('utf-8').trim();
+        console.log(`🔍 [Updater API] [Diagnostic] Decoded base64 signature:\n${tauriUpdateSignature}`);
       } catch (err) {
         console.error(`Error decoding base64 signature:`, err);
       }
@@ -141,6 +149,9 @@ function getLatestUpdateInfo(req: express.Request, type: 'tauri' | 'backend'): U
 
     const tauriUrl = msiFile ? `${baseUrl}/updates/${latestFolder}/${msiFile}` : '';
     const downloadUrl = zipFile ? `${baseUrl}/updates/${latestFolder}/${zipFile}` : '';
+
+    console.log(`🔍 [Updater API] [Diagnostic] Generated tauriUrl: "${tauriUrl}"`);
+    console.log(`🔍 [Updater API] [Diagnostic] Generated downloadUrl: "${downloadUrl}"`);
 
     return {
       latestVersion,
@@ -500,6 +511,10 @@ app.get('/api/updater/:target/:version', (req, res) => {
   const { target, version } = req.params;
   const updateInfo = getLatestUpdateInfo(req, 'tauri');
   
+  console.log(`\n📥 [Updater API] [Diagnostic] Requested target: "${target}"`);
+  console.log(`📥 [Updater API] [Diagnostic] Current version: "${version}"`);
+  console.log(`📥 [Updater API] [Diagnostic] Detected latest version: "${updateInfo.latestVersion}"`);
+
   if (semverCompare(version, updateInfo.latestVersion) >= 0) {
     console.log(`📥 [Updater API] Client target "${target}" version "${version}" is up-to-date.`);
     return res.status(204).send(); // 204 No Content
@@ -507,18 +522,61 @@ app.get('/api/updater/:target/:version', (req, res) => {
 
   console.log(`📥 [Updater API] Client target "${target}" version "${version}" needs update to "${updateInfo.latestVersion}".`);
   
-  // Return official Tauri 2.0 updater JSON response structure
-  return res.json({
+  // Build platforms object
+  const platformsObj: any = {
+    [target]: {
+      signature: updateInfo.tauriUpdateSignature,
+      url: updateInfo.tauriUrl
+    }
+  };
+
+  // If target is windows, we must also add fallback platform keys expected by Windows Tauri clients
+  if (target.toLowerCase().includes('windows') || target.toLowerCase() === 'windows') {
+    platformsObj['windows-x86_64'] = {
+      signature: updateInfo.tauriUpdateSignature,
+      url: updateInfo.tauriUrl
+    };
+    platformsObj['windows-x86_64-msi'] = {
+      signature: updateInfo.tauriUpdateSignature,
+      url: updateInfo.tauriUrl
+    };
+  }
+
+  // Populate macOS fallbacks
+  if (target.toLowerCase().includes('darwin') || target.toLowerCase() === 'macos') {
+    platformsObj['darwin-x86_64'] = {
+      signature: updateInfo.tauriUpdateSignature,
+      url: updateInfo.tauriUrl
+    };
+    platformsObj['darwin-aarch64'] = {
+      signature: updateInfo.tauriUpdateSignature,
+      url: updateInfo.tauriUrl
+    };
+  }
+
+  // Populate Linux fallbacks
+  if (target.toLowerCase().includes('linux')) {
+    platformsObj['linux-x86_64'] = {
+      signature: updateInfo.tauriUpdateSignature,
+      url: updateInfo.tauriUrl
+    };
+    platformsObj['linux-aarch64'] = {
+      signature: updateInfo.tauriUpdateSignature,
+      url: updateInfo.tauriUrl
+    };
+  }
+
+  const responseJson = {
     version: updateInfo.latestVersion,
     notes: updateInfo.releaseNotes,
     pub_date: new Date().toISOString(),
-    platforms: {
-      [target]: {
-        signature: updateInfo.tauriUpdateSignature,
-        url: updateInfo.tauriUrl
-      }
-    }
-  });
+    platforms: platformsObj
+  };
+
+  console.log(`📥 [Updater API] [Diagnostic] Selected platform keys:`, Object.keys(platformsObj));
+  console.log(`📥 [Updater API] [Diagnostic] Returned JSON:\n`, JSON.stringify(responseJson, null, 2));
+
+  return res.json(responseJson);
 });
 
 // ==================================================
