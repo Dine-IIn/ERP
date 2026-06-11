@@ -45,7 +45,7 @@ export default function InventoryProducts({
   const [loading, setLoading] = useState(false);
 
   const openAdjModal = () => {
-    setProductId(products[0]?.id || '');
+    setProductId((products || [])[0]?.id || '');
     setAdjType('MANUAL_ADD');
     setQuantity('');
     setReason('');
@@ -56,8 +56,8 @@ export default function InventoryProducts({
 
   const openLocationModal = (p: Product) => {
     setSelectedProduct(p);
-    setReorderLevel(String(p.reorderLevel || 5));
-    setWarehouseLoc(p.warehouseLoc || '');
+    setReorderLevel(p?.reorderLevel !== undefined && p?.reorderLevel !== null ? String(p.reorderLevel) : '5.0');
+    setWarehouseLoc(p?.warehouseLoc || '');
     setLocalErr(null);
     setLocalSuccess(null);
     setShowLocationModal(true);
@@ -103,7 +103,7 @@ export default function InventoryProducts({
     setLoading(true);
 
     const payload = {
-      reorderLevel: parseFloat(reorderLevel) || 5.0,
+      reorderLevel: isNaN(parseFloat(reorderLevel)) ? 5.0 : parseFloat(reorderLevel),
       warehouseLoc: warehouseLoc.trim() || null
     };
 
@@ -120,11 +120,16 @@ export default function InventoryProducts({
     }
   };
 
-  const filteredProducts = products.filter(p =>
-    p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (p.warehouseLoc && p.warehouseLoc.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredProducts = (products || []).filter(p => {
+    if (!p) return false;
+    const name = p.name || '';
+    const sku = p.sku || '';
+    const warehouseLoc = p.warehouseLoc || '';
+    const term = (searchTerm || '').toLowerCase();
+    return name.toLowerCase().includes(term) ||
+      sku.toLowerCase().includes(term) ||
+      warehouseLoc.toLowerCase().includes(term);
+  });
 
   return (
     <div className="space-y-6">
@@ -263,8 +268,8 @@ export default function InventoryProducts({
                   required
                 >
                   <option value="" disabled>Select target item</option>
-                  {products.map(p => (
-                    <option key={p.id} value={p.id}>{p.name} (SKU: {p.sku})</option>
+                  {(products || []).map(p => (
+                    <option key={p.id} value={p.id}>{p.name || 'Unnamed Product'} (SKU: {p.sku || 'N/A'})</option>
                   ))}
                 </select>
               </div>

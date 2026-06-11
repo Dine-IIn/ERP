@@ -26,11 +26,15 @@ export default function Cashbook({
 }: CashbookProps) {
   const [searchTerm, setSearchTerm] = useState('');
 
-  const filteredVouchers = vouchers.filter(v =>
-    v.voucherNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    v.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (v.referenceNo && v.referenceNo.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredVouchers = (vouchers || []).filter(v => {
+    const voucherNo = v?.voucherNo || '';
+    const description = v?.description || '';
+    const referenceNo = v?.referenceNo || '';
+    const term = (searchTerm || '').toLowerCase();
+    return voucherNo.toLowerCase().includes(term) ||
+      description.toLowerCase().includes(term) ||
+      referenceNo.toLowerCase().includes(term);
+  });
 
   // Inwards vs Outwards Totals
   const totalInward = vouchers

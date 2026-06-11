@@ -25,18 +25,26 @@ export default function CompleteInventoryView({ products = [] }: CompleteInvento
 
   // Compute Categories list
   const categories = Array.from(
-    new Set(products.map(p => p.category?.name).filter(Boolean))
+    new Set((products || []).map(p => p?.category?.name).filter(Boolean))
   ) as string[];
 
   // Filter products
-  const filteredProducts = products.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (p.sku && p.sku.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (p.warehouseLoc && p.warehouseLoc.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredProducts = (products || []).filter(p => {
+    if (!p) return false;
+    const name = p.name || '';
+    const sku = p.sku || '';
+    const warehouseLoc = p.warehouseLoc || '';
+    const term = (searchTerm || '').toLowerCase();
+
+    const matchesSearch = name.toLowerCase().includes(term) ||
+      sku.toLowerCase().includes(term) ||
+      warehouseLoc.toLowerCase().includes(term);
 
     const matchesCategory = categoryFilter === 'ALL' || p.category?.name === categoryFilter;
 
-    const isLow = p.stock <= p.reorderLevel;
+    const stock = p.stock || 0;
+    const reorderLevel = p.reorderLevel || 0;
+    const isLow = stock <= reorderLevel;
     const matchesStatus = statusFilter === 'ALL' ||
       (statusFilter === 'LOW' && isLow) ||
       (statusFilter === 'SAFE' && !isLow);
@@ -45,10 +53,10 @@ export default function CompleteInventoryView({ products = [] }: CompleteInvento
   });
 
   // Calculate high-level summary cards stats
-  const totalProducts = products.length;
-  const totalStockItems = products.reduce((sum, p) => sum + Math.max(0, p.stock), 0);
-  const totalValuation = products.reduce((sum, p) => sum + (Math.max(0, p.stock) * p.pricing), 0);
-  const criticalItemsCount = products.filter(p => p.stock <= p.reorderLevel).length;
+  const totalProducts = (products || []).length;
+  const totalStockItems = (products || []).reduce((sum, p) => sum + Math.max(0, p?.stock || 0), 0);
+  const totalValuation = (products || []).reduce((sum, p) => sum + (Math.max(0, p?.stock || 0) * (p?.pricing || 0)), 0);
+  const criticalItemsCount = (products || []).filter(p => (p?.stock || 0) <= (p?.reorderLevel || 0)).length;
 
   return (
     <div className="space-y-6">
@@ -181,25 +189,27 @@ export default function CompleteInventoryView({ products = [] }: CompleteInvento
                   <th className="py-3.5 px-5">Status Alert</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/50">
-                {filteredProducts.map((p) => {
-                  const isLow = p.stock <= p.reorderLevel;
-                  const totalVal = Math.max(0, p.stock) * p.pricing;
-                  const ratio = p.reorderLevel > 0 ? (p.stock / p.reorderLevel) * 100 : 100;
+              <tbody className="divide-y divide-slate-800/50">                {filteredProducts.map((p) => {
+                  const stock = p.stock || 0;
+                  const reorderLevel = p.reorderLevel || 0;
+                  const pricing = p.pricing || 0;
+                  const isLow = stock <= reorderLevel;
+                  const totalVal = Math.max(0, stock) * pricing;
+                  const ratio = reorderLevel > 0 ? (stock / reorderLevel) * 100 : 100;
                   
                   return (
                     <tr key={p.id} className="hover:bg-slate-800/15 transition-colors">
-                      <td className="py-4 px-5">
-                        <span className="font-bold text-white block truncate max-w-xs">{p.name}</span>
-                        <span className="text-[9px] font-mono text-slate-500 mt-0.5 block">{p.sku || p.id.slice(0, 8).toUpperCase()}</span>
+                       <td className="py-4 px-5">
+                        <span className="font-bold text-white block truncate max-w-xs">{p.name || 'Unnamed Product'}</span>
+                        <span className="text-[9px] font-mono text-slate-500 mt-0.5 block">{p.sku || p.id?.slice(0, 8).toUpperCase() || 'N/A'}</span>
                       </td>
                       <td className="py-4 px-5">
                         <span className="px-2 py-0.5 rounded text-[8px] font-bold tracking-wider inline-block bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 uppercase">
                           {p.category?.name || 'N/A'}
                         </span>
                         {p.brand && (
-                          <span className="px-2 py-0.5 rounded text-[8px] font-bold tracking-wider inline-block bg-slate-800 text-slate-450 border border-slate-700 uppercase ml-1.5">
-                            {p.brand.name}
+                          <span className="px-2 py-0.5 rounded text-[8px] font-bold tracking-wider inline-block bg-slate-800 text-slate-455 border border-slate-700 uppercase ml-1.5">
+                            {p.brand?.name || 'N/A'}
                           </span>
                         )}
                       </td>
@@ -209,17 +219,17 @@ export default function CompleteInventoryView({ products = [] }: CompleteInvento
                         </span>
                       </td>
                       <td className="py-4 px-5 font-mono text-white text-sm font-extrabold">
-                        {p.stock} <span className="text-[10px] text-slate-450 uppercase font-sans font-medium">{p.uom}</span>
+                        {stock} <span className="text-[10px] text-slate-450 uppercase font-sans font-medium">{p.uom || 'PCS'}</span>
                       </td>
                       <td className="py-4 px-5 font-mono text-slate-400 text-xs">
-                        {p.reorderLevel} <span className="text-[9px] text-slate-500 uppercase font-sans font-medium">{p.uom}</span>
+                        {reorderLevel} <span className="text-[9px] text-slate-500 uppercase font-sans font-medium">{p.uom || 'PCS'}</span>
                       </td>
                       <td className="py-4 px-5 font-mono text-slate-300">
-                        ₹{p.pricing.toFixed(2)}
+                        ₹{pricing.toFixed(2)}
                       </td>
                       <td className="py-4 px-5 font-mono text-emerald-400 font-bold text-sm">
                         ₹{totalVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
+                      </td> </td>
                       <td className="py-4 px-5">
                         {isLow ? (
                           <div className="flex items-center gap-1.5">

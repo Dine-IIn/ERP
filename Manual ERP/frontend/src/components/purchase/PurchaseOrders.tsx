@@ -212,10 +212,13 @@ export default function PurchaseOrders({
     }
   };
 
-  const filteredOrders = orders.filter(o =>
-    o.poNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    o.vendor.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredOrders = (orders || []).filter(o => {
+    const poNo = o?.poNo || '';
+    const vendorName = o?.vendor?.name || '';
+    const term = (searchTerm || '').toLowerCase();
+    return poNo.toLowerCase().includes(term) ||
+      vendorName.toLowerCase().includes(term);
+  });
 
   return (
     <div className="space-y-6">

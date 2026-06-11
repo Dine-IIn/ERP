@@ -74,11 +74,15 @@ export default function Payments({
     }
   };
 
-  const filteredPayments = payments.filter(p =>
-    p.paymentNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.vendor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (p.referenceNo && p.referenceNo.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredPayments = (payments || []).filter(p => {
+    const paymentNo = p?.paymentNo || '';
+    const vendorName = p?.vendor?.name || '';
+    const referenceNo = p?.referenceNo || '';
+    const term = (searchTerm || '').toLowerCase();
+    return paymentNo.toLowerCase().includes(term) ||
+      vendorName.toLowerCase().includes(term) ||
+      referenceNo.toLowerCase().includes(term);
+  });
 
   return (
     <div className="space-y-6">

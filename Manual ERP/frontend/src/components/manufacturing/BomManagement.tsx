@@ -321,10 +321,14 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
     }, 0);
   };
 
-  const filteredBOMs = bomsList.filter(bom => {
-    const matchesSearch = bom.finishedProductName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      bom.finishedProductCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      bom.version.toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredBOMs = (bomsList || []).filter(bom => {
+    const finishedProductName = bom?.finishedProductName || '';
+    const finishedProductCode = bom?.finishedProductCode || '';
+    const version = bom?.version || '';
+    const term = (searchTerm || '').toLowerCase();
+    const matchesSearch = finishedProductName.toLowerCase().includes(term) ||
+      finishedProductCode.toLowerCase().includes(term) ||
+      version.toLowerCase().includes(term);
     const matchesStatus = statusFilter === 'ALL' || bom.status === statusFilter;
     return matchesSearch && matchesStatus;
   });

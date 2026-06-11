@@ -139,12 +139,18 @@ export default function PostSalesService({
     }
   };
 
-  const filteredTickets = tickets.filter(t =>
-    t.ticketNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    t.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    t.customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    t.product.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredTickets = (tickets || []).filter(t => {
+    const ticketNo = t?.ticketNo || '';
+    const title = t?.title || '';
+    const customerName = t?.customer?.name || '';
+    const productName = t?.product?.name || '';
+    const term = (searchTerm || '').toLowerCase();
+    
+    return ticketNo.toLowerCase().includes(term) ||
+      title.toLowerCase().includes(term) ||
+      customerName.toLowerCase().includes(term) ||
+      productName.toLowerCase().includes(term);
+  });
 
   const getPriorityStyle = (p: string) => {
     switch (p) {

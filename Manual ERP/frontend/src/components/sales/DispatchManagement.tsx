@@ -112,13 +112,20 @@ export default function DispatchManagement({
     }
   };
 
-  const filtered = dispatches.filter(disp =>
-    disp.dispatchNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (disp.order?.orderNo || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (disp.order?.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (disp.carrier || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    disp.status.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filtered = (dispatches || []).filter(disp => {
+    const dispatchNo = disp?.dispatchNo || '';
+    const orderNo = disp?.order?.orderNo || '';
+    const customerName = disp?.order?.customer?.name || '';
+    const carrierName = disp?.carrier || '';
+    const statusVal = disp?.status || '';
+    const term = (searchTerm || '').toLowerCase();
+    
+    return dispatchNo.toLowerCase().includes(term) ||
+      orderNo.toLowerCase().includes(term) ||
+      customerName.toLowerCase().includes(term) ||
+      carrierName.toLowerCase().includes(term) ||
+      statusVal.toLowerCase().includes(term);
+  });
 
   return (
     <div className="animate-fade-in flex flex-col gap-4 text-left select-none">

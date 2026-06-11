@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CalendarRange, Plus, Check, X, AlertCircle, CheckCircle2, User, FileText, ChevronRight, MessageSquare } from 'lucide-react';
+import { CalendarRange, Plus, Check, X, AlertCircle, CheckCircle2, User, FileText, ChevronRight, MessageSquare, Search } from 'lucide-react';
 
 interface LeaveRequest {
   id: string;
@@ -43,8 +43,28 @@ export default function LeaveManagement({
   const [localErr, setLocalErr] = useState<string | null>(null);
   const [localSuccess, setLocalSuccess] = useState<string | null>(null);
 
-  const myRequests = leaveRequests.filter(l => l.userId === currentUser.id);
-  const pendingRequests = leaveRequests.filter(l => l.status === "PENDING" && l.userId !== currentUser.id);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const myRequests = (leaveRequests || [])
+    .filter(l => l.userId === currentUser.id)
+    .filter(l => {
+      const type = l?.type || '';
+      const reason = l?.reason || '';
+      const term = (searchTerm || '').toLowerCase();
+      return type.toLowerCase().includes(term) || reason.toLowerCase().includes(term);
+    });
+
+  const pendingRequests = (leaveRequests || [])
+    .filter(l => l.status === "PENDING" && l.userId !== currentUser.id)
+    .filter(l => {
+      const username = l?.user?.username || '';
+      const type = l?.type || '';
+      const reason = l?.reason || '';
+      const term = (searchTerm || '').toLowerCase();
+      return username.toLowerCase().includes(term) ||
+        type.toLowerCase().includes(term) ||
+        reason.toLowerCase().includes(term);
+    });
 
   const handleApply = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -153,8 +173,18 @@ export default function LeaveManagement({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left/Middle: My Leaves List */}
         <div className="lg:col-span-2 bg-slate-900/35 border border-slate-800/80 backdrop-blur-xl rounded-2xl overflow-hidden">
-          <div className="p-4 border-b border-slate-800/60 bg-slate-950/20">
+          <div className="p-4 border-b border-slate-800/60 bg-slate-950/20 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <h3 className="text-sm font-bold text-white flex items-center gap-1.5">My Leave Applications</h3>
+            <div className="relative max-w-xs w-full">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+              <input
+                type="text"
+                placeholder="Search leaves by reason or type..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 bg-slate-950/40 border border-slate-850 rounded-xl text-white text-xs outline-none focus:border-indigo-500 transition-all"
+              />
+            </div>
           </div>
 
           <div className="overflow-x-auto">

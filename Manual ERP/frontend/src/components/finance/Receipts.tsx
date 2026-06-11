@@ -71,11 +71,15 @@ export default function Receipts({
     }
   };
 
-  const filteredReceipts = receipts.filter(r =>
-    r.payerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    r.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (r.referenceNo && r.referenceNo.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredReceipts = (receipts || []).filter(r => {
+    const payerName = r?.payerName || '';
+    const category = r?.category || '';
+    const referenceNo = r?.referenceNo || '';
+    const term = (searchTerm || '').toLowerCase();
+    return payerName.toLowerCase().includes(term) ||
+      category.toLowerCase().includes(term) ||
+      referenceNo.toLowerCase().includes(term);
+  });
 
   return (
     <div className="space-y-6">

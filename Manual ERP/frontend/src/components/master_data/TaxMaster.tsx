@@ -265,6 +265,7 @@ export default function TaxMaster({
                     className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white outline-none focus:border-emerald-500 transition-all text-sm"
                   >
                     <option value="GST">GST (General)</option>
+                    <option value="CGST_SGST">CGST + SGST (Dual Split)</option>
                     <option value="CGST">CGST (Central GST)</option>
                     <option value="SGST">SGST (State GST)</option>
                     <option value="IGST">IGST (Integrated GST)</option>
@@ -273,6 +274,8 @@ export default function TaxMaster({
                     <option value="VAT">VAT (Value Added Tax)</option>
                     <option value="TDS">TDS (Tax Deducted at Source)</option>
                     <option value="TCS">TCS (Tax Collected at Source)</option>
+                    <option value="GST_EXEMPT">GST Exempt (0%)</option>
+                    <option value="CUSTOMS_DUTY">Import Customs Duty</option>
                     <option value="SALES_TAX">Sales Tax</option>
                     <option value="SERVICE_TAX">Service Tax</option>
                   </select>

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Truck, Search, Plus, Edit, Trash2, X, AlertCircle, Calendar, CheckCircle2, Mail, Download, Package } from 'lucide-react';
+import { apiClient } from '../../utils/apiService';
 
 interface DeliveryChallanProps {
   challans: any[];
@@ -32,6 +33,21 @@ export default function DeliveryChallan({
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
+  const [companyProfile, setCompanyProfile] = useState<any>(null);
+
+  React.useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const res = await apiClient.get<any>('/api/admin/company/profile');
+        setCompanyProfile(res.company || null);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    fetchProfile();
+  }, []);
 
   const [customerId, setCustomerId] = useState('');
   const [status, setStatus] = useState('ISSUED');
@@ -165,20 +181,60 @@ export default function DeliveryChallan({
 
   const handleDownloadPDF = (dc: any) => {
     const cust = customers.find(c => c.id === dc.customerId);
+    
+    // Load custom template if selected
+    let tpl: any = null;
+    if (selectedTemplateId) {
+      try {
+        const saved = localStorage.getItem('erp_pdf_templates');
+        if (saved) {
+          const templates = JSON.parse(saved);
+          tpl = templates.find((t: any) => t.id === selectedTemplateId);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    const title = tpl?.title || 'DELIVERY CHALLAN';
+    const headerName = tpl?.headerName || companyProfile?.name || 'ANB INDUSTRIES PRIVATE LIMITED';
+    const headerSubtitle = tpl?.headerSubtitle || 'Consignment Gate Pass & Delivery Memo';
+    const terms = tpl?.terms || '1. Please receive the goods in sound physical condition.\n2. Return duplicate copy duly signed and stamped.';
+    const themeColor = tpl?.themeColor || 'emerald';
+    
+    const showLogo = tpl?.showLogo ?? true;
+    const showCompanyDetails = tpl?.showCompanyDetails ?? true;
+    const showBillingAddress = tpl?.showBillingAddress ?? true;
+    const showShippingAddress = tpl?.showShippingAddress ?? true;
+    const showTerms = tpl?.showTerms ?? true;
+    
+    const colProductCode = tpl?.colProductCode ?? true;
+
+    const getThemeHex = (colorName: string) => {
+      switch (colorName) {
+        case 'emerald': return '#10b981';
+        case 'rose': return '#f43f5e';
+        case 'amber': return '#f59e0b';
+        case 'slate': return '#64748b';
+        default: return '#6366f1'; // indigo
+      }
+    };
+    const currentThemeHex = getThemeHex(themeColor);
+
     const docHtml = `
       <html>
         <head>
-          <title>Delivery Challan - ${dc.challanNo}</title>
+          <title>${title} - ${dc.challanNo}</title>
           <style>
             body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #333; padding: 40px; background: #fff; }
-            .header { display: flex; justify-content: space-between; border-bottom: 2px solid #6366f1; padding-bottom: 20px; margin-bottom: 30px; }
-            .title { font-size: 24px; font-weight: bold; color: #6366f1; text-transform: uppercase; }
+            .header { display: flex; justify-content: space-between; border-bottom: 2px solid ${currentThemeHex}; padding-bottom: 20px; margin-bottom: 30px; }
+            .title { font-size: 24px; font-weight: bold; color: ${currentThemeHex}; text-transform: uppercase; }
             .meta { font-size: 11px; text-align: right; color: #555; }
             .section { margin-bottom: 25px; }
-            .section-title { font-size: 12px; font-weight: bold; text-transform: uppercase; color: #6366f1; border-bottom: 1px solid #eee; padding-bottom: 4px; margin-bottom: 8px; }
+            .section-title { font-size: 12px; font-weight: bold; text-transform: uppercase; color: ${currentThemeHex}; border-bottom: 1px solid #eee; padding-bottom: 4px; margin-bottom: 8px; }
             .client-details { font-size: 12px; line-height: 1.5; }
             table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-            th { background: #f8fafc; border-bottom: 2px solid #e2e8f0; color: #475569; font-weight: bold; font-size: 11px; text-transform: uppercase; padding: 10px; text-align: left; }
+            th { background: #f8fafc; border-bottom: 2px solid ${currentThemeHex}; color: #475569; font-weight: bold; font-size: 11px; text-transform: uppercase; padding: 10px; text-align: left; }
             td { padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 12px; color: #334155; }
             .footer { margin-top: 50px; border-top: 1px solid #eee; padding-top: 15px; font-size: 10px; text-align: center; color: #94a3b8; }
             .sign-box { display: flex; justify-content: space-between; margin-top: 80px; font-size: 11px; color: #475569; }
@@ -188,24 +244,46 @@ export default function DeliveryChallan({
         <body>
           <div class="header">
             <div>
-              <div class="title">Delivery Challan</div>
+              ${showLogo && companyProfile?.logoUrl ? `<img src="${companyProfile.logoUrl}" alt="Logo" style="max-height: 40px; margin-bottom: 8px;" />` : ''}
+              <div class="title">${title}</div>
               <div style="font-size: 12px; color: #64748b; font-weight: bold; margin-top: 5px;">${dc.challanNo}</div>
             </div>
             <div class="meta">
+              ${showCompanyDetails && companyProfile ? `
+                <div style="margin-bottom: 8px; font-size: 10px; color: #475569;">
+                  <strong>${headerName}</strong><br/>
+                  ${headerSubtitle}<br/>
+                  ${companyProfile.addressLine1 || ''} ${companyProfile.city || ''}<br/>
+                </div>
+              ` : ''}
               <div>Challan Date: ${new Date(dc.date).toLocaleDateString()}</div>
               <div>Status: <strong>${dc.status}</strong></div>
             </div>
           </div>
           
-          <div class="section">
-            <div class="section-title">Shipping Recipient</div>
-            <div class="client-details">
-              <strong>${cust?.name || 'Customer Profile'}</strong><br/>
-              Classification: ${cust?.clientClassification || 'NATIONAL'}<br/>
-              Mobile No: ${cust?.mobileNo || 'N/A'}<br/>
-              Shipping Destination Address:<br/>
-              <strong>${cust?.shippingAddress || cust?.billingAddress || 'N/A'}</strong>
-            </div>
+          <div style="display: flex; gap: 40px; margin-bottom: 20px;">
+            ${showBillingAddress ? `
+              <div class="section" style="flex: 1;">
+                <div class="section-title">Billing Corporate Recipient</div>
+                <div class="client-details">
+                  <strong>${cust?.name || 'Customer Profile'}</strong><br/>
+                  Classification: ${cust?.clientClassification || 'NATIONAL'}<br/>
+                  Billing Destination: ${cust?.billingAddress || 'N/A'}
+                </div>
+              </div>
+            ` : ''}
+
+            ${showShippingAddress ? `
+              <div class="section" style="flex: 1;">
+                <div class="section-title">Shipping Delivery Destination</div>
+                <div class="client-details">
+                  <strong>${cust?.name || 'Customer Profile'}</strong><br/>
+                  Mobile No: ${cust?.mobileNo || 'N/A'}<br/>
+                  Shipping Destination Address:<br/>
+                  <strong>${cust?.shippingAddress || cust?.billingAddress || 'N/A'}</strong>
+                </div>
+              </div>
+            ` : ''}
           </div>
 
           <div class="section">
@@ -214,6 +292,7 @@ export default function DeliveryChallan({
               <thead>
                 <tr>
                   <th>Stock Product Item</th>
+                  ${colProductCode ? `<th>SKU / Code</th>` : ''}
                   <th style="text-align: right;">Quantity Shipped</th>
                   <th style="text-align: right;">Assumed Unit Value</th>
                   <th style="text-align: right;">Declared Subtotal</th>
@@ -227,6 +306,7 @@ export default function DeliveryChallan({
                   return `
                     <tr>
                       <td><strong>${prod?.name || 'Stock Item'}</strong></td>
+                      ${colProductCode ? `<td>${prod?.sku || 'N/A'}</td>` : ''}
                       <td style="text-align: right;">${it.quantity}</td>
                       <td style="text-align: right;">${currencySymbol}${itemVal.toFixed(2)}</td>
                       <td style="text-align: right;">${currencySymbol}${sub.toFixed(2)}</td>
@@ -242,9 +322,12 @@ export default function DeliveryChallan({
             <div class="sign-line">Recipient / Customer Signature</div>
           </div>
 
-          <div class="footer">
-            Generated via Dine-IIn ERP Consolidated Sales Console. This Challan must accompany the stock materials during active transit.
-          </div>
+          ${showTerms && terms ? `
+            <div class="footer">
+              <strong style="display: block; margin-bottom: 5px; color: #475569;">Declarations & Terms</strong>
+              ${terms.split('\n').map(line => `<div>${line}</div>`).join('')}
+            </div>
+          ` : ''}
           <script>
             window.onload = function() {
               window.print();
@@ -282,6 +365,31 @@ export default function DeliveryChallan({
         </div>
 
         <div className="flex items-center gap-3 w-full md:w-auto shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0 bg-slate-900/30 border border-[var(--border-color)] px-2.5 py-1.5 rounded-xl">
+            <span className="text-[10px] text-[var(--text-secondary)] font-semibold uppercase">Template:</span>
+            <select
+              value={selectedTemplateId}
+              onChange={e => setSelectedTemplateId(e.target.value)}
+              className="bg-transparent text-[var(--text-primary)] text-xs border-0 outline-none cursor-pointer pr-4 font-semibold"
+            >
+              <option value="" className="bg-slate-950">-- Default --</option>
+              {(() => {
+                const saved = localStorage.getItem('erp_pdf_templates');
+                if (!saved) return null;
+                try {
+                  const templates = JSON.parse(saved);
+                  return templates
+                    .filter((t: any) => t.type === 'CHALLAN')
+                    .map((t: any) => (
+                      <option key={t.id} value={t.id} className="bg-slate-950">{t.name}</option>
+                    ));
+                } catch (e) {
+                  return null;
+                }
+              })()}
+            </select>
+          </div>
+
           <div className="relative flex-1 md:w-64">
             <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
             <input

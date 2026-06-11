@@ -162,15 +162,22 @@ const EmployeeMaster = React.memo(function EmployeeMaster({
   // Filter manager dropdown options to exclude the active employee themselves
   const potentialManagers = companyUsers.filter(u => u.id !== editingAdminUserId);
 
-  const filteredEmployees = companyUsers.filter(emp => {
-    const roleName = getRoleName(emp.roleId).toLowerCase();
-    const deptName = getDeptName(emp.departmentId).toLowerCase();
-    const matchesSearch = emp.username.toLowerCase().includes(employeeSearch.toLowerCase()) ||
-      (emp.email || '').toLowerCase().includes(employeeSearch.toLowerCase()) ||
-      (emp.mobileNo || '').toLowerCase().includes(employeeSearch.toLowerCase()) ||
-      roleName.includes(employeeSearch.toLowerCase()) ||
-      deptName.includes(employeeSearch.toLowerCase());
-    const matchesDept = departmentFilter === 'ALL' || emp.departmentId === departmentFilter;
+  const filteredEmployees = (companyUsers || []).filter(emp => {
+    const username = emp?.username || '';
+    const email = emp?.email || '';
+    const mobileNo = emp?.mobileNo || '';
+    const roleId = emp?.roleId || '';
+    const departmentId = emp?.departmentId || '';
+    const roleName = getRoleName(roleId).toLowerCase();
+    const deptName = getDeptName(departmentId).toLowerCase();
+    const term = (employeeSearch || '').toLowerCase();
+    
+    const matchesSearch = username.toLowerCase().includes(term) ||
+      email.toLowerCase().includes(term) ||
+      mobileNo.toLowerCase().includes(term) ||
+      roleName.includes(term) ||
+      deptName.includes(term);
+    const matchesDept = departmentFilter === 'ALL' || departmentId === departmentFilter;
     return matchesSearch && matchesDept;
   });
 

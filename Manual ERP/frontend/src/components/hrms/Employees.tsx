@@ -100,13 +100,19 @@ export default function Employees({
     }
   };
 
-  const filteredEmployees = employees.filter(emp =>
-    emp.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (emp.email && emp.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    emp.mobileNo.includes(searchTerm) ||
-    (emp.role?.name && emp.role.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (emp.department?.name && emp.department.name.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredEmployees = (employees || []).filter(emp => {
+    const username = emp?.username || '';
+    const email = emp?.email || '';
+    const mobileNo = emp?.mobileNo || '';
+    const roleName = emp?.role?.name || '';
+    const deptName = emp?.department?.name || '';
+    const term = (searchTerm || '').toLowerCase();
+    return username.toLowerCase().includes(term) ||
+      email.toLowerCase().includes(term) ||
+      mobileNo.toLowerCase().includes(term) ||
+      roleName.toLowerCase().includes(term) ||
+      deptName.toLowerCase().includes(term);
+  });
 
   return (
     <div className="space-y-6">

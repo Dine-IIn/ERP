@@ -26,11 +26,18 @@ export default function StockOverview({
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('');
 
-  const filteredAdjustments = adjustments.filter(adj => {
-    const matchesSearch = adj.product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      adj.adjustmentNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (adj.reason && adj.reason.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (adj.referenceNo && adj.referenceNo.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredAdjustments = (adjustments || []).filter(adj => {
+    if (!adj) return false;
+    const productName = adj.product?.name || '';
+    const adjNo = adj.adjustmentNo || '';
+    const reason = adj.reason || '';
+    const refNo = adj.referenceNo || '';
+    const term = (searchTerm || '').toLowerCase();
+
+    const matchesSearch = productName.toLowerCase().includes(term) ||
+      adjNo.toLowerCase().includes(term) ||
+      reason.toLowerCase().includes(term) ||
+      refNo.toLowerCase().includes(term);
 
     const matchesType = filterType ? adj.type === filterType : true;
 
@@ -123,12 +130,12 @@ export default function StockOverview({
                   const isInward = adj.quantity > 0;
                   return (
                     <tr key={adj.id} className="hover:bg-slate-800/20 transition-colors">
-                      <td className="py-4 px-6 font-bold text-white">{adj.adjustmentNo}</td>
-                      <td className="py-4 px-6 font-semibold font-sans text-slate-200 text-sm">{adj.product.name}</td>
-                      <td className="py-4 px-6 text-slate-350">{new Date(adj.date).toLocaleString()}</td>
+                      <td className="py-4 px-6 font-bold text-white">{adj.adjustmentNo || 'N/A'}</td>
+                      <td className="py-4 px-6 font-semibold font-sans text-slate-200 text-sm">{adj.product?.name || 'Unnamed Product'}</td>
+                      <td className="py-4 px-6 text-slate-350">{adj.date ? new Date(adj.date).toLocaleString() : 'N/A'}</td>
                       <td className="py-4 px-6">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 font-bold rounded-full border ${getTypeStyle(adj.type)}`}>
-                          {adj.type.replace('_', ' ')}
+                        <span className={`inline-flex items-center px-2.5 py-0.5 font-bold rounded-full border ${getTypeStyle(adj.type || '')}`}>
+                          {(adj.type || '').replace('_', ' ')}
                         </span>
                       </td>
                       <td className={`py-4 px-6 font-bold text-sm ${isInward ? 'text-emerald-450' : 'text-red-400'}`}>
@@ -138,11 +145,11 @@ export default function StockOverview({
                           ) : (
                             <ArrowDownLeft className="w-3.5 h-3.5 flex-shrink-0 text-red-450" />
                           )}
-                          <span>{isInward ? '+' : ''}{formatNumber(adj.quantity)} <span className="text-[10px] text-slate-500 font-normal">{adj.product.uom}</span></span>
+                          <span>{isInward ? '+' : ''}{formatNumber(adj.quantity || 0)} <span className="text-[10px] text-slate-500 font-normal">{adj.product?.uom || 'PCS'}</span></span>
                         </div>
                       </td>
                       <td className="py-4 px-6 text-slate-400">
-                        {formatNumber(adj.previousStock)} <span className="text-[10px] text-slate-600">to</span> <span className="text-white font-bold">{formatNumber(adj.newStock)}</span>
+                        {formatNumber(adj.previousStock || 0)} <span className="text-[10px] text-slate-600">to</span> <span className="text-white font-bold">{formatNumber(adj.newStock || 0)}</span>
                       </td>
                       <td className="py-4 px-6 max-w-xs font-sans text-slate-400">
                         {adj.reason && (

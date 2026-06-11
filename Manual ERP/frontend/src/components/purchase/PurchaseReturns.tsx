@@ -155,10 +155,13 @@ export default function PurchaseReturns({
     }
   };
 
-  const filteredReturns = returns.filter(r =>
-    r.returnNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    r.purchaseOrder.poNo.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredReturns = (returns || []).filter(r => {
+    const returnNo = r?.returnNo || '';
+    const poNo = r?.purchaseOrder?.poNo || '';
+    const term = (searchTerm || '').toLowerCase();
+    return returnNo.toLowerCase().includes(term) ||
+      poNo.toLowerCase().includes(term);
+  });
 
   return (
     <div className="space-y-6">

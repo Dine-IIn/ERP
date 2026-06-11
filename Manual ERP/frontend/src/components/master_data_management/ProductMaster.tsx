@@ -248,13 +248,20 @@ export default function ProductMaster({
   const getCategoryName = (id: string) => categories.find(c => c.id === id)?.name || '';
   const getBrandName = (id: string) => brands.find(b => b.id === id)?.name || '';
 
-  const filtered = products.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (p.hsnSacCode && p.hsnSacCode.includes(searchTerm)) ||
-      (p.category && p.category.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (p.brand && p.brand.name.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesCategory = categoryFilter === '' || p.categoryId === categoryFilter;
-    const matchesBrand = brandFilter === '' || p.brandId === brandFilter;
+  const filtered = (products || []).filter(p => {
+    const name = p?.name || '';
+    const hsn = p?.hsnSacCode || '';
+    const catName = p?.category?.name || '';
+    const brandName = p?.brand?.name || '';
+    const term = (searchTerm || '').toLowerCase();
+
+    const matchesSearch = name.toLowerCase().includes(term) ||
+      hsn.includes(term) ||
+      catName.toLowerCase().includes(term) ||
+      brandName.toLowerCase().includes(term);
+
+    const matchesCategory = categoryFilter === '' || p?.categoryId === categoryFilter;
+    const matchesBrand = brandFilter === '' || p?.brandId === brandFilter;
     return matchesSearch && matchesCategory && matchesBrand;
   });
 

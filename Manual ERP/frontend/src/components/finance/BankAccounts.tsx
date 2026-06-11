@@ -71,11 +71,15 @@ export default function BankAccounts({
     }
   };
 
-  const filteredAccounts = bankAccounts.filter(acc =>
-    acc.bankName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    acc.accountNo.includes(searchTerm) ||
-    acc.ifscCode.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredAccounts = (bankAccounts || []).filter(acc => {
+    const bankName = acc?.bankName || '';
+    const accountNo = acc?.accountNo || '';
+    const ifscCode = acc?.ifscCode || '';
+    const term = (searchTerm || '').toLowerCase();
+    return bankName.toLowerCase().includes(term) ||
+      accountNo.toLowerCase().includes(term) ||
+      ifscCode.toLowerCase().includes(term);
+  });
 
   const totalBankAssets = filteredAccounts.reduce((sum, acc) => sum + acc.balance, 0.0);
 

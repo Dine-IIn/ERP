@@ -140,13 +140,19 @@ export default function CustomerMaster({
     new Set(customers.map(c => c.customerGroup).filter(Boolean))
   ) as string[];
 
-  const filtered = customers.filter(c => {
-    const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.contactNo.includes(searchTerm) ||
-      (c.email && c.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (c.contactPerson && c.contactPerson.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filtered = (customers || []).filter(c => {
+    const name = c?.name || '';
+    const contactNo = c?.contactNo || '';
+    const email = c?.email || '';
+    const contactPerson = c?.contactPerson || '';
+    const term = (searchTerm || '').toLowerCase();
     
-    const matchesGroup = customerGroupFilter === 'ALL' || c.customerGroup === customerGroupFilter;
+    const matchesSearch = name.toLowerCase().includes(term) ||
+      contactNo.includes(term) ||
+      email.toLowerCase().includes(term) ||
+      contactPerson.toLowerCase().includes(term);
+    
+    const matchesGroup = customerGroupFilter === 'ALL' || c?.customerGroup === customerGroupFilter;
     return matchesSearch && matchesGroup;
   });
 

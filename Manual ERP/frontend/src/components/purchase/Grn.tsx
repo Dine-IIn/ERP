@@ -173,10 +173,13 @@ export default function Grn({
     }
   };
 
-  const filteredGrns = grns.filter(g =>
-    g.grnNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    g.purchaseOrder.poNo.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredGrns = (grns || []).filter(g => {
+    const grnNo = g?.grnNo || '';
+    const poNo = g?.purchaseOrder?.poNo || '';
+    const term = (searchTerm || '').toLowerCase();
+    return grnNo.toLowerCase().includes(term) ||
+      poNo.toLowerCase().includes(term);
+  });
 
   return (
     <div className="space-y-6">

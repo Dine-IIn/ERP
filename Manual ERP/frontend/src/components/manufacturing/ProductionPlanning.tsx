@@ -263,10 +263,14 @@ export default function ProductionPlanning({ salesOrders = [], products = [], cu
   const scheduledSoIds = plansList.map(p => p.salesOrderId).filter(Boolean);
   const selectableSalesOrders = activeSalesOrders.filter(so => isEditing ? so.id === selectedSoId : !scheduledSoIds.includes(so.id));
 
-  const filteredPlans = plansList.filter(plan => {
-    const matchesSearch = plan.finishedProductName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      plan.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      plan.salesOrderNo.toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredPlans = (plansList || []).filter(plan => {
+    const finishedProductName = plan?.finishedProductName || '';
+    const customerName = plan?.customerName || '';
+    const salesOrderNo = plan?.salesOrderNo || '';
+    const term = (searchTerm || '').toLowerCase();
+    const matchesSearch = finishedProductName.toLowerCase().includes(term) ||
+      customerName.toLowerCase().includes(term) ||
+      salesOrderNo.toLowerCase().includes(term);
     const matchesStatus = statusFilter === 'ALL' || plan.status === statusFilter;
     return matchesSearch && matchesStatus;
   });

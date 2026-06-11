@@ -243,20 +243,30 @@ export default function QualityControl({ products = [], employees = [] }: Qualit
     });
   };
 
-  const filteredQC = qcRecordsList.filter(rec => {
-    const matchesSearch = rec.productName.toLowerCase().includes(inspectionsSearch.toLowerCase()) ||
-      rec.batchNo.toLowerCase().includes(inspectionsSearch.toLowerCase()) ||
-      rec.productCode.toLowerCase().includes(inspectionsSearch.toLowerCase()) ||
-      rec.inspectorName.toLowerCase().includes(inspectionsSearch.toLowerCase());
+  const filteredQC = (qcRecordsList || []).filter(rec => {
+    const productName = rec?.productName || '';
+    const batchNo = rec?.batchNo || '';
+    const productCode = rec?.productCode || '';
+    const inspectorName = rec?.inspectorName || '';
+    const term = (inspectionsSearch || '').toLowerCase();
+    const matchesSearch = productName.toLowerCase().includes(term) ||
+      batchNo.toLowerCase().includes(term) ||
+      productCode.toLowerCase().includes(term) ||
+      inspectorName.toLowerCase().includes(term);
     const matchesStatus = inspectionsStatus === 'ALL' || rec.status === inspectionsStatus;
     return matchesSearch && matchesStatus;
   });
 
-  const filteredRework = reworkCardsList.filter(card => {
-    const matchesSearch = card.productName.toLowerCase().includes(reworkSearch.toLowerCase()) ||
-      card.batchNo.toLowerCase().includes(reworkSearch.toLowerCase()) ||
-      card.assignedOperator.toLowerCase().includes(reworkSearch.toLowerCase()) ||
-      card.reworkOperation.toLowerCase().includes(reworkSearch.toLowerCase());
+  const filteredRework = (reworkCardsList || []).filter(card => {
+    const productName = card?.productName || '';
+    const batchNo = card?.batchNo || '';
+    const assignedOperator = card?.assignedOperator || '';
+    const reworkOperation = card?.reworkOperation || '';
+    const term = (reworkSearch || '').toLowerCase();
+    const matchesSearch = productName.toLowerCase().includes(term) ||
+      batchNo.toLowerCase().includes(term) ||
+      assignedOperator.toLowerCase().includes(term) ||
+      reworkOperation.toLowerCase().includes(term);
     const matchesStatus = reworkStatus === 'ALL' || card.status === reworkStatus;
     return matchesSearch && matchesStatus;
   });

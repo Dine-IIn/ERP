@@ -1026,7 +1026,7 @@ export async function updateDispatch(req: AuthenticatedRequest, res: Response) {
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
-    const { carrier, trackingNo, vehicleNo, shippingCost, status, notes } = req.body;
+    const { orderId, carrier, trackingNo, vehicleNo, shippingCost, status, notes } = req.body;
 
     const disp = await prisma.dispatch.findFirst({ where: { id, companyId } });
     if (!disp) return res.status(404).json({ error: "Dispatch record not found" });
@@ -1035,6 +1035,7 @@ export async function updateDispatch(req: AuthenticatedRequest, res: Response) {
       const up = await tx.dispatch.update({
         where: { id },
         data: {
+          ...(orderId && { orderId }),
           ...(carrier !== undefined && { carrier: carrier || null }),
           ...(trackingNo !== undefined && { trackingNo: trackingNo || null }),
           ...(vehicleNo !== undefined && { vehicleNo: vehicleNo || null }),
@@ -1044,11 +1045,34 @@ export async function updateDispatch(req: AuthenticatedRequest, res: Response) {
         }
       });
 
-      if (status) {
-        let soStatus = 'DISPATCHED';
-        if (status === 'DELIVERED') soStatus = 'COMPLETED';
-        else if (status === 'RETURNED') soStatus = 'CANCELLED';
+      // Handle SalesOrder status updates based on the dispatch status
+      const targetOrderId = orderId || disp.orderId;
+      const targetStatus = status || disp.status;
+      
+      let soStatus = 'DISPATCHED';
+      if (targetStatus === 'DELIVERED') soStatus = 'COMPLETED';
+      else if (targetStatus === 'RETURNED') soStatus = 'CANCELLED';
 
+      // If orderId has changed
+      if (orderId && orderId !== disp.orderId) {
+        // Revert old SalesOrder if no other dispatches exist for it
+        const otherDispatches = await tx.dispatch.findMany({
+          where: { orderId: disp.orderId, id: { not: id } }
+        });
+        if (otherDispatches.length === 0) {
+          await tx.salesOrder.update({
+            where: { id: disp.orderId },
+            data: { status: 'PENDING' }
+          });
+        }
+
+        // Update new SalesOrder
+        await tx.salesOrder.update({
+          where: { id: orderId },
+          data: { status: soStatus }
+        });
+      } else {
+        // Just update the current SalesOrder
         await tx.salesOrder.update({
           where: { id: disp.orderId },
           data: { status: soStatus }

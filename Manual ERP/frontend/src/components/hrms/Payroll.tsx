@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { DollarSign, Plus, Check, X, AlertCircle, CheckCircle2, Award, ClipboardList, Send } from 'lucide-react';
+import { DollarSign, Plus, Check, X, AlertCircle, CheckCircle2, Award, ClipboardList, Send, Search } from 'lucide-react';
 
 interface PayrollRecord {
   id: string;
@@ -46,6 +46,17 @@ export default function Payroll({
   const [loading, setLoading] = useState(false);
   const [localErr, setLocalErr] = useState<string | null>(null);
   const [localSuccess, setLocalSuccess] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const filteredPayrolls = (payrolls || []).filter(payroll => {
+    const employee = payroll?.user?.username || '';
+    const status = payroll?.status || '';
+    const reference = payroll?.referenceNo || '';
+    const term = (searchTerm || '').toLowerCase();
+    return employee.toLowerCase().includes(term) ||
+      status.toLowerCase().includes(term) ||
+      reference.toLowerCase().includes(term);
+  });
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -132,15 +143,25 @@ export default function Payroll({
 
       {/* Salaries Ledger Table */}
       <div className="bg-slate-900/35 border border-slate-800/80 backdrop-blur-xl rounded-2xl overflow-hidden">
-        <div className="p-4 border-b border-slate-800/60 bg-slate-950/20">
+        <div className="p-4 border-b border-slate-800/60 bg-slate-950/20 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <h3 className="text-sm font-bold text-white flex items-center gap-2">
             <ClipboardList className="w-4 h-4 text-indigo-400" />
             Wage Disbursements and Ledgers
           </h3>
+          <div className="relative max-w-xs w-full">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+            <input
+              type="text"
+              placeholder="Search by employee name or status..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-3 py-1.5 bg-slate-950/40 border border-slate-850 rounded-xl text-white text-xs outline-none focus:border-indigo-500 transition-all"
+            />
+          </div>
         </div>
 
         <div className="overflow-x-auto">
-          {payrolls.length === 0 ? (
+          {filteredPayrolls.length === 0 ? (
             <div className="p-12 text-center text-slate-550 flex flex-col items-center justify-center">
               <DollarSign className="w-12 h-12 text-slate-750 mb-3" />
               <p className="font-semibold text-sm">No payroll registers logged</p>
@@ -161,7 +182,7 @@ export default function Payroll({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/50">
-                {payrolls.map((payroll) => (
+                {filteredPayrolls.map((payroll) => (
                   <tr key={payroll.id} className="hover:bg-slate-800/10 transition-colors">
                     <td className="py-4 px-5 font-bold text-slate-250">{payroll.user?.username || 'Staff'}</td>
                     <td className="py-4 px-5 font-medium text-slate-450">{getMonthName(payroll.month)} {payroll.year}</td>

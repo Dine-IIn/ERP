@@ -543,12 +543,18 @@ export async function createWorkOrder(req: AuthenticatedRequest, res: Response) 
       });
       if (routing && routing.operations.length > 0) {
         for (const op of routing.operations) {
+          // Verify workCenterId still exists before inserting
+          let verifiedWcId: string | null = null;
+          if (op.workCenterId) {
+            const wcExists = await tx.workCenter.findFirst({ where: { id: op.workCenterId, companyId } });
+            verifiedWcId = wcExists ? wcExists.id : null;
+          }
           await tx.jobCard.create({
             data: {
               companyId,
               woId: wo.id,
               operationName: op.operationName,
-              workCenterId: op.workCenterId,
+              workCenterId: verifiedWcId,
               qtyTarget: parseFloat(qtyTarget),
               status: 'PENDING',
               cycleTimeMinutes: op.setupTimeMins + (op.runTimePerUnit * parseFloat(qtyTarget))
@@ -583,12 +589,17 @@ export async function createWorkOrder(req: AuthenticatedRequest, res: Response) 
             });
             if (subRouting && subRouting.operations.length > 0) {
               for (const op of subRouting.operations) {
+                let verifiedSubWcId: string | null = null;
+                if (op.workCenterId) {
+                  const wcExists = await tx.workCenter.findFirst({ where: { id: op.workCenterId, companyId } });
+                  verifiedSubWcId = wcExists ? wcExists.id : null;
+                }
                 await tx.jobCard.create({
                   data: {
                     companyId,
                     woId: subWo.id,
                     operationName: op.operationName,
-                    workCenterId: op.workCenterId,
+                    workCenterId: verifiedSubWcId,
                     qtyTarget: comp.qtyRequired,
                     status: 'PENDING',
                     cycleTimeMinutes: op.setupTimeMins + (op.runTimePerUnit * comp.qtyRequired)
@@ -605,7 +616,11 @@ export async function createWorkOrder(req: AuthenticatedRequest, res: Response) 
 
     return res.status(201).json({ message: 'Work Order dispatched successfully', workOrder });
   } catch (error: any) {
-    return res.status(500).json({ error: error.message });
+    console.error('[releaseWorkOrder Error]:', error);
+    if (error.code === 'P2003') {
+      return res.status(400).json({ error: 'Database integrity error: A routing step references a Work Center or resource that no longer exists. Please update the routing configuration.' });
+    }
+    return res.status(500).json({ error: error.message || 'Failed to release work order.' });
   }
 }
 
@@ -692,7 +707,8 @@ export async function listJobCards(req: AuthenticatedRequest, res: Response) {
       where: { companyId },
       include: {
         workOrder: true,
-        assignedOperator: true
+        assignedOperator: true,
+        workCenter: true
       },
       orderBy: { createdAt: 'desc' }
     });
@@ -714,6 +730,22 @@ export async function createJobCard(req: AuthenticatedRequest, res: Response) {
       return res.status(400).json({ error: 'woId, operationName, and qtyTarget are required' });
     }
 
+    // === RESOLVE woId: accept UUID or woNo string ===
+    const targetWorkOrder = await prisma.workOrder.findFirst({
+      where: {
+        companyId,
+        OR: [
+          { id: woId },
+          { woNo: woId }
+        ]
+      }
+    });
+    if (!targetWorkOrder) {
+      return res.status(404).json({ error: `Work Order '${woId}' was not found. Please select or release a valid Work Order first.` });
+    }
+    const resolvedWoId = targetWorkOrder.id;
+
+    // === RESOLVE workCenterId: accept UUID, name, or code ===
     let resolvedWorkCenterId: string | null = null;
     if (workCenterId) {
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(workCenterId);
@@ -736,6 +768,7 @@ export async function createJobCard(req: AuthenticatedRequest, res: Response) {
         if (wc) {
           resolvedWorkCenterId = wc.id;
         } else {
+          // Auto-create a new WorkCenter from the typed name
           const newWc = await prisma.workCenter.create({
             data: {
               companyId,
@@ -750,13 +783,31 @@ export async function createJobCard(req: AuthenticatedRequest, res: Response) {
       }
     }
 
+    // === RESOLVE assignedOperatorId: validate against users table ===
+    let resolvedOperatorId: string | null = null;
+    if (assignedOperatorId) {
+      const user = await prisma.user.findFirst({
+        where: { id: assignedOperatorId, companyId }
+      });
+      resolvedOperatorId = user ? user.id : null;
+    }
+
+    // === Final defensive check: verify resolvedWorkCenterId exists ===
+    if (resolvedWorkCenterId) {
+      const wcVerify = await prisma.workCenter.findFirst({ where: { id: resolvedWorkCenterId } });
+      if (!wcVerify) {
+        console.error(`[createJobCard] resolvedWorkCenterId '${resolvedWorkCenterId}' does not exist — setting to null`);
+        resolvedWorkCenterId = null;
+      }
+    }
+
     const jobCard = await prisma.jobCard.create({
       data: {
         companyId,
-        woId,
+        woId: resolvedWoId,
         operationName,
         workCenterId: resolvedWorkCenterId,
-        assignedOperatorId: assignedOperatorId || null,
+        assignedOperatorId: resolvedOperatorId,
         status: 'PENDING',
         cycleTimeMinutes: parseFloat(cycleTimeMinutes) || 0.0,
         qtyTarget: parseFloat(qtyTarget) || 0.0,
@@ -767,7 +818,11 @@ export async function createJobCard(req: AuthenticatedRequest, res: Response) {
 
     return res.status(201).json({ message: 'Job Card rostered', jobCard });
   } catch (error: any) {
-    return res.status(500).json({ error: error.message });
+    console.error('[createJobCard Error]:', error);
+    if (error.code === 'P2003') {
+      return res.status(400).json({ error: 'Foreign key error: One of the selected references (Work Order, Work Center, or Operator) does not exist. Please refresh and try again.' });
+    }
+    return res.status(500).json({ error: error.message || 'Failed to create job card.' });
   }
 }
 
@@ -822,12 +877,32 @@ export async function updateJobCard(req: AuthenticatedRequest, res: Response) {
       }
     }
 
+    // Resolve assignedOperatorId safely
+    let resolvedOperatorId: string | null | undefined = undefined;
+    if (assignedOperatorId !== undefined) {
+      if (!assignedOperatorId) {
+        resolvedOperatorId = null;
+      } else {
+        const user = await prisma.user.findFirst({ where: { id: assignedOperatorId, companyId } });
+        resolvedOperatorId = user ? user.id : null;
+      }
+    }
+
+    // Final defensive check on resolvedWorkCenterId
+    if (resolvedWorkCenterId) {
+      const wcVerify = await prisma.workCenter.findFirst({ where: { id: resolvedWorkCenterId } });
+      if (!wcVerify) {
+        console.error(`[updateJobCard] resolvedWorkCenterId '${resolvedWorkCenterId}' does not exist — setting to null`);
+        resolvedWorkCenterId = null;
+      }
+    }
+
     const updated = await prisma.jobCard.update({
       where: { id },
       data: {
         ...(operationName && { operationName }),
         ...(resolvedWorkCenterId !== undefined && { workCenterId: resolvedWorkCenterId }),
-        ...(assignedOperatorId !== undefined && { assignedOperatorId: assignedOperatorId || null }),
+        ...(resolvedOperatorId !== undefined && { assignedOperatorId: resolvedOperatorId }),
         ...(status && { status }),
         ...(cycleTimeMinutes !== undefined && { cycleTimeMinutes: parseFloat(cycleTimeMinutes) || 0.0 }),
         ...(qtyTarget !== undefined && { qtyTarget: parseFloat(qtyTarget) || 0.0 }),
@@ -838,7 +913,11 @@ export async function updateJobCard(req: AuthenticatedRequest, res: Response) {
 
     return res.json({ message: 'Job Card updated successfully', jobCard: updated });
   } catch (error: any) {
-    return res.status(500).json({ error: error.message });
+    console.error('[updateJobCard Error]:', error);
+    if (error.code === 'P2003') {
+      return res.status(400).json({ error: 'Foreign key error: One of the selected references (Work Center or Operator) does not exist.' });
+    }
+    return res.status(500).json({ error: error.message || 'Failed to update job card.' });
   }
 }
 

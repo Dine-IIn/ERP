@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { FileText, Search, Plus, Edit, Trash2, X, AlertCircle, Calendar, CheckCircle2, Mail, Download, Layers } from 'lucide-react';
+import { apiClient } from '../../utils/apiService';
 
 interface ProformaInvoiceProps {
   invoices: any[];
@@ -33,6 +34,21 @@ export default function ProformaInvoice({
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
+  const [companyProfile, setCompanyProfile] = useState<any>(null);
+
+  React.useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const res = await apiClient.get<any>('/api/admin/company/profile');
+        setCompanyProfile(res.company || null);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    fetchProfile();
+  }, []);
 
   const [customerId, setCustomerId] = useState('');
   const [dueDate, setDueDate] = useState('');
@@ -204,49 +220,121 @@ export default function ProformaInvoice({
 
   const handleDownloadPDF = (inv: any) => {
     const cust = customers.find(c => c.id === inv.customerId);
+    
+    // Load custom template if selected
+    let tpl: any = null;
+    if (selectedTemplateId) {
+      try {
+        const saved = localStorage.getItem('erp_pdf_templates');
+        if (saved) {
+          const templates = JSON.parse(saved);
+          tpl = templates.find((t: any) => t.id === selectedTemplateId);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    const title = tpl?.title || 'PROFORMA ESTIMATE';
+    const headerName = tpl?.headerName || companyProfile?.name || 'ANB INDUSTRIES PRIVATE LIMITED';
+    const headerSubtitle = tpl?.headerSubtitle || 'Pre-shipment Valuation Estimate';
+    const terms = tpl?.terms || '1. This is a proforma estimate and not a tax declaration invoice.\n2. Material dispatch only after advance payment confirmation.';
+    const themeColor = tpl?.themeColor || 'amber';
+    
+    const showLogo = tpl?.showLogo ?? true;
+    const showCompanyDetails = tpl?.showCompanyDetails ?? true;
+    const showBillingAddress = tpl?.showBillingAddress ?? true;
+    const showShippingAddress = tpl?.showShippingAddress ?? false;
+    const showBankDetails = tpl?.showBankDetails ?? true;
+    const showTerms = tpl?.showTerms ?? true;
+    
+    const colProductCode = tpl?.colProductCode ?? true;
+    const colUnitPrice = tpl?.colUnitPrice ?? true;
+    const colDiscount = tpl?.colDiscount ?? true;
+    const colTax = tpl?.colTax ?? true;
+
+    const getThemeHex = (colorName: string) => {
+      switch (colorName) {
+        case 'emerald': return '#10b981';
+        case 'rose': return '#f43f5e';
+        case 'amber': return '#f59e0b';
+        case 'slate': return '#64748b';
+        default: return '#6366f1'; // indigo
+      }
+    };
+    const currentThemeHex = getThemeHex(themeColor);
+
+    const isSameState = companyProfile && cust?.state === companyProfile.state;
+    const isInternational = cust?.clientClassification === 'INTERNATIONAL';
+
     const docHtml = `
       <html>
         <head>
-          <title>Proforma Invoice - ${inv.invoiceNo}</title>
+          <title>${title} - ${inv.invoiceNo}</title>
           <style>
             body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #333; padding: 40px; background: #fff; }
-            .header { display: flex; justify-content: space-between; border-bottom: 2px solid #6366f1; padding-bottom: 20px; margin-bottom: 30px; }
-            .title { font-size: 24px; font-weight: bold; color: #6366f1; text-transform: uppercase; }
+            .header { display: flex; justify-content: space-between; border-bottom: 2px solid ${currentThemeHex}; padding-bottom: 20px; margin-bottom: 30px; }
+            .title { font-size: 24px; font-weight: bold; color: ${currentThemeHex}; text-transform: uppercase; }
             .meta { font-size: 11px; text-align: right; color: #555; }
             .section { margin-bottom: 25px; }
-            .section-title { font-size: 12px; font-weight: bold; text-transform: uppercase; color: #6366f1; border-bottom: 1px solid #eee; padding-bottom: 4px; margin-bottom: 8px; }
+            .section-title { font-size: 12px; font-weight: bold; text-transform: uppercase; color: ${currentThemeHex}; border-bottom: 1px solid #eee; padding-bottom: 4px; margin-bottom: 8px; }
             .client-details { font-size: 12px; line-height: 1.5; }
             table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-            th { background: #f8fafc; border-bottom: 2px solid #e2e8f0; color: #475569; font-weight: bold; font-size: 11px; text-transform: uppercase; padding: 10px; text-align: left; }
+            th { background: #f8fafc; border-bottom: 2px solid ${currentThemeHex}; color: #475569; font-weight: bold; font-size: 11px; text-transform: uppercase; padding: 10px; text-align: left; }
             td { padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 12px; color: #334155; }
-            .total-table { width: 40%; margin-left: auto; margin-top: 20px; }
-            .total-table td { border-bottom: none; padding: 6px 10px; }
-            .grand-total { font-weight: bold; color: #6366f1; font-size: 14px; border-top: 2px solid #6366f1; }
+            .total-table { width: 45%; margin-left: auto; margin-top: 20px; }
+            .total-table td { border-bottom: none; padding: 6px 10px; font-size: 11px; }
+            .grand-total { font-weight: bold; color: ${currentThemeHex}; font-size: 14px; border-top: 2px solid ${currentThemeHex}; }
             .footer { margin-top: 50px; border-top: 1px solid #eee; padding-top: 15px; font-size: 10px; text-align: center; color: #94a3b8; }
+            .bank-details { margin-top: 20px; padding: 15px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 11px; color: #475569; }
           </style>
         </head>
         <body>
           <div class="header">
             <div>
-              <div class="title">Proforma Invoice</div>
+              ${showLogo && companyProfile?.logoUrl ? `<img src="${companyProfile.logoUrl}" alt="Logo" style="max-height: 40px; margin-bottom: 8px;" />` : ''}
+              <div class="title">${title}</div>
               <div style="font-size: 12px; color: #64748b; font-weight: bold; margin-top: 5px;">${inv.invoiceNo}</div>
             </div>
             <div class="meta">
+              ${showCompanyDetails && companyProfile ? `
+                <div style="margin-bottom: 8px; font-size: 10px; color: #475569;">
+                  <strong>${headerName}</strong><br/>
+                  ${headerSubtitle}<br/>
+                  ${companyProfile.addressLine1 || ''} ${companyProfile.city || ''}<br/>
+                  ${companyProfile.gstNumber ? `GSTIN: ${companyProfile.gstNumber}` : ''}
+                </div>
+              ` : ''}
               <div>Date: ${new Date(inv.date).toLocaleDateString()}</div>
               <div>Due Date: ${inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : 'Upon Dispatch'}</div>
               <div>Status: <strong>${inv.status}</strong></div>
             </div>
           </div>
           
-          <div class="section">
-            <div class="section-title">Bill To Customer</div>
-            <div class="client-details">
-              <strong>${cust?.name || 'Customer Profile'}</strong><br/>
-              Classification: ${cust?.clientClassification || 'NATIONAL'}<br/>
-              Email ID: ${cust?.email || 'N/A'}<br/>
-              Mobile: ${cust?.mobileNo || 'N/A'}<br/>
-              Billing Destination: ${cust?.billingAddress || 'N/A'}
-            </div>
+          <div style="display: flex; gap: 40px; margin-bottom: 20px;">
+            ${showBillingAddress ? `
+              <div class="section" style="flex: 1;">
+                <div class="section-title">Bill To Customer</div>
+                <div class="client-details">
+                  <strong>${cust?.name || 'Customer Profile'}</strong><br/>
+                  Classification: ${cust?.clientClassification || 'NATIONAL'}<br/>
+                  Email ID: ${cust?.email || 'N/A'}<br/>
+                  Mobile: ${cust?.mobileNo || 'N/A'}<br/>
+                  Billing Destination: ${cust?.billingAddress || 'N/A'}
+                </div>
+              </div>
+            ` : ''}
+
+            ${showShippingAddress ? `
+              <div class="section" style="flex: 1;">
+                <div class="section-title">Ship To Destination</div>
+                <div class="client-details">
+                  <strong>${inv.shippingName || cust?.name || 'Customer Profile'}</strong><br/>
+                  Shipping Address: ${inv.shippingAddress || cust?.shippingAddress || cust?.billingAddress || 'N/A'}<br/>
+                  State: ${inv.shippingState || cust?.state || 'N/A'}
+                </div>
+              </div>
+            ` : ''}
           </div>
 
           <div class="section">
@@ -255,9 +343,10 @@ export default function ProformaInvoice({
               <thead>
                 <tr>
                   <th>Product Item</th>
+                  ${colProductCode ? `<th>SKU / Code</th>` : ''}
                   <th style="text-align: right;">Qty</th>
-                  <th style="text-align: right;">Unit Price</th>
-                  <th style="text-align: right;">Discount</th>
+                  ${colUnitPrice ? `<th style="text-align: right;">Unit Price</th>` : ''}
+                  ${colDiscount ? `<th style="text-align: right;">Discount</th>` : ''}
                   <th style="text-align: right;">Subtotal</th>
                 </tr>
               </thead>
@@ -268,9 +357,10 @@ export default function ProformaInvoice({
                   return `
                     <tr>
                       <td><strong>${prod?.name || 'Stock Item'}</strong></td>
+                      ${colProductCode ? `<td>${prod?.sku || 'N/A'}</td>` : ''}
                       <td style="text-align: right;">${it.quantity}</td>
-                      <td style="text-align: right;">${currencySymbol}${it.price.toFixed(2)}</td>
-                      <td style="text-align: right;">${(it.discount || 0).toFixed(1)}%</td>
+                      ${colUnitPrice ? `<td style="text-align: right;">${currencySymbol}${it.price.toFixed(2)}</td>` : ''}
+                      ${colDiscount ? `<td style="text-align: right;">${(it.discount || 0).toFixed(1)}%</td>` : ''}
                       <td style="text-align: right;">${currencySymbol}${sub.toFixed(2)}</td>
                     </tr>
                   `;
@@ -279,29 +369,74 @@ export default function ProformaInvoice({
             </table>
           </div>
 
-          <table class="total-table">
-            <tr>
-              <td>Subtotal Value:</td>
-              <td style="text-align: right;">${currencySymbol}${inv.subtotal.toFixed(2)}</td>
-            </tr>
-            ${inv.discount > 0 ? `
-            <tr>
-              <td style="color: #ef4444;">Overall Discount (${inv.discount}%):</td>
-              <td style="text-align: right; color: #ef4444;">-${currencySymbol}${(inv.subtotal * (inv.discount / 100)).toFixed(2)}</td>
-            </tr>` : ''}
-            <tr>
-              <td>Sales Tax / GST Charge:</td>
-              <td style="text-align: right;">${currencySymbol}${(inv.tax || 0).toFixed(2)}</td>
-            </tr>
-            <tr class="grand-total">
-              <td>Grand Total:</td>
-              <td style="text-align: right;">${currencySymbol}${inv.total.toFixed(2)}</td>
-            </tr>
-          </table>
+          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            ${showBankDetails && companyProfile ? `
+              <div class="bank-details" style="width: 45%;">
+                <strong>Corporate Payout Account</strong><br/>
+                Banker: State Bank of India<br/>
+                A/C Name: ${companyProfile.name}<br/>
+                A/C No: 40921005671094<br/>
+                IFS Code: SBIN0001094
+              </div>
+            ` : '<div></div>'}
 
-          <div class="footer">
-            Generated automatically via Dine-IIn ERP Consolidated Sales Console. This is a computer generated Proforma Invoice document.
+            <table class="total-table">
+              <tr>
+                <td>Subtotal Value:</td>
+                <td style="text-align: right;">${currencySymbol}${inv.subtotal.toFixed(2)}</td>
+              </tr>
+              ${inv.discount > 0 ? `
+              <tr>
+                <td style="color: #ef4444;">Overall Discount (${inv.discount}%):</td>
+                <td style="text-align: right; color: #ef4444;">-${currencySymbol}${(inv.subtotal * (inv.discount / 100)).toFixed(2)}</td>
+              </tr>` : ''}
+              ${colTax ? (() => {
+                if (isInternational) {
+                  return `
+                    <tr>
+                      <td style="font-style: italic;">Zero-rated Export (0%):</td>
+                      <td style="text-align: right;">${currencySymbol}0.00</td>
+                    </tr>
+                  `;
+                } else if (isSameState) {
+                  const halfTax = (inv.tax || 0) / 2;
+                  return `
+                    <tr>
+                      <td>CGST (9.0%):</td>
+                      <td style="text-align: right;">${currencySymbol}${halfTax.toFixed(2)}</td>
+                    </tr>
+                    <tr>
+                      <td>SGST (9.0%):</td>
+                      <td style="text-align: right;">${currencySymbol}${halfTax.toFixed(2)}</td>
+                    </tr>
+                  `;
+                } else {
+                  return `
+                    <tr>
+                      <td>IGST (18.0%):</td>
+                      <td style="text-align: right;">${currencySymbol}${(inv.tax || 0).toFixed(2)}</td>
+                    </tr>
+                  `;
+                }
+              })() : `
+                <tr>
+                  <td>Sales Tax / GST Charge:</td>
+                  <td style="text-align: right;">${currencySymbol}${(inv.tax || 0).toFixed(2)}</td>
+                </tr>
+              `}
+              <tr class="grand-total">
+                <td>Grand Total:</td>
+                <td style="text-align: right;">${currencySymbol}${inv.total.toFixed(2)}</td>
+              </tr>
+            </table>
           </div>
+
+          ${showTerms && terms ? `
+            <div class="footer">
+              <strong style="display: block; margin-bottom: 5px; color: #475569;">Declarations & Terms</strong>
+              ${terms.split('\n').map(line => `<div>${line}</div>`).join('')}
+            </div>
+          ` : ''}
           <script>
             window.onload = function() {
               window.print();
@@ -339,6 +474,31 @@ export default function ProformaInvoice({
         </div>
 
         <div className="flex items-center gap-3 w-full md:w-auto shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0 bg-slate-900/30 border border-[var(--border-color)] px-2.5 py-1.5 rounded-xl">
+            <span className="text-[10px] text-[var(--text-secondary)] font-semibold uppercase">Template:</span>
+            <select
+              value={selectedTemplateId}
+              onChange={e => setSelectedTemplateId(e.target.value)}
+              className="bg-transparent text-[var(--text-primary)] text-xs border-0 outline-none cursor-pointer pr-4 font-semibold"
+            >
+              <option value="" className="bg-slate-950">-- Default --</option>
+              {(() => {
+                const saved = localStorage.getItem('erp_pdf_templates');
+                if (!saved) return null;
+                try {
+                  const templates = JSON.parse(saved);
+                  return templates
+                    .filter((t: any) => t.type === 'PROFORMA')
+                    .map((t: any) => (
+                      <option key={t.id} value={t.id} className="bg-slate-950">{t.name}</option>
+                    ));
+                } catch (e) {
+                  return null;
+                }
+              })()}
+            </select>
+          </div>
+
           <div className="relative flex-1 md:w-64">
             <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
             <input

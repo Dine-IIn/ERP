@@ -140,15 +140,21 @@ export default function VendorMaster({
     }
   };
 
-  const filtered = vendors.filter(v => {
-    const matchesSearch = v.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      v.contactNo.includes(searchTerm) ||
-      (v.email && v.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (v.gstDetails && v.gstDetails.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filtered = (vendors || []).filter(v => {
+    const name = v?.name || '';
+    const contactNo = v?.contactNo || '';
+    const email = v?.email || '';
+    const gstDetails = v?.gstDetails || '';
+    const term = (searchTerm || '').toLowerCase();
+
+    const matchesSearch = name.toLowerCase().includes(term) ||
+      contactNo.includes(term) ||
+      email.toLowerCase().includes(term) ||
+      gstDetails.toLowerCase().includes(term);
     
     const matchesType = vendorTypeFilter === 'ALL' ||
-      (vendorTypeFilter === 'VENDOR' && v.isVendor) ||
-      (vendorTypeFilter === 'SUPPLIER' && !v.isVendor);
+      (vendorTypeFilter === 'VENDOR' && v?.isVendor) ||
+      (vendorTypeFilter === 'SUPPLIER' && !v?.isVendor);
       
     return matchesSearch && matchesType;
   });

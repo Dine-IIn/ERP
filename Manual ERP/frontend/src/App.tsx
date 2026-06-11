@@ -21,6 +21,7 @@ const ProformaInvoice = React.lazy(() => import('./components/sales/ProformaInvo
 const SalesInvoice = React.lazy(() => import('./components/sales/SalesInvoice'));
 const DeliveryChallan = React.lazy(() => import('./components/sales/DeliveryChallan'));
 const DispatchManagement = React.lazy(() => import('./components/sales/DispatchManagement'));
+const PdfTemplateEditor = React.lazy(() => import('./components/sales/PdfTemplateEditor'));
 
 const TaxMaster = React.lazy(() => import('./components/master_data/TaxMaster'));
 const Leads = React.lazy(() => import('./components/crm/Leads'));
@@ -1740,6 +1741,7 @@ export default function App() {
       case 'SALES_QUOTATION': import('./components/sales/Quotations'); break;
       case 'SALES_POSTSALES':
       case 'SALES_POST_SERVICE': import('./components/sales/PostSalesService'); break;
+      case 'SALES_PDF_EDITOR': import('./components/sales/PdfTemplateEditor'); break;
       case 'PURCHASE_QUOTATIONS':
       case 'PURCHASE_VENDOR_QUOTE': import('./components/purchase/VendorQuotations'); break;
       case 'PURCHASE_ORDERS':
@@ -3149,6 +3151,7 @@ export default function App() {
       fetchPurchasesData();
     } else if (activeWorkspaceSubModule.startsWith('INVENTORY_')) {
       fetchInventoryData();
+      fetchMasterData();
     } else if (activeWorkspaceSubModule.startsWith('CRM_')) {
       fetchCrmData();
     } else if (activeWorkspaceSubModule.startsWith('SALES_')) {
@@ -4330,6 +4333,10 @@ export default function App() {
                       onApproveLeave={async (id, notes) => { await handleProcessLeaveRequest(id, notes, true); }}
                       onRejectLeave={async (id, notes) => { await handleProcessLeaveRequest(id, notes, false); }}
                       currencySymbol={currencySymbol}
+                      productsList={productsList}
+                      salesOrdersList={salesOrdersList}
+                      salesInvoicesList={salesInvoicesList}
+                      leadsList={leadsList}
                     />
                   </div>
                 )
@@ -4588,6 +4595,10 @@ export default function App() {
                         onUpdateTicket={handleUpdateServiceTicket}
                         onDeleteTicket={handleDeleteServiceTicket}
                       />
+                    )}
+
+                    {activeWorkspaceSubModule === 'SALES_PDF_EDITOR' && (
+                      <PdfTemplateEditor />
                     )}
 
                   </div>

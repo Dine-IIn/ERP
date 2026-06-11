@@ -141,27 +141,39 @@ export default function ProductionExecution({ products = [] }: ProductionExecuti
     }
   };
 
-  const filteredLogs = logsList.filter(log =>
-    log.finishedProductName.toLowerCase().includes(yieldSearch.toLowerCase()) ||
-    log.woNo.toLowerCase().includes(yieldSearch.toLowerCase()) ||
-    log.operatorName.toLowerCase().includes(yieldSearch.toLowerCase())
-  );
+  const filteredLogs = (logsList || []).filter(log => {
+    const productName = log?.finishedProductName || '';
+    const woNo = log?.woNo || '';
+    const opName = log?.operatorName || '';
+    const term = (yieldSearch || '').toLowerCase();
+    return productName.toLowerCase().includes(term) ||
+      woNo.toLowerCase().includes(term) ||
+      opName.toLowerCase().includes(term);
+  });
 
-  const filteredConsumption = stockLedger
-    .filter(entry => entry.transactionType === 'RAW_CONSUMPTION')
-    .filter(entry =>
-      entry.referenceNo.toLowerCase().includes(consumptionSearch.toLowerCase()) ||
-      entry.productName.toLowerCase().includes(consumptionSearch.toLowerCase()) ||
-      entry.productCode.toLowerCase().includes(consumptionSearch.toLowerCase())
-    );
+  const filteredConsumption = (stockLedger || [])
+    .filter(entry => entry?.transactionType === 'RAW_CONSUMPTION')
+    .filter(entry => {
+      const refNo = entry?.referenceNo || '';
+      const name = entry?.productName || '';
+      const code = entry?.productCode || '';
+      const term = (consumptionSearch || '').toLowerCase();
+      return refNo.toLowerCase().includes(term) ||
+        name.toLowerCase().includes(term) ||
+        code.toLowerCase().includes(term);
+    });
 
-  const filteredLedger = stockLedger
-    .filter(entry => ledgerTypeFilter === 'ALL' || entry.transactionType === ledgerTypeFilter)
-    .filter(entry =>
-      entry.referenceNo.toLowerCase().includes(ledgerSearch.toLowerCase()) ||
-      entry.productName.toLowerCase().includes(ledgerSearch.toLowerCase()) ||
-      entry.productCode.toLowerCase().includes(ledgerSearch.toLowerCase())
-    );
+  const filteredLedger = (stockLedger || [])
+    .filter(entry => ledgerTypeFilter === 'ALL' || entry?.transactionType === ledgerTypeFilter)
+    .filter(entry => {
+      const refNo = entry?.referenceNo || '';
+      const name = entry?.productName || '';
+      const code = entry?.productCode || '';
+      const term = (ledgerSearch || '').toLowerCase();
+      return refNo.toLowerCase().includes(term) ||
+        name.toLowerCase().includes(term) ||
+        code.toLowerCase().includes(term);
+    });
 
   return (
     <div className="space-y-6">

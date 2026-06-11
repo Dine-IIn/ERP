@@ -130,12 +130,17 @@ const Leads = React.memo(function Leads({
     }
   };
 
-  const filteredLeads = leads.filter(l =>
-    l.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (l.companyName && l.companyName.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    l.phone.includes(searchTerm) ||
-    (l.email && l.email.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredLeads = (leads || []).filter(l => {
+    const name = l?.name || '';
+    const company = l?.companyName || '';
+    const phone = l?.phone || '';
+    const email = l?.email || '';
+    const term = (searchTerm || '').toLowerCase();
+    return name.toLowerCase().includes(term) ||
+      company.toLowerCase().includes(term) ||
+      String(phone).toLowerCase().includes(term) ||
+      email.toLowerCase().includes(term);
+  });
 
   const getStatusStyle = (s: string) => {
     switch (s) {

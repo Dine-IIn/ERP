@@ -108,10 +108,13 @@ export default function VendorPayments({
     }
   };
 
-  const filteredPayments = payments.filter(p =>
-    p.paymentNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.vendor.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredPayments = (payments || []).filter(p => {
+    const paymentNo = p?.paymentNo || '';
+    const vendorName = p?.vendor?.name || '';
+    const term = (searchTerm || '').toLowerCase();
+    return paymentNo.toLowerCase().includes(term) ||
+      vendorName.toLowerCase().includes(term);
+  });
 
   const getMethodStyle = (m: string) => {
     switch (m) {

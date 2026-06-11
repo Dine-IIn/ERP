@@ -32,6 +32,7 @@ export default function Attendance({
   const [filterEnd, setFilterEnd] = useState('');
   const [loading, setLoading] = useState(false);
   const [punching, setPunching] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Check if current user is checked-in (last log has checkOut null)
   const userLogs = attendances.filter(a => a.userId === currentUser.id);
@@ -77,6 +78,13 @@ export default function Attendance({
         return 'bg-red-500/10 text-red-400 border-red-500/20';
     }
   };
+
+  const filteredAttendances = (attendances || []).filter(log => {
+    const username = log.user?.username || currentUser.username || '';
+    const status = log.status || '';
+    const term = (searchTerm || '').toLowerCase();
+    return username.toLowerCase().includes(term) || status.toLowerCase().includes(term);
+  });
 
   return (
     <div className="space-y-6">
@@ -197,15 +205,25 @@ export default function Attendance({
 
           {/* Table list */}
           <div className="bg-slate-900/35 border border-slate-800/80 backdrop-blur-xl rounded-2xl overflow-hidden">
-            <div className="p-4 border-b border-slate-800/60 bg-slate-950/20">
+            <div className="p-4 border-b border-slate-800/60 bg-slate-950/20 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
                 <Calendar className="w-4 h-4 text-indigo-400" />
                 Shift Attendance History logs
               </h3>
+              <div className="relative max-w-xs w-full">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+                <input
+                  type="text"
+                  placeholder="Search by employee name or status..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-3 py-1.5 bg-slate-950/40 border border-slate-850 rounded-xl text-white text-xs outline-none focus:border-indigo-500 transition-all"
+                />
+              </div>
             </div>
 
             <div className="overflow-x-auto max-h-96">
-              {attendances.length === 0 ? (
+              {filteredAttendances.length === 0 ? (
                 <div className="p-12 text-center text-slate-550 flex flex-col items-center justify-center">
                   <UserCheck className="w-12 h-12 text-slate-750 mb-3" />
                   <p className="font-semibold text-sm">No attendance punches logged</p>
@@ -224,7 +242,7 @@ export default function Attendance({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/50">
-                    {attendances.map((log) => (
+                    {filteredAttendances.map((log) => (
                       <tr key={log.id} className="hover:bg-slate-800/10 transition-colors">
                         <td className="py-3.5 px-5 font-bold text-slate-250">{log.user?.username || currentUser.username}</td>
                         <td className="py-3.5 px-5 font-medium text-slate-400">{new Date(log.date).toISOString().slice(0, 10)}</td>

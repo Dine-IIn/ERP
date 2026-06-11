@@ -144,11 +144,15 @@ export default function Opportunities({
     }
   };
 
-  const filteredOpps = opportunities.filter(opp =>
-    opp.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    opp.lead.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (opp.lead.companyName && opp.lead.companyName.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredOpps = (opportunities || []).filter(opp => {
+    const title = opp?.title || '';
+    const leadName = opp?.lead?.name || '';
+    const companyName = opp?.lead?.companyName || '';
+    const term = (searchTerm || '').toLowerCase();
+    return title.toLowerCase().includes(term) ||
+      leadName.toLowerCase().includes(term) ||
+      companyName.toLowerCase().includes(term);
+  });
 
   const getStageValuationSum = (stageKey: string) => {
     return filteredOpps

@@ -236,19 +236,27 @@ export default function ShopFloor({ employees = [] }: ShopFloorProps) {
     }
   };
 
-  const filteredCenters = centersList.filter(wc => {
-    const matchesSearch = wc.name.toLowerCase().includes(wcSearch.toLowerCase()) ||
-      wc.code.toLowerCase().includes(wcSearch.toLowerCase());
-    const matchesStatus = wcStatusFilter === 'ALL' || wc.status === wcStatusFilter;
+  const filteredCenters = (centersList || []).filter(wc => {
+    const name = wc?.name || '';
+    const code = wc?.code || '';
+    const term = (wcSearch || '').toLowerCase();
+    const matchesSearch = name.toLowerCase().includes(term) ||
+      code.toLowerCase().includes(term);
+    const matchesStatus = wcStatusFilter === 'ALL' || wc?.status === wcStatusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  const filteredShifts = shiftsList.filter(sh => {
-    const matchesSearch = sh.operatorName.toLowerCase().includes(shiftSearch.toLowerCase()) ||
-      sh.workCenterName.toLowerCase().includes(shiftSearch.toLowerCase()) ||
-      sh.shiftName.toLowerCase().includes(shiftSearch.toLowerCase()) ||
-      sh.assignedMachine.toLowerCase().includes(shiftSearch.toLowerCase());
-    const matchesStatus = shiftNameFilter === 'ALL' || sh.shiftName === shiftNameFilter;
+  const filteredShifts = (shiftsList || []).filter(sh => {
+    const opName = sh?.operatorName || '';
+    const wcName = sh?.workCenterName || '';
+    const shiftName = sh?.shiftName || '';
+    const machine = sh?.assignedMachine || '';
+    const term = (shiftSearch || '').toLowerCase();
+    const matchesSearch = opName.toLowerCase().includes(term) ||
+      wcName.toLowerCase().includes(term) ||
+      shiftName.toLowerCase().includes(term) ||
+      machine.toLowerCase().includes(term);
+    const matchesStatus = shiftNameFilter === 'ALL' || sh?.shiftName === shiftNameFilter;
     return matchesSearch && matchesStatus;
   });
 

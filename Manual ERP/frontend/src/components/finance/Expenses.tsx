@@ -72,10 +72,14 @@ export default function Expenses({
     }
   };
 
-  const filteredExpenses = expenses.filter(exp => {
-    const matchesSearch = exp.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      exp.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (exp.referenceNo && exp.referenceNo.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredExpenses = (expenses || []).filter(exp => {
+    const description = exp?.description || '';
+    const category = exp?.category || '';
+    const referenceNo = exp?.referenceNo || '';
+    const term = (searchTerm || '').toLowerCase();
+    const matchesSearch = description.toLowerCase().includes(term) ||
+      category.toLowerCase().includes(term) ||
+      referenceNo.toLowerCase().includes(term);
     
     const matchesCategory = categoryFilter === '' || exp.category === categoryFilter;
 

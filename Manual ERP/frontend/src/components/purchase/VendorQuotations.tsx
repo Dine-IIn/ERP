@@ -164,10 +164,13 @@ export default function VendorQuotations({
     }
   };
 
-  const filteredQuotes = quotations.filter(q =>
-    q.quoteNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    q.vendor.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredQuotes = (quotations || []).filter(q => {
+    const quoteNo = q?.quoteNo || '';
+    const vendorName = q?.vendor?.name || '';
+    const term = (searchTerm || '').toLowerCase();
+    return quoteNo.toLowerCase().includes(term) ||
+      vendorName.toLowerCase().includes(term);
+  });
 
   return (
     <div className="space-y-6">

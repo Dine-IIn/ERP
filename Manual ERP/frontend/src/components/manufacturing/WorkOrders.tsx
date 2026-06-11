@@ -270,19 +270,28 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
     }
   };
 
-  const filteredWO = workOrdersList.filter(wo => {
-    const matchesSearch = wo.finishedProductName.toLowerCase().includes(woSearch.toLowerCase()) ||
-      wo.woNo.toLowerCase().includes(woSearch.toLowerCase()) ||
-      wo.routingStage.toLowerCase().includes(woSearch.toLowerCase());
+  const filteredWO = (workOrdersList || []).filter(wo => {
+    const finishedProductName = wo?.finishedProductName || '';
+    const woNo = wo?.woNo || '';
+    const routingStage = wo?.routingStage || '';
+    const term = (woSearch || '').toLowerCase();
+    const matchesSearch = finishedProductName.toLowerCase().includes(term) ||
+      woNo.toLowerCase().includes(term) ||
+      routingStage.toLowerCase().includes(term);
     const matchesStatus = woStatusFilter === 'ALL' || wo.status === woStatusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  const filteredJobs = jobCardsList.filter(job => {
-    const matchesSearch = job.woNo.toLowerCase().includes(jobsSearch.toLowerCase()) ||
-      job.operationName.toLowerCase().includes(jobsSearch.toLowerCase()) ||
-      job.workCenterName.toLowerCase().includes(jobsSearch.toLowerCase()) ||
-      job.assignedOperator.toLowerCase().includes(jobsSearch.toLowerCase());
+  const filteredJobs = (jobCardsList || []).filter(job => {
+    const woNo = job?.woNo || '';
+    const operationName = job?.operationName || '';
+    const workCenterName = job?.workCenterName || '';
+    const assignedOperator = job?.assignedOperator || '';
+    const term = (jobsSearch || '').toLowerCase();
+    const matchesSearch = woNo.toLowerCase().includes(term) ||
+      operationName.toLowerCase().includes(term) ||
+      workCenterName.toLowerCase().includes(term) ||
+      assignedOperator.toLowerCase().includes(term);
     const matchesStatus = jobsStatusFilter === 'ALL' || job.status === jobsStatusFilter;
     return matchesSearch && matchesStatus;
   });

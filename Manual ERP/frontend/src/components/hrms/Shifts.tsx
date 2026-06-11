@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CalendarClock, Plus, Clock, X, AlertCircle, CheckCircle2, Sliders, CalendarDays, Zap } from 'lucide-react';
+import { CalendarClock, Plus, Clock, X, AlertCircle, CheckCircle2, Sliders, CalendarDays, Zap, Search } from 'lucide-react';
 
 interface ShiftRoster {
   id: string;
@@ -28,6 +28,17 @@ export default function Shifts({
   const [loading, setLoading] = useState(false);
   const [localErr, setLocalErr] = useState<string | null>(null);
   const [localSuccess, setLocalSuccess] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const filteredRosters = (shiftRosters || []).filter(roster => {
+    const shiftName = roster?.name || '';
+    const start = roster?.startTime || '';
+    const end = roster?.endTime || '';
+    const term = (searchTerm || '').toLowerCase();
+    return shiftName.toLowerCase().includes(term) ||
+      start.toLowerCase().includes(term) ||
+      end.toLowerCase().includes(term);
+  });
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,12 +104,24 @@ export default function Shifts({
         {/* Left: Shifts List */}
         <div className="lg:col-span-2 space-y-4">
           <div className="bg-slate-900/35 border border-slate-800/80 backdrop-blur-xl rounded-2xl overflow-hidden p-6 space-y-4">
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <Sliders className="w-4 h-4 text-indigo-400" />
-              Active Timing Shifts Configurations
-            </h3>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-800/40 pb-3 -mx-6 px-6 bg-slate-950/20 py-3 -mt-6">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-indigo-400" />
+                Active Timing Shifts Configurations
+              </h3>
+              <div className="relative max-w-xs w-full">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+                <input
+                  type="text"
+                  placeholder="Search shifts..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-3 py-1.5 bg-slate-950/40 border border-slate-850 rounded-xl text-white text-xs outline-none focus:border-indigo-500 transition-all"
+                />
+              </div>
+            </div>
 
-            {shiftRosters.length === 0 ? (
+            {filteredRosters.length === 0 ? (
               <div className="p-12 text-center text-slate-550 flex flex-col items-center justify-center">
                 <Clock className="w-12 h-12 text-slate-750 mb-3" />
                 <p className="font-semibold text-sm">No custom shifts configured</p>
@@ -106,7 +129,7 @@ export default function Shifts({
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {shiftRosters.map((roster) => (
+                {filteredRosters.map((roster) => (
                   <div key={roster.id} className="p-4 bg-slate-950/40 border border-slate-850 hover:border-slate-800 rounded-xl space-y-3 transition-colors">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-white">{roster.name}</span>

@@ -91,6 +91,28 @@ export default function SalesInvoice({
     colTax: true,
   });
 
+  const [themeColor, setThemeColor] = useState('indigo');
+  const getThemeHex = (colorName: string) => {
+    switch (colorName) {
+      case 'emerald': return '#10b981';
+      case 'rose': return '#f43f5e';
+      case 'amber': return '#f59e0b';
+      case 'slate': return '#64748b';
+      default: return '#6366f1'; // indigo
+    }
+  };
+  const currentThemeHex = getThemeHex(themeColor);
+
+  React.useEffect(() => {
+    if (activePrintInvoice) {
+      const timer = setTimeout(() => {
+        window.print();
+        setActivePrintInvoice(null);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [activePrintInvoice]);
+
   // Load backend profiles, bank accounts, and sales orders
   React.useEffect(() => {
     const fetchProfileData = async () => {
@@ -315,6 +337,28 @@ export default function SalesInvoice({
 
     setLocalErr(null);
     setLocalSuccess(null);
+
+    // Validate remaining quantity limits
+    if (selectedOrderIds.length > 0) {
+      const selectedOrders = salesOrders.filter(so => selectedOrderIds.includes(so.id));
+      for (const item of items) {
+        let limit = 0;
+        for (const order of selectedOrders) {
+          for (const oItem of order.items) {
+            if (oItem.productId === item.productId) {
+              limit += (oItem.remainingQuantity !== undefined ? oItem.remainingQuantity : oItem.quantity);
+            }
+          }
+        }
+        const inputQty = parseFloat(item.quantity) || 0;
+        if (inputQty > limit) {
+          const prod = products.find(p => p.id === item.productId);
+          setLocalErr(`Quantity for product '${prod?.name || item.productId}' exceeds the total remaining limit of ${limit} in the selected Sales Order(s).`);
+          return;
+        }
+      }
+    }
+
     setLoading(true);
 
     const payload = {
@@ -762,7 +806,41 @@ export default function SalesInvoice({
                   <span className="flex justify-between text-amber-400"><span>Billed Subtotal ({billingPct}%):</span> <span>{currencySymbol}{subtotal.toFixed(2)}</span></span>
                 )}
                 <span className="flex justify-between text-rose-400"><span>Discount ({discPct}%):</span> <span>-{currencySymbol}{discVal.toFixed(2)}</span></span>
-                <span className="flex justify-between text-emerald-400"><span>Tax ({taxPct}%):</span> <span>+{currencySymbol}{taxVal.toFixed(2)}</span></span>
+                {(() => {
+                  const cust = customers.find(c => c.id === customerId);
+                  const isInternational = cust?.clientClassification === 'INTERNATIONAL';
+                  const isSameState = companyProfile && cust?.state === companyProfile.state;
+                  if (isInternational) {
+                    return (
+                      <span className="flex justify-between text-emerald-400 italic">
+                        <span>Zero-rated Export (0%):</span>
+                        <span>+{currencySymbol}0.00</span>
+                      </span>
+                    );
+                  } else if (isSameState) {
+                    const halfTax = taxVal / 2;
+                    const halfPct = taxPct / 2;
+                    return (
+                      <>
+                        <span className="flex justify-between text-emerald-400">
+                          <span>CGST ({halfPct.toFixed(1)}%):</span>
+                          <span>+{currencySymbol}{halfTax.toFixed(2)}</span>
+                        </span>
+                        <span className="flex justify-between text-emerald-400">
+                          <span>SGST ({halfPct.toFixed(1)}%):</span>
+                          <span>+{currencySymbol}{halfTax.toFixed(2)}</span>
+                        </span>
+                      </>
+                    );
+                  } else {
+                    return (
+                      <span className="flex justify-between text-emerald-400">
+                        <span>IGST ({taxPct}%):</span>
+                        <span>+{currencySymbol}{taxVal.toFixed(2)}</span>
+                      </span>
+                    );
+                  }
+                })()}
                 <span className="flex justify-between border-t border-[var(--border-color)]/60 pt-1 text-sm font-bold text-emerald-400"><span>Total Invoiced:</span> <span>{currencySymbol}{totalVal.toFixed(2)}</span></span>
               </div>
 
@@ -813,6 +891,23 @@ export default function SalesInvoice({
                           onChange={e => handleItemChange(index, 'quantity', e.target.value)}
                           className="w-full bg-[var(--bg-secondary)] border border-[var(--border-color)] py-1.5 px-2.5 rounded-md text-xs text-[var(--text-primary)] focus:outline-none font-mono"
                         />
+                        {selectedOrderIds.length > 0 && (() => {
+                          let limit = 0;
+                          const selectedOrders = salesOrders.filter(so => selectedOrderIds.includes(so.id));
+                          for (const order of selectedOrders) {
+                            for (const oItem of order.items) {
+                              if (oItem.productId === item.productId) {
+                                limit += (oItem.remainingQuantity !== undefined ? oItem.remainingQuantity : oItem.quantity);
+                              }
+                            }
+                          }
+                          return (
+                            <div className="mt-1 text-[9px] text-[var(--text-muted)] flex justify-between">
+                              <span>Remaining limit:</span>
+                              <span className={parseFloat(item.quantity) > limit ? "text-rose-400 font-bold" : "text-emerald-400 font-semibold"}>{limit}</span>
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       {/* Price */}
@@ -913,6 +1008,60 @@ export default function SalesInvoice({
                 {/* Left Side: Controls */}
                 <div className="w-80 border-r border-[var(--border-color)] p-5 overflow-y-auto space-y-5 shrink-0 bg-slate-950/20">
                   <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block border-b border-[var(--border-color)] pb-2 mb-3">Template Options</span>
+
+                  {/* Load Custom Template Selection */}
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold text-slate-400 uppercase">Load Custom Template Preset</label>
+                    <select
+                      onChange={(e) => {
+                        const tplId = e.target.value;
+                        if (!tplId) return;
+                        const saved = localStorage.getItem('erp_pdf_templates');
+                        if (saved) {
+                          try {
+                            const templates = JSON.parse(saved);
+                            const tpl = templates.find((t: any) => t.id === tplId);
+                            if (tpl) {
+                              setCustomTitle(tpl.title || 'Tax Invoice');
+                              setCustomNotes(tpl.terms || '');
+                              setThemeColor(tpl.themeColor || 'indigo');
+                              setPdfCustomizer({
+                                showLogo: tpl.showLogo ?? true,
+                                showCompanyDetails: tpl.showCompanyDetails ?? true,
+                                showBillingAddress: tpl.showBillingAddress ?? true,
+                                showShippingAddress: tpl.showShippingAddress ?? true,
+                                showBankDetails: tpl.showBankDetails ?? true,
+                                showTerms: tpl.showTerms ?? true,
+                                colProductCode: tpl.colProductCode ?? true,
+                                colUnitPrice: tpl.colUnitPrice ?? true,
+                                colDiscount: tpl.colDiscount ?? true,
+                                colTax: tpl.colTax ?? true,
+                              });
+                            }
+                          } catch (err) {
+                            console.error(err);
+                          }
+                        }
+                      }}
+                      className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] py-1.5 px-3 rounded-lg text-xs text-white focus:outline-none cursor-pointer"
+                    >
+                      <option value="">-- Choose custom template --</option>
+                      {(() => {
+                        const saved = localStorage.getItem('erp_pdf_templates');
+                        if (!saved) return null;
+                        try {
+                          const templates = JSON.parse(saved);
+                          return templates
+                            .filter((t: any) => t.type === 'INVOICE')
+                            .map((t: any) => (
+                              <option key={t.id} value={t.id}>{t.name}</option>
+                            ));
+                        } catch (err) {
+                          return null;
+                        }
+                      })()}
+                    </select>
+                  </div>
                   
                   {/* Title Customizer */}
                   <div className="space-y-1">
@@ -923,6 +1072,25 @@ export default function SalesInvoice({
                       onChange={e => setCustomTitle(e.target.value)}
                       className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] py-1.5 px-3 rounded-lg text-xs text-white focus:outline-none"
                     />
+                  </div>
+
+                  {/* Theme Color Selector */}
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-bold text-slate-400 uppercase block">Theme Accent Color</label>
+                    <div className="flex gap-2.5">
+                      {['indigo', 'emerald', 'rose', 'amber', 'slate'].map(color => (
+                        <button
+                          key={color}
+                          type="button"
+                          onClick={() => setThemeColor(color)}
+                          style={{ backgroundColor: getThemeHex(color) }}
+                          className={`w-5.5 h-5.5 rounded-full border border-black cursor-pointer transition-all active:scale-90 ${
+                            themeColor === color ? 'ring-2 ring-indigo-500 ring-offset-2 ring-offset-slate-950' : 'opacity-70 hover:opacity-100'
+                          }`}
+                          title={color}
+                        />
+                      ))}
+                    </div>
                   </div>
 
                   {/* Toggles */}
@@ -1049,12 +1217,12 @@ export default function SalesInvoice({
                   <div className="w-[210mm] min-h-[297mm] bg-white text-black p-10 shadow-2xl text-[11px] relative flex flex-col justify-between font-sans leading-relaxed select-text">
                     <div className="space-y-6">
                       {/* Document Header */}
-                      <div className="flex justify-between items-start border-b-2 border-slate-900 pb-5">
+                      <div className="flex justify-between items-start border-b-2 pb-5" style={{ borderColor: currentThemeHex }}>
                         <div>
                           {pdfCustomizer.showLogo && companyProfile?.logoUrl && (
                             <img src={companyProfile.logoUrl} alt="Logo" className="max-h-12 object-contain mb-3" />
                           )}
-                          <div className="text-xl font-extrabold uppercase text-slate-900">{customTitle}</div>
+                          <div className="text-xl font-extrabold uppercase" style={{ color: currentThemeHex }}>{customTitle}</div>
                           <div className="font-mono text-[10px] text-slate-650 mt-1">Invoice No: {inv.invoiceNo}</div>
                         </div>
 
@@ -1093,7 +1261,7 @@ export default function SalesInvoice({
                         {/* Bill To */}
                         {pdfCustomizer.showBillingAddress && (
                           <div className="text-[10px] text-slate-700 leading-relaxed">
-                            <span className="text-[9px] uppercase font-bold text-slate-455 block mb-1">Billing Destination (Bill To)</span>
+                            <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Billing Destination (Bill To)</span>
                             <strong className="text-slate-900">{cust?.name}</strong><br/>
                             {inv.billingAddress || cust?.billingAddress || 'Billing address pending'}
                           </div>
@@ -1102,7 +1270,7 @@ export default function SalesInvoice({
                         {/* Ship To */}
                         {pdfCustomizer.showShippingAddress && (
                           <div className="text-[10px] text-slate-700 leading-relaxed text-right">
-                            <span className="text-[9px] uppercase font-bold text-slate-455 block mb-1">Shipping Destination (Ship To)</span>
+                            <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Shipping Destination (Ship To)</span>
                             <strong className="text-slate-900">{inv.shippingName || cust?.name}</strong><br/>
                             {inv.shippingAddress || cust?.shippingAddress || inv.billingAddress || cust?.billingAddress || 'Shipping address pending'}<br/>
                             {inv.shippingState && <span>State: {inv.shippingState}</span>}
@@ -1114,8 +1282,8 @@ export default function SalesInvoice({
                       <div className="pt-2">
                         <table className="w-full text-left text-[10px] border-collapse">
                           <thead>
-                            <tr className="border-b border-slate-900 text-slate-800 font-bold bg-slate-50">
-                              <th className="py-2.5 px-2">Description</th>
+                            <tr className="border-b-2 font-bold bg-slate-50" style={{ borderBottomColor: currentThemeHex }}>
+                              <th className="py-2.5 px-2 text-slate-800">Description</th>
                               {pdfCustomizer.colProductCode && <th className="py-2.5 px-2">SKU / Code</th>}
                               <th className="py-2.5 px-2 text-right">Qty</th>
                               {pdfCustomizer.colUnitPrice && <th className="py-2.5 px-2 text-right">Price</th>}
@@ -1202,7 +1370,7 @@ export default function SalesInvoice({
                               </tr>
                             )}
 
-                            <tr className="border-t-2 border-slate-900 font-extrabold text-[12px] text-slate-900">
+                            <tr className="border-t-2 font-extrabold text-[12px]" style={{ color: currentThemeHex, borderTopColor: currentThemeHex }}>
                               <td className="py-2.5 text-left">Grand Total:</td>
                               <td className="py-2.5 text-right font-mono">₹{inv.total.toFixed(2)}</td>
                             </tr>
@@ -1287,12 +1455,12 @@ export default function SalesInvoice({
             `}} />
             <div className="space-y-6">
               {/* Header */}
-              <div className="flex justify-between items-start border-b-2 border-slate-900 pb-5">
+              <div className="flex justify-between items-start border-b-2 pb-5" style={{ borderColor: currentThemeHex }}>
                 <div>
                   {pdfCustomizer.showLogo && companyProfile?.logoUrl && (
                     <img src={companyProfile.logoUrl} alt="Logo" className="max-h-12 object-contain mb-3" />
                   )}
-                  <div className="text-xl font-extrabold uppercase text-slate-900">{customTitle}</div>
+                  <div className="text-xl font-extrabold uppercase" style={{ color: currentThemeHex }}>{customTitle}</div>
                   <div className="font-mono text-[10px] text-slate-650 mt-1">Invoice No: {inv.invoiceNo}</div>
                 </div>
 
@@ -1330,7 +1498,7 @@ export default function SalesInvoice({
               <div className="grid grid-cols-2 gap-6 border-t border-slate-200 pt-4">
                 {pdfCustomizer.showBillingAddress && (
                   <div className="text-[10px] text-slate-700 leading-relaxed">
-                    <span className="text-[9px] uppercase font-bold text-slate-455 block mb-1">Billing Destination (Bill To)</span>
+                    <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Billing Destination (Bill To)</span>
                     <strong className="text-slate-900">{cust?.name}</strong><br/>
                     {inv.billingAddress || cust?.billingAddress || 'Billing address pending'}
                   </div>
@@ -1338,7 +1506,7 @@ export default function SalesInvoice({
                 
                 {pdfCustomizer.showShippingAddress && (
                   <div className="text-[10px] text-slate-700 leading-relaxed text-right">
-                    <span className="text-[9px] uppercase font-bold text-slate-455 block mb-1">Shipping Destination (Ship To)</span>
+                    <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Shipping Destination (Ship To)</span>
                     <strong className="text-slate-900">{inv.shippingName || cust?.name}</strong><br/>
                     {inv.shippingAddress || cust?.shippingAddress || inv.billingAddress || cust?.billingAddress || 'Shipping address pending'}<br/>
                     {inv.shippingState && <span>State: {inv.shippingState}</span>}
@@ -1350,8 +1518,8 @@ export default function SalesInvoice({
               <div className="pt-2">
                 <table className="w-full text-left text-[10px] border-collapse">
                   <thead>
-                    <tr className="border-b border-slate-900 text-slate-800 font-bold bg-slate-50">
-                      <th className="py-2.5 px-2">Description</th>
+                    <tr className="border-b-2 font-bold bg-slate-50" style={{ borderBottomColor: currentThemeHex }}>
+                      <th className="py-2.5 px-2 text-slate-800">Description</th>
                       {pdfCustomizer.colProductCode && <th className="py-2.5 px-2">SKU / Code</th>}
                       <th className="py-2.5 px-2 text-right">Qty</th>
                       {pdfCustomizer.colUnitPrice && <th className="py-2.5 px-2 text-right">Price</th>}
@@ -1437,7 +1605,7 @@ export default function SalesInvoice({
                       </tr>
                     )}
 
-                    <tr className="border-t-2 border-slate-900 font-extrabold text-[12px] text-slate-900">
+                    <tr className="border-t-2 font-extrabold text-[12px]" style={{ color: currentThemeHex, borderTopColor: currentThemeHex }}>
                       <td className="py-2.5 text-left">Grand Total:</td>
                       <td className="py-2.5 text-right font-mono">₹{inv.total.toFixed(2)}</td>
                     </tr>

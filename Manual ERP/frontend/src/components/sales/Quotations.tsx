@@ -183,10 +183,13 @@ export default function Quotations({
     }
   };
 
-  const filteredQuotes = quotations.filter(q =>
-    q.quoteNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    q.customer.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredQuotes = (quotations || []).filter(q => {
+    const quoteNo = q?.quoteNo || '';
+    const customerName = q?.customer?.name || '';
+    const term = (searchTerm || '').toLowerCase();
+    return quoteNo.toLowerCase().includes(term) ||
+      customerName.toLowerCase().includes(term);
+  });
 
   const getStatusColor = (s: string) => {
     switch (s) {

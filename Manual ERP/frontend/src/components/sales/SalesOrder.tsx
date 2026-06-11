@@ -154,26 +154,30 @@ export default function SalesOrder({
     }
   };
 
-  const getCustomerName = (id: string) => customers.find(c => c.id === id)?.name || 'colleague';
-  const getProductName = (id: string) => products.find(p => p.id === id)?.name || 'Item';
+  const getCustomerName = (id: string) => (customers || []).find(c => c?.id === id)?.name || 'colleague';
+  const getProductName = (id: string) => (products || []).find(p => p?.id === id)?.name || 'Item';
 
   const calculateTotal = (order: any) => {
-    const subtotal = (order.items || []).reduce((acc: number, item: any) => {
-      const itemSub = item.quantity * item.price;
-      const itemDiscPercent = item.discount || 0;
+    const subtotal = (order?.items || []).reduce((acc: number, item: any) => {
+      const itemSub = (item?.quantity || 0) * (item?.price || 0);
+      const itemDiscPercent = item?.discount || 0;
       const itemDiscVal = itemSub * (itemDiscPercent / 100);
       return acc + (itemSub - itemDiscVal);
     }, 0);
-    const overallDiscPercent = order.discount || 0;
+    const overallDiscPercent = order?.discount || 0;
     const overallDiscVal = subtotal * (overallDiscPercent / 100);
     return Math.max(0, subtotal - overallDiscVal);
   };
 
-  const filtered = orders.filter(o =>
-    o.orderNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    getCustomerName(o.customerId).toLowerCase().includes(searchTerm.toLowerCase()) ||
-    o.status.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filtered = (orders || []).filter(o => {
+    const orderNo = o?.orderNo || '';
+    const customerName = getCustomerName(o?.customerId || '');
+    const status = o?.status || '';
+    const term = (searchTerm || '').toLowerCase();
+    return orderNo.toLowerCase().includes(term) ||
+      customerName.toLowerCase().includes(term) ||
+      status.toLowerCase().includes(term);
+  });
 
   return (
     <div className="animate-fade-in flex flex-col gap-4 text-left select-none">

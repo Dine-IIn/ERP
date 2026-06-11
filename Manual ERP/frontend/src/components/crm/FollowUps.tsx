@@ -120,11 +120,15 @@ export default function FollowUps({
     }
   };
 
-  const filteredFollowups = followups.filter(f =>
-    f.lead.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (f.lead.companyName && f.lead.companyName.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    f.type.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredFollowups = (followups || []).filter(f => {
+    const leadName = f?.lead?.name || '';
+    const companyName = f?.lead?.companyName || '';
+    const fupType = f?.type || '';
+    const term = (searchTerm || '').toLowerCase();
+    return leadName.toLowerCase().includes(term) ||
+      companyName.toLowerCase().includes(term) ||
+      fupType.toLowerCase().includes(term);
+  });
 
   const getInteractionIcon = (t: string) => {
     switch (t) {

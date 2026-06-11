@@ -1,5 +1,5 @@
 datasource db {
-  provider = "sqlite"
+  provider = "postgres"
   url      = env("DATABASE_URL")
 }
 
@@ -87,6 +87,7 @@ model Company {
   proformaInvoices  ProformaInvoice[]
   salesInvoices     SalesInvoice[]
   deliveryChallans  DeliveryChallan[]
+  documentTemplates DocumentTemplate[]
   dispatches        Dispatch[]
   taxes             Tax[]
   leads             Lead[]
@@ -1108,6 +1109,9 @@ model BillOfMaterials {
   finishedProductId    String
   finishedProduct      Product          @relation("FinishedProductBOM", fields: [finishedProductId], references: [id], onDelete: Cascade)
   version              String
+  baseQuantity         Float            @default(1.0)
+  validFrom            DateTime?
+  validTo              DateTime?
   laborHours           Float            @default(0.0)
   laborRate            Float            @default(0.0)
   overheadAllocation   Float            @default(0.0)
@@ -1129,6 +1133,8 @@ model BomComponent {
   product       Product         @relation("ComponentProductBOM", fields: [productId], references: [id], onDelete: Cascade)
   qtyRequired   Float
   wasteMargin   Float           @default(0.0)
+  componentType String          @default("STOCK") // STOCK, NON_STOCK
+  operationSeqNo Int?
 
   @@map("bom_components")
 }
@@ -1333,5 +1339,22 @@ model MaterialIssue {
 
   @@index([woId])
   @@map("material_issues")
+}
+
+model DocumentTemplate {
+  id          String   @id @default(uuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  docType     String   // "INVOICE", "PROFORMA", "CHALLAN"
+  name        String
+  title       String   @default("Tax Invoice")
+  isDefault   Boolean  @default(false)
+  settings    String   // JSON stringified display toggles (logo, columns, bank, etc.)
+  terms       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([companyId, docType, name])
+  @@map("document_templates")
 }
 

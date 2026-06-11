@@ -1,5 +1,5 @@
-import React from 'react';
-import { AlertCircle, ArrowUpRight, ShieldAlert, ShoppingCart, Sliders, Warehouse } from 'lucide-react';
+import React, { useState } from 'react';
+import { AlertCircle, ArrowUpRight, ShieldAlert, ShoppingCart, Sliders, Warehouse, Search } from 'lucide-react';
 
 interface Product {
   id: string;
@@ -22,8 +22,20 @@ export default function LowStockAlerts({
   onTriggerReorderRedirect,
   onTriggerAuditRedirect
 }: LowStockAlertsProps) {
-  // Filter products below minimum safety threshold
-  const alertProducts = products.filter(p => p.stock <= p.reorderLevel);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Filter products below minimum safety threshold and match search term
+  const alertProducts = (products || [])
+    .filter(p => p.stock <= p.reorderLevel)
+    .filter(p => {
+      const name = p?.name || '';
+      const sku = p?.sku || '';
+      const rack = p?.warehouseLoc || '';
+      const term = (searchTerm || '').toLowerCase();
+      return name.toLowerCase().includes(term) ||
+        sku.toLowerCase().includes(term) ||
+        rack.toLowerCase().includes(term);
+    });
 
   return (
     <div className="space-y-6">
@@ -41,6 +53,20 @@ export default function LowStockAlerts({
         <div className="text-center font-mono bg-red-950/60 border border-red-500/30 px-5 py-2.5 rounded-xl self-start sm:self-auto">
           <div className="text-2xl font-black text-red-400">{alertProducts.length}</div>
           <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Critical Items</div>
+        </div>
+      </div>
+
+      {/* Search bar */}
+      <div className="p-4 bg-slate-900/40 border border-slate-800/80 rounded-2xl backdrop-blur-xl flex items-center justify-between gap-3">
+        <div className="relative max-w-md w-full">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+          <input
+            type="text"
+            placeholder="Search by SKU, name, or rack location..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 bg-slate-950/40 border border-slate-850/60 focus:border-red-500 focus:ring-1 focus:ring-red-500 rounded-xl text-white text-xs outline-none transition-all"
+          />
         </div>
       </div>
 
