@@ -1,5 +1,5 @@
 datasource db {
-  provider = "postgres"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -356,6 +356,7 @@ model Customer {
   creditLimit     Float    @default(0.0)
   creditTime      Int      @default(0)
   clientClassification String?  @default("NATIONAL") // "NATIONAL" or "INTERNATIONAL"
+  state           String   @default("Gujarat")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   salesOrders     SalesOrder[]
@@ -552,22 +553,28 @@ model ProformaInvoiceItem {
 }
 
 model SalesInvoice {
-  id         String             @id @default(uuid())
-  companyId  String
-  company    Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customerId String
-  customer   Customer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  invoiceNo  String
-  date       DateTime           @default(now())
-  dueDate    DateTime?
-  subtotal   Float
-  discount   Float              @default(0.0)
-  tax        Float              @default(0.0)
-  total      Float
-  status     String             @default("UNPAID") // UNPAID, PARTIAL, PAID, OVERDUE, CANCELLED
-  items      SalesInvoiceItem[]
-  createdAt  DateTime           @default(now())
-  updatedAt  DateTime           @updatedAt
+  id              String             @id @default(uuid())
+  companyId       String
+  company         Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customerId      String
+  customer        Customer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  invoiceNo       String
+  date            DateTime           @default(now())
+  dueDate         DateTime?
+  subtotal        Float
+  discount        Float              @default(0.0)
+  tax             Float              @default(0.0)
+  total           Float
+  status          String             @default("UNPAID") // UNPAID, PARTIAL, PAID, OVERDUE, CANCELLED
+  items           SalesInvoiceItem[]
+  billingAddress  String?
+  shippingAddress String?
+  shippingState   String?
+  shippingName    String?
+  salesOrderId    String?
+  salesOrderIds   String?            // JSON string for merged Sales Orders
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
 
   @@unique([companyId, invoiceNo])
   @@map("sales_invoices")

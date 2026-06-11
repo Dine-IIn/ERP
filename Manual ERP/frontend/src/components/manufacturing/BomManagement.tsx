@@ -32,6 +32,83 @@ interface BomManagementProps {
 }
 
 export default function BomManagement({ products = [] }: BomManagementProps) {
+  const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
+
+  const toggleNode = (nodeId: string) => {
+    setExpandedNodes(prev => ({ ...prev, [nodeId]: !prev[nodeId] }));
+  };
+
+  const isServiceItemProduct = (prodId: string): boolean => {
+    const prod = products.find(p => p.id === prodId);
+    if (!prod) return false;
+    const uomLower = (prod.uom || "").toLowerCase();
+    const categoryLower = (prod.category?.name || "").toLowerCase();
+    const nameLower = (prod.name || "").toLowerCase();
+    return (
+      uomLower.includes("hour") ||
+      uomLower.includes("hrs") ||
+      uomLower.includes("serv") ||
+      uomLower.includes("labor") ||
+      uomLower.includes("labour") ||
+      categoryLower.includes("service") ||
+      categoryLower.includes("process") ||
+      nameLower.includes("service") ||
+      nameLower.includes("labor") ||
+      nameLower.includes("labour")
+    );
+  };
+
+  const renderBOMTree = (components: ComponentItem[], parentQty = 1, depth = 0, parentPath = '') => {
+    return components.map((comp, idx) => {
+      const nodePath = `${parentPath}-${comp.productId}-${idx}`;
+      const subBom = bomsList.find(b => b.finishedProductId === comp.productId && b.status === 'ACTIVE');
+      const isExpanded = !!expandedNodes[nodePath];
+      const quantity = comp.qtyRequired * parentQty;
+
+      return (
+        <div key={nodePath} className="flex flex-col">
+          <div className="flex justify-between items-center text-[11px] py-1.5 border-b border-slate-900/30 last:border-b-0">
+            <div className="flex items-center" style={{ paddingLeft: `${depth * 16}px` }}>
+              {subBom ? (
+                <button
+                  type="button"
+                  onClick={() => toggleNode(nodePath)}
+                  className="p-0.5 hover:bg-slate-800 rounded mr-1.5 text-indigo-400 focus:outline-none bg-transparent border-0 cursor-pointer flex items-center justify-center w-4 h-4"
+                >
+                  <span className="font-bold text-[8px] font-mono">{isExpanded ? '▼' : '▶'}</span>
+                </button>
+              ) : (
+                <span className="w-4.5 block text-center text-slate-600 mr-1.5 text-[8px]">•</span>
+              )}
+              <span className={`text-slate-300 font-medium flex items-center flex-wrap gap-1.5 ${subBom ? 'text-indigo-300 font-bold' : ''}`}>
+                {comp.name}
+                {subBom && (
+                  <span className="px-1.5 py-0.25 rounded text-[7px] font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 uppercase tracking-wide">
+                    Nested BOM
+                  </span>
+                )}
+                {isServiceItemProduct(comp.productId) && (
+                  <span className="px-1.5 py-0.25 rounded text-[7px] font-bold bg-amber-500/10 text-amber-450 border border-amber-500/25 uppercase tracking-wide">
+                    Process / Service
+                  </span>
+                )}
+              </span>
+            </div>
+            <span className="font-mono text-slate-455 text-right shrink-0">
+              {formatNumber(quantity)} {comp.unit}
+              {comp.wasteMargin > 0 && <span className="text-[9px] text-amber-500/80 ml-1">(+{comp.wasteMargin}%)</span>}
+            </span>
+          </div>
+          {subBom && isExpanded && (
+            <div className="border-l border-slate-800/85 ml-2 pl-1 mt-0.5 mb-1 bg-slate-950/15 rounded-r-lg">
+              {renderBOMTree(subBom.components, quantity, depth + 1, nodePath)}
+            </div>
+          )}
+        </div>
+      );
+    });
+  };
+
   const formatLaborTime = (hours: number): string => {
     if (hours === 0) return '0h';
     const totalSeconds = Math.round(hours * 3600);
@@ -344,14 +421,9 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
                     </div>
 
                     <div className="text-left">
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Formulation Ingredients</span>
-                      <div className="flex flex-col gap-1.5 bg-slate-950/20 p-3 border border-slate-900 rounded-xl">
-                        {bom.components.map((comp, idx) => (
-                          <div key={idx} className="flex justify-between items-center text-[11px]">
-                            <span className="text-slate-300 font-medium">{comp.name}</span>
-                            <span className="font-mono text-slate-400">{formatNumber(comp.qtyRequired)} {comp.unit} <span className="text-[10px] text-amber-500/80">(+{comp.wasteMargin}% waste)</span></span>
-                          </div>
-                        ))}
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Formulation Ingredients (Multilevel Nested Tree)</span>
+                      <div className="flex flex-col gap-1 bg-slate-950/20 p-3 border border-slate-900 rounded-xl max-h-60 overflow-y-auto">
+                        {renderBOMTree(bom.components, 1, 0, bom.id)}
                       </div>
                     </div>
 
@@ -498,9 +570,14 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
                     disabled={isEditing}
                     className="w-full bg-slate-950 border border-slate-850 p-2.5 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500 disabled:opacity-55"
                   >
-                    {finishedProductsCatalog.map(p => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
+                    {finishedProductsCatalog.map(p => {
+                      const isServ = isServiceItemProduct(p.id);
+                      return (
+                        <option key={p.id} value={p.id}>
+                          {p.name} {isServ ? '🛠️ (Service/Process)' : ''}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
                 <div>
@@ -528,9 +605,16 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
                       onChange={e => setSelectedCompId(e.target.value)}
                       className="w-full bg-slate-900 border border-slate-800 p-2 rounded-lg text-[10px] text-white focus:outline-none focus:border-indigo-500"
                     >
-                      {rawMaterialsCatalog.map(p => (
-                        <option key={p.id} value={p.id}>{p.name} (₹{p.pricing})</option>
-                      ))}
+                      {rawMaterialsCatalog.map(p => {
+                        const hasSubBom = bomsList.some(b => b.finishedProductId === p.id && b.status === 'ACTIVE');
+                        const isServ = isServiceItemProduct(p.id);
+                        let label = p.name;
+                        if (isServ) label += " 🛠️ (Service/Process)";
+                        else if (hasSubBom) label += " 📦 (Has Sub-BOM)";
+                        return (
+                          <option key={p.id} value={p.id}>{label} (₹{p.pricing})</option>
+                        );
+                      })}
                     </select>
                   </div>
                   <div>

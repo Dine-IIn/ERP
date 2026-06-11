@@ -122,14 +122,14 @@ function getLatestUpdateInfo(req: express.Request, type: 'tauri' | 'backend'): U
       }
     }
 
-    // if (tauriUpdateSignature && tauriUpdateSignature.startsWith('dW50cnVzdGVk')) {
-    //   try {
-    //     tauriUpdateSignature = Buffer.from(tauriUpdateSignature, 'base64').toString('utf-8').trim();
-    //     console.log(`🔍 [Updater API] [Diagnostic] Decoded base64 signature:\n${tauriUpdateSignature}`);
-    //   } catch (err) {
-    //     console.error(`Error decoding base64 signature:`, err);
-    //   }
-    // }
+    if (tauriUpdateSignature && tauriUpdateSignature.startsWith('dW50cnVzdGVk')) {
+      try {
+        tauriUpdateSignature = Buffer.from(tauriUpdateSignature, 'base64').toString('utf-8').trim();
+        console.log(`🔍 [Updater API] [Diagnostic] Decoded base64 signature:\n${tauriUpdateSignature}`);
+      } catch (err) {
+        console.error(`Error decoding base64 signature:`, err);
+      }
+    }
 
     let releaseNotes = config.releaseNotes;
     if (notesFile) {

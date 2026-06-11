@@ -716,16 +716,14 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Operation Routing Name</label>
-                  <select
+                  <input
+                    type="text"
+                    required
                     value={jobOperationName}
                     onChange={e => setJobOperationName(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-850 p-2.5 rounded-lg text-xs text-white focus:outline-none"
-                  >
-                    <option value="Autoclave Molding">Autoclave Molding & Layup</option>
-                    <option value="Robotic Precision Welding">Robotic Precision Welding</option>
-                    <option value="Torque Stress testing">Torque Stress testing</option>
-                    <option value="Anodized Spray Finish">Anodized Spray Finish</option>
-                  </select>
+                    placeholder="e.g. Autoclave Molding"
+                    className="w-full bg-slate-950 border border-slate-850 p-2 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
+                  />
                 </div>
                 <div>
                   <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Machine / Work Center</label>

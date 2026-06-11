@@ -1,6 +1,17 @@
 import React, { useState } from 'react';
 import { UserCheck, Search, Plus, Edit, Trash2, X, AlertCircle, MapPin, DollarSign, Clock } from 'lucide-react';
 
+const INDIAN_STATES = [
+  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
+  "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand",
+  "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur",
+  "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab",
+  "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura",
+  "Uttar Pradesh", "Uttarakhand", "West Bengal",
+  "Andaman and Nicobar Islands", "Chandigarh", "Dadra and Nagar Haveli and Daman and Diu",
+  "Delhi", "Jammu and Kashmir", "Ladakh", "Lakshadweep", "Puducherry"
+];
+
 interface CustomerMasterProps {
   customers: any[];
   onCreateCustomer: (customer: any) => Promise<void>;
@@ -33,7 +44,8 @@ export default function CustomerMaster({
     shippingAddress: '',
     creditLimit: '0',
     creditTime: '0',
-    clientClassification: 'NATIONAL'
+    clientClassification: 'NATIONAL',
+    state: 'Gujarat'
   });
   
   const [localErr, setLocalErr] = useState<string | null>(null);
@@ -52,7 +64,8 @@ export default function CustomerMaster({
       shippingAddress: '',
       creditLimit: '0',
       creditTime: '0',
-      clientClassification: 'NATIONAL'
+      clientClassification: 'NATIONAL',
+      state: 'Gujarat'
     });
     setIsEditing(false);
     setEditingId(null);
@@ -73,7 +86,8 @@ export default function CustomerMaster({
       shippingAddress: cust.shippingAddress || '',
       creditLimit: String(cust.creditLimit || 0),
       creditTime: String(cust.creditTime || 0),
-      clientClassification: cust.clientClassification || 'NATIONAL'
+      clientClassification: cust.clientClassification || 'NATIONAL',
+      state: cust.state || 'Gujarat'
     });
     setIsEditing(true);
     setEditingId(cust.id);
@@ -195,7 +209,7 @@ export default function CustomerMaster({
             {filtered.map(cust => (
               <tr key={cust.id} className="border-b border-[var(--border-color)]/40 hover:bg-[var(--bg-tertiary)]/20 transition-colors last:border-b-0 text-left">
                 <td className="p-3 shrink-0">
-                  <span className="font-bold text-[var(--text-primary)] block">{cust.name}</span>
+                  <span className="font-bold text-[var(--text-primary)] block">{cust.name} <span className="text-[10px] font-normal text-indigo-400">({cust.state || 'Gujarat'})</span></span>
                   <span className="text-[10px] text-[var(--text-muted)] mt-0.5">{cust.contactPerson ? `Contact Person: ${cust.contactPerson}` : 'No contact person'}</span>
                 </td>
                 <td className="p-3 shrink-0">
@@ -335,6 +349,21 @@ export default function CustomerMaster({
                 >
                   <option value="NATIONAL">NATIONAL (Domestic Billing)</option>
                   <option value="INTERNATIONAL">INTERNATIONAL (Cross-Border Billing)</option>
+                </select>
+              </div>
+
+              {/* State dropdown */}
+              <div>
+                <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Billing / Shipping State (Compulsory)</label>
+                <select
+                  required
+                  value={form.state}
+                  onChange={e => setForm({ ...form, state: e.target.value })}
+                  className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none cursor-pointer"
+                >
+                  {INDIAN_STATES.map(st => (
+                    <option key={st} value={st}>{st}</option>
+                  ))}
                 </select>
               </div>
 

@@ -110,6 +110,24 @@ export default function ProductionPlanning({ salesOrders = [], products = [], cu
   const [planEndDate, setPlanEndDate] = useState('2026-06-10');
   const [statusFilter, setStatusFilter] = useState('ALL');
 
+  // Independent planning states
+  const [planType, setPlanType] = useState<'sales_order' | 'independent'>('sales_order');
+  const [selectedProductId, setSelectedProductId] = useState('');
+  const [independentQty, setIndependentQty] = useState('10');
+  const [selectedBomId, setSelectedBomId] = useState('');
+
+  // Automatically select default BOM for the chosen product
+  useEffect(() => {
+    if (selectedProductId) {
+      const boms = bomDefinitions.filter(bom => bom.finishedProductId === selectedProductId);
+      if (boms.length > 0) {
+        setSelectedBomId(boms[0].id);
+      } else {
+        setSelectedBomId('');
+      }
+    }
+  }, [selectedProductId, bomDefinitions]);
+
   // Set default dropdown selections when catalog loads (filtering out already scheduled Sales Orders)
   useEffect(() => {
     const scheduledSoIds = plansList.map(p => p.salesOrderId).filter(Boolean);
@@ -125,30 +143,55 @@ export default function ProductionPlanning({ salesOrders = [], products = [], cu
 
   const handleCreatePlanSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const activeSO = activeSalesOrders.find(so => so.id === selectedSoId);
-    if (!activeSO) return;
+    
+    let payload: any = {};
+    if (planType === 'sales_order') {
+      const activeSO = activeSalesOrders.find(so => so.id === selectedSoId);
+      if (!activeSO) return;
 
-    const finishedProductId = activeSO.productId;
-    if (!finishedProductId) {
-      alert("No target product found in the selected Sales Order.");
-      return;
+      const finishedProductId = activeSO.productId;
+      if (!finishedProductId) {
+        alert("No target product found in the selected Sales Order.");
+        return;
+      }
+
+      const matchedBOM = bomDefinitions.find(bom => bom.finishedProductId === finishedProductId);
+      if (!matchedBOM) {
+        alert(`No Bill of Materials (BOM) configured for product "${activeSO.product}". Please publish a BOM formulation first!`);
+        return;
+      }
+
+      payload = {
+        salesOrderId: selectedSoId,
+        finishedProductId,
+        qtyToProduce: Number(activeSO.qty),
+        startDate: planStartDate,
+        endDate: planEndDate,
+        bomId: matchedBOM.id
+      };
+    } else {
+      if (!selectedProductId) {
+        alert("Please select a finished product.");
+        return;
+      }
+      if (!independentQty || Number(independentQty) <= 0) {
+        alert("Please enter a valid quantity.");
+        return;
+      }
+      if (!selectedBomId) {
+        alert("Please select a BOM formulation.");
+        return;
+      }
+
+      payload = {
+        salesOrderId: null,
+        finishedProductId: selectedProductId,
+        qtyToProduce: Number(independentQty),
+        startDate: planStartDate,
+        endDate: planEndDate,
+        bomId: selectedBomId
+      };
     }
-
-    // Try to match a published BOM formula
-    const matchedBOM = bomDefinitions.find(bom => bom.finishedProductId === finishedProductId);
-    if (!matchedBOM) {
-      alert(`No Bill of Materials (BOM) configured for product "${activeSO.product}". Please publish a BOM formulation first!`);
-      return;
-    }
-
-    const payload = {
-      salesOrderId: selectedSoId,
-      finishedProductId,
-      qtyToProduce: Number(activeSO.qty),
-      startDate: planStartDate,
-      endDate: planEndDate,
-      bomId: matchedBOM.id
-    };
 
     try {
       if (isEditing && editingId) {
@@ -257,11 +300,25 @@ export default function ProductionPlanning({ salesOrders = [], products = [], cu
               }
               setIsEditing(false);
               setEditingId(null);
+              setPlanType('sales_order');
               setShowAddModal(true);
             }}
             className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 active:scale-95 transition-all text-white font-bold text-xs rounded-xl shadow-lg cursor-pointer border-0"
           >
             <Plus className="w-4 h-4" /> Schedule Sales Order
+          </button>
+          <button
+            onClick={() => {
+              setIsEditing(false);
+              setEditingId(null);
+              setPlanType('independent');
+              setSelectedProductId(products[0]?.id || '');
+              setIndependentQty('10');
+              setShowAddModal(true);
+            }}
+            className="flex items-center gap-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-700 active:scale-95 transition-all text-white font-bold text-xs rounded-xl shadow-lg cursor-pointer border border-slate-750"
+          >
+            <Plus className="w-4 h-4 text-indigo-400" /> Create Direct Plan
           </button>
         </div>
       </div>
@@ -359,6 +416,10 @@ export default function ProductionPlanning({ salesOrders = [], products = [], cu
                           setPlanEndDate(plan.endDate);
                           setIsEditing(true);
                           setEditingId(plan.id);
+                          setPlanType(plan.salesOrderId ? 'sales_order' : 'independent');
+                          setSelectedProductId(plan.finishedProductId || '');
+                          setIndependentQty(String(plan.qtyToProduce || '10'));
+                          setSelectedBomId(plan.bomId || '');
                           setShowAddModal(true);
                         }}
                         className="px-2.5 py-1.5 bg-indigo-650/10 hover:bg-indigo-650 text-indigo-400 hover:text-white rounded-lg text-[10px] uppercase font-bold cursor-pointer transition-all border-0 bg-transparent flex items-center gap-1"
@@ -486,27 +547,98 @@ export default function ProductionPlanning({ salesOrders = [], products = [], cu
             </div>
 
             <form onSubmit={handleCreatePlanSubmit} className="p-6 space-y-4">
-              <div>
-                <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Select Customer Sales Order</label>
-                {selectableSalesOrders.length > 0 ? (
-                  <select
-                    value={selectedSoId}
-                    onChange={e => setSelectedSoId(e.target.value)}
-                    disabled={isEditing}
-                    className="w-full bg-slate-950 border border-slate-850 p-2.5 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500 disabled:opacity-55"
-                  >
-                    {selectableSalesOrders.map(so => (
-                      <option key={so.id} value={so.id}>
-                        {so.orderNo} - {so.customerName} ({so.product} x {so.qty})
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <div className="text-amber-500 bg-amber-500/10 border border-amber-500/20 p-3 rounded-lg text-xs font-semibold mt-1">
-                    No unscheduled Sales Orders available. All Sales Orders have already been planned!
+              {!isEditing && (
+                <div className="flex gap-4 border-b border-slate-800 pb-3 mb-2">
+                  <label className="flex items-center gap-2 text-xs font-bold text-slate-350 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="planType"
+                      checked={planType === 'sales_order'}
+                      onChange={() => setPlanType('sales_order')}
+                      className="accent-indigo-500"
+                    />
+                    Link Sales Order
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-bold text-slate-350 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="planType"
+                      checked={planType === 'independent'}
+                      onChange={() => setPlanType('independent')}
+                      className="accent-indigo-500"
+                    />
+                    Direct Independent Plan
+                  </label>
+                </div>
+              )}
+
+              {planType === 'sales_order' ? (
+                <div>
+                  <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Select Customer Sales Order</label>
+                  {selectableSalesOrders.length > 0 ? (
+                    <select
+                      value={selectedSoId}
+                      onChange={e => setSelectedSoId(e.target.value)}
+                      disabled={isEditing}
+                      className="w-full bg-slate-950 border border-slate-850 p-2.5 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500 disabled:opacity-55"
+                    >
+                      {selectableSalesOrders.map(so => (
+                        <option key={so.id} value={so.id}>
+                          {so.orderNo} - {so.customerName} ({so.product} x {so.qty})
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="text-amber-500 bg-amber-500/10 border border-amber-500/20 p-3 rounded-lg text-xs font-semibold mt-1">
+                      No unscheduled Sales Orders available. All Sales Orders have already been planned!
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Select Finished Product</label>
+                    <select
+                      value={selectedProductId}
+                      onChange={e => setSelectedProductId(e.target.value)}
+                      disabled={isEditing}
+                      className="w-full bg-slate-950 border border-slate-850 p-2.5 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500 disabled:opacity-55"
+                      required
+                    >
+                      <option value="" disabled>Select target item</option>
+                      {products.map(p => (
+                        <option key={p.id} value={p.id}>{p.name} (SKU: {p.sku})</option>
+                      ))}
+                    </select>
                   </div>
-                )}
-              </div>
+                  <div>
+                    <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Quantity to Produce</label>
+                    <input
+                      type="number"
+                      min="1"
+                      placeholder="e.g. 100"
+                      value={independentQty}
+                      onChange={e => setIndependentQty(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-850 p-2.5 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Select BOM Formulation</label>
+                    <select
+                      value={selectedBomId}
+                      onChange={e => setSelectedBomId(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-850 p-2.5 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
+                      required
+                    >
+                      <option value="" disabled>Select BOM version</option>
+                      {bomDefinitions.filter(bom => bom.finishedProductId === selectedProductId).map(bom => (
+                        <option key={bom.id} value={bom.id}>v{bom.version} (Labor Hours: {bom.laborHours})</option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>

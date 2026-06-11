@@ -74,7 +74,9 @@ export default function ProductMaster({
     hsnSacCode: '',
     imageUrl: '',
     bomReference: '',
-    moq: '1'
+    moq: '1',
+    reorderLevel: '5.0',
+    warehouseLoc: ''
   });
 
   const [variants, setVariants] = useState<ProductVariantForm[]>([]);
@@ -92,7 +94,9 @@ export default function ProductMaster({
       hsnSacCode: '',
       imageUrl: '',
       bomReference: '',
-      moq: '1'
+      moq: '1',
+      reorderLevel: '5.0',
+      warehouseLoc: ''
     });
     setVariants([]);
     setIsEditing(false);
@@ -112,7 +116,9 @@ export default function ProductMaster({
       hsnSacCode: prod.hsnSacCode || '',
       imageUrl: prod.imageUrl || '',
       bomReference: prod.bomReference || '',
-      moq: String(prod.moq || 1)
+      moq: String(prod.moq || 1),
+      reorderLevel: String(prod.reorderLevel !== undefined ? prod.reorderLevel : 5.0),
+      warehouseLoc: prod.warehouseLoc || ''
     });
 
     const parsedVariants = (prod.variants || []).map((v: any) => ({
@@ -164,6 +170,8 @@ export default function ProductMaster({
 
     const payload = {
       ...form,
+      reorderLevel: parseFloat(form.reorderLevel) || 0.0,
+      warehouseLoc: form.warehouseLoc ? form.warehouseLoc.trim() : null,
       variants: variants.map(v => ({
         name: v.name.trim(),
         sku: v.sku.trim() || null,
@@ -389,7 +397,7 @@ export default function ProductMaster({
                     HSN: {prod.hsnSacCode || 'N/A'}
                   </span>
                   <span className="text-[9px] text-[var(--text-secondary)] block mt-0.5 truncate max-w-xs font-mono">
-                    MOQ: {prod.moq || 1.0} • BOM: {prod.bomReference || 'None'}
+                    MOQ: {prod.moq || 1.0} • BOM: {prod.bomReference || 'None'} • Safety: {prod.reorderLevel !== undefined ? prod.reorderLevel : 5.0} {prod.uom} • Loc: {prod.warehouseLoc || 'N/A'}
                   </span>
                 </td>
 
@@ -650,6 +658,31 @@ export default function ProductMaster({
                   value={form.moq}
                   onChange={e => setForm({ ...form, moq: e.target.value })}
                   className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Safety Stock Limit (Reorder Level)</label>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  required
+                  value={form.reorderLevel}
+                  onChange={e => setForm({ ...form, reorderLevel: e.target.value })}
+                  className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none font-mono"
+                  placeholder="5.0"
+                />
+              </div>
+
+              <div>
+                <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Warehouse Location Shelf / Rack</label>
+                <input
+                  type="text"
+                  value={form.warehouseLoc}
+                  onChange={e => setForm({ ...form, warehouseLoc: e.target.value })}
+                  className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none font-mono"
+                  placeholder="e.g. Rack A-3"
                 />
               </div>
 

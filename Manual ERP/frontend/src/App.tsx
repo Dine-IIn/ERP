@@ -37,6 +37,7 @@ const VendorPayments = React.lazy(() => import('./components/purchase/VendorPaym
 const InventoryProducts = React.lazy(() => import('./components/inventory/InventoryProducts'));
 const StockOverview = React.lazy(() => import('./components/inventory/StockOverview'));
 const LowStockAlerts = React.lazy(() => import('./components/inventory/LowStockAlerts'));
+const CompleteInventoryView = React.lazy(() => import('./components/inventory/CompleteInventoryView'));
 
 // --- PHASE 2 HIGH-FIDELITY COMPONENT IMPORTS ---
 const CustomizableDashboard = React.lazy(() => import('./components/dashboard/CustomizableDashboard'));
@@ -1209,6 +1210,20 @@ export default function App() {
     };
   }, []);
 
+  // --- GLOBAL KEYBOARD HOOK (ESC -> DASHBOARD) ---
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setActiveWorkspaceModule('dashboard');
+        setActiveWorkspaceSubModule('');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
   // Client-side inactivity timer for desktop sessions (configurable via VITE_INACTIVITY_TIMEOUT_MINUTES env)
   useEffect(() => {
     if (!token || !user || getDeviceDetails().deviceType !== 'DESKTOP') {
@@ -1740,6 +1755,7 @@ export default function App() {
       case 'INVENTORY_STOCK_OVERVIEW': import('./components/inventory/StockOverview'); break;
       case 'INVENTORY_ALERTS':
       case 'INVENTORY_LOW_ALERT': import('./components/inventory/LowStockAlerts'); break;
+      case 'INVENTORY_COMPLETE_VIEW': import('./components/inventory/CompleteInventoryView'); break;
       case 'HRMS_EMPLOYEES': import('./components/hrms/Employees'); break;
       case 'HRMS_ATTENDANCE': import('./components/hrms/Attendance'); break;
       case 'HRMS_LEAVES': import('./components/hrms/LeaveManagement'); break;
@@ -4725,6 +4741,10 @@ export default function App() {
                           setActiveWorkspaceSubModule('INVENTORY_PRODUCT');
                         }}
                       />
+                    )}
+
+                    {activeWorkspaceSubModule === 'INVENTORY_COMPLETE_VIEW' && (
+                      <CompleteInventoryView products={productsList} />
                     )}
 
                   </div>

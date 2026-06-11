@@ -39,10 +39,10 @@ export async function createCustomer(req: AuthenticatedRequest, res: Response) {
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { name, customerType, customerGroup, contactPerson, contactNo, email, billingAddress, shippingAddress, creditLimit, creditTime } = req.body;
+    const { name, customerType, customerGroup, contactPerson, contactNo, email, billingAddress, shippingAddress, creditLimit, creditTime, state, clientClassification } = req.body;
 
-    if (!name || !customerType || !contactNo) {
-      return res.status(400).json({ error: "Name, customerType, and contactNo are required fields" });
+    if (!name || !customerType || !contactNo || !state) {
+      return res.status(400).json({ error: "Name, customerType, contactNo, and state are required fields" });
     }
 
     // Check unique customer name in company
@@ -65,7 +65,9 @@ export async function createCustomer(req: AuthenticatedRequest, res: Response) {
         billingAddress: billingAddress || null,
         shippingAddress: shippingAddress || billingAddress || null,
         creditLimit: creditLimit ? parseFloat(creditLimit) : 0.0,
-        creditTime: creditTime ? parseInt(creditTime) : 0
+        creditTime: creditTime ? parseInt(creditTime) : 0,
+        state: state,
+        clientClassification: clientClassification || "NATIONAL"
       }
     });
 
@@ -93,7 +95,7 @@ export async function updateCustomer(req: AuthenticatedRequest, res: Response) {
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
-    const { name, customerType, customerGroup, contactPerson, contactNo, email, billingAddress, shippingAddress, creditLimit, creditTime } = req.body;
+    const { name, customerType, customerGroup, contactPerson, contactNo, email, billingAddress, shippingAddress, creditLimit, creditTime, state, clientClassification } = req.body;
 
     const customerToUpdate = await prisma.customer.findFirst({
       where: { id, companyId }
@@ -121,7 +123,9 @@ export async function updateCustomer(req: AuthenticatedRequest, res: Response) {
         ...(billingAddress !== undefined && { billingAddress: billingAddress || null }),
         ...(shippingAddress !== undefined && { shippingAddress: shippingAddress || billingAddress || null }),
         ...(creditLimit !== undefined && { creditLimit: parseFloat(creditLimit) || 0.0 }),
-        ...(creditTime !== undefined && { creditTime: parseInt(creditTime) || 0 })
+        ...(creditTime !== undefined && { creditTime: parseInt(creditTime) || 0 }),
+        ...(state !== undefined && { state }),
+        ...(clientClassification !== undefined && { clientClassification })
       }
     });
 
@@ -493,7 +497,7 @@ export async function createProduct(req: AuthenticatedRequest, res: Response) {
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { name, categoryId, brandId, uom, pricing, hsnSacCode, imageUrl, bomReference, moq, variants } = req.body;
+    const { name, categoryId, brandId, uom, pricing, hsnSacCode, imageUrl, bomReference, moq, variants, reorderLevel, warehouseLoc } = req.body;
 
     if (!name || !uom) {
       return res.status(400).json({ error: "Product name and UOM are required fields" });
@@ -518,9 +522,15 @@ export async function createProduct(req: AuthenticatedRequest, res: Response) {
         hsnSacCode: hsnSacCode || null,
         imageUrl: imageUrl || null,
         bomReference: bomReference || null,
-        moq: moq ? parseFloat(moq) : 1.0
+        moq: moq ? parseFloat(moq) : 1.0,
+        reorderLevel: reorderLevel ? parseFloat(reorderLevel) : 5.0,
+        warehouseLoc: warehouseLoc || null
       }
     });
+
+    // Check if initial stock (which defaults to 0) drops below reorderLevel
+    const { checkAndNotifyLowStock } = require('../utils/lowStockAlert');
+    await checkAndNotifyLowStock(product.id, req.user?.userId);
 
     // Create variants if any
     const createdVariants: any[] = [];
@@ -564,7 +574,7 @@ export async function updateProduct(req: AuthenticatedRequest, res: Response) {
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
-    const { name, categoryId, brandId, uom, pricing, hsnSacCode, imageUrl, bomReference, moq, variants } = req.body;
+    const { name, categoryId, brandId, uom, pricing, hsnSacCode, imageUrl, bomReference, moq, variants, reorderLevel, warehouseLoc } = req.body;
 
     const productToUpdate = await prisma.product.findFirst({
       where: { id, companyId },
@@ -592,9 +602,15 @@ export async function updateProduct(req: AuthenticatedRequest, res: Response) {
         ...(hsnSacCode !== undefined && { hsnSacCode: hsnSacCode || null }),
         ...(imageUrl !== undefined && { imageUrl: imageUrl || null }),
         ...(bomReference !== undefined && { bomReference: bomReference || null }),
-        ...(moq !== undefined && { moq: parseFloat(moq) || 1.0 })
+        ...(moq !== undefined && { moq: parseFloat(moq) || 1.0 }),
+        ...(reorderLevel !== undefined && { reorderLevel: parseFloat(reorderLevel) || 0.0 }),
+        ...(warehouseLoc !== undefined && { warehouseLoc: warehouseLoc || null })
       }
     });
+
+    // Check if updated parameters caused product to drop below reorder limit
+    const { checkAndNotifyLowStock } = require('../utils/lowStockAlert');
+    await checkAndNotifyLowStock(id, req.user?.userId);
 
     // Handle variant replacements (simpler transaction: wipe and recreate)
     if (variants && Array.isArray(variants)) {

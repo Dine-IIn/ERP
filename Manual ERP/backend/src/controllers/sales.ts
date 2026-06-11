@@ -4,6 +4,25 @@ import prisma from '../services/db';
 import { logAudit } from '../utils/audit';
 import { sendEmailNotification } from '../utils';
 
+const isServiceItem = (product: any): boolean => {
+  if (!product) return false;
+  const uomLower = (product.uom || "").toLowerCase();
+  const categoryLower = (product.category?.name || "").toLowerCase();
+  const nameLower = (product.name || "").toLowerCase();
+  return (
+    uomLower.includes("hour") ||
+    uomLower.includes("hrs") ||
+    uomLower.includes("serv") ||
+    uomLower.includes("labor") ||
+    uomLower.includes("labour") ||
+    categoryLower.includes("service") ||
+    categoryLower.includes("process") ||
+    nameLower.includes("service") ||
+    nameLower.includes("labor") ||
+    nameLower.includes("labour")
+  );
+};
+
 // Helper to generate next document number
 async function generateDocNo(companyId: string, prefix: string, modelName: 'salesOrder' | 'proformaInvoice' | 'salesInvoice' | 'deliveryChallan' | 'dispatch'): Promise<string> {
   const rand = Math.floor(1000 + Math.random() * 9000);
@@ -103,13 +122,60 @@ export async function listSalesOrders(req: AuthenticatedRequest, res: Response) 
       include: {
         customer: true,
         items: {
-          include: { product: true }
+          include: {
+            product: {
+              include: {
+                category: true
+              }
+            }
+          }
         }
       },
       orderBy: { orderDate: 'desc' }
     });
 
-    return res.json({ orders });
+    const enrichedOrders = await Promise.all(orders.map(async (order) => {
+      const invoices = await prisma.salesInvoice.findMany({
+        where: {
+          companyId,
+          OR: [
+            { salesOrderId: order.id },
+            {
+              salesOrderIds: {
+                contains: order.id
+              }
+            }
+          ]
+        },
+        include: {
+          items: true
+        }
+      });
+
+      const billedQuantities: Record<string, number> = {};
+      for (const inv of invoices) {
+        for (const item of inv.items) {
+          billedQuantities[item.productId] = (billedQuantities[item.productId] || 0) + item.quantity;
+        }
+      }
+
+      const enrichedItems = order.items.map((item) => {
+        const billed = billedQuantities[item.productId] || 0.0;
+        const remaining = Math.max(0.0, item.quantity - billed);
+        return {
+          ...item,
+          billedQuantity: billed,
+          remainingQuantity: remaining
+        };
+      });
+
+      return {
+        ...order,
+        items: enrichedItems
+      };
+    }));
+
+    return res.json({ orders: enrichedOrders });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }
@@ -483,7 +549,7 @@ export async function createSalesInvoice(req: AuthenticatedRequest, res: Respons
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { customerId, dueDate, discount, tax, subtotal, total, status, items } = req.body;
+    const { customerId, dueDate, discount, tax, subtotal, total, status, items, billingAddress, shippingAddress, shippingState, shippingName, salesOrderId, salesOrderIds } = req.body;
 
     if (!customerId || !items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "Customer and at least one item are required." });
@@ -502,7 +568,13 @@ export async function createSalesInvoice(req: AuthenticatedRequest, res: Respons
           discount: parseFloat(discount) || 0.0,
           tax: parseFloat(tax) || 0.0,
           total: parseFloat(total) || 0.0,
-          status: status || 'UNPAID'
+          status: status || 'UNPAID',
+          billingAddress: billingAddress || null,
+          shippingAddress: shippingAddress || null,
+          shippingState: shippingState || null,
+          shippingName: shippingName || null,
+          salesOrderId: salesOrderId || null,
+          salesOrderIds: salesOrderIds || null
         }
       });
 
@@ -541,7 +613,7 @@ export async function updateSalesInvoice(req: AuthenticatedRequest, res: Respons
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
-    const { customerId, dueDate, discount, tax, subtotal, total, status, items } = req.body;
+    const { customerId, dueDate, discount, tax, subtotal, total, status, items, billingAddress, shippingAddress, shippingState, shippingName, salesOrderId, salesOrderIds } = req.body;
 
     const invoice = await prisma.salesInvoice.findFirst({ where: { id, companyId } });
     if (!invoice) return res.status(404).json({ error: "Sales Invoice not found" });
@@ -558,7 +630,13 @@ export async function updateSalesInvoice(req: AuthenticatedRequest, res: Respons
           ...(discount !== undefined && { discount: parseFloat(discount) || 0.0 }),
           ...(tax !== undefined && { tax: parseFloat(tax) || 0.0 }),
           ...(total !== undefined && { total: parseFloat(total) || 0.0 }),
-          ...(status && { status })
+          ...(status && { status }),
+          ...(billingAddress !== undefined && { billingAddress: billingAddress || null }),
+          ...(shippingAddress !== undefined && { shippingAddress: shippingAddress || null }),
+          ...(shippingState !== undefined && { shippingState: shippingState || null }),
+          ...(shippingName !== undefined && { shippingName: shippingName || null }),
+          ...(salesOrderId !== undefined && { salesOrderId: salesOrderId || null }),
+          ...(salesOrderIds !== undefined && { salesOrderIds: salesOrderIds || null })
         }
       });
 
@@ -872,37 +950,51 @@ export async function createDispatch(req: AuthenticatedRequest, res: Response) {
       // Adjust stock levels and log adjustments
       const order = await tx.salesOrder.findUnique({
         where: { id: orderId },
-        include: { items: true }
+        include: {
+          items: {
+            include: {
+              product: {
+                include: {
+                  category: true
+                }
+              }
+            }
+          }
+        }
       });
       if (order) {
         for (const item of order.items) {
-          await tx.product.update({
-            where: { id: item.productId },
-            data: { stock: { decrement: item.quantity } }
-          });
-
-          const updatedProd = await tx.product.findUnique({
-            where: { id: item.productId },
-            select: { stock: true }
-          });
-          const newStock = updatedProd ? updatedProd.stock : 0.0;
-          const previousStock = newStock + item.quantity;
-
-          const adjCount = await tx.stockAdjustment.count({ where: { companyId } });
-          const adjustmentNo = `ADJ-${new Date().getFullYear()}-${(adjCount + 1).toString().padStart(5, '0')}`;
-          await tx.stockAdjustment.create({
-            data: {
-              companyId,
-              productId: item.productId,
-              adjustmentNo,
-              type: 'OUTWARD_SO',
-              quantity: -item.quantity,
-              previousStock,
-              newStock,
-              reason: `Sales Dispatch ${dispatchNo}`,
-              referenceNo: dispatchNo
+          const isServ = isServiceItem(item.product);
+          if (!isServ) {
+            const remainingStock = item.product.stock - item.quantity;
+            if (remainingStock < item.product.reorderLevel) {
+              throw new Error(`Cannot dispatch: stock for product '${item.product.name}' will drop below safety limit of ${item.product.reorderLevel} ${item.product.uom}. Available stock: ${item.product.stock}.`);
             }
-          });
+
+            await tx.product.update({
+              where: { id: item.productId },
+              data: { stock: { decrement: item.quantity } }
+            });
+
+            const newStock = remainingStock;
+            const previousStock = item.product.stock;
+
+            const adjCount = await tx.stockAdjustment.count({ where: { companyId } });
+            const adjustmentNo = `ADJ-${new Date().getFullYear()}-${(adjCount + 1).toString().padStart(5, '0')}`;
+            await tx.stockAdjustment.create({
+              data: {
+                companyId,
+                productId: item.productId,
+                adjustmentNo,
+                type: 'OUTWARD_SO',
+                quantity: -item.quantity,
+                previousStock,
+                newStock,
+                reason: `Sales Dispatch ${dispatchNo}`,
+                referenceNo: dispatchNo
+              }
+            });
+          }
         }
       }
 
@@ -911,8 +1003,16 @@ export async function createDispatch(req: AuthenticatedRequest, res: Response) {
 
     const finalDispatch = await prisma.dispatch.findUnique({
       where: { id: dispatch.id },
-      include: { order: { include: { customer: true } } }
+      include: { order: { include: { customer: true, items: true } } }
     });
+
+    // Fire low stock check alerts asynchronously after transaction commits
+    const { checkAndNotifyLowStock } = require('../utils/lowStockAlert');
+    if (finalDispatch && finalDispatch.order) {
+      for (const item of finalDispatch.order.items) {
+        await checkAndNotifyLowStock(item.productId, req.user?.userId);
+      }
+    }
 
     return res.status(201).json({ message: `Dispatch ${dispatchNo} registered successfully`, dispatch: finalDispatch });
   } catch (error: any) {
@@ -931,16 +1031,31 @@ export async function updateDispatch(req: AuthenticatedRequest, res: Response) {
     const disp = await prisma.dispatch.findFirst({ where: { id, companyId } });
     if (!disp) return res.status(404).json({ error: "Dispatch record not found" });
 
-    const updated = await prisma.dispatch.update({
-      where: { id },
-      data: {
-        ...(carrier !== undefined && { carrier: carrier || null }),
-        ...(trackingNo !== undefined && { trackingNo: trackingNo || null }),
-        ...(vehicleNo !== undefined && { vehicleNo: vehicleNo || null }),
-        ...(shippingCost !== undefined && { shippingCost: parseFloat(shippingCost) || 0.0 }),
-        ...(status && { status }),
-        ...(notes !== undefined && { notes: notes || null })
+    const updated = await prisma.$transaction(async (tx) => {
+      const up = await tx.dispatch.update({
+        where: { id },
+        data: {
+          ...(carrier !== undefined && { carrier: carrier || null }),
+          ...(trackingNo !== undefined && { trackingNo: trackingNo || null }),
+          ...(vehicleNo !== undefined && { vehicleNo: vehicleNo || null }),
+          ...(shippingCost !== undefined && { shippingCost: parseFloat(shippingCost) || 0.0 }),
+          ...(status && { status }),
+          ...(notes !== undefined && { notes: notes || null })
+        }
+      });
+
+      if (status) {
+        let soStatus = 'DISPATCHED';
+        if (status === 'DELIVERED') soStatus = 'COMPLETED';
+        else if (status === 'RETURNED') soStatus = 'CANCELLED';
+
+        await tx.salesOrder.update({
+          where: { id: disp.orderId },
+          data: { status: soStatus }
+        });
       }
+
+      return up;
     });
 
     const finalDispatch = await prisma.dispatch.findUnique({

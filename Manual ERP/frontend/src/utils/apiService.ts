@@ -82,6 +82,9 @@ export class ApiError extends Error {
 }
 
 async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
+  if (typeof window !== 'undefined' && !window.navigator.onLine) {
+    throw new Error("Internet disconnected. Request blocked to prevent data inconsistency.");
+  }
   const token = localStorage.getItem('erp_token');
   
   const headers = new Headers(options.headers);

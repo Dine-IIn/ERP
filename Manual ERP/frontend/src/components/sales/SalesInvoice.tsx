@@ -1,6 +1,17 @@
 import React, { useState } from 'react';
 import { Receipt, Search, Plus, Edit, Trash2, X, AlertCircle, Calendar, CheckCircle2, Mail, Download, Layers } from 'lucide-react';
 
+const INDIAN_STATES = [
+  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
+  "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand",
+  "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur",
+  "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab",
+  "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura",
+  "Uttar Pradesh", "Uttarakhand", "West Bengal",
+  "Andaman and Nicobar Islands", "Chandigarh", "Dadra and Nagar Haveli and Daman and Diu",
+  "Delhi", "Jammu and Kashmir", "Ladakh", "Lakshadweep", "Puducherry"
+];
+
 interface SalesInvoiceProps {
   invoices: any[];
   customers: any[];
@@ -50,6 +61,134 @@ export default function SalesInvoice({
   const [loading, setLoading] = useState(false);
   const [emailingId, setEmailingId] = useState<string | null>(null);
 
+  // --- NEW STATES FOR ADVANCED INVOICING, MERGING, SHIPPING & PRINTING ---
+  const [companyProfile, setCompanyProfile] = useState<any>(null);
+  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
+  const [salesOrders, setSalesOrders] = useState<any[]>([]);
+  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
+  
+  const [billingAddress, setBillingAddress] = useState('');
+  const [shippingAddress, setShippingAddress] = useState('');
+  const [shippingState, setShippingState] = useState('Gujarat');
+  const [shippingName, setShippingName] = useState('');
+  const [diffShipping, setDiffShipping] = useState(false);
+
+  // Customizer dialog & print stream states
+  const [customizingInvoice, setCustomizingInvoice] = useState<any>(null);
+  const [activePrintInvoice, setActivePrintInvoice] = useState<any>(null);
+  const [customTitle, setCustomTitle] = useState('Tax Invoice');
+  const [customNotes, setCustomNotes] = useState('All financial disputes are governed under corporate guidelines. Thank you!');
+  const [pdfCustomizer, setPdfCustomizer] = useState({
+    showLogo: true,
+    showCompanyDetails: true,
+    showBillingAddress: true,
+    showShippingAddress: true,
+    showBankDetails: true,
+    showTerms: true,
+    colProductCode: true,
+    colUnitPrice: true,
+    colDiscount: true,
+    colTax: true,
+  });
+
+  // Load backend profiles, bank accounts, and sales orders
+  React.useEffect(() => {
+    const fetchProfileData = async () => {
+      try {
+        const profileData = await apiClient.get<any>('/api/admin/company/profile');
+        setCompanyProfile(profileData.company || null);
+      } catch (err) {
+        console.error('Failed to load company profile:', err);
+      }
+    };
+    const fetchBankData = async () => {
+      try {
+        const bankData = await apiClient.get<{ bankAccounts: any[] }>('/api/finance/bank-accounts');
+        setBankAccounts(bankData.bankAccounts || []);
+      } catch (err) {
+        console.error('Failed to load bank accounts:', err);
+      }
+    };
+    const fetchOrdersData = async () => {
+      try {
+        const ordersData = await apiClient.get<{ orders: any[] }>('/api/sales/orders');
+        setSalesOrders(ordersData.orders || []);
+      } catch (err) {
+        console.error('Failed to load Sales Orders:', err);
+      }
+    };
+
+    fetchProfileData();
+    fetchBankData();
+    fetchOrdersData();
+  }, [showModal, customizingInvoice]);
+
+  // Sync customer state and default shipping addresses
+  React.useEffect(() => {
+    if (!customerId) return;
+    const cust = customers.find(c => c.id === customerId);
+    if (!cust) return;
+
+    setBillingAddress(cust.billingAddress || '');
+    if (!diffShipping) {
+      setShippingAddress(cust.shippingAddress || cust.billingAddress || '');
+      setShippingState(cust.state || 'Gujarat');
+      setShippingName(cust.name || '');
+    }
+
+    // Auto Tax Bracket Calculation
+    if (cust.clientClassification === 'INTERNATIONAL') {
+      setTax('0.00');
+    } else if (companyProfile) {
+      if (cust.state === companyProfile.state) {
+        setTax('18.00'); // CGST + SGST (standard 18%)
+      } else {
+        setTax('18.00'); // IGST (standard 18%)
+      }
+    }
+  }, [customerId, companyProfile, diffShipping]);
+
+  // Toggle order in list & merge its items
+  const handleToggleSalesOrder = (soId: string) => {
+    let updatedIds = [...selectedOrderIds];
+    if (updatedIds.includes(soId)) {
+      updatedIds = updatedIds.filter(id => id !== soId);
+    } else {
+      updatedIds.push(soId);
+    }
+    setSelectedOrderIds(updatedIds);
+
+    const selectedOrders = salesOrders.filter(so => updatedIds.includes(so.id));
+    const mergedItems: Record<string, { productId: string; quantity: number; price: number; discount: number }> = {};
+
+    for (const order of selectedOrders) {
+      for (const item of order.items) {
+        const remaining = item.remainingQuantity !== undefined ? item.remainingQuantity : item.quantity;
+        if (remaining <= 0) continue;
+
+        if (mergedItems[item.productId]) {
+          mergedItems[item.productId].quantity += remaining;
+        } else {
+          mergedItems[item.productId] = {
+            productId: item.productId,
+            quantity: remaining,
+            price: item.price,
+            discount: item.discount || 0
+          };
+        }
+      }
+    }
+
+    const newItemsList = Object.values(mergedItems).map(item => ({
+      productId: item.productId,
+      quantity: String(item.quantity),
+      price: String(item.price),
+      discount: String(item.discount)
+    }));
+
+    setItems(newItemsList.length > 0 ? newItemsList : [{ productId: products[0]?.id || '', quantity: '1', price: String(products[0]?.pricing || 0), discount: '0.00' }]);
+  };
+
   const openAddModal = () => {
     setCustomerId(customers[0]?.id || '');
     setDueDate('');
@@ -63,6 +202,15 @@ export default function SalesInvoice({
     setEditingId(null);
     setLocalErr(null);
     setLocalSuccess(null);
+    
+    // Reset new states
+    setSelectedOrderIds([]);
+    setBillingAddress('');
+    setShippingAddress('');
+    setShippingState('Gujarat');
+    setShippingName('');
+    setDiffShipping(false);
+    
     setShowModal(true);
   };
 
@@ -78,6 +226,29 @@ export default function SalesInvoice({
     setStatus(inv.status || 'UNPAID');
     setBillingMode('FULL');
     setBillingFactor('100.00');
+
+    // Load new states
+    setBillingAddress(inv.billingAddress || '');
+    setShippingAddress(inv.shippingAddress || '');
+    setShippingState(inv.shippingState || 'Gujarat');
+    setShippingName(inv.shippingName || '');
+    setDiffShipping(!!inv.shippingAddress && inv.shippingAddress !== inv.billingAddress);
+    
+    let resolvedOrderIds: string[] = [];
+    if (inv.salesOrderId) {
+      resolvedOrderIds.push(inv.salesOrderId);
+    }
+    if (inv.salesOrderIds) {
+      try {
+        const parsed = JSON.parse(inv.salesOrderIds);
+        if (Array.isArray(parsed)) {
+          resolvedOrderIds = Array.from(new Set([...resolvedOrderIds, ...parsed]));
+        }
+      } catch (e) {
+        console.error("Failed to parse salesOrderIds", e);
+      }
+    }
+    setSelectedOrderIds(resolvedOrderIds);
 
     const mappedItems = (inv.items || []).map((item: any) => ({
       productId: item.productId,
@@ -154,6 +325,12 @@ export default function SalesInvoice({
       subtotal,
       total: totalVal,
       status,
+      billingAddress: billingAddress || null,
+      shippingAddress: shippingAddress || null,
+      shippingState: shippingState || null,
+      shippingName: shippingName || null,
+      salesOrderId: selectedOrderIds.length === 1 ? selectedOrderIds[0] : null,
+      salesOrderIds: selectedOrderIds.length > 1 ? JSON.stringify(selectedOrderIds) : null,
       items: items.map(item => ({
         productId: item.productId,
         quantity: (parseFloat(item.quantity) || 1.0) * (billingPct / 100), // Scale quantity by partial billing factor
@@ -203,119 +380,9 @@ export default function SalesInvoice({
   };
 
   const handleDownloadPDF = (inv: any) => {
-    const cust = customers.find(c => c.id === inv.customerId);
-    const docHtml = `
-      <html>
-        <head>
-          <title>Sales Invoice - ${inv.invoiceNo}</title>
-          <style>
-            body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #333; padding: 40px; background: #fff; }
-            .header { display: flex; justify-content: space-between; border-bottom: 2px solid #10b981; padding-bottom: 20px; margin-bottom: 30px; }
-            .title { font-size: 24px; font-weight: bold; color: #10b981; text-transform: uppercase; }
-            .meta { font-size: 11px; text-align: right; color: #555; }
-            .section { margin-bottom: 25px; }
-            .section-title { font-size: 12px; font-weight: bold; text-transform: uppercase; color: #10b981; border-bottom: 1px solid #eee; padding-bottom: 4px; margin-bottom: 8px; }
-            .client-details { font-size: 12px; line-height: 1.5; }
-            table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-            th { background: #f8fafc; border-bottom: 2px solid #e2e8f0; color: #475569; font-weight: bold; font-size: 11px; text-transform: uppercase; padding: 10px; text-align: left; }
-            td { padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 12px; color: #334155; }
-            .total-table { width: 40%; margin-left: auto; margin-top: 20px; }
-            .total-table td { border-bottom: none; padding: 6px 10px; }
-            .grand-total { font-weight: bold; color: #10b981; font-size: 14px; border-top: 2px solid #10b981; }
-            .footer { margin-top: 50px; border-top: 1px solid #eee; padding-top: 15px; font-size: 10px; text-align: center; color: #94a3b8; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div>
-              <div class="title">Tax Invoice</div>
-              <div style="font-size: 12px; color: #64748b; font-weight: bold; margin-top: 5px;">${inv.invoiceNo}</div>
-            </div>
-            <div class="meta">
-              <div>Invoice Date: ${new Date(inv.date).toLocaleDateString()}</div>
-              <div>Due Date: ${inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : 'Immediate'}</div>
-              <div>Collection Status: <strong>${inv.status}</strong></div>
-            </div>
-          </div>
-          
-          <div class="section">
-            <div class="section-title">Billing Customer Profile</div>
-            <div class="client-details">
-              <strong>${cust?.name || 'Customer Profile'}</strong><br/>
-              Classification: ${cust?.clientClassification || 'NATIONAL'}<br/>
-              Email ID: ${cust?.email || 'N/A'}<br/>
-              Mobile: ${cust?.mobileNo || 'N/A'}<br/>
-              Billing Destination: ${cust?.billingAddress || 'N/A'}
-            </div>
-          </div>
-
-          <div class="section">
-            <div class="section-title">Invoiced Stock Items</div>
-            <table>
-              <thead>
-                <tr>
-                  <th>Stock Product</th>
-                  <th style="text-align: right;">Quantity</th>
-                  <th style="text-align: right;">Unit Price</th>
-                  <th style="text-align: right;">Item Discount</th>
-                  <th style="text-align: right;">Subtotal</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${(inv.items || []).map((it: any) => {
-                  const prod = products.find(p => p.id === it.productId);
-                  const sub = (it.quantity * it.price) * (1 - (it.discount || 0) / 100);
-                  return `
-                    <tr>
-                      <td><strong>${prod?.name || 'Stock Item'}</strong></td>
-                      <td style="text-align: right;">${it.quantity}</td>
-                      <td style="text-align: right;">${currencySymbol}${it.price.toFixed(2)}</td>
-                      <td style="text-align: right;">${(it.discount || 0).toFixed(1)}%</td>
-                      <td style="text-align: right;">${currencySymbol}${sub.toFixed(2)}</td>
-                    </tr>
-                  `;
-                }).join('')}
-              </tbody>
-            </table>
-          </div>
-
-          <table class="total-table">
-            <tr>
-              <td>Subtotal Value:</td>
-              <td style="text-align: right;">${currencySymbol}${inv.subtotal.toFixed(2)}</td>
-            </tr>
-            ${inv.discount > 0 ? `
-            <tr>
-              <td style="color: #ef4444;">Overall Discount (${inv.discount}%):</td>
-              <td style="text-align: right; color: #ef4444;">-${currencySymbol}${(inv.subtotal * (inv.discount / 100)).toFixed(2)}</td>
-            </tr>` : ''}
-            <tr>
-              <td>Sales Tax / GST Charge:</td>
-              <td style="text-align: right;">${currencySymbol}${(inv.tax || 0).toFixed(2)}</td>
-            </tr>
-            <tr class="grand-total">
-              <td>Total Payable Amount:</td>
-              <td style="text-align: right;">${currencySymbol}${inv.total.toFixed(2)}</td>
-            </tr>
-          </table>
-
-          <div class="footer">
-            Generated via Dine-IIn ERP Consolidated Sales Console. All financial disputes are governed under corporate guidelines. Thank you!
-          </div>
-          <script>
-            window.onload = function() {
-              window.print();
-            }
-          </script>
-        </body>
-      </html>
-    `;
-
-    const printWin = window.open('', '_blank');
-    if (printWin) {
-      printWin.document.write(docHtml);
-      printWin.document.close();
-    }
+    setCustomizingInvoice(inv);
+    setCustomTitle('Tax Invoice');
+    setCustomNotes('All financial disputes are governed under corporate guidelines. Thank you!');
   };
 
   const getCustomerName = (id: string) => customers.find(c => c.id === id)?.name || 'Customer';
@@ -520,6 +587,102 @@ export default function SalesInvoice({
                 />
               </div>
 
+              {/* Sales Orders merge selector */}
+              {customerId && salesOrders.filter(so => so.customerId === customerId && so.status !== 'COMPLETED' && so.status !== 'CANCELLED').length > 0 && (
+                <div className="md:col-span-2 bg-slate-950/20 p-3.5 border border-slate-800 rounded-xl space-y-2">
+                  <label className="text-[9px] font-bold text-indigo-400 tracking-wider uppercase block">Link Sales Orders (Check multiple to merge same company)</label>
+                  <div className="flex flex-wrap gap-2">
+                    {salesOrders
+                      .filter(so => so.customerId === customerId && so.status !== 'COMPLETED' && so.status !== 'CANCELLED')
+                      .map(so => {
+                        const isChecked = selectedOrderIds.includes(so.id);
+                        return (
+                          <button
+                            key={so.id}
+                            type="button"
+                            onClick={() => handleToggleSalesOrder(so.id)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                              isChecked
+                                ? 'bg-indigo-650/20 border-indigo-500/60 text-indigo-400 font-bold'
+                                : 'bg-slate-900 border-slate-800 text-slate-455 hover:text-slate-200'
+                            }`}
+                          >
+                            {so.orderNo} ({so.status})
+                          </button>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
+
+              {/* Billing Destination Address */}
+              <div className="md:col-span-2">
+                <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Billing Address *</label>
+                <textarea
+                  required
+                  rows={2}
+                  value={billingAddress}
+                  onChange={e => setBillingAddress(e.target.value)}
+                  className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-emerald-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none"
+                  placeholder="Company billing destination address"
+                />
+              </div>
+
+              {/* Shipping address toggle */}
+              <div className="md:col-span-2 flex items-center gap-2.5 py-1">
+                <input
+                  type="checkbox"
+                  id="diffShipping"
+                  checked={diffShipping}
+                  onChange={e => setDiffShipping(e.target.checked)}
+                  className="w-4.5 h-4.5 accent-emerald-500 rounded border-slate-800 focus:ring-0 focus:ring-offset-0 bg-slate-950"
+                />
+                <label htmlFor="diffShipping" className="text-xs text-[var(--text-secondary)] font-semibold cursor-pointer select-none">
+                  Ship to a different destination name or address (Bill-to / Ship-to Invoice)
+                </label>
+              </div>
+
+              {/* Shipping fields */}
+              {diffShipping && (
+                <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-950/10 p-4 border border-slate-850 rounded-xl">
+                  <div className="md:col-span-2">
+                    <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Shipping Consignee / Name *</label>
+                    <input
+                      type="text"
+                      required={diffShipping}
+                      value={shippingName}
+                      onChange={e => setShippingName(e.target.value)}
+                      className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-emerald-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none"
+                      placeholder="e.g. Acme Warehouses, John Doe"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Shipping Destination Address *</label>
+                    <textarea
+                      required={diffShipping}
+                      rows={2}
+                      value={shippingAddress}
+                      onChange={e => setShippingAddress(e.target.value)}
+                      className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-emerald-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none"
+                      placeholder="Delivery street address, pincode"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Shipping State (Compulsory) *</label>
+                    <select
+                      required={diffShipping}
+                      value={shippingState}
+                      onChange={e => setShippingState(e.target.value)}
+                      className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-emerald-500/50 py-2.5 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none cursor-pointer"
+                    >
+                      {INDIAN_STATES.map(st => (
+                        <option key={st} value={st}>{st}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+
               {/* Overall Discount (%) */}
               <div>
                 <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Overall Discount (%) (Optional)</label>
@@ -716,6 +879,593 @@ export default function SalesInvoice({
           </div>
         </div>
       )}
+
+      {/* ==========================================
+          MODAL: PDF TEMPLATE CUSTOMIZER & PRINT HUB
+          ========================================== */}
+      {customizingInvoice && (() => {
+        const inv = customizingInvoice;
+        const cust = customers.find(c => c.id === inv.customerId);
+        
+        const discountVal = inv.subtotal * ((inv.discount || 0) / 100);
+        const isInternational = cust?.clientClassification === 'INTERNATIONAL';
+        const isSameState = companyProfile && cust?.state === companyProfile.state;
+        
+        return (
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in text-left">
+            <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl w-full max-w-5xl h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-scale-up">
+              {/* Header */}
+              <div className="flex items-center justify-between p-5 border-b border-[var(--border-color)] shrink-0">
+                <div>
+                  <h3 className="font-bold text-base text-[var(--text-primary)]">Custom Print Template Studio</h3>
+                  <p className="text-[var(--text-secondary)] text-[10px]">Toggle invoice columns, sections, headers, and click print to trigger a direct print stream.</p>
+                </div>
+                <button
+                  onClick={() => setCustomizingInvoice(null)}
+                  className="text-[var(--text-muted)] hover:text-white cursor-pointer bg-transparent border-0"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="flex-1 flex overflow-hidden min-h-0">
+                {/* Left Side: Controls */}
+                <div className="w-80 border-r border-[var(--border-color)] p-5 overflow-y-auto space-y-5 shrink-0 bg-slate-950/20">
+                  <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block border-b border-[var(--border-color)] pb-2 mb-3">Template Options</span>
+                  
+                  {/* Title Customizer */}
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold text-slate-400 uppercase">Document Title</label>
+                    <input
+                      type="text"
+                      value={customTitle}
+                      onChange={e => setCustomTitle(e.target.value)}
+                      className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] py-1.5 px-3 rounded-lg text-xs text-white focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Toggles */}
+                  <div className="space-y-3">
+                    <span className="text-[8.5px] font-extrabold text-slate-505 uppercase block tracking-wider">Layout Blocks</span>
+                    <div className="flex flex-col gap-2">
+                      <label className="flex items-center gap-2 text-xs text-slate-350 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={pdfCustomizer.showLogo}
+                          onChange={e => setPdfCustomizer({ ...pdfCustomizer, showLogo: e.target.checked })}
+                          className="accent-indigo-500"
+                        />
+                        Include Corporate Logo
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-slate-350 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={pdfCustomizer.showCompanyDetails}
+                          onChange={e => setPdfCustomizer({ ...pdfCustomizer, showCompanyDetails: e.target.checked })}
+                          className="accent-indigo-500"
+                        />
+                        Show Company Info
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-slate-350 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={pdfCustomizer.showBillingAddress}
+                          onChange={e => setPdfCustomizer({ ...pdfCustomizer, showBillingAddress: e.target.checked })}
+                          className="accent-indigo-500"
+                        />
+                        Show Billing Address
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-slate-350 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={pdfCustomizer.showShippingAddress}
+                          onChange={e => setPdfCustomizer({ ...pdfCustomizer, showShippingAddress: e.target.checked })}
+                          className="accent-indigo-500"
+                        />
+                        Show Shipping Address
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-slate-350 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={pdfCustomizer.showBankDetails}
+                          onChange={e => setPdfCustomizer({ ...pdfCustomizer, showBankDetails: e.target.checked })}
+                          className="accent-indigo-500"
+                        />
+                        Include Bank Details
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-slate-350 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={pdfCustomizer.showTerms}
+                          onChange={e => setPdfCustomizer({ ...pdfCustomizer, showTerms: e.target.checked })}
+                          className="accent-indigo-500"
+                        />
+                        Include T&C Notes
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Columns */}
+                  <div className="space-y-3">
+                    <span className="text-[8.5px] font-extrabold text-slate-505 uppercase block tracking-wider">Item Table Columns</span>
+                    <div className="flex flex-col gap-2">
+                      <label className="flex items-center gap-2 text-xs text-slate-350 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={pdfCustomizer.colProductCode}
+                          onChange={e => setPdfCustomizer({ ...pdfCustomizer, colProductCode: e.target.checked })}
+                          className="accent-indigo-500"
+                        />
+                        Show Product Code/SKU
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-slate-350 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={pdfCustomizer.colUnitPrice}
+                          onChange={e => setPdfCustomizer({ ...pdfCustomizer, colUnitPrice: e.target.checked })}
+                          className="accent-indigo-500"
+                        />
+                        Show Unit Pricing
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-slate-350 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={pdfCustomizer.colDiscount}
+                          onChange={e => setPdfCustomizer({ ...pdfCustomizer, colDiscount: e.target.checked })}
+                          className="accent-indigo-500"
+                        />
+                        Show Item Discounts %
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-slate-350 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={pdfCustomizer.colTax}
+                          onChange={e => setPdfCustomizer({ ...pdfCustomizer, colTax: e.target.checked })}
+                          className="accent-indigo-500"
+                        />
+                        Show GST / Tax breakdown
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Terms text */}
+                  {pdfCustomizer.showTerms && (
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-slate-400 uppercase">Custom Terms / Notes</label>
+                      <textarea
+                        rows={3}
+                        value={customNotes}
+                        onChange={e => setCustomNotes(e.target.value)}
+                        className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] py-1.5 px-3 rounded-lg text-xs text-white focus:outline-none"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Right Side: Visual Preview */}
+                <div className="flex-1 bg-slate-950 p-8 overflow-y-auto flex justify-center">
+                  {/* Paper sheet */}
+                  <div className="w-[210mm] min-h-[297mm] bg-white text-black p-10 shadow-2xl text-[11px] relative flex flex-col justify-between font-sans leading-relaxed select-text">
+                    <div className="space-y-6">
+                      {/* Document Header */}
+                      <div className="flex justify-between items-start border-b-2 border-slate-900 pb-5">
+                        <div>
+                          {pdfCustomizer.showLogo && companyProfile?.logoUrl && (
+                            <img src={companyProfile.logoUrl} alt="Logo" className="max-h-12 object-contain mb-3" />
+                          )}
+                          <div className="text-xl font-extrabold uppercase text-slate-900">{customTitle}</div>
+                          <div className="font-mono text-[10px] text-slate-650 mt-1">Invoice No: {inv.invoiceNo}</div>
+                        </div>
+
+                        {pdfCustomizer.showCompanyDetails && companyProfile && (
+                          <div className="text-right text-[10px] text-slate-700 leading-normal max-w-xs">
+                            <strong className="text-slate-900 text-[11px]">{companyProfile.name}</strong><br/>
+                            {companyProfile.addressLine1 && `${companyProfile.addressLine1}, `}
+                            {companyProfile.addressLine2 && `${companyProfile.addressLine2}, `}<br/>
+                            {companyProfile.city && `${companyProfile.city}, `}
+                            {companyProfile.state && `${companyProfile.state} - `}
+                            {companyProfile.pincode && companyProfile.pincode}<br/>
+                            {companyProfile.gstNumber && <strong>GSTIN: {companyProfile.gstNumber}</strong>}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Meta Columns */}
+                      <div className="grid grid-cols-2 gap-6 text-[10px] text-slate-700">
+                        <div className="space-y-1">
+                          <div className="text-[9px] uppercase font-bold text-slate-450">Invoice Metadata</div>
+                          <div>Invoice Date: <span className="font-semibold text-slate-900">{new Date(inv.date).toLocaleDateString()}</span></div>
+                          <div>Due Date: <span className="font-semibold text-slate-900">{inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : 'Immediate'}</span></div>
+                          <div>Status: <span className="font-semibold text-slate-900">{inv.status}</span></div>
+                        </div>
+                        <div className="space-y-1 text-right">
+                          <div className="text-[9px] uppercase font-bold text-slate-450">Customer Classification</div>
+                          <div className="font-semibold text-slate-900">{cust?.name || 'Client Name'}</div>
+                          <div>Type: {cust?.customerType || 'INDIVIDUAL'}</div>
+                          <div>Category: {cust?.customerGroup || 'Standard Group'}</div>
+                          {cust?.contactNo && <div>Tel: {cust.contactNo}</div>}
+                        </div>
+                      </div>
+
+                      {/* Addresses Row */}
+                      <div className="grid grid-cols-2 gap-6 border-t border-slate-200 pt-4">
+                        {/* Bill To */}
+                        {pdfCustomizer.showBillingAddress && (
+                          <div className="text-[10px] text-slate-700 leading-relaxed">
+                            <span className="text-[9px] uppercase font-bold text-slate-455 block mb-1">Billing Destination (Bill To)</span>
+                            <strong className="text-slate-900">{cust?.name}</strong><br/>
+                            {inv.billingAddress || cust?.billingAddress || 'Billing address pending'}
+                          </div>
+                        )}
+                        
+                        {/* Ship To */}
+                        {pdfCustomizer.showShippingAddress && (
+                          <div className="text-[10px] text-slate-700 leading-relaxed text-right">
+                            <span className="text-[9px] uppercase font-bold text-slate-455 block mb-1">Shipping Destination (Ship To)</span>
+                            <strong className="text-slate-900">{inv.shippingName || cust?.name}</strong><br/>
+                            {inv.shippingAddress || cust?.shippingAddress || inv.billingAddress || cust?.billingAddress || 'Shipping address pending'}<br/>
+                            {inv.shippingState && <span>State: {inv.shippingState}</span>}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Items Table */}
+                      <div className="pt-2">
+                        <table className="w-full text-left text-[10px] border-collapse">
+                          <thead>
+                            <tr className="border-b border-slate-900 text-slate-800 font-bold bg-slate-50">
+                              <th className="py-2.5 px-2">Description</th>
+                              {pdfCustomizer.colProductCode && <th className="py-2.5 px-2">SKU / Code</th>}
+                              <th className="py-2.5 px-2 text-right">Qty</th>
+                              {pdfCustomizer.colUnitPrice && <th className="py-2.5 px-2 text-right">Price</th>}
+                              {pdfCustomizer.colDiscount && <th className="py-2.5 px-2 text-right">Discount</th>}
+                              <th className="py-2.5 px-2 text-right">Subtotal</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(inv.items || []).map((it: any) => {
+                              const prod = products.find(p => p.id === it.productId);
+                              const itemSub = it.quantity * it.price;
+                              const itemDisc = itemSub * ((it.discount || 0) / 100);
+                              return (
+                                <tr key={it.id} className="border-b border-slate-100">
+                                  <td className="py-2.5 px-2">
+                                    <strong className="text-slate-900">{prod?.name || 'Stock Item'}</strong>
+                                    {prod?.hsnSacCode && <span className="text-[9px] text-slate-550 block mt-0.5">HSN Code: {prod.hsnSacCode}</span>}
+                                  </td>
+                                  {pdfCustomizer.colProductCode && (
+                                    <td className="py-2.5 px-2 font-mono text-slate-650">{prod?.sku || 'N/A'}</td>
+                                  )}
+                                  <td className="py-2.5 px-2 text-right font-mono">{it.quantity} {prod?.uom || 'PCS'}</td>
+                                  {pdfCustomizer.colUnitPrice && (
+                                    <td className="py-2.5 px-2 text-right font-mono">₹{it.price.toFixed(2)}</td>
+                                  )}
+                                  {pdfCustomizer.colDiscount && (
+                                    <td className="py-2.5 px-2 text-right font-mono">{it.discount || 0}%</td>
+                                  )}
+                                  <td className="py-2.5 px-2 text-right font-mono font-semibold text-slate-900">₹{(itemSub - itemDisc).toFixed(2)}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Calculations Table */}
+                      <div className="flex justify-end pt-2">
+                        <table className="w-[50%] text-[10px] text-slate-700">
+                          <tbody>
+                            <tr className="border-b border-slate-100">
+                              <td className="py-1.5 text-left">Subtotal:</td>
+                              <td className="py-1.5 text-right font-mono text-slate-900">₹{inv.subtotal.toFixed(2)}</td>
+                            </tr>
+                            {inv.discount > 0 && (
+                              <tr className="border-b border-slate-100">
+                                <td className="py-1.5 text-left text-red-500">Discount ({inv.discount}%):</td>
+                                <td className="py-1.5 text-right font-mono text-red-500">-₹{discountVal.toFixed(2)}</td>
+                              </tr>
+                            )}
+
+                            {/* Tax split layout */}
+                            {pdfCustomizer.colTax && (
+                              <>
+                                {isInternational ? (
+                                  <tr className="border-b border-slate-100">
+                                    <td className="py-1.5 text-left italic">Zero-rated Export (0%):</td>
+                                    <td className="py-1.5 text-right font-mono text-slate-900">₹0.00</td>
+                                  </tr>
+                                ) : isSameState ? (
+                                  <>
+                                    <tr className="border-b border-slate-100">
+                                      <td className="py-1.5 text-left">CGST (9.0%):</td>
+                                      <td className="py-1.5 text-right font-mono text-slate-900">₹{(inv.tax / 2).toFixed(2)}</td>
+                                    </tr>
+                                    <tr className="border-b border-slate-100">
+                                      <td className="py-1.5 text-left">SGST (9.0%):</td>
+                                      <td className="py-1.5 text-right font-mono text-slate-900">₹{(inv.tax / 2).toFixed(2)}</td>
+                                    </tr>
+                                  </>
+                                ) : (
+                                  <tr className="border-b border-slate-100">
+                                    <td className="py-1.5 text-left">IGST (18.0%):</td>
+                                    <td className="py-1.5 text-right font-mono text-slate-900">₹{inv.tax.toFixed(2)}</td>
+                                  </tr>
+                                )}
+                              </>
+                            )}
+
+                            {!pdfCustomizer.colTax && (
+                              <tr className="border-b border-slate-100">
+                                <td className="py-1.5 text-left">Sales Tax / GST:</td>
+                                <td className="py-1.5 text-right font-mono text-slate-900">₹{inv.tax.toFixed(2)}</td>
+                              </tr>
+                            )}
+
+                            <tr className="border-t-2 border-slate-900 font-extrabold text-[12px] text-slate-900">
+                              <td className="py-2.5 text-left">Grand Total:</td>
+                              <td className="py-2.5 text-right font-mono">₹{inv.total.toFixed(2)}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Bank Accounts details */}
+                      {pdfCustomizer.showBankDetails && bankAccounts.length > 0 && (
+                        <div className="border border-slate-200 bg-slate-50 p-3.5 rounded-lg text-[9px] text-slate-700 leading-normal space-y-1.5 mt-8">
+                          <span className="font-extrabold text-slate-900 uppercase block tracking-wider">Payment Bank Destination</span>
+                          <div className="grid grid-cols-3 gap-4">
+                            <div><strong>Bank Name:</strong> {bankAccounts[0].bankName}</div>
+                            <div><strong>Account Number:</strong> {bankAccounts[0].accountNo}</div>
+                            <div><strong>IFSC Code:</strong> {bankAccounts[0].ifscCode}</div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Footer */}
+                    {pdfCustomizer.showTerms && (
+                      <div className="border-t border-slate-200 pt-4 mt-12 text-[9px] text-slate-550 text-center leading-normal">
+                        {customNotes}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer Buttons */}
+              <div className="p-4 border-t border-[var(--border-color)] shrink-0 flex justify-end gap-3 bg-slate-950/20">
+                <button
+                  onClick={() => setCustomizingInvoice(null)}
+                  className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-350 font-bold text-xs rounded-xl border-0 cursor-pointer transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setActivePrintInvoice(inv);
+                  }}
+                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl border-0 cursor-pointer transition-all shadow-lg shadow-emerald-600/10"
+                >
+                  Print PDF Directly
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ==========================================
+          HIDDEN PRINT CONTAINER FOR MEDIA PRINT STREAMS
+          ========================================== */}
+      {activePrintInvoice && (() => {
+        const inv = activePrintInvoice;
+        const cust = customers.find(c => c.id === inv.customerId);
+        const discountVal = inv.subtotal * ((inv.discount || 0) / 100);
+        const isInternational = cust?.clientClassification === 'INTERNATIONAL';
+        const isSameState = companyProfile && cust?.state === companyProfile.state;
+
+        return (
+          <div id="print-section" className="hidden print:block fixed inset-0 z-[99999] bg-white text-black p-10">
+            <style dangerouslySetInnerHTML={{__html: `
+              @media print {
+                body * {
+                  visibility: hidden !important;
+                }
+                #print-section, #print-section * {
+                  visibility: visible !important;
+                }
+                #print-section {
+                  position: absolute !important;
+                  left: 0 !important;
+                  top: 0 !important;
+                  width: 100% !important;
+                  background: white !important;
+                  color: black !important;
+                }
+              }
+            `}} />
+            <div className="space-y-6">
+              {/* Header */}
+              <div className="flex justify-between items-start border-b-2 border-slate-900 pb-5">
+                <div>
+                  {pdfCustomizer.showLogo && companyProfile?.logoUrl && (
+                    <img src={companyProfile.logoUrl} alt="Logo" className="max-h-12 object-contain mb-3" />
+                  )}
+                  <div className="text-xl font-extrabold uppercase text-slate-900">{customTitle}</div>
+                  <div className="font-mono text-[10px] text-slate-650 mt-1">Invoice No: {inv.invoiceNo}</div>
+                </div>
+
+                {pdfCustomizer.showCompanyDetails && companyProfile && (
+                  <div className="text-right text-[10px] text-slate-700 leading-normal max-w-xs">
+                    <strong className="text-slate-900 text-[11px]">{companyProfile.name}</strong><br/>
+                    {companyProfile.addressLine1 && `${companyProfile.addressLine1}, `}
+                    {companyProfile.addressLine2 && `${companyProfile.addressLine2}, `}<br/>
+                    {companyProfile.city && `${companyProfile.city}, `}
+                    {companyProfile.state && `${companyProfile.state} - `}
+                    {companyProfile.pincode && companyProfile.pincode}<br/>
+                    {companyProfile.gstNumber && <strong>GSTIN: {companyProfile.gstNumber}</strong>}
+                  </div>
+                )}
+              </div>
+
+              {/* Meta */}
+              <div className="grid grid-cols-2 gap-6 text-[10px] text-slate-700">
+                <div className="space-y-1">
+                  <div className="text-[9px] uppercase font-bold text-slate-455">Invoice Metadata</div>
+                  <div>Invoice Date: <span className="font-semibold text-slate-900">{new Date(inv.date).toLocaleDateString()}</span></div>
+                  <div>Due Date: <span className="font-semibold text-slate-900">{inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : 'Immediate'}</span></div>
+                  <div>Status: <span className="font-semibold text-slate-900">{inv.status}</span></div>
+                </div>
+                <div className="space-y-1 text-right">
+                  <div className="text-[9px] uppercase font-bold text-slate-455">Customer Classification</div>
+                  <div className="font-semibold text-slate-900">{cust?.name || 'Client Name'}</div>
+                  <div>Type: {cust?.customerType || 'INDIVIDUAL'}</div>
+                  <div>Category: {cust?.customerGroup || 'Standard Group'}</div>
+                  {cust?.contactNo && <div>Tel: {cust.contactNo}</div>}
+                </div>
+              </div>
+
+              {/* Addresses Row */}
+              <div className="grid grid-cols-2 gap-6 border-t border-slate-200 pt-4">
+                {pdfCustomizer.showBillingAddress && (
+                  <div className="text-[10px] text-slate-700 leading-relaxed">
+                    <span className="text-[9px] uppercase font-bold text-slate-455 block mb-1">Billing Destination (Bill To)</span>
+                    <strong className="text-slate-900">{cust?.name}</strong><br/>
+                    {inv.billingAddress || cust?.billingAddress || 'Billing address pending'}
+                  </div>
+                )}
+                
+                {pdfCustomizer.showShippingAddress && (
+                  <div className="text-[10px] text-slate-700 leading-relaxed text-right">
+                    <span className="text-[9px] uppercase font-bold text-slate-455 block mb-1">Shipping Destination (Ship To)</span>
+                    <strong className="text-slate-900">{inv.shippingName || cust?.name}</strong><br/>
+                    {inv.shippingAddress || cust?.shippingAddress || inv.billingAddress || cust?.billingAddress || 'Shipping address pending'}<br/>
+                    {inv.shippingState && <span>State: {inv.shippingState}</span>}
+                  </div>
+                )}
+              </div>
+
+              {/* Items Table */}
+              <div className="pt-2">
+                <table className="w-full text-left text-[10px] border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-900 text-slate-800 font-bold bg-slate-50">
+                      <th className="py-2.5 px-2">Description</th>
+                      {pdfCustomizer.colProductCode && <th className="py-2.5 px-2">SKU / Code</th>}
+                      <th className="py-2.5 px-2 text-right">Qty</th>
+                      {pdfCustomizer.colUnitPrice && <th className="py-2.5 px-2 text-right">Price</th>}
+                      {pdfCustomizer.colDiscount && <th className="py-2.5 px-2 text-right">Discount</th>}
+                      <th className="py-2.5 px-2 text-right">Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(inv.items || []).map((it: any) => {
+                      const prod = products.find(p => p.id === it.productId);
+                      const itemSub = it.quantity * it.price;
+                      const itemDisc = itemSub * ((it.discount || 0) / 100);
+                      return (
+                        <tr key={it.id} className="border-b border-slate-100">
+                          <td className="py-2.5 px-2">
+                            <strong className="text-slate-900">{prod?.name || 'Stock Item'}</strong>
+                            {prod?.hsnSacCode && <span className="text-[9px] text-slate-550 block mt-0.5">HSN Code: {prod.hsnSacCode}</span>}
+                          </td>
+                          {pdfCustomizer.colProductCode && (
+                            <td className="py-2.5 px-2 font-mono text-slate-650">{prod?.sku || 'N/A'}</td>
+                          )}
+                          <td className="py-2.5 px-2 text-right font-mono">{it.quantity} {prod?.uom || 'PCS'}</td>
+                          {pdfCustomizer.colUnitPrice && (
+                            <td className="py-2.5 px-2 text-right font-mono">₹{it.price.toFixed(2)}</td>
+                          )}
+                          {pdfCustomizer.colDiscount && (
+                            <td className="py-2.5 px-2 text-right font-mono">{it.discount || 0}%</td>
+                          )}
+                          <td className="py-2.5 px-2 text-right font-mono font-semibold text-slate-900">₹{(itemSub - itemDisc).toFixed(2)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Calculations Table */}
+              <div className="flex justify-end pt-2">
+                <table className="w-[50%] text-[10px] text-slate-700">
+                  <tbody>
+                    <tr className="border-b border-slate-100">
+                      <td className="py-1.5 text-left">Subtotal:</td>
+                      <td className="py-1.5 text-right font-mono text-slate-900">₹{inv.subtotal.toFixed(2)}</td>
+                    </tr>
+                    {inv.discount > 0 && (
+                      <tr className="border-b border-slate-100">
+                        <td className="py-1.5 text-left text-red-500">Discount ({inv.discount}%):</td>
+                        <td className="py-1.5 text-right font-mono text-red-550">-₹{discountVal.toFixed(2)}</td>
+                      </tr>
+                    )}
+
+                    {pdfCustomizer.colTax && (
+                      <>
+                        {isInternational ? (
+                          <tr className="border-b border-slate-100">
+                            <td className="py-1.5 text-left italic">Zero-rated Export (0%):</td>
+                            <td className="py-1.5 text-right font-mono text-slate-900">₹0.00</td>
+                          </tr>
+                        ) : isSameState ? (
+                          <>
+                            <tr className="border-b border-slate-100">
+                              <td className="py-1.5 text-left">CGST (9.0%):</td>
+                              <td className="py-1.5 text-right font-mono text-slate-900">₹{(inv.tax / 2).toFixed(2)}</td>
+                            </tr>
+                            <tr className="border-b border-slate-100">
+                              <td className="py-1.5 text-left">SGST (9.0%):</td>
+                              <td className="py-1.5 text-right font-mono text-slate-900">₹{(inv.tax / 2).toFixed(2)}</td>
+                            </tr>
+                          </>
+                        ) : (
+                          <tr className="border-b border-slate-100">
+                            <td className="py-1.5 text-left">IGST (18.0%):</td>
+                            <td className="py-1.5 text-right font-mono text-slate-900">₹{inv.tax.toFixed(2)}</td>
+                          </tr>
+                        )}
+                      </>
+                    )}
+
+                    {!pdfCustomizer.colTax && (
+                      <tr className="border-b border-slate-100">
+                        <td className="py-1.5 text-left">Sales Tax / GST:</td>
+                        <td className="py-1.5 text-right font-mono text-slate-900">₹{inv.tax.toFixed(2)}</td>
+                      </tr>
+                    )}
+
+                    <tr className="border-t-2 border-slate-900 font-extrabold text-[12px] text-slate-900">
+                      <td className="py-2.5 text-left">Grand Total:</td>
+                      <td className="py-2.5 text-right font-mono">₹{inv.total.toFixed(2)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Bank Accounts details */}
+              {pdfCustomizer.showBankDetails && bankAccounts.length > 0 && (
+                <div className="border border-slate-200 bg-slate-50 p-3.5 rounded-lg text-[9px] text-slate-700 leading-normal space-y-1.5 mt-8">
+                  <span className="font-extrabold text-slate-900 uppercase block tracking-wider">Payment Bank Destination</span>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div><strong>Bank Name:</strong> {bankAccounts[0].bankName}</div>
+                    <div><strong>Account Number:</strong> {bankAccounts[0].accountNo}</div>
+                    <div><strong>IFSC Code:</strong> {bankAccounts[0].ifscCode}</div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {pdfCustomizer.showTerms && (
+              <div className="border-t border-slate-200 pt-4 mt-12 text-[9px] text-slate-550 text-center leading-normal">
+                {customNotes}
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

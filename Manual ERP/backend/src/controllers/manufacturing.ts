@@ -46,6 +46,25 @@ async function explodeBOM(bomId: string, qty: number, companyId: string, visited
   return exploded;
 }
 
+const isServiceItem = (product: any): boolean => {
+  if (!product) return false;
+  const uomLower = (product.uom || "").toLowerCase();
+  const categoryLower = (product.category?.name || "").toLowerCase();
+  const nameLower = (product.name || "").toLowerCase();
+  return (
+    uomLower.includes("hour") ||
+    uomLower.includes("hrs") ||
+    uomLower.includes("serv") ||
+    uomLower.includes("labor") ||
+    uomLower.includes("labour") ||
+    categoryLower.includes("service") ||
+    categoryLower.includes("process") ||
+    nameLower.includes("service") ||
+    nameLower.includes("labor") ||
+    nameLower.includes("labour")
+  );
+};
+
 // Helper to check company authentication
 const getCompanyId = (req: AuthenticatedRequest, res: Response): string | null => {
   const companyId = req.user?.companyId;
@@ -695,16 +714,52 @@ export async function createJobCard(req: AuthenticatedRequest, res: Response) {
       return res.status(400).json({ error: 'woId, operationName, and qtyTarget are required' });
     }
 
+    let resolvedWorkCenterId: string | null = null;
+    if (workCenterId) {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(workCenterId);
+      if (isUuid) {
+        const wc = await prisma.workCenter.findFirst({
+          where: { id: workCenterId, companyId }
+        });
+        if (wc) resolvedWorkCenterId = wc.id;
+      }
+      if (!resolvedWorkCenterId) {
+        const wc = await prisma.workCenter.findFirst({
+          where: {
+            companyId,
+            OR: [
+              { name: workCenterId },
+              { code: workCenterId }
+            ]
+          }
+        });
+        if (wc) {
+          resolvedWorkCenterId = wc.id;
+        } else {
+          const newWc = await prisma.workCenter.create({
+            data: {
+              companyId,
+              name: workCenterId,
+              code: `WC-${Math.floor(1000 + Math.random() * 9000)}`,
+              capacityHours: 8.0,
+              status: 'OPERATIONAL'
+            }
+          });
+          resolvedWorkCenterId = newWc.id;
+        }
+      }
+    }
+
     const jobCard = await prisma.jobCard.create({
       data: {
         companyId,
         woId,
         operationName,
-        workCenterId: workCenterId || null,
+        workCenterId: resolvedWorkCenterId,
         assignedOperatorId: assignedOperatorId || null,
         status: 'PENDING',
         cycleTimeMinutes: parseFloat(cycleTimeMinutes) || 0.0,
-        qtyTarget: parseFloat(qtyTarget),
+        qtyTarget: parseFloat(qtyTarget) || 0.0,
         qtyAccepted: 0.0,
         qtyScrapped: 0.0
       }
@@ -727,17 +782,57 @@ export async function updateJobCard(req: AuthenticatedRequest, res: Response) {
     const existing = await prisma.jobCard.findFirst({ where: { id, companyId } });
     if (!existing) return res.status(404).json({ error: 'Job Card not found' });
 
+    let resolvedWorkCenterId: string | null | undefined = undefined;
+    if (workCenterId !== undefined) {
+      if (!workCenterId) {
+        resolvedWorkCenterId = null;
+      } else {
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(workCenterId);
+        if (isUuid) {
+          const wc = await prisma.workCenter.findFirst({
+            where: { id: workCenterId, companyId }
+          });
+          if (wc) resolvedWorkCenterId = wc.id;
+        }
+        if (!resolvedWorkCenterId) {
+          const wc = await prisma.workCenter.findFirst({
+            where: {
+              companyId,
+              OR: [
+                { name: workCenterId },
+                { code: workCenterId }
+              ]
+            }
+          });
+          if (wc) {
+            resolvedWorkCenterId = wc.id;
+          } else {
+            const newWc = await prisma.workCenter.create({
+              data: {
+                companyId,
+                name: workCenterId,
+                code: `WC-${Math.floor(1000 + Math.random() * 9000)}`,
+                capacityHours: 8.0,
+                status: 'OPERATIONAL'
+              }
+            });
+            resolvedWorkCenterId = newWc.id;
+          }
+        }
+      }
+    }
+
     const updated = await prisma.jobCard.update({
       where: { id },
       data: {
         ...(operationName && { operationName }),
-        ...(workCenterId !== undefined && { workCenterId: workCenterId || null }),
+        ...(resolvedWorkCenterId !== undefined && { workCenterId: resolvedWorkCenterId }),
         ...(assignedOperatorId !== undefined && { assignedOperatorId: assignedOperatorId || null }),
         ...(status && { status }),
-        ...(cycleTimeMinutes !== undefined && { cycleTimeMinutes: parseFloat(cycleTimeMinutes) }),
-        ...(qtyTarget !== undefined && { qtyTarget: parseFloat(qtyTarget) }),
-        ...(qtyAccepted !== undefined && { qtyAccepted: parseFloat(qtyAccepted) }),
-        ...(qtyScrapped !== undefined && { qtyScrapped: parseFloat(qtyScrapped) })
+        ...(cycleTimeMinutes !== undefined && { cycleTimeMinutes: parseFloat(cycleTimeMinutes) || 0.0 }),
+        ...(qtyTarget !== undefined && { qtyTarget: parseFloat(qtyTarget) || 0.0 }),
+        ...(qtyAccepted !== undefined && { qtyAccepted: parseFloat(qtyAccepted) || 0.0 }),
+        ...(qtyScrapped !== undefined && { qtyScrapped: parseFloat(qtyScrapped) || 0.0 })
       }
     });
 
@@ -858,12 +953,20 @@ export async function createLog(req: AuthenticatedRequest, res: Response) {
       include: {
         plan: {
           include: {
-            finishedProduct: true,
+            finishedProduct: {
+              include: {
+                category: true
+              }
+            },
             bom: {
               include: {
                 components: {
                   include: {
-                    product: true
+                    product: {
+                      include: {
+                        category: true
+                      }
+                    }
                   }
                 }
               }
@@ -898,33 +1001,39 @@ export async function createLog(req: AuthenticatedRequest, res: Response) {
 
       // 2. Increment Finished Goods stock
       const finishedProduct = workOrder.plan.finishedProduct;
-      const prevStockFinished = finishedProduct.stock;
-      const newStockFinished = prevStockFinished + logQty;
+      const isFinService = isServiceItem(finishedProduct);
+      if (!isFinService) {
+        const prevStockFinished = finishedProduct.stock;
+        const newStockFinished = prevStockFinished + logQty;
 
-      await tx.product.update({
-        where: { id: finishedProduct.id },
-        data: { stock: newStockFinished }
-      });
+        await tx.product.update({
+          where: { id: finishedProduct.id },
+          data: { stock: newStockFinished }
+        });
 
-      // Log stock adjustment for finished goods
-      await tx.stockAdjustment.create({
-        data: {
-          companyId,
-          productId: finishedProduct.id,
-          adjustmentNo: `ADJ-FG-${Date.now()}`,
-          type: 'MANUAL_ADD',
-          quantity: logQty,
-          previousStock: prevStockFinished,
-          newStock: newStockFinished,
-          reason: `Finished Goods Yield Receipt - Work Order: ${workOrder.woNo}`,
-          referenceNo: workOrder.woNo
-        }
-      });
+        // Log stock adjustment for finished goods
+        await tx.stockAdjustment.create({
+          data: {
+            companyId,
+            productId: finishedProduct.id,
+            adjustmentNo: `ADJ-FG-${Date.now()}`,
+            type: 'MANUAL_ADD',
+            quantity: logQty,
+            previousStock: prevStockFinished,
+            newStock: newStockFinished,
+            reason: `Finished Goods Yield Receipt - Work Order: ${workOrder.woNo}`,
+            referenceNo: workOrder.woNo
+          }
+        });
+      }
 
       // 3. Drawdown components based on the BOM
       const bom = workOrder.plan.bom;
       if (bom && bom.components) {
         for (const comp of bom.components) {
+          if (isServiceItem(comp.product)) {
+            continue; // Bypass service items
+          }
           // Total required per recipe x completed target (factoring waste tolerances)
           const grossQtyRequiredPerUnit = comp.qtyRequired * (1 + comp.wasteMargin / 100);
           const totalDrawdownQty = grossQtyRequiredPerUnit * totalRequiredQty;
@@ -1622,34 +1731,37 @@ export async function issueMaterialsToWorkOrder(req: AuthenticatedRequest, res: 
     const wo = await prisma.workOrder.findFirst({ where: { id: woId, companyId } });
     if (!wo) return res.status(404).json({ error: "Work Order not found" });
 
-    const prod = await prisma.product.findFirst({ where: { id: productId, companyId } });
+    const prod = await prisma.product.findFirst({ where: { id: productId, companyId }, include: { category: true } });
     if (!prod) return res.status(404).json({ error: "Product not found" });
 
-    if (prod.stock < qty) {
+    const isServ = isServiceItem(prod);
+    if (!isServ && prod.stock < qty) {
       return res.status(400).json({ error: `Insufficient stock. Available: ${prod.stock}` });
     }
 
     const issue = await prisma.$transaction(async (tx) => {
       // 1. Decrement raw product stock
-      await tx.product.update({
-        where: { id: productId },
-        data: { stock: { decrement: qty } }
-      });
+      if (!isServ) {
+        await tx.product.update({
+          where: { id: productId },
+          data: { stock: { decrement: qty } }
+        });
 
-      // 2. Log stock adjustment
-      await tx.stockAdjustment.create({
-        data: {
-          companyId,
-          productId,
-          adjustmentNo: `ADJ-RAW-ISSUE-${Date.now()}`,
-          type: 'MANUAL_SUB',
-          quantity: -qty,
-          previousStock: prod.stock,
-          newStock: prod.stock - qty,
-          reason: `Material issue to Work Order ${wo.woNo}`,
-          referenceNo: wo.woNo
-        }
-      });
+        // 2. Log stock adjustment
+        await tx.stockAdjustment.create({
+          data: {
+            companyId,
+            productId,
+            adjustmentNo: `ADJ-RAW-ISSUE-${Date.now()}`,
+            type: 'MANUAL_SUB',
+            quantity: -qty,
+            previousStock: prod.stock,
+            newStock: prod.stock - qty,
+            reason: `Material issue to Work Order ${wo.woNo}`,
+            referenceNo: wo.woNo
+          }
+        });
+      }
 
       // 3. Create MaterialIssue
       const mi = await tx.materialIssue.create({

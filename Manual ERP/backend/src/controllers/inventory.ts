@@ -88,6 +88,10 @@ export async function adjustStock(req: AuthenticatedRequest, res: Response) {
       req.headers['user-agent']
     );
 
+    // Check if updated stock drops below safety limit
+    const { checkAndNotifyLowStock } = require('../utils/lowStockAlert');
+    await checkAndNotifyLowStock(productId, req.user?.userId);
+
     return res.status(201).json({ message: "Stock adjustment processed successfully", adjustment });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
