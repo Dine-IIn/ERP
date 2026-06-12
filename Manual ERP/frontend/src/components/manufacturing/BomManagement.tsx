@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ClipboardList, Plus, Search, DollarSign, Calculator, Layers, Trash2, Edit2 } from 'lucide-react';
+import { ClipboardList, Plus, Search, DollarSign, Calculator, Layers, Trash2, Edit2, Clock, Wrench, Settings, Download, Printer, ArrowUp, ArrowDown } from 'lucide-react';
 import { apiClient, formatNumber } from '../../utils/apiService';
 
 interface ComponentItem {
@@ -10,10 +10,13 @@ interface ComponentItem {
   unit: string;
   costPerUnit: number;
   wasteMargin: number;
+  subBomId?: string;
 }
 
 interface BOM {
   id: string;
+  name?: string;
+  description?: string;
   finishedProductId: string;
   finishedProductName: string;
   finishedProductCode: string;
@@ -61,7 +64,9 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
   const renderBOMTree = (components: ComponentItem[], parentQty = 1, depth = 0, parentPath = '') => {
     return components.map((comp, idx) => {
       const nodePath = `${parentPath}-${comp.productId}-${idx}`;
-      const subBom = bomsList.find(b => b.finishedProductId === comp.productId && b.status === 'ACTIVE');
+      const subBom = comp.subBomId
+        ? bomsList.find(b => b.id === comp.subBomId)
+        : bomsList.find(b => b.finishedProductId === comp.productId && b.status === 'ACTIVE');
       const isExpanded = !!expandedNodes[nodePath];
       const quantity = comp.qtyRequired * parentQty;
 
@@ -84,7 +89,7 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
                 {comp.name}
                 {subBom && (
                   <span className="px-1.5 py-0.25 rounded text-[7px] font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 uppercase tracking-wide">
-                    Nested BOM
+                    Nested BOM ({subBom.version})
                   </span>
                 )}
                 {isServiceItemProduct(comp.productId) && (
@@ -140,29 +145,160 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
   const [bomsList, setBomsList] = useState<BOM[]>([]);
   const [loading, setLoading] = useState(false);
 
+  const [routings, setRoutings] = useState<any[]>([]);
+  const [workCenters, setWorkCenters] = useState<any[]>([]);
+  const [modalTab, setModalTab] = useState<'components' | 'routing'>('components');
+
+  const [exportBom, setExportBom] = useState<BOM | null>(null);
+  const [exportQty, setExportQty] = useState<number>(1);
+  const [activePrintLeaf, setActivePrintLeaf] = useState<BOM | null>(null);
+
+  useEffect(() => {
+    if (activePrintLeaf) {
+      const timer = setTimeout(() => {
+        window.print();
+        setActivePrintLeaf(null);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [activePrintLeaf]);
+
+  const getFlattenedLeafComponents = (finishedProductId: string, parentQty = 1, visited: string[] = [], specificBomId?: string): any[] => {
+    if (visited.includes(finishedProductId)) return [];
+    const currentVisited = [...visited, finishedProductId];
+
+    const bom = specificBomId
+      ? bomsList.find(b => b.id === specificBomId)
+      : bomsList.find(b => b.finishedProductId === finishedProductId && b.status === 'ACTIVE');
+    if (!bom) return [];
+
+    const leaves: Record<string, { productId: string; name: string; code: string; qtyRequired: number; unit: string; costPerUnit: number }> = {};
+
+    bom.components.forEach(comp => {
+      const subBom = comp.subBomId
+        ? bomsList.find(b => b.id === comp.subBomId)
+        : bomsList.find(b => b.finishedProductId === comp.productId && b.status === 'ACTIVE');
+      const totalQty = (Number(comp.qtyRequired) || 0) * parentQty;
+
+      if (subBom) {
+        const subLeaves = getFlattenedLeafComponents(comp.productId, totalQty, currentVisited, comp.subBomId);
+        subLeaves.forEach(sl => {
+          if (leaves[sl.productId]) {
+            leaves[sl.productId].qtyRequired += sl.qtyRequired;
+          } else {
+            leaves[sl.productId] = { ...sl };
+          }
+        });
+      } else {
+        const prod = products.find(p => p.id === comp.productId);
+        const code = prod?.hsnSacCode || prod?.sku || 'N/A';
+        if (leaves[comp.productId]) {
+          leaves[comp.productId].qtyRequired += totalQty;
+        } else {
+          leaves[comp.productId] = {
+            productId: comp.productId,
+            name: comp.name,
+            code: code,
+            qtyRequired: totalQty,
+            unit: comp.unit,
+            costPerUnit: Number(comp.costPerUnit) || 0
+          };
+        }
+      }
+    });
+
+    return Object.values(leaves);
+  };
+
+  // routing states for modal
+  const [routingName, setRoutingName] = useState('Standard Routing');
+  const [routingSteps, setRoutingSteps] = useState<any[]>([]);
+
+  // routing step input states for modal
+  const [stepSeqNo, setStepSeqNo] = useState('1');
+  const [stepOpName, setStepOpName] = useState('');
+  const [stepWcId, setStepWcId] = useState('');
+  const [stepSetupTime, setStepSetupTime] = useState('5');
+  const [stepRunTime, setStepRunTime] = useState('2');
+
+  // outsource step input states
+  const [stepOperationType, setStepOperationType] = useState<'IN_HOUSE' | 'OUTSOURCED'>('IN_HOUSE');
+  const [stepVendorId, setStepVendorId] = useState('');
+  const [stepOutsourceCost, setStepOutsourceCost] = useState('0.0');
+  const [stepLeadTimeDays, setStepLeadTimeDays] = useState('0');
+
+  const [vendors, setVendors] = useState<any[]>([]);
+
+  const moveStep = (index: number, direction: 'up' | 'down') => {
+    if (direction === 'up' && index === 0) return;
+    if (direction === 'down' && index === routingSteps.length - 1) return;
+
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    const newSteps = [...routingSteps];
+    
+    // Swap sequence numbers
+    const tempSeq = newSteps[index].sequenceNo;
+    newSteps[index].sequenceNo = newSteps[targetIndex].sequenceNo;
+    newSteps[targetIndex].sequenceNo = tempSeq;
+
+    // Swap positions in array
+    const tempItem = newSteps[index];
+    newSteps[index] = newSteps[targetIndex];
+    newSteps[targetIndex] = tempItem;
+
+    // Sort to keep ordered by sequenceNo
+    newSteps.sort((a, b) => parseInt(a.sequenceNo) - parseInt(b.sequenceNo));
+    
+    setRoutingSteps(newSteps);
+  };
+
+  const fetchRoutingsAndWorkCenters = async () => {
+    try {
+      const routingRes = await apiClient.get<any>('/api/manufacturing/routings');
+      setRoutings(routingRes.routings || []);
+    } catch (e) {
+      console.error('Failed to load routings:', e);
+    }
+    try {
+      const wcRes = await apiClient.get<{ workCenters: any[] }>('/api/manufacturing/work-centers');
+      setWorkCenters(wcRes.workCenters || []);
+    } catch (e) {
+      console.error('Failed to load work centers:', e);
+    }
+    try {
+      const vendorRes = await apiClient.get<{ vendors: any[] }>('/api/master/vendors');
+      setVendors(vendorRes.vendors || []);
+    } catch (e) {
+      console.error('Failed to load vendors:', e);
+    }
+  };
+
   const fetchBOMs = async () => {
     setLoading(true);
     try {
       const data = await apiClient.get<{ boms: any[] }>('/api/manufacturing/boms');
       const formattedBoms: BOM[] = (data.boms || []).map((bom: any) => ({
         id: bom.id,
+        name: bom.name || '',
+        description: bom.description || '',
         finishedProductId: bom.finishedProductId,
         finishedProductName: bom.finishedProduct?.name || 'Standard Product',
         finishedProductCode: bom.finishedProduct?.hsnSacCode || bom.finishedProduct?.code || 'PROD-CF90',
-        version: bom.version,
+        version: bom.version || 'v1.0',
         componentsCount: bom.components?.length || 0,
-        status: bom.status,
-        laborHours: bom.laborHours,
-        laborRate: bom.laborRate,
-        overheadAllocation: bom.overheadAllocation,
+        status: bom.status || 'DRAFT',
+        laborHours: Number(bom.laborHours) || 0,
+        laborRate: Number(bom.laborRate) || 0,
+        overheadAllocation: Number(bom.overheadAllocation) || 0,
         createdAt: bom.createdAt?.split('T')[0] || '',
         components: (bom.components || []).map((comp: any) => ({
           productId: comp.productId,
           name: comp.product?.name || 'Raw Component',
-          qtyRequired: comp.qtyRequired,
+          qtyRequired: Number(comp.qtyRequired) || 0,
           unit: comp.product?.uom || 'unit',
-          costPerUnit: comp.product?.pricing || 0,
-          wasteMargin: comp.wasteMargin
+          costPerUnit: Number(comp.product?.pricing) || Number(comp.costPerUnit) || 0,
+          wasteMargin: Number(comp.wasteMargin) || 0,
+          subBomId: comp.subBomId || undefined
         }))
       }));
       setBomsList(formattedBoms);
@@ -175,10 +311,13 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
 
   useEffect(() => {
     fetchBOMs();
+    fetchRoutingsAndWorkCenters();
   }, [products]);
 
   // State for creating new BOM
   const [newBomFinishedProductId, setNewBomFinishedProductId] = useState('');
+  const [newBomName, setNewBomName] = useState('');
+  const [newBomDescription, setNewBomDescription] = useState('');
   const [newBomVersion, setNewBomVersion] = useState('v1.0');
   const [newBomLaborTime, setNewBomLaborTime] = useState<number>(8);
   const [newBomLaborTimeUnit, setNewBomLaborTimeUnit] = useState<'HOURS' | 'MINUTES' | 'SECONDS'>('HOURS');
@@ -190,6 +329,7 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
   const [selectedCompId, setSelectedCompId] = useState('');
   const [compQty, setCompQty] = useState(1);
   const [compWaste, setCompWaste] = useState(2);
+  const [selectedSubBomId, setSelectedSubBomId] = useState('');
 
   // Set default dropdown selections when catalog loads
   useEffect(() => {
@@ -221,9 +361,11 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
         qtyRequired: Number(compQty),
         unit: rawProd.uom || 'unit',
         costPerUnit: rawProd.pricing || 0,
-        wasteMargin: Number(compWaste)
+        wasteMargin: Number(compWaste),
+        subBomId: selectedSubBomId || undefined
       }
     ]);
+    setSelectedSubBomId('');
   };
 
   const removeComponentFromDraft = (prodId: string) => {
@@ -246,6 +388,8 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
     }
 
     const payload = {
+      name: newBomName || null,
+      description: newBomDescription || null,
       finishedProductId: newBomFinishedProductId,
       version: newBomVersion,
       laborHours: calculatedHours,
@@ -254,7 +398,8 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
       components: newBomComponents.map(c => ({
         productId: c.productId,
         qtyRequired: Number(c.qtyRequired),
-        wasteMargin: Number(c.wasteMargin)
+        wasteMargin: Number(c.wasteMargin),
+        subBomId: c.subBomId || null
       }))
     };
 
@@ -264,19 +409,53 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
       } else {
         await apiClient.post('/api/manufacturing/boms', payload);
       }
+
+      // Sync routing steps with backend
+      const rPayload = {
+        productId: newBomFinishedProductId,
+        name: routingName || 'Standard Routing',
+        operations: routingSteps.map(step => ({
+          sequenceNo: parseInt(step.sequenceNo) || 1,
+          operationName: step.operationName,
+          workCenterId: step.operationType === 'IN_HOUSE' && step.workCenterId ? step.workCenterId : null,
+          setupTimeMins: step.operationType === 'IN_HOUSE' ? (parseFloat(step.setupTimeMins) || 0.0) : 0.0,
+          runTimePerUnit: step.operationType === 'IN_HOUSE' ? (parseFloat(step.runTimePerUnit) || 0.0) : 0.0,
+          operationType: step.operationType || 'IN_HOUSE',
+          vendorId: step.operationType === 'OUTSOURCED' && step.vendorId ? step.vendorId : null,
+          outsourceCost: step.operationType === 'OUTSOURCED' ? (parseFloat(step.outsourceCost) || 0.0) : 0.0,
+          leadTimeDays: step.operationType === 'OUTSOURCED' ? (parseInt(step.leadTimeDays) || 0) : 0
+        }))
+      };
+
+      const existingRouting = routings.find(rt => rt.productId === newBomFinishedProductId);
+      if (existingRouting) {
+        await apiClient.put(`/api/manufacturing/routings/${existingRouting.id}`, rPayload);
+      } else {
+        if (routingSteps.length > 0) {
+          await apiClient.post('/api/manufacturing/routings', rPayload);
+        }
+      }
+
       setShowAddModal(false);
       setIsEditing(false);
       setEditingId(null);
       setNewBomComponents([]);
+      setNewBomName('');
+      setNewBomDescription('');
       setNewBomVersion('v1.0');
+      setRoutingSteps([]);
+      setRoutingName('Standard Routing');
       fetchBOMs();
+      fetchRoutingsAndWorkCenters();
     } catch (err: any) {
-      alert(err.message || 'Failed to save BOM');
+      alert(err.message || 'Failed to save BOM/Routing');
     }
   };
 
   const handleEditBOM = (bom: BOM) => {
     setNewBomFinishedProductId(bom.finishedProductId);
+    setNewBomName(bom.name || '');
+    setNewBomDescription(bom.description || '');
     setNewBomVersion(bom.version);
 
     // Convert decimal hours back to a friendly time unit
@@ -298,6 +477,28 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
     setNewBomLaborRate(bom.laborRate);
     setNewBomOverhead(bom.overheadAllocation);
     setNewBomComponents(bom.components);
+
+    const r = routings.find(rt => rt.productId === bom.finishedProductId);
+    if (r) {
+      setRoutingName(r.name || 'Standard Routing');
+      setRoutingSteps((r.operations || []).map((op: any) => ({
+        id: op.id,
+        sequenceNo: String(op.sequenceNo),
+        operationName: op.operationName,
+        workCenterId: op.workCenterId || '',
+        setupTimeMins: String(op.setupTimeMins),
+        runTimePerUnit: String(op.runTimePerUnit),
+        operationType: op.operationType || 'IN_HOUSE',
+        vendorId: op.vendorId || '',
+        outsourceCost: String(op.outsourceCost || 0.0),
+        leadTimeDays: String(op.leadTimeDays || 0)
+      })));
+    } else {
+      setRoutingName('Standard Routing');
+      setRoutingSteps([]);
+    }
+    setModalTab('components');
+
     setIsEditing(true);
     setEditingId(bom.id);
     setShowAddModal(true);
@@ -359,6 +560,16 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
               setIsEditing(false);
               setEditingId(null);
               setNewBomComponents([]);
+              setNewBomName('');
+              setNewBomDescription('');
+              setRoutingSteps([]);
+              setRoutingName('Standard Routing');
+              setStepSeqNo('1');
+              setStepOpName('');
+              setStepWcId('');
+              setStepSetupTime('5');
+              setStepRunTime('2');
+              setModalTab('components');
               setShowAddModal(true);
             }}
             className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 active:scale-95 transition-all text-white font-bold text-xs rounded-xl shadow-lg shadow-indigo-600/10 cursor-pointer border-0"
@@ -415,7 +626,12 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
                     <div className="flex items-center justify-between border-b border-slate-850 pb-3">
                       <div className="text-left">
                         <span className="text-[10px] bg-indigo-500/15 border border-indigo-500/20 text-indigo-400 py-0.5 px-2 rounded-full font-bold uppercase tracking-wider">{bom.version}</span>
-                        <h4 className="font-bold text-sm text-white mt-1.5">{bom.finishedProductName}</h4>
+                        <h4 className="font-bold text-sm text-white mt-1.5">
+                          {bom.name ? `${bom.name} (${bom.finishedProductName})` : bom.finishedProductName}
+                        </h4>
+                        {bom.description && (
+                          <p className="text-[11px] text-slate-400 mt-1 italic">{bom.description}</p>
+                        )}
                         <p className="text-[10px] text-slate-500 font-mono mt-0.5">{bom.finishedProductCode}</p>
                       </div>
                       <div className="text-right">
@@ -430,6 +646,49 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
                         {renderBOMTree(bom.components, 1, 0, bom.id)}
                       </div>
                     </div>
+
+                    {/* Visual Process Routing Steps Timeline */}
+                    {(() => {
+                      const r = routings.find(rt => rt.productId === bom.finishedProductId);
+                      if (!r || !r.operations || r.operations.length === 0) return null;
+                      return (
+                        <div className="text-left border-t border-slate-850/65 pt-3.5">
+                          <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest block mb-2">Process Routing Sequence</span>
+                          <div className="relative border-l border-indigo-500/20 pl-4 ml-2.5 space-y-2">
+                            {r.operations.map((op: any, index: number) => {
+                              const isOutsource = op.operationType === 'OUTSOURCED';
+                              return (
+                                <div key={op.id || index} className="relative text-[10px]">
+                                  <div className={`absolute -left-[20.5px] top-1.5 w-2 h-2 rounded-full border border-slate-900 shadow-[0_0_8px_rgba(99,102,241,0.5)] ${
+                                    isOutsource ? 'bg-amber-500' : 'bg-indigo-500'
+                                  }`} />
+                                  <div className="text-slate-355 font-semibold flex items-center gap-1.5 flex-wrap">
+                                    <span>Step {op.sequenceNo}: {op.operationName}</span>
+                                    {isOutsource ? (
+                                      <span className="text-[8px] bg-amber-500/10 text-amber-400 px-1.5 py-0.25 rounded border border-amber-500/25 uppercase font-bold tracking-wide">
+                                        Outsource {op.vendor ? `@${op.vendor.name}` : ''}
+                                      </span>
+                                    ) : (
+                                      op.workCenter && (
+                                        <span className="text-[8px] bg-slate-800 text-slate-400 px-1 py-0.25 rounded border border-slate-700 font-mono">
+                                          @{op.workCenter.name}
+                                        </span>
+                                      )
+                                    )}
+                                  </div>
+                                  <div className="text-slate-500 text-[9px] mt-0.5">
+                                    {isOutsource
+                                      ? `Service Fee: ₹${op.outsourceCost} | Lead Time: ${op.leadTimeDays}d`
+                                      : `Setup: ${op.setupTimeMins}m | Run/unit: ${op.runTimePerUnit}m`
+                                    }
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     <div className="grid grid-cols-3 gap-2.5 border-t border-slate-850 pt-3.5 text-left">
                       <div>
@@ -448,6 +707,16 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
 
                     {/* Edit & Delete Action Bar */}
                     <div className="flex justify-end gap-2 border-t border-slate-850/60 pt-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setExportBom(bom);
+                          setExportQty(1);
+                        }}
+                        className="px-2.5 py-1 bg-emerald-650/10 hover:bg-emerald-650 text-emerald-400 hover:text-white rounded-lg text-[10px] uppercase font-bold cursor-pointer transition-all border-0 bg-transparent flex items-center gap-1"
+                      >
+                        <Download className="w-3 h-3" /> Explode Leaves
+                      </button>
                       <button
                         onClick={() => handleEditBOM(bom)}
                         className="px-2.5 py-1 bg-indigo-650/10 hover:bg-indigo-650 text-indigo-400 hover:text-white rounded-lg text-[10px] uppercase font-bold cursor-pointer transition-all border-0 bg-transparent flex items-center gap-1"
@@ -567,6 +836,29 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
             <form onSubmit={handleCreateBOMSubmit} className="p-6 space-y-4 text-left">
               <div className="grid grid-cols-2 gap-4">
                 <div>
+                  <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">BOM Name</label>
+                  <input
+                    type="text"
+                    value={newBomName}
+                    onChange={e => setNewBomName(e.target.value)}
+                    placeholder="e.g. Standard Formulation, Premium Assembly"
+                    className="w-full bg-slate-950 border border-slate-850 p-2 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Description / Notes</label>
+                  <input
+                    type="text"
+                    value={newBomDescription}
+                    onChange={e => setNewBomDescription(e.target.value)}
+                    placeholder="Brief description of this formula"
+                    className="w-full bg-slate-950 border border-slate-850 p-2 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
                   <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Target Product</label>
                   <select
                     value={newBomFinishedProductId}
@@ -598,130 +890,521 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
                 </div>
               </div>
 
-              {/* Add Material to formulation */}
-              <div className="p-4 bg-slate-950/40 border border-slate-850 rounded-xl space-y-3">
-                <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest block">Add Component Material</span>
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label className="text-[8px] font-bold text-slate-500 uppercase block mb-1">Raw Material</label>
-                    <select
-                      value={selectedCompId}
-                      onChange={e => setSelectedCompId(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-800 p-2 rounded-lg text-[10px] text-white focus:outline-none focus:border-indigo-500"
-                    >
-                      {rawMaterialsCatalog.map(p => {
-                        const hasSubBom = bomsList.some(b => b.finishedProductId === p.id && b.status === 'ACTIVE');
-                        const isServ = isServiceItemProduct(p.id);
-                        let label = p.name;
-                        if (isServ) label += " 🛠️ (Service/Process)";
-                        else if (hasSubBom) label += " 📦 (Has Sub-BOM)";
-                        return (
-                          <option key={p.id} value={p.id}>{label} (₹{p.pricing})</option>
-                        );
-                      })}
-                    </select>
+              {/* Tab Navigation */}
+              <div className="flex border-b border-slate-800 my-2">
+                <button
+                  type="button"
+                  onClick={() => setModalTab('components')}
+                  className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider text-center border-b-2 transition-all ${
+                    modalTab === 'components'
+                      ? 'border-indigo-500 text-indigo-400 font-bold'
+                      : 'border-transparent text-slate-550 hover:text-slate-300'
+                  } bg-transparent cursor-pointer`}
+                >
+                  Components List
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModalTab('routing')}
+                  className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider text-center border-b-2 transition-all ${
+                    modalTab === 'routing'
+                      ? 'border-indigo-500 text-indigo-400 font-bold'
+                      : 'border-transparent text-slate-550 hover:text-slate-300'
+                  } bg-transparent cursor-pointer`}
+                >
+                  Process Routing Steps ({routingSteps.length})
+                </button>
+              </div>
+
+              {/* Tab Content: Components List */}
+              {modalTab === 'components' && (
+                <>
+                  {/* Add Material to formulation */}
+                  <div className="p-4 bg-slate-950/40 border border-slate-850 rounded-xl space-y-3">
+                    <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest block">Add Component Material</span>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="col-span-1">
+                        <label className="text-[8px] font-bold text-slate-500 uppercase block mb-1">Raw Material</label>
+                        <select
+                          value={selectedCompId}
+                          onChange={e => {
+                            setSelectedCompId(e.target.value);
+                            setSelectedSubBomId('');
+                          }}
+                          className="w-full bg-slate-900 border border-slate-800 p-2 rounded-lg text-[10px] text-white focus:outline-none focus:border-indigo-500"
+                        >
+                          {rawMaterialsCatalog.map(p => {
+                            const hasSubBom = bomsList.some(b => b.finishedProductId === p.id && b.status === 'ACTIVE');
+                            const isServ = isServiceItemProduct(p.id);
+                            let label = p.name;
+                            if (isServ) label += " 🛠️ (Service/Process)";
+                            else if (hasSubBom) label += " 📦 (Has Sub-BOM)";
+                            return (
+                              <option key={p.id} value={p.id}>{label} (₹{p.pricing})</option>
+                            );
+                          })}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[8px] font-bold text-slate-500 uppercase block mb-1">Qty Required</label>
+                        <input
+                          type="number"
+                          value={compQty}
+                          step="0.001"
+                          onChange={e => setCompQty(Number(e.target.value))}
+                          min="0.001"
+                          className="w-full bg-slate-900 border border-slate-800 p-1.5 rounded-lg text-[10px] text-white focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                      <div className="flex items-end gap-2">
+                        <div className="flex-1">
+                          <label className="text-[8px] font-bold text-slate-500 uppercase block mb-1">Waste Margin (%)</label>
+                          <input
+                            type="number"
+                            value={compWaste}
+                            onChange={e => setCompWaste(Number(e.target.value))}
+                            min="0"
+                            className="w-full bg-slate-900 border border-slate-800 p-1.5 rounded-lg text-[10px] text-white focus:outline-none focus:border-indigo-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Sub-BOM optional version selector */}
+                    {(() => {
+                      const selectedProductBoms = bomsList.filter(b => b.finishedProductId === selectedCompId);
+                      if (selectedProductBoms.length === 0) return null;
+                      return (
+                        <div className="grid grid-cols-3 gap-3 mt-1.5">
+                          <div className="col-span-2">
+                            <label className="text-[8px] font-bold text-slate-500 uppercase block mb-1">Specific Sub-BOM version override</label>
+                            <select
+                              value={selectedSubBomId}
+                              onChange={e => setSelectedSubBomId(e.target.value)}
+                              className="w-full bg-slate-900 border border-slate-800 p-1.5 rounded-lg text-[10px] text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
+                            >
+                              <option value="">-- Active Standard BOM --</option>
+                              {selectedProductBoms.map(b => (
+                                <option key={b.id} value={b.id}>Version {b.version}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="flex items-end">
+                            <button
+                              type="button"
+                              onClick={addComponentToDraft}
+                              className="w-full py-1.5 bg-indigo-650/20 text-indigo-400 hover:bg-indigo-600 hover:text-white font-extrabold text-[10px] uppercase rounded-lg border-0 cursor-pointer transition-all"
+                            >
+                              Add component
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Fallback button if there are no sub-BOM versions to select */}
+                    {bomsList.filter(b => b.finishedProductId === selectedCompId).length === 0 && (
+                      <div className="flex justify-end mt-2">
+                        <button
+                          type="button"
+                          onClick={addComponentToDraft}
+                          className="px-3.5 py-1.5 bg-indigo-650/20 text-indigo-400 hover:bg-indigo-600 hover:text-white font-extrabold text-[10px] uppercase rounded-lg border-0 cursor-pointer transition-all"
+                        >
+                          Add component
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Draft list inside modal */}
+                    {newBomComponents.length > 0 && (
+                      <div className="mt-3 border-t border-slate-900 pt-3 space-y-2 max-h-[140px] overflow-y-auto">
+                        {newBomComponents.map((item, idx) => {
+                          const subBom = bomsList.find(b => b.id === item.subBomId);
+                          return (
+                            <div key={idx} className="flex justify-between items-center bg-slate-900/50 p-2 border border-slate-850 rounded-lg text-[11px]">
+                              <span className="font-semibold text-slate-200">
+                                {item.name}
+                                {subBom && <span className="text-[9px] text-indigo-400 font-mono ml-2">({subBom.version})</span>}
+                              </span>
+                              <div className="flex items-center gap-3">
+                                <span className="font-mono text-slate-400">{formatNumber(item.qtyRequired)} {item.unit} (Waste: {item.wasteMargin}%)</span>
+                                <button
+                                  type="button"
+                                  onClick={() => removeComponentFromDraft(item.productId)}
+                                  className="p-1 text-rose-500 hover:bg-rose-500/10 rounded border-0 bg-transparent cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <label className="text-[8px] font-bold text-slate-500 uppercase block mb-1">Qty Required</label>
-                    <input
-                      type="number"
-                      value={compQty}
-                      step="0.001"
-                      onChange={e => setCompQty(Number(e.target.value))}
-                      min="0.001"
-                      className="w-full bg-slate-900 border border-slate-800 p-1.5 rounded-lg text-[10px] text-white focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
-                  <div className="flex items-end gap-2">
-                    <div className="flex-1">
-                      <label className="text-[8px] font-bold text-slate-500 uppercase block mb-1">Waste Margin (%)</label>
+
+                  {/* Labor time and Overheads */}
+                  <div className="grid grid-cols-4 gap-4 pt-2">
+                    <div className="col-span-2">
+                      <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Labor Time</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          value={newBomLaborTime}
+                          step="any"
+                          onChange={e => setNewBomLaborTime(Number(e.target.value))}
+                          min="0"
+                          className="w-2/3 bg-slate-950 border border-slate-850 p-2 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
+                        />
+                        <select
+                          value={newBomLaborTimeUnit}
+                          onChange={e => setNewBomLaborTimeUnit(e.target.value as any)}
+                          className="w-1/3 bg-slate-950 border border-slate-850 p-2 rounded-lg text-[10px] text-white focus:outline-none focus:border-indigo-500"
+                        >
+                          <option value="HOURS">Hours</option>
+                          <option value="MINUTES">Minutes</option>
+                          <option value="SECONDS">Seconds</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Labor Rate/hr (₹)</label>
                       <input
                         type="number"
-                        value={compWaste}
-                        onChange={e => setCompWaste(Number(e.target.value))}
+                        value={newBomLaborRate}
+                        step="0.01"
+                        onChange={e => setNewBomLaborRate(Number(e.target.value))}
                         min="0"
-                        className="w-full bg-slate-900 border border-slate-800 p-1.5 rounded-lg text-[10px] text-white focus:outline-none focus:border-indigo-500"
+                        className="w-full bg-slate-950 border border-slate-850 p-2 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
                       />
                     </div>
-                    <button
-                      type="button"
-                      onClick={addComponentToDraft}
-                      className="px-3.5 py-2.5 bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600 hover:text-white font-extrabold text-[10px] uppercase rounded-lg border-0 cursor-pointer transition-all"
-                    >
-                      Add
-                    </button>
+                    <div>
+                      <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Overhead Allocation (₹)</label>
+                      <input
+                        type="number"
+                        value={newBomOverhead}
+                        step="0.01"
+                        onChange={e => setNewBomOverhead(Number(e.target.value))}
+                        min="0"
+                        className="w-full bg-slate-950 border border-slate-850 p-2 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
                   </div>
-                </div>
+                </>
+              )}
 
-                {/* Draft list inside modal */}
-                {newBomComponents.length > 0 && (
-                  <div className="mt-3 border-t border-slate-900 pt-3 space-y-2 max-h-[140px] overflow-y-auto">
-                    {newBomComponents.map((item, idx) => (
-                      <div key={idx} className="flex justify-between items-center bg-slate-900/50 p-2 border border-slate-850 rounded-lg text-[11px]">
-                        <span className="font-semibold text-slate-200">{item.name}</span>
-                        <div className="flex items-center gap-3">
-                          <span className="font-mono text-slate-400">{formatNumber(item.qtyRequired)} {item.unit} (Waste: {item.wasteMargin}%)</span>
+              {/* Tab Content: Process Routing Steps */}
+              {modalTab === 'routing' && (
+                <div className="space-y-4">
+                  {/* Routing Name */}
+                  <div>
+                    <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Routing Sequence Name</label>
+                    <input
+                      type="text"
+                      value={routingName}
+                      onChange={e => setRoutingName(e.target.value)}
+                      placeholder="e.g. Standard Routing, Assembly Flow"
+                      className="w-full bg-slate-950 border border-slate-850 p-2 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+
+                  {/* Add routing operation form */}
+                  <div className="p-4 bg-slate-950/40 border border-slate-850 rounded-xl space-y-3">
+                    <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest block">Add Routing Operation</span>
+                    
+                    <div className="grid grid-cols-4 gap-2.5">
+                      <div className="col-span-1">
+                        <label className="text-[8px] font-bold text-slate-500 uppercase block mb-1">Seq No</label>
+                        <input
+                          type="number"
+                          step="1"
+                          value={stepSeqNo}
+                          onChange={e => setStepSeqNo(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-800 p-1.5 rounded-lg text-[10px] text-white focus:outline-none focus:border-indigo-500 font-mono"
+                        />
+                      </div>
+                      <div className="col-span-3">
+                        <label className="text-[8px] font-bold text-slate-500 uppercase block mb-1">Operation Name</label>
+                        <input
+                          type="text"
+                          value={stepOpName}
+                          onChange={e => setStepOpName(e.target.value)}
+                          placeholder="e.g. Molding / Plating Service"
+                          className="w-full bg-slate-900 border border-slate-800 p-1.5 rounded-lg text-[10px] text-white focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-2.5">
+                      <div className="col-span-2">
+                        <label className="text-[8px] font-bold text-slate-500 uppercase block mb-1">Operation Type</label>
+                        <div className="flex gap-2">
                           <button
                             type="button"
-                            onClick={() => removeComponentFromDraft(item.productId)}
-                            className="p-1 text-rose-500 hover:bg-rose-500/10 rounded border-0 bg-transparent cursor-pointer"
+                            onClick={() => setStepOperationType('IN_HOUSE')}
+                            className={`flex-1 py-1.5 rounded text-[9px] font-bold border cursor-pointer ${
+                              stepOperationType === 'IN_HOUSE'
+                                ? 'bg-indigo-650 border-indigo-550 text-white'
+                                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                            }`}
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            In-House
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setStepOperationType('OUTSOURCED')}
+                            className={`flex-1 py-1.5 rounded text-[9px] font-bold border cursor-pointer ${
+                              stepOperationType === 'OUTSOURCED'
+                                ? 'bg-indigo-650 border-indigo-550 text-white'
+                                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            Outsourced
                           </button>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
 
-              {/* Labor time and Overheads */}
-              <div className="grid grid-cols-4 gap-4 pt-2">
-                <div className="col-span-2">
-                  <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Labor Time</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      value={newBomLaborTime}
-                      step="any"
-                      onChange={e => setNewBomLaborTime(Number(e.target.value))}
-                      min="0"
-                      className="w-2/3 bg-slate-950 border border-slate-850 p-2 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
-                    />
-                    <select
-                      value={newBomLaborTimeUnit}
-                      onChange={e => setNewBomLaborTimeUnit(e.target.value as any)}
-                      className="w-1/3 bg-slate-950 border border-slate-850 p-2 rounded-lg text-[10px] text-white focus:outline-none focus:border-indigo-500"
-                    >
-                      <option value="HOURS">Hours</option>
-                      <option value="MINUTES">Minutes</option>
-                      <option value="SECONDS">Seconds</option>
-                    </select>
+                      {stepOperationType === 'IN_HOUSE' ? (
+                        <div className="col-span-2">
+                          <label className="text-[8px] font-bold text-slate-500 uppercase block mb-1">Work Center</label>
+                          <select
+                            value={stepWcId}
+                            onChange={e => setStepWcId(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-800 p-1.5 rounded-lg text-[10px] text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
+                          >
+                            <option value="">-- No Work Center --</option>
+                            {workCenters.map(wc => (
+                              <option key={wc.id} value={wc.id}>{wc.name} ({wc.code})</option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : (
+                        <div className="col-span-2">
+                          <label className="text-[8px] font-bold text-slate-500 uppercase block mb-1">Subcontractor Vendor</label>
+                          <select
+                            value={stepVendorId}
+                            onChange={e => setStepVendorId(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-800 p-1.5 rounded-lg text-[10px] text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
+                          >
+                            <option value="">-- Select Vendor --</option>
+                            {vendors.map(v => (
+                              <option key={v.id} value={v.id}>{v.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+
+                    {stepOperationType === 'IN_HOUSE' ? (
+                      <div className="grid grid-cols-3 gap-3 pt-1">
+                        <div>
+                          <label className="text-[8px] font-bold text-slate-500 uppercase block mb-1">Setup Mins</label>
+                          <input
+                            type="number"
+                            value={stepSetupTime}
+                            onChange={e => setStepSetupTime(e.target.value)}
+                            min="0"
+                            className="w-full bg-slate-900 border border-slate-800 p-1.5 rounded-lg text-[10px] text-white focus:outline-none focus:border-indigo-500 font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[8px] font-bold text-slate-500 uppercase block mb-1">Run Time/Unit</label>
+                          <input
+                            type="number"
+                            step="0.001"
+                            value={stepRunTime}
+                            onChange={e => setStepRunTime(e.target.value)}
+                            min="0"
+                            className="w-full bg-slate-900 border border-slate-800 p-1.5 rounded-lg text-[10px] text-white focus:outline-none focus:border-indigo-500 font-mono"
+                          />
+                        </div>
+                        <div className="flex items-end">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!stepOpName) {
+                                alert('Operation Name is required');
+                                return;
+                              }
+                              const seq = parseInt(stepSeqNo) || 1;
+                              if (routingSteps.some(s => parseInt(s.sequenceNo) === seq)) {
+                                alert(`Sequence number ${seq} is already in use.`);
+                                return;
+                              }
+                              const updatedSteps = [
+                                ...routingSteps,
+                                {
+                                  sequenceNo: String(seq),
+                                  operationName: stepOpName,
+                                  workCenterId: stepWcId,
+                                  setupTimeMins: String(parseFloat(stepSetupTime) || 0),
+                                  runTimePerUnit: String(parseFloat(stepRunTime) || 0),
+                                  operationType: 'IN_HOUSE',
+                                  vendorId: '',
+                                  outsourceCost: '0.0',
+                                  leadTimeDays: '0'
+                                }
+                              ].sort((a, b) => parseInt(a.sequenceNo) - parseInt(b.sequenceNo));
+                              
+                              setRoutingSteps(updatedSteps);
+                              setStepSeqNo(String(seq + 1));
+                              setStepOpName('');
+                            }}
+                            className="w-full py-1.5 bg-indigo-650/20 text-indigo-400 hover:bg-indigo-600 hover:text-white font-extrabold text-[10px] uppercase rounded-lg border-0 cursor-pointer transition-all"
+                          >
+                            Add Step
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-3 pt-1">
+                        <div>
+                          <label className="text-[8px] font-bold text-slate-500 uppercase block mb-1">Fee/Unit (₹)</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={stepOutsourceCost}
+                            onChange={e => setStepOutsourceCost(e.target.value)}
+                            min="0"
+                            className="w-full bg-slate-900 border border-slate-800 p-1.5 rounded-lg text-[10px] text-white focus:outline-none focus:border-indigo-500 font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[8px] font-bold text-slate-500 uppercase block mb-1">Lead Time (Days)</label>
+                          <input
+                            type="number"
+                            step="1"
+                            value={stepLeadTimeDays}
+                            onChange={e => setStepLeadTimeDays(e.target.value)}
+                            min="0"
+                            className="w-full bg-slate-900 border border-slate-800 p-1.5 rounded-lg text-[10px] text-white focus:outline-none focus:border-indigo-500 font-mono"
+                          />
+                        </div>
+                        <div className="flex items-end">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!stepOpName) {
+                                alert('Operation Name is required');
+                                return;
+                              }
+                              if (!stepVendorId) {
+                                alert('Subcontractor vendor must be selected');
+                                return;
+                              }
+                              const seq = parseInt(stepSeqNo) || 1;
+                              if (routingSteps.some(s => parseInt(s.sequenceNo) === seq)) {
+                                alert(`Sequence number ${seq} is already in use.`);
+                                return;
+                              }
+                              const updatedSteps = [
+                                ...routingSteps,
+                                {
+                                  sequenceNo: String(seq),
+                                  operationName: stepOpName,
+                                  workCenterId: '',
+                                  setupTimeMins: '0',
+                                  runTimePerUnit: '0',
+                                  operationType: 'OUTSOURCED',
+                                  vendorId: stepVendorId,
+                                  outsourceCost: String(parseFloat(stepOutsourceCost) || 0),
+                                  leadTimeDays: String(parseInt(stepLeadTimeDays) || 0)
+                                }
+                              ].sort((a, b) => parseInt(a.sequenceNo) - parseInt(b.sequenceNo));
+                              
+                              setRoutingSteps(updatedSteps);
+                              setStepSeqNo(String(seq + 1));
+                              setStepOpName('');
+                              setStepVendorId('');
+                              setStepOutsourceCost('0.0');
+                              setStepLeadTimeDays('0');
+                            }}
+                            className="w-full py-1.5 bg-indigo-650/20 text-indigo-400 hover:bg-indigo-600 hover:text-white font-extrabold text-[10px] uppercase rounded-lg border-0 cursor-pointer transition-all"
+                          >
+                            Add Step
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
+
+                  {/* Steps List */}
+                  {routingSteps.length > 0 ? (
+                    <div className="space-y-2 max-h-[180px] overflow-y-auto border border-slate-850 rounded-xl p-3 bg-slate-950/10">
+                      {routingSteps.map((step, idx) => {
+                        const wc = workCenters.find(w => w.id === step.workCenterId);
+                        const vendor = vendors.find(v => v.id === step.vendorId);
+                        const isOutsource = step.operationType === 'OUTSOURCED';
+                        return (
+                          <div key={idx} className={`flex justify-between items-center p-2 border rounded-lg text-[11px] ${
+                            isOutsource
+                              ? 'bg-amber-950/15 border-amber-900/40'
+                              : 'bg-slate-900/50 border-slate-850'
+                          }`}>
+                            <div className="text-left flex-1">
+                              <span className={`font-bold font-mono mr-2 ${isOutsource ? 'text-amber-450' : 'text-indigo-400'}`}>Step {step.sequenceNo}:</span>
+                              <span className="font-semibold text-slate-200">{step.operationName}</span>
+                              {isOutsource ? (
+                                <span className="px-1.5 py-0.25 rounded text-[8px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 ml-2 uppercase tracking-wide">
+                                  Outsource {vendor ? `@${vendor.name}` : ''}
+                                </span>
+                              ) : (
+                                wc && (
+                                  <span className="text-[8px] bg-slate-800 text-slate-400 px-1 py-0.25 rounded border border-slate-700 ml-2 font-mono">
+                                    @{wc.name}
+                                  </span>
+                                )
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-slate-400 text-[10px] mr-2">
+                                {isOutsource
+                                  ? `Cost: ₹${step.outsourceCost} | LT: ${step.leadTimeDays}d`
+                                  : `Setup: ${step.setupTimeMins}m | Run/u: ${step.runTimePerUnit}m`
+                                }
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => moveStep(idx, 'up')}
+                                disabled={idx === 0}
+                                className={`p-1 rounded border-0 bg-transparent cursor-pointer ${
+                                  idx === 0 ? 'text-slate-700 cursor-not-allowed' : 'text-indigo-400 hover:bg-indigo-500/15'
+                                }`}
+                                title="Move Step Up"
+                              >
+                                <ArrowUp className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => moveStep(idx, 'down')}
+                                disabled={idx === routingSteps.length - 1}
+                                className={`p-1 rounded border-0 bg-transparent cursor-pointer ${
+                                  idx === routingSteps.length - 1 ? 'text-slate-700 cursor-not-allowed' : 'text-indigo-400 hover:bg-indigo-500/15'
+                                }`}
+                                title="Move Step Down"
+                              >
+                                <ArrowDown className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setRoutingSteps(routingSteps.filter((_, i) => i !== idx));
+                                }}
+                                className="p-1 text-rose-500 hover:bg-rose-500/10 rounded border-0 bg-transparent cursor-pointer animate-fade-in"
+                                title="Delete Step"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-6 text-slate-500 italic text-[10px]">No process routing steps configured yet. Configure operations above to route job cards.</div>
+                  )}
                 </div>
-                <div>
-                  <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Labor Rate/hr (₹)</label>
-                  <input
-                    type="number"
-                    value={newBomLaborRate}
-                    step="0.01"
-                    onChange={e => setNewBomLaborRate(Number(e.target.value))}
-                    min="0"
-                    className="w-full bg-slate-950 border border-slate-850 p-2 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Overhead Allocation (₹)</label>
-                  <input
-                    type="number"
-                    value={newBomOverhead}
-                    step="0.01"
-                    onChange={e => setNewBomOverhead(Number(e.target.value))}
-                    min="0"
-                    className="w-full bg-slate-950 border border-slate-850 p-2 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-              </div>
+              )}
 
               <div className="flex gap-3 justify-end pt-3">
                 <button
@@ -743,6 +1426,250 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
           </div>
         </div>
       )}
+
+      {/* ==========================================
+          MODAL: EXPLODE LEAF COMPONENTS SUMMARY
+          ========================================== */}
+      {exportBom && (() => {
+        const leafItems = getFlattenedLeafComponents(exportBom.finishedProductId, 1, [], exportBom.id);
+        const totalLeafCost = leafItems.reduce((sum, item) => sum + (item.qtyRequired * exportQty * item.costPerUnit), 0);
+
+        const handleCsvDownload = () => {
+          const headers = ['Product Code', 'Product Name', 'Quantity Required', 'Unit', 'Unit Cost (INR)', 'Total Estimated Cost (INR)'];
+          const rows = leafItems.map(item => [
+            item.code,
+            item.name,
+            (item.qtyRequired * exportQty).toFixed(4),
+            item.unit,
+            item.costPerUnit,
+            (item.qtyRequired * exportQty * item.costPerUnit).toFixed(2)
+          ]);
+
+          const csvContent = "data:text/csv;charset=utf-8," 
+            + [headers.join(','), ...rows.map(e => e.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","))].join("\n");
+          
+          const encodedUri = encodeURI(csvContent);
+          const link = document.createElement("a");
+          link.setAttribute("href", encodedUri);
+          link.setAttribute("download", `BOM_Leaf_Components_${exportBom.finishedProductName.replace(/\s+/g, '_')}.csv`);
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        };
+
+        return (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 animate-fade-in text-left">
+            <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl w-full max-w-3xl p-6 relative shadow-2xl animate-scale-up max-h-[90vh] overflow-y-auto animate-fade-in">
+              <button 
+                onClick={() => setExportBom(null)}
+                className="absolute top-4 right-4 text-[var(--text-muted)] hover:text-white cursor-pointer bg-transparent border-0"
+              >
+                ✕
+              </button>
+
+              <div className="flex items-center gap-3 pb-3 border-b border-[var(--border-color)]">
+                <div className="p-2.5 bg-emerald-500/10 rounded-xl text-emerald-400 border border-emerald-500/20">
+                  <Layers className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-[var(--text-primary)] font-display">
+                    Leaf Materials Checklist Studio
+                  </h3>
+                  <p className="text-[var(--text-secondary)] text-[10px]">
+                    Exploded flattened end-point raw material checklist required for batch production runs of <strong>{exportBom.finishedProductName}</strong>
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Target Qty */}
+                <div>
+                  <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Target Production Run Quantity</label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="any"
+                    value={exportQty}
+                    onChange={e => setExportQty(Math.max(1, parseFloat(e.target.value) || 1))}
+                    className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-emerald-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none font-mono"
+                  />
+                </div>
+
+                {/* Total Cost Valuation */}
+                <div className="bg-[var(--bg-tertiary)]/30 border border-[var(--border-color)]/60 rounded-xl p-3 flex flex-col justify-center text-xs font-mono text-[var(--text-secondary)]">
+                  <span className="flex justify-between">
+                    <span>Base Formulation Unit Cost:</span> 
+                    <span>₹{(totalLeafCost / exportQty).toFixed(2)}</span>
+                  </span>
+                  <span className="flex justify-between border-t border-[var(--border-color)]/60 pt-1 text-sm font-bold text-emerald-450 mt-1">
+                    <span>Batch Valuation Total:</span> 
+                    <span>₹{totalLeafCost.toFixed(2)}</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Leaf Nodes Table */}
+              <div className="border border-[var(--border-color)] rounded-xl mt-4 overflow-hidden">
+                <div className="max-h-72 overflow-y-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-[var(--bg-tertiary)] border-b border-[var(--border-color)] text-[var(--text-secondary)] font-bold">
+                        <th className="p-2.5 text-[9px] uppercase tracking-wider">Product Code</th>
+                        <th className="p-2.5 text-[9px] uppercase tracking-wider">Product Name</th>
+                        <th className="p-2.5 text-[9px] uppercase tracking-wider text-right font-bold">Qty Req</th>
+                        <th className="p-2.5 text-[9px] uppercase tracking-wider">Unit</th>
+                        <th className="p-2.5 text-[9px] uppercase tracking-wider text-right">Cost/Unit</th>
+                        <th className="p-2.5 text-[9px] uppercase tracking-wider text-right font-bold">Total Cost</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {leafItems.map((item, idx) => {
+                        const scaledQty = item.qtyRequired * exportQty;
+                        const itemTotalCost = scaledQty * item.costPerUnit;
+                        return (
+                          <tr key={item.productId || idx} className="border-b border-[var(--border-color)]/40 last:border-0 hover:bg-slate-900/25">
+                            <td className="p-2.5 font-mono text-slate-400 text-[10px]">{item.code}</td>
+                            <td className="p-2.5 font-semibold text-slate-200">{item.name}</td>
+                            <td className="p-2.5 text-right font-mono text-white">{scaledQty.toFixed(3)}</td>
+                            <td className="p-2.5 text-slate-400 text-[10px]">{item.unit}</td>
+                            <td className="p-2.5 text-right font-mono text-slate-400 font-mono">₹{item.costPerUnit.toFixed(2)}</td>
+                            <td className="p-2.5 text-right font-mono text-emerald-400 font-bold">₹{itemTotalCost.toFixed(2)}</td>
+                          </tr>
+                        );
+                      })}
+                      {leafItems.length === 0 && (
+                        <tr>
+                          <td colSpan={6} className="text-center py-6 text-slate-500 italic">No leaf components found for this design</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="flex gap-3 mt-4 border-t border-[var(--border-color)] pt-4 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setExportBom(null)}
+                  className="px-4 py-2 bg-[var(--bg-tertiary)] border border-[var(--border-color)] hover:text-[var(--text-primary)] font-bold text-xs rounded-xl cursor-pointer transition-all"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCsvDownload}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-indigo-400 hover:text-indigo-300 font-bold text-xs rounded-xl cursor-pointer transition-all border border-slate-700 flex items-center gap-1.5"
+                >
+                  <Download className="w-3.5 h-3.5" /> Download CSV
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActivePrintLeaf(exportBom)}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl cursor-pointer transition-all flex items-center gap-1.5 shadow-lg shadow-emerald-600/10 border-0"
+                >
+                  <Printer className="w-3.5 h-3.5" /> Print Summary
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ==========================================
+          HIDDEN PRINT CONTAINER FOR BATCH BOM LEAF SUMMARY
+          ========================================== */}
+      {activePrintLeaf && (() => {
+        const leafItems = getFlattenedLeafComponents(activePrintLeaf.finishedProductId, 1, [], activePrintLeaf.id);
+        const totalLeafCost = leafItems.reduce((sum, item) => sum + (item.qtyRequired * exportQty * item.costPerUnit), 0);
+
+        return (
+          <div id="print-section" className="hidden print:block fixed inset-0 z-[99999] bg-white text-black p-10 select-text">
+            <style dangerouslySetInnerHTML={{__html: `
+              @media print {
+                body * {
+                  visibility: hidden !important;
+                }
+                #print-section, #print-section * {
+                  visibility: visible !important;
+                }
+                #print-section {
+                  position: absolute !important;
+                  left: 0 !important;
+                  top: 0 !important;
+                  width: 100% !important;
+                  background: white !important;
+                  color: black !important;
+                }
+              }
+            `}} />
+            <div className="space-y-6">
+              {/* Header */}
+              <div className="border-b-2 border-emerald-600 pb-5">
+                <div className="text-xl font-extrabold uppercase text-emerald-700">Exploded Leaf Materials Summary</div>
+                <div className="text-[12px] font-bold text-slate-800 mt-1">Final Design Formulation: {activePrintLeaf.finishedProductName}</div>
+                <div className="text-[10px] text-slate-650 mt-0.5">Version: {activePrintLeaf.version} | Finished Product Code: {activePrintLeaf.finishedProductCode}</div>
+              </div>
+
+              {/* Batch details */}
+              <div className="grid grid-cols-2 gap-6 text-[11px] text-slate-800 border border-slate-200 p-3 rounded-lg bg-slate-50 font-mono">
+                <div>
+                  <strong>Target Batch Run Quantity:</strong> {exportQty} units
+                </div>
+                <div className="text-right">
+                  <strong>Estimated Total Batch Cost:</strong> ₹{totalLeafCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </div>
+              </div>
+
+              {/* Items Table */}
+              <div className="pt-2">
+                <table className="w-full text-left text-[11px] border-collapse">
+                  <thead>
+                    <tr className="border-b-2 border-emerald-600 font-bold bg-slate-100">
+                      <th className="py-2.5 px-2 text-slate-900">Product Code</th>
+                      <th className="py-2.5 px-2 text-slate-900">Product Name</th>
+                      <th className="py-2.5 px-2 text-right text-slate-900 font-bold">Qty Required</th>
+                      <th className="py-2.5 px-2 text-slate-900">Unit</th>
+                      <th className="py-2.5 px-2 text-right text-slate-900">Cost/Unit</th>
+                      <th className="py-2.5 px-2 text-right text-slate-900 font-bold">Estimated Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {leafItems.map((item, idx) => {
+                      const scaledQty = item.qtyRequired * exportQty;
+                      const itemTotalCost = scaledQty * item.costPerUnit;
+                      return (
+                        <tr key={item.productId || idx} className="border-b border-slate-200">
+                          <td className="py-2.5 px-2 font-mono text-slate-750">{item.code}</td>
+                          <td className="py-2.5 px-2 font-bold text-slate-900">{item.name}</td>
+                          <td className="py-2.5 px-2 text-right font-mono text-slate-900">{scaledQty.toFixed(3)}</td>
+                          <td className="py-2.5 px-2 text-slate-700">{item.unit}</td>
+                          <td className="py-2.5 px-2 text-right font-mono text-slate-700">₹{item.costPerUnit.toFixed(2)}</td>
+                          <td className="py-2.5 px-2 text-right font-mono font-bold text-slate-900">₹{itemTotalCost.toFixed(2)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Summary of Totals */}
+              <div className="flex justify-end pt-4 border-t border-slate-200">
+                <div className="w-[55%] text-[11px] text-slate-800 space-y-1.5 font-mono">
+                  <div className="flex justify-between">
+                    <span>Base Formulation Unit Material Cost:</span>
+                    <span className="font-bold text-slate-950">₹{(totalLeafCost / exportQty).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between border-t-2 border-emerald-600 pt-2 text-[13px] font-extrabold text-emerald-800">
+                    <span>Grand Batch Valuation Cost:</span>
+                    <span>₹{totalLeafCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

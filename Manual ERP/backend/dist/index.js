@@ -342,6 +342,11 @@ app.get('/api/sales/dispatches', auth_1.authenticateToken, sales_2.listDispatche
 app.post('/api/sales/dispatches', auth_1.authenticateToken, sales_2.createDispatch);
 app.patch('/api/sales/dispatches/:id', auth_1.authenticateToken, sales_2.updateDispatch);
 app.delete('/api/sales/dispatches/:id', auth_1.authenticateToken, sales_2.deleteDispatch);
+// 9.05 Document Templates CRUD
+app.get('/api/sales/templates', auth_1.authenticateToken, sales_2.listDocumentTemplates);
+app.post('/api/sales/templates', auth_1.authenticateToken, sales_2.createDocumentTemplate);
+app.patch('/api/sales/templates/:id', auth_1.authenticateToken, sales_2.updateDocumentTemplate);
+app.delete('/api/sales/templates/:id', auth_1.authenticateToken, sales_2.deleteDocumentTemplate);
 // 9.1 Advanced Sales: Quotations & Post-Sales Maintenance Service CRUDs
 app.get('/api/sales/quotations', auth_1.authenticateToken, sales_1.listQuotations);
 app.post('/api/sales/quotations', auth_1.authenticateToken, sales_1.createQuotation);
@@ -504,6 +509,7 @@ async function seedDatabase() {
                         "SALES_DISPATCH",
                         "SALES_QUOTATION",
                         "SALES_POST_SERVICE",
+                        "SALES_PDF_EDITOR",
                         "CRM_DATA",
                         "CRM_LEAD",
                         "CRM_OPPORTUNITY",
@@ -598,6 +604,7 @@ async function seedDatabase() {
                 permissions.SALES_DISPATCH = ["read", "write", "delete"];
                 permissions.SALES_QUOTATION = ["read", "write", "delete"];
                 permissions.SALES_POST_SERVICE = ["read", "write", "delete"];
+                permissions.SALES_PDF_EDITOR = ["read", "write", "delete"];
                 permissions.CRM_DATA = ["read", "write", "delete"];
                 permissions.CRM_LEAD = ["read", "write", "delete"];
                 permissions.CRM_OPPORTUNITY = ["read", "write", "delete"];

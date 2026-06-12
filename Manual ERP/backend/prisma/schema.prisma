@@ -388,6 +388,8 @@ model Vendor {
   vendorQuotations VendorQuotation[]
   purchaseOrders   PurchaseOrder[]
   vendorPayments   VendorPayment[]
+  routingOperations RoutingOperation[]
+  jobCards          JobCard[]        @relation("JobCardVendor")
 
   @@unique([companyId, name])
   @@map("vendors")
@@ -595,17 +597,19 @@ model SalesInvoiceItem {
 }
 
 model DeliveryChallan {
-  id         String                 @id @default(uuid())
-  companyId  String
-  company    Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customerId String
-  customer   Customer               @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  challanNo  String
-  date       DateTime               @default(now())
-  status     String                 @default("ISSUED") // ISSUED, RECEIVED, RETURNED, CANCELLED
-  items      DeliveryChallanItem[]
-  createdAt  DateTime               @default(now())
-  updatedAt  DateTime               @updatedAt
+  id              String                 @id @default(uuid())
+  companyId       String
+  company         Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customerId      String
+  customer        Customer               @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  challanNo       String
+  date            DateTime               @default(now())
+  status          String                 @default("ISSUED") // ISSUED, RECEIVED, RETURNED, CANCELLED
+  items           DeliveryChallanItem[]
+  salesOrderId    String?
+  salesOrderIds   String?                // JSON string for merged Sales Orders
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
 
   @@unique([companyId, challanNo])
   @@map("delivery_challans")
@@ -828,6 +832,13 @@ model PurchaseOrder {
   returns      PurchaseReturn[]
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt
+
+  // Outsource / Subcontract Relations
+  isSubcontract Boolean            @default(false)
+  workOrderId   String?
+  workOrder     WorkOrder?         @relation(fields: [workOrderId], references: [id], onDelete: SetNull)
+  jobCardId     String?
+  jobCard       JobCard?           @relation(fields: [jobCardId], references: [id], onDelete: SetNull)
 
   @@unique([companyId, poNo])
   @@index([vendorId])
@@ -1106,6 +1117,8 @@ model BillOfMaterials {
   id                   String           @id @default(uuid())
   companyId            String
   company              Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name                 String?
+  description          String?
   finishedProductId    String
   finishedProduct      Product          @relation("FinishedProductBOM", fields: [finishedProductId], references: [id], onDelete: Cascade)
   version              String
@@ -1116,7 +1129,8 @@ model BillOfMaterials {
   laborRate            Float            @default(0.0)
   overheadAllocation   Float            @default(0.0)
   status               String           @default("ACTIVE") // ACTIVE, ARCHIVED, DRAFT
-  components           BomComponent[]
+  components           BomComponent[]   @relation("ParentBom")
+  usedAsSubBom         BomComponent[]   @relation("SubBom")
   productionPlans      ProductionPlan[]
   createdAt            DateTime         @default(now())
   updatedAt            DateTime         @updatedAt
@@ -1128,13 +1142,17 @@ model BillOfMaterials {
 model BomComponent {
   id            String          @id @default(uuid())
   bomId         String
-  bom           BillOfMaterials @relation(fields: [bomId], references: [id], onDelete: Cascade)
+  bom           BillOfMaterials @relation("ParentBom", fields: [bomId], references: [id], onDelete: Cascade)
   productId     String
   product       Product         @relation("ComponentProductBOM", fields: [productId], references: [id], onDelete: Cascade)
   qtyRequired   Float
   wasteMargin   Float           @default(0.0)
   componentType String          @default("STOCK") // STOCK, NON_STOCK
   operationSeqNo Int?
+
+  // Sub-BOM reference
+  subBomId      String?
+  subBom        BillOfMaterials? @relation("SubBom", fields: [subBomId], references: [id], onDelete: SetNull)
 
   @@map("bom_components")
 }
@@ -1175,6 +1193,7 @@ model WorkOrder {
   jobCards            JobCard[]
   productionLogs      ProductionLog[]
   materialIssues      MaterialIssue[]
+  subcontractPos      PurchaseOrder[]
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 
@@ -1199,6 +1218,14 @@ model JobCard {
   qtyTarget         Float
   qtyAccepted       Float           @default(0.0)
   qtyScrapped       Float           @default(0.0)
+  subcontractPos    PurchaseOrder[]
+  
+  // Outsource fields
+  operationType      String          @default("IN_HOUSE") // IN_HOUSE or OUTSOURCED
+  vendorId           String?
+  vendor             Vendor?         @relation("JobCardVendor", fields: [vendorId], references: [id], onDelete: SetNull)
+  outsourceCost      Float           @default(0.0)
+
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
@@ -1323,6 +1350,13 @@ model RoutingOperation {
   workCenter      WorkCenter? @relation(fields: [workCenterId], references: [id], onDelete: SetNull)
   setupTimeMins   Float       @default(0.0)
   runTimePerUnit  Float       @default(0.0)
+
+  // Outsource/Subcontract fields
+  operationType   String      @default("IN_HOUSE") // "IN_HOUSE" or "OUTSOURCED"
+  vendorId        String?
+  vendor          Vendor?     @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  outsourceCost   Float       @default(0.0)
+  leadTimeDays    Int         @default(0)
 
   @@map("routing_operations")
 }

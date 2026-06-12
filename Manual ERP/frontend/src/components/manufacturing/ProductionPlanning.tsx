@@ -636,8 +636,10 @@ export default function ProductionPlanning({ salesOrders = [], products = [], cu
                       required
                     >
                       <option value="" disabled>Select BOM version</option>
-                      {bomDefinitions.filter(bom => bom.finishedProductId === selectedProductId).map(bom => (
-                        <option key={bom.id} value={bom.id}>v{bom.version} (Labor Hours: {bom.laborHours})</option>
+                       {bomDefinitions.filter(bom => bom.finishedProductId === selectedProductId).map(bom => (
+                        <option key={bom.id} value={bom.id}>
+                          {bom.name ? `${bom.name} (${bom.version})` : `Version ${bom.version}`} (Labor: {bom.laborHours}h)
+                        </option>
                       ))}
                     </select>
                   </div>

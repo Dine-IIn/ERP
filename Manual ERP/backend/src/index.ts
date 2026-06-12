@@ -132,7 +132,8 @@ import {
   listShifts, createShift, updateShift, deleteShift,
   listRoutings, createRouting, updateRouting, deleteRouting,
   listMaterialIssues, issueMaterialsToWorkOrder,
-  getWorkOrderActualCosting
+  getWorkOrderActualCosting,
+  createSubcontractPO
 } from './controllers';
 
 import {
@@ -522,7 +523,11 @@ import {
   listDispatches,
   createDispatch,
   updateDispatch,
-  deleteDispatch
+  deleteDispatch,
+  listDocumentTemplates,
+  createDocumentTemplate,
+  updateDocumentTemplate,
+  deleteDocumentTemplate
 } from './controllers/sales';
 
 // 6. General Administration Module Routes (Company Profile & Features Only)
@@ -605,6 +610,12 @@ app.get('/api/sales/dispatches', authenticateToken, listDispatches);
 app.post('/api/sales/dispatches', authenticateToken, createDispatch);
 app.patch('/api/sales/dispatches/:id', authenticateToken, updateDispatch);
 app.delete('/api/sales/dispatches/:id', authenticateToken, deleteDispatch);
+
+// 9.05 Document Templates CRUD
+app.get('/api/sales/templates', authenticateToken, listDocumentTemplates);
+app.post('/api/sales/templates', authenticateToken, createDocumentTemplate);
+app.patch('/api/sales/templates/:id', authenticateToken, updateDocumentTemplate);
+app.delete('/api/sales/templates/:id', authenticateToken, deleteDocumentTemplate);
 
 // 9.1 Advanced Sales: Quotations & Post-Sales Maintenance Service CRUDs
 app.get('/api/sales/quotations', authenticateToken, listQuotations);
@@ -692,6 +703,7 @@ app.put('/api/manufacturing/job-cards/:id', authenticateToken, updateJobCard);
 app.delete('/api/manufacturing/job-cards/:id', authenticateToken, deleteJobCard);
 app.post('/api/manufacturing/job-cards/:id/start', authenticateToken, startJobCard);
 app.post('/api/manufacturing/job-cards/:id/complete', authenticateToken, completeJobCard);
+app.post('/api/manufacturing/job-cards/:id/create-sub-po', authenticateToken, createSubcontractPO);
 
 app.get('/api/manufacturing/logs', authenticateToken, listLogs);
 app.post('/api/manufacturing/logs', authenticateToken, createLog);
@@ -797,6 +809,7 @@ async function seedDatabase() {
             "SALES_DISPATCH",
             "SALES_QUOTATION",
             "SALES_POST_SERVICE",
+            "SALES_PDF_EDITOR",
             "CRM_DATA",
             "CRM_LEAD",
             "CRM_OPPORTUNITY",
@@ -897,6 +910,7 @@ async function seedDatabase() {
         permissions.SALES_DISPATCH = ["read", "write", "delete"];
         permissions.SALES_QUOTATION = ["read", "write", "delete"];
         permissions.SALES_POST_SERVICE = ["read", "write", "delete"];
+        permissions.SALES_PDF_EDITOR = ["read", "write", "delete"];
 
         permissions.CRM_DATA = ["read", "write", "delete"];
         permissions.CRM_LEAD = ["read", "write", "delete"];

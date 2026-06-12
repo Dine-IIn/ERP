@@ -159,13 +159,41 @@ export async function listSalesOrders(req: AuthenticatedRequest, res: Response) 
         }
       }
 
+      const challans = await prisma.deliveryChallan.findMany({
+        where: {
+          companyId,
+          OR: [
+            { salesOrderId: order.id },
+            {
+              salesOrderIds: {
+                contains: order.id
+              }
+            }
+          ]
+        },
+        include: {
+          items: true
+        }
+      });
+
+      const shippedQuantities: Record<string, number> = {};
+      for (const challan of challans) {
+        for (const item of challan.items) {
+          shippedQuantities[item.productId] = (shippedQuantities[item.productId] || 0) + item.quantity;
+        }
+      }
+
       const enrichedItems = order.items.map((item) => {
         const billed = billedQuantities[item.productId] || 0.0;
         const remaining = Math.max(0.0, item.quantity - billed);
+        const shipped = shippedQuantities[item.productId] || 0.0;
+        const remainingChallan = Math.max(0.0, item.quantity - shipped);
         return {
           ...item,
           billedQuantity: billed,
-          remainingQuantity: remaining
+          remainingQuantity: remaining,
+          shippedQuantity: shipped,
+          remainingChallanQuantity: remainingChallan
         };
       });
 
@@ -759,7 +787,7 @@ export async function createDeliveryChallan(req: AuthenticatedRequest, res: Resp
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { customerId, status, items } = req.body;
+    const { customerId, status, items, salesOrderId, salesOrderIds } = req.body;
 
     if (!customerId || !items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "Customer and at least one item are required." });
@@ -773,7 +801,9 @@ export async function createDeliveryChallan(req: AuthenticatedRequest, res: Resp
           companyId,
           customerId,
           challanNo,
-          status: status || 'ISSUED'
+          status: status || 'ISSUED',
+          salesOrderId: salesOrderId || null,
+          salesOrderIds: salesOrderIds || null
         }
       });
 
@@ -807,7 +837,7 @@ export async function updateDeliveryChallan(req: AuthenticatedRequest, res: Resp
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
-    const { customerId, status, items } = req.body;
+    const { customerId, status, items, salesOrderId, salesOrderIds } = req.body;
 
     const challan = await prisma.deliveryChallan.findFirst({ where: { id, companyId } });
     if (!challan) return res.status(404).json({ error: "Delivery Challan not found" });
@@ -817,7 +847,9 @@ export async function updateDeliveryChallan(req: AuthenticatedRequest, res: Resp
         where: { id },
         data: {
           ...(customerId && { customerId }),
-          ...(status && { status })
+          ...(status && { status }),
+          salesOrderId: salesOrderId !== undefined ? salesOrderId : undefined,
+          salesOrderIds: salesOrderIds !== undefined ? salesOrderIds : undefined
         }
       });
 
@@ -1350,6 +1382,122 @@ export async function deleteServiceTicket(req: AuthenticatedRequest, res: Respon
     if (!exist) return res.status(404).json({ error: "Service ticket not found" });
     await prisma.serviceTicket.delete({ where: { id } });
     return res.json({ message: "Service ticket deleted successfully." });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+// ==========================================
+// 5. DOCUMENT TEMPLATE CONTROLLERS
+// ==========================================
+
+export async function listDocumentTemplates(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { docType } = req.query;
+
+    const templates = await prisma.documentTemplate.findMany({
+      where: {
+        companyId,
+        ...(docType && { docType: String(docType) })
+      },
+      orderBy: { name: 'asc' }
+    });
+
+    return res.json({ templates });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function createDocumentTemplate(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { name, docType, title, isDefault, settings, terms } = req.body;
+
+    if (!name || !docType || !settings) {
+      return res.status(400).json({ error: "Name, docType, and settings are required." });
+    }
+
+    // If marked as default, unset others of same docType
+    if (isDefault) {
+      await prisma.documentTemplate.updateMany({
+        where: { companyId, docType, isDefault: true },
+        data: { isDefault: false }
+      });
+    }
+
+    const template = await prisma.documentTemplate.create({
+      data: {
+        companyId,
+        name,
+        docType,
+        title: title || "Tax Invoice",
+        isDefault: !!isDefault,
+        settings: typeof settings === 'string' ? settings : JSON.stringify(settings),
+        terms: terms || null
+      }
+    });
+
+    return res.status(201).json({ message: "Document template created successfully", template });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function updateDocumentTemplate(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { id } = req.params;
+    const { name, docType, title, isDefault, settings, terms } = req.body;
+
+    const exist = await prisma.documentTemplate.findFirst({ where: { id, companyId } });
+    if (!exist) return res.status(404).json({ error: "Document template not found" });
+
+    const targetDocType = docType || exist.docType;
+
+    if (isDefault) {
+      await prisma.documentTemplate.updateMany({
+        where: { companyId, docType: targetDocType, isDefault: true },
+        data: { isDefault: false }
+      });
+    }
+
+    const template = await prisma.documentTemplate.update({
+      where: { id },
+      data: {
+        ...(name && { name }),
+        ...(docType && { docType }),
+        ...(title !== undefined && { title }),
+        ...(isDefault !== undefined && { isDefault: !!isDefault }),
+        ...(settings !== undefined && { settings: typeof settings === 'string' ? settings : JSON.stringify(settings) }),
+        ...(terms !== undefined && { terms: terms || null })
+      }
+    });
+
+    return res.json({ message: "Document template updated successfully", template });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function deleteDocumentTemplate(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { id } = req.params;
+    const exist = await prisma.documentTemplate.findFirst({ where: { id, companyId } });
+    if (!exist) return res.status(404).json({ error: "Document template not found" });
+
+    await prisma.documentTemplate.delete({ where: { id } });
+    return res.json({ message: "Document template deleted successfully" });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }

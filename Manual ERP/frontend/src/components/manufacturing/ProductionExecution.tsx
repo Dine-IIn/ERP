@@ -51,7 +51,7 @@ export default function ProductionExecution({ products = [] }: ProductionExecuti
   const [selectedWoId, setSelectedWoId] = useState('');
   const [logQtyCompleted, setLogQtyCompleted] = useState(5);
   const [logQtyScrapped, setLogQtyScrapped] = useState(0);
-  const [logOperator, setLogOperator] = useState('System Operator');
+  const [logOperator, setLogOperator] = useState('');
 
   const fetchExecutionData = async () => {
     setLoading(true);
@@ -494,12 +494,12 @@ export default function ProductionExecution({ products = [] }: ProductionExecuti
               </div>
 
               <div>
-                <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Machine Operator Name</label>
+                <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Machine Operator Name (Optional)</label>
                 <input
                   type="text"
-                  required
                   value={logOperator}
                   onChange={e => setLogOperator(e.target.value)}
+                  placeholder="e.g. System Operator"
                   className="w-full bg-slate-950 border border-slate-850 p-2 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
                 />
               </div>

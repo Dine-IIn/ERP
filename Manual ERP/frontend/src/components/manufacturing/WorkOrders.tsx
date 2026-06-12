@@ -31,11 +31,212 @@ interface JobCard {
   qtyTarget: number;
   qtyAccepted: number;
   qtyScrapped: number;
+  operationType?: string;
+  vendorName?: string;
+  vendorId?: string;
+  outsourceCost?: number;
+  subcontractPos?: any[];
 }
 
 interface WorkOrdersProps {
   employees: any[];
 }
+
+interface JobCardRowProps {
+  job: JobCard;
+  handleStartJob: (id: string) => void;
+  handleCompleteJob: (id: string, accepted: number, scrapped: number) => void;
+  handleDeleteJob: (id: string) => void;
+  setSelectedWoId: (id: string) => void;
+  setJobOperationName: (name: string) => void;
+  setJobWorkCenter: (name: string) => void;
+  setSelectedOperatorId: (id: string) => void;
+  setJobCycleTime: (time: number) => void;
+  setJobQtyTarget: (qty: number) => void;
+  setIsEditingJob: (editing: boolean) => void;
+  setEditingJobId: (id: string) => void;
+  setShowAddJobModal: (show: boolean) => void;
+  handleCreateSubcontractPo: (id: string) => void;
+}
+
+const JobCardRow: React.FC<JobCardRowProps> = ({
+  job,
+  handleStartJob,
+  handleCompleteJob,
+  handleDeleteJob,
+  setSelectedWoId,
+  setJobOperationName,
+  setJobWorkCenter,
+  setSelectedOperatorId,
+  setJobCycleTime,
+  setJobQtyTarget,
+  setIsEditingJob,
+  setEditingJobId,
+  setShowAddJobModal,
+  handleCreateSubcontractPo
+}) => {
+  const [accepted, setAccepted] = useState(job.qtyTarget);
+  const [scrapped, setScrapped] = useState(0);
+  const isOutsource = job.operationType === 'OUTSOURCED';
+  const hasPo = job.subcontractPos && job.subcontractPos.length > 0;
+
+  return (
+    <div className={`p-5 border rounded-2xl flex flex-col md:flex-row gap-5 items-start md:items-center justify-between ${
+      isOutsource ? 'bg-amber-950/10 border-amber-900/40' : 'bg-slate-950/30 border-slate-850'
+    }`}>
+      <div className="space-y-2 text-left flex-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded border ${
+            job.status === 'RUNNING' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' : 'bg-slate-900 text-slate-500 border-slate-800'
+          }`}>{job.status}</span>
+          {isOutsource && (
+            <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded border bg-amber-500/10 text-amber-400 border-amber-500/20">
+              Outsource Step
+            </span>
+          )}
+          <span className="text-[10px] text-slate-500 font-mono">Work Order: {job.woNo}</span>
+        </div>
+        <h4 className="font-extrabold text-sm text-white">{job.operationName}</h4>
+        
+        {isOutsource ? (
+          <p className="text-[10px] text-slate-400 flex items-center gap-1.5">
+            <Users className="w-3.5 h-3.5 text-amber-450" /> Subcontractor Vendor: <strong className="text-slate-300">{job.vendorName || 'Unassigned Vendor'}</strong>
+          </p>
+        ) : (
+          <p className="text-[10px] text-slate-400 flex items-center gap-1.5">
+            <Cpu className="w-3.5 h-3.5 text-indigo-400" /> {job.workCenterName}
+          </p>
+        )}
+
+        <div className="flex gap-4 text-[10px] text-slate-500 pt-1.5 flex-wrap">
+          {isOutsource ? (
+            <>
+              <span className="flex items-center gap-1">Processing cost/unit: <strong className="text-slate-300">₹{job.outsourceCost}</strong></span>
+              <span className="flex items-center gap-1">Quantity: <strong className="text-slate-300">{job.qtyTarget} units</strong></span>
+            </>
+          ) : (
+            <>
+              <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" /> Operator: <strong className="text-slate-300">{job.assignedOperator}</strong></span>
+              <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> Cycle Time: <strong className="text-slate-300">{job.cycleTimeMinutes} min</strong></span>
+            </>
+          )}
+        </div>
+
+        {isOutsource && hasPo && (
+          <div className="pt-2 flex items-center gap-2">
+            <span className="text-[9px] text-slate-500 uppercase font-bold">Linked PO:</span>
+            {job.subcontractPos?.map((po: any) => (
+              <span key={po.id} className={`px-2 py-0.5 rounded text-[9px] font-bold border ${
+                po.status === 'COMPLETED'
+                  ? 'bg-emerald-500/10 text-emerald-450 border-emerald-500/25'
+                  : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/25'
+              }`}>
+                {po.poNo} ({po.status})
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="flex gap-4 items-center flex-wrap">
+        {job.status === 'PENDING' && (
+          isOutsource ? (
+            !hasPo ? (
+              <button
+                onClick={() => handleCreateSubcontractPo(job.id)}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-xl border-0 cursor-pointer transition-all active:scale-95 shadow-md shadow-amber-600/10 flex items-center gap-1"
+              >
+                <Layers className="w-3.5 h-3.5" /> Create Subcontract PO
+              </button>
+            ) : (
+              <span className="text-[10px] text-slate-500 italic">PO Dispatched, awaiting GRN receipt...</span>
+            )
+          ) : (
+            <button
+              onClick={() => handleStartJob(job.id)}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl border-0 cursor-pointer transition-all active:scale-95 shadow-md shadow-indigo-600/10 flex items-center gap-1"
+            >
+              <Play className="w-3.5 h-3.5" /> Start Operation
+            </button>
+          )
+        )}
+
+        {job.status === 'RUNNING' && (
+          isOutsource ? (
+            <span className="text-[10px] text-amber-400 font-semibold italic">Processing at subcontractor...</span>
+          ) : (
+            <div className="flex flex-col sm:flex-row gap-3 items-end">
+              <div className="flex gap-2">
+                <div>
+                  <label className="text-[8px] font-bold text-slate-500 uppercase block mb-1">Accepted Yield</label>
+                  <input
+                    type="number"
+                    value={accepted}
+                    onChange={e => setAccepted(Number(e.target.value))}
+                    className="w-16 bg-slate-900 border border-slate-800 p-1 rounded text-[10px] text-white focus:outline-none focus:border-indigo-500 text-center font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-[8px] font-bold text-slate-500 uppercase block mb-1">Scrapped Qty</label>
+                  <input
+                    type="number"
+                    value={scrapped}
+                    onChange={e => setScrapped(Number(e.target.value))}
+                    className="w-16 bg-slate-900 border border-slate-800 p-1 rounded text-[10px] text-white focus:outline-none focus:border-indigo-500 text-center font-mono"
+                  />
+                </div>
+              </div>
+              <button
+                onClick={() => handleCompleteJob(job.id, accepted, scrapped)}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl border-0 cursor-pointer transition-all active:scale-95 shadow-md shadow-emerald-600/10 flex items-center gap-1"
+              >
+                <CheckCircle2 className="w-4 h-4" /> End & log
+              </button>
+            </div>
+          )
+        )}
+
+        {job.status === 'COMPLETED' && (
+          <div className="text-right">
+            <span className="text-[9px] text-slate-500 block uppercase font-bold tracking-wider">Completed Logs</span>
+            <span className="text-xs font-bold text-emerald-400 mt-1 block">Accepted: {formatNumber(job.qtyAccepted)} | Scrap: {formatNumber(job.qtyScrapped)}</span>
+            <span className="text-[9px] text-slate-650 font-mono mt-0.5 block">Ended at: {job.endTime}</span>
+          </div>
+        )}
+
+        {/* Edit / Delete on Job Cards */}
+        <div className="flex flex-col gap-1.5 ml-2">
+          {job.status === 'PENDING' && (
+            <button
+              onClick={() => {
+                setSelectedWoId(job.woId);
+                setJobOperationName(job.operationName);
+                setJobWorkCenter(job.workCenterName);
+                setSelectedOperatorId(job.operatorId);
+                setJobCycleTime(job.cycleTimeMinutes);
+                setJobQtyTarget(job.qtyTarget);
+                setIsEditingJob(true);
+                setEditingJobId(job.id);
+                setShowAddJobModal(true);
+              }}
+              className="p-1.5 text-indigo-400 hover:bg-indigo-600/15 rounded border-0 bg-transparent cursor-pointer"
+              title="Edit Job Card"
+            >
+              <Edit2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+          <button
+            onClick={() => handleDeleteJob(job.id)}
+            className="p-1.5 text-rose-450 hover:bg-rose-500/15 rounded border-0 bg-transparent cursor-pointer"
+            title="Delete Job Card"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
   const [activeTab, setActiveTab] = useState<'wo' | 'jobs'>('wo');
@@ -96,8 +297,8 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
         woId: job.woId,
         woNo: job.workOrder?.woNo || 'WO-UNKNOWN',
         operationName: job.operationName,
-        workCenterName: job.workCenterId || 'Center A',
-        assignedOperator: job.assignedOperator?.username || 'Operator',
+        workCenterName: job.workCenter?.name || job.workCenterId || 'Center A',
+        assignedOperator: job.assignedOperator?.username || 'Unassigned',
         operatorId: job.assignedOperatorId || '',
         status: job.status,
         startTime: job.startTime ? new Date(job.startTime).toISOString().replace('T', ' ').substring(0, 16) : undefined,
@@ -105,7 +306,12 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
         cycleTimeMinutes: job.cycleTimeMinutes,
         qtyTarget: job.qtyTarget,
         qtyAccepted: job.qtyAccepted,
-        qtyScrapped: job.qtyScrapped
+        qtyScrapped: job.qtyScrapped,
+        operationType: job.operationType,
+        vendorName: job.vendor?.name || '',
+        vendorId: job.vendorId || '',
+        outsourceCost: job.outsourceCost,
+        subcontractPos: job.subcontractPos || []
       }));
       setJobCardsList(formatted);
     } catch (err) {
@@ -154,11 +360,12 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
     }
   }, [workOrdersList, selectedWoId]);
 
-  useEffect(() => {
-    if (employeeOperators.length > 0 && !selectedOperatorId) {
-      setSelectedOperatorId(employeeOperators[0].id);
-    }
-  }, [employeeOperators, selectedOperatorId]);
+  // Keep operator selection optional by default
+  // useEffect(() => {
+  //   if (employeeOperators.length > 0 && !selectedOperatorId) {
+  //     setSelectedOperatorId(employeeOperators[0].id);
+  //   }
+  // }, [employeeOperators, selectedOperatorId]);
 
   const handleCreateWorkOrderSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -267,6 +474,16 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
       } catch (err: any) {
         alert(err.message || 'Failed to delete Job Card');
       }
+    }
+  };
+
+  const handleCreateSubcontractPo = async (jobId: string) => {
+    try {
+      const res = await apiClient.post<any>(`/api/manufacturing/job-cards/${jobId}/create-sub-po`);
+      alert(res.message || "Subcontract PO created successfully!");
+      fetchJobCards();
+    } catch (err: any) {
+      alert(err.message || "Failed to create subcontract Purchase Order");
     }
   };
 
@@ -514,111 +731,25 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
             </div>
           ) : (
             <div className="space-y-5">
-              {filteredJobs.map(job => {
-                const [accepted, setAccepted] = useState(job.qtyTarget);
-                const [scrapped, setScrapped] = useState(0);
-
-                return (
-                  <div key={job.id} className="p-5 bg-slate-950/30 border border-slate-850 rounded-2xl flex flex-col md:flex-row gap-5 items-start md:items-center justify-between">
-                    <div className="space-y-2 text-left flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded border ${
-                          job.status === 'RUNNING' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' : 'bg-slate-900 text-slate-500 border-slate-800'
-                        }`}>{job.status}</span>
-                        <span className="text-[10px] text-slate-500 font-mono">Work Order: {job.woNo}</span>
-                      </div>
-                      <h4 className="font-extrabold text-sm text-white">{job.operationName}</h4>
-                      <p className="text-[10px] text-slate-400 flex items-center gap-1.5">
-                        <Cpu className="w-3.5 h-3.5 text-indigo-400" /> {job.workCenterName}
-                      </p>
-                      <div className="flex gap-4 text-[10px] text-slate-500 pt-1.5">
-                        <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" /> Operator: <strong className="text-slate-300">{job.assignedOperator}</strong></span>
-                        <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> Cycle Time: <strong className="text-slate-300">{job.cycleTimeMinutes} min</strong></span>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-4 items-center">
-                      {job.status === 'PENDING' && (
-                        <button
-                          onClick={() => handleStartJob(job.id)}
-                          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl border-0 cursor-pointer transition-all active:scale-95 shadow-md shadow-indigo-600/10 flex items-center gap-1"
-                        >
-                          <Play className="w-3.5 h-3.5" /> Start Operation
-                        </button>
-                      )}
-
-                      {job.status === 'RUNNING' && (
-                        <div className="flex flex-col sm:flex-row gap-3 items-end">
-                          <div className="flex gap-2">
-                            <div>
-                              <label className="text-[8px] font-bold text-slate-500 uppercase block mb-1">Accepted Yield</label>
-                              <input
-                                type="number"
-                                value={accepted}
-                                onChange={e => setAccepted(Number(e.target.value))}
-                                className="w-16 bg-slate-900 border border-slate-800 p-1 rounded text-[10px] text-white focus:outline-none focus:border-indigo-500 text-center font-mono"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-[8px] font-bold text-slate-500 uppercase block mb-1">Scrapped Qty</label>
-                              <input
-                                type="number"
-                                value={scrapped}
-                                onChange={e => setScrapped(Number(e.target.value))}
-                                className="w-16 bg-slate-900 border border-slate-800 p-1 rounded text-[10px] text-white focus:outline-none focus:border-indigo-500 text-center font-mono"
-                              />
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => handleCompleteJob(job.id, accepted, scrapped)}
-                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl border-0 cursor-pointer transition-all active:scale-95 shadow-md shadow-emerald-600/10 flex items-center gap-1"
-                          >
-                            <CheckCircle2 className="w-4 h-4" /> End & log
-                          </button>
-                        </div>
-                      )}
-
-                      {job.status === 'COMPLETED' && (
-                        <div className="text-right">
-                          <span className="text-[9px] text-slate-500 block uppercase font-bold tracking-wider">Completed Logs</span>
-                          <span className="text-xs font-bold text-emerald-400 mt-1 block">Accepted: {formatNumber(job.qtyAccepted)} | Scrap: {formatNumber(job.qtyScrapped)}</span>
-                          <span className="text-[9px] text-slate-650 font-mono mt-0.5 block">Ended at: {job.endTime}</span>
-                        </div>
-                      )}
-
-                      {/* Edit / Delete on Job Cards */}
-                      <div className="flex flex-col gap-1.5 ml-2">
-                        {job.status === 'PENDING' && (
-                          <button
-                            onClick={() => {
-                              setSelectedWoId(job.woId);
-                              setJobOperationName(job.operationName);
-                              setJobWorkCenter(job.workCenterName);
-                              setSelectedOperatorId(job.operatorId);
-                              setJobCycleTime(job.cycleTimeMinutes);
-                              setJobQtyTarget(job.qtyTarget);
-                              setIsEditingJob(true);
-                              setEditingJobId(job.id);
-                              setShowAddJobModal(true);
-                            }}
-                            className="p-1.5 text-indigo-400 hover:bg-indigo-600/15 rounded border-0 bg-transparent cursor-pointer"
-                            title="Edit Job Card"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleDeleteJob(job.id)}
-                          className="p-1.5 text-rose-450 hover:bg-rose-500/15 rounded border-0 bg-transparent cursor-pointer"
-                          title="Delete Job Card"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+              {filteredJobs.map(job => (
+                <JobCardRow
+                  key={job.id}
+                  job={job}
+                  handleStartJob={handleStartJob}
+                  handleCompleteJob={handleCompleteJob}
+                  handleDeleteJob={handleDeleteJob}
+                  setSelectedWoId={setSelectedWoId}
+                  setJobOperationName={setJobOperationName}
+                  setJobWorkCenter={setJobWorkCenter}
+                  setSelectedOperatorId={setSelectedOperatorId}
+                  setJobCycleTime={setJobCycleTime}
+                  setJobQtyTarget={setJobQtyTarget}
+                  setIsEditingJob={setIsEditingJob}
+                  setEditingJobId={setEditingJobId}
+                  setShowAddJobModal={setShowAddJobModal}
+                  handleCreateSubcontractPo={handleCreateSubcontractPo}
+                />
+              ))}
             </div>
           )}
         </div>
@@ -752,8 +883,9 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
                   <select
                     value={selectedOperatorId}
                     onChange={e => setSelectedOperatorId(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-850 p-2.5 rounded-lg text-xs text-white focus:outline-none"
+                    className="w-full bg-slate-950 border border-slate-850 p-2.5 rounded-lg text-xs text-white focus:outline-none cursor-pointer"
                   >
+                    <option value="">-- No Assigned Operator (Optional) --</option>
                     {employeeOperators.map(emp => (
                       <option key={emp.id} value={emp.id}>{emp.username} ({emp.role || 'Operator'})</option>
                     ))}

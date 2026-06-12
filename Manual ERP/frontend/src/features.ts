@@ -39,7 +39,8 @@ export const MASTER_FEATURES_HIERARCHY = [
       { key: 'MASTER_CUSTOMER', name: 'Customer Master', desc: 'Administer sales accounts, billing destinations, and credit ratings' },
       { key: 'MASTER_VENDOR', name: 'Vendor / Supplier Master', desc: 'Handle supply registers, GST details, bank parameters, and payments' },
       { key: 'MASTER_PRODUCT', name: 'Product / Item Master', desc: 'Configure inventory catalog, variants, pricing, and HSN codes' },
-      { key: 'MASTER_TAX', name: 'Tax Master', desc: 'Configure corporate sales tax rates, GSTIN brackets, and VAT schemes' }
+      { key: 'MASTER_TAX', name: 'Tax Master', desc: 'Configure corporate sales tax rates, GSTIN brackets, and VAT schemes' },
+      { key: 'SALES_PDF_EDITOR', name: 'PDF Print Studio', desc: 'Configure custom print layouts, logos, headers, colors, and terms for documents' }
     ]
   },
   {
@@ -53,8 +54,7 @@ export const MASTER_FEATURES_HIERARCHY = [
       { key: 'SALES_CHALLAN', name: 'Delivery Challans', desc: 'Generate transit challans and declarations' },
       { key: 'SALES_DISPATCH', name: 'Dispatch Management', desc: 'Coordinate shipments, carrier tracking and vehicles details' },
       { key: 'SALES_QUOTATION', name: 'Sales Quotations', desc: 'Generate, edit, and dispatch legal price quotations' },
-      { key: 'SALES_POST_SERVICE', name: 'Post-Sales Maintenance & Service', desc: 'Coordinate warranty claims, maintenance logs, and service sheets' },
-      { key: 'SALES_PDF_EDITOR', name: 'PDF Print Studio', desc: 'Configure custom print layouts, logos, headers, colors, and terms for documents' }
+      { key: 'SALES_POST_SERVICE', name: 'Post-Sales Maintenance & Service', desc: 'Coordinate warranty claims, maintenance logs, and service sheets' }
     ]
   },
   {

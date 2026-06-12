@@ -229,7 +229,7 @@ export default function CompleteInventoryView({ products = [] }: CompleteInvento
                       </td>
                       <td className="py-4 px-5 font-mono text-emerald-400 font-bold text-sm">
                         ₹{totalVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td> </td>
+                      </td>
                       <td className="py-4 px-5">
                         {isLow ? (
                           <div className="flex items-center gap-1.5">

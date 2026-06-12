@@ -23,9 +23,13 @@ async function explodeBOM(bomId: string, qty: number, companyId: string, visited
   const exploded: ExplodedComponent[] = [];
   for (const comp of bom.components) {
     const totalQty = comp.qtyRequired * qty;
-    const subBom = await prisma.billOfMaterials.findFirst({
-      where: { finishedProductId: comp.productId, status: 'ACTIVE', companyId }
-    });
+    const subBom = comp.subBomId
+      ? await prisma.billOfMaterials.findFirst({
+          where: { id: comp.subBomId, companyId }
+        })
+      : await prisma.billOfMaterials.findFirst({
+          where: { finishedProductId: comp.productId, status: 'ACTIVE', companyId }
+        });
     if (subBom) {
       exploded.push({
         productId: comp.productId,
@@ -90,7 +94,8 @@ export async function listBoms(req: AuthenticatedRequest, res: Response) {
         finishedProduct: true,
         components: {
           include: {
-            product: true
+            product: true,
+            subBom: true
           }
         }
       },
@@ -108,7 +113,7 @@ export async function createBom(req: AuthenticatedRequest, res: Response) {
     const companyId = getCompanyId(req, res);
     if (!companyId) return;
 
-    const { finishedProductId, version, laborHours, laborRate, overheadAllocation, components } = req.body;
+    const { name, description, finishedProductId, version, laborHours, laborRate, overheadAllocation, components } = req.body;
 
     if (!finishedProductId || !version || !components || !Array.isArray(components)) {
       return res.status(400).json({ error: 'finishedProductId, version, and components array are required' });
@@ -132,6 +137,8 @@ export async function createBom(req: AuthenticatedRequest, res: Response) {
     const bom = await prisma.billOfMaterials.create({
       data: {
         companyId,
+        name: name || null,
+        description: description || null,
         finishedProductId,
         version,
         laborHours: parseFloat(laborHours) || 0.0,
@@ -142,7 +149,9 @@ export async function createBom(req: AuthenticatedRequest, res: Response) {
           create: components.map((c: any) => ({
             productId: c.productId,
             qtyRequired: parseFloat(c.qtyRequired) || 0.0,
-            wasteMargin: parseFloat(c.wasteMargin) || 0.0
+            wasteMargin: parseFloat(c.wasteMargin) || 0.0,
+            subBomId: c.subBomId || null,
+            operationSeqNo: c.operationSeqNo !== undefined ? parseInt(c.operationSeqNo) : null
           }))
         }
       },
@@ -176,7 +185,7 @@ export async function updateBom(req: AuthenticatedRequest, res: Response) {
     if (!companyId) return;
 
     const { id } = req.params;
-    const { version, laborHours, laborRate, overheadAllocation, status, components } = req.body;
+    const { name, description, version, laborHours, laborRate, overheadAllocation, status, components } = req.body;
 
     const existingBom = await prisma.billOfMaterials.findFirst({
       where: { id, companyId }
@@ -190,6 +199,8 @@ export async function updateBom(req: AuthenticatedRequest, res: Response) {
     const updated = await prisma.billOfMaterials.update({
       where: { id },
       data: {
+        ...(name !== undefined && { name: name || null }),
+        ...(description !== undefined && { description: description || null }),
         ...(version && { version }),
         ...(laborHours !== undefined && { laborHours: parseFloat(laborHours) }),
         ...(laborRate !== undefined && { laborRate: parseFloat(laborRate) }),
@@ -207,7 +218,9 @@ export async function updateBom(req: AuthenticatedRequest, res: Response) {
             bomId: id,
             productId: c.productId,
             qtyRequired: parseFloat(c.qtyRequired) || 0.0,
-            wasteMargin: parseFloat(c.wasteMargin) || 0.0
+            wasteMargin: parseFloat(c.wasteMargin) || 0.0,
+            subBomId: c.subBomId || null,
+            operationSeqNo: c.operationSeqNo !== undefined ? parseInt(c.operationSeqNo) : null
           }
         });
       }
@@ -485,6 +498,14 @@ export async function listWorkOrders(req: AuthenticatedRequest, res: Response) {
           include: {
             finishedProduct: true
           }
+        },
+        jobCards: {
+          include: {
+            vendor: true,
+            workCenter: true,
+            assignedOperator: true,
+            subcontractPos: true
+          }
         }
       },
       orderBy: { createdAt: 'desc' }
@@ -557,7 +578,10 @@ export async function createWorkOrder(req: AuthenticatedRequest, res: Response) 
               workCenterId: verifiedWcId,
               qtyTarget: parseFloat(qtyTarget),
               status: 'PENDING',
-              cycleTimeMinutes: op.setupTimeMins + (op.runTimePerUnit * parseFloat(qtyTarget))
+              cycleTimeMinutes: op.setupTimeMins + (op.runTimePerUnit * parseFloat(qtyTarget)),
+              operationType: op.operationType || 'IN_HOUSE',
+              vendorId: op.vendorId || null,
+              outsourceCost: op.outsourceCost || 0.0
             }
           });
         }
@@ -602,7 +626,10 @@ export async function createWorkOrder(req: AuthenticatedRequest, res: Response) 
                     workCenterId: verifiedSubWcId,
                     qtyTarget: comp.qtyRequired,
                     status: 'PENDING',
-                    cycleTimeMinutes: op.setupTimeMins + (op.runTimePerUnit * comp.qtyRequired)
+                    cycleTimeMinutes: op.setupTimeMins + (op.runTimePerUnit * comp.qtyRequired),
+                    operationType: op.operationType || 'IN_HOUSE',
+                    vendorId: op.vendorId || null,
+                    outsourceCost: op.outsourceCost || 0.0
                   }
                 });
               }
@@ -708,7 +735,9 @@ export async function listJobCards(req: AuthenticatedRequest, res: Response) {
       include: {
         workOrder: true,
         assignedOperator: true,
-        workCenter: true
+        workCenter: true,
+        vendor: true,
+        subcontractPos: true
       },
       orderBy: { createdAt: 'desc' }
     });
@@ -724,7 +753,7 @@ export async function createJobCard(req: AuthenticatedRequest, res: Response) {
     const companyId = getCompanyId(req, res);
     if (!companyId) return;
 
-    const { woId, operationName, workCenterId, assignedOperatorId, cycleTimeMinutes, qtyTarget } = req.body;
+    const { woId, operationName, workCenterId, assignedOperatorId, cycleTimeMinutes, qtyTarget, operationType, vendorId, outsourceCost } = req.body;
 
     if (!woId || !operationName || !qtyTarget) {
       return res.status(400).json({ error: 'woId, operationName, and qtyTarget are required' });
@@ -812,7 +841,10 @@ export async function createJobCard(req: AuthenticatedRequest, res: Response) {
         cycleTimeMinutes: parseFloat(cycleTimeMinutes) || 0.0,
         qtyTarget: parseFloat(qtyTarget) || 0.0,
         qtyAccepted: 0.0,
-        qtyScrapped: 0.0
+        qtyScrapped: 0.0,
+        operationType: operationType || 'IN_HOUSE',
+        vendorId: vendorId || null,
+        outsourceCost: parseFloat(outsourceCost) || 0.0
       }
     });
 
@@ -832,7 +864,7 @@ export async function updateJobCard(req: AuthenticatedRequest, res: Response) {
     if (!companyId) return;
 
     const { id } = req.params;
-    const { operationName, workCenterId, assignedOperatorId, status, cycleTimeMinutes, qtyTarget, qtyAccepted, qtyScrapped } = req.body;
+    const { operationName, workCenterId, assignedOperatorId, status, cycleTimeMinutes, qtyTarget, qtyAccepted, qtyScrapped, operationType, vendorId, outsourceCost } = req.body;
 
     const existing = await prisma.jobCard.findFirst({ where: { id, companyId } });
     if (!existing) return res.status(404).json({ error: 'Job Card not found' });
@@ -907,7 +939,10 @@ export async function updateJobCard(req: AuthenticatedRequest, res: Response) {
         ...(cycleTimeMinutes !== undefined && { cycleTimeMinutes: parseFloat(cycleTimeMinutes) || 0.0 }),
         ...(qtyTarget !== undefined && { qtyTarget: parseFloat(qtyTarget) || 0.0 }),
         ...(qtyAccepted !== undefined && { qtyAccepted: parseFloat(qtyAccepted) || 0.0 }),
-        ...(qtyScrapped !== undefined && { qtyScrapped: parseFloat(qtyScrapped) || 0.0 })
+        ...(qtyScrapped !== undefined && { qtyScrapped: parseFloat(qtyScrapped) || 0.0 }),
+        ...(operationType && { operationType }),
+        ...(vendorId !== undefined && { vendorId: vendorId || null }),
+        ...(outsourceCost !== undefined && { outsourceCost: parseFloat(outsourceCost) || 0.0 })
       }
     });
 
@@ -1652,7 +1687,7 @@ export async function listRoutings(req: AuthenticatedRequest, res: Response) {
       include: {
         product: true,
         operations: {
-          include: { workCenter: true },
+          include: { workCenter: true, vendor: true },
           orderBy: { sequenceNo: 'asc' }
         }
       }
@@ -1692,7 +1727,11 @@ export async function createRouting(req: AuthenticatedRequest, res: Response) {
             operationName: op.operationName,
             workCenterId: op.workCenterId || null,
             setupTimeMins: parseFloat(op.setupTimeMins) || 0.0,
-            runTimePerUnit: parseFloat(op.runTimePerUnit) || 0.0
+            runTimePerUnit: parseFloat(op.runTimePerUnit) || 0.0,
+            operationType: op.operationType || 'IN_HOUSE',
+            vendorId: op.vendorId || null,
+            outsourceCost: parseFloat(op.outsourceCost) || 0.0,
+            leadTimeDays: parseInt(op.leadTimeDays) || 0
           }))
         }
       },
@@ -1724,16 +1763,22 @@ export async function updateRouting(req: AuthenticatedRequest, res: Response) {
 
       if (operations && Array.isArray(operations)) {
         await tx.routingOperation.deleteMany({ where: { routingId: id } });
-        await tx.routingOperation.createMany({
-          data: operations.map((op: any) => ({
-            routingId: id,
-            sequenceNo: parseInt(op.sequenceNo) || 10,
-            operationName: op.operationName,
-            workCenterId: op.workCenterId || null,
-            setupTimeMins: parseFloat(op.setupTimeMins) || 0.0,
-            runTimePerUnit: parseFloat(op.runTimePerUnit) || 0.0
-          }))
-        });
+        for (const op of operations) {
+          await tx.routingOperation.create({
+            data: {
+              routingId: id,
+              sequenceNo: parseInt(op.sequenceNo) || 10,
+              operationName: op.operationName,
+              workCenterId: op.workCenterId || null,
+              setupTimeMins: parseFloat(op.setupTimeMins) || 0.0,
+              runTimePerUnit: parseFloat(op.runTimePerUnit) || 0.0,
+              operationType: op.operationType || 'IN_HOUSE',
+              vendorId: op.vendorId || null,
+              outsourceCost: parseFloat(op.outsourceCost) || 0.0,
+              leadTimeDays: parseInt(op.leadTimeDays) || 0
+            }
+          });
+        }
       }
 
       return r;
@@ -1896,7 +1941,7 @@ export async function getWorkOrderActualCosting(req: AuthenticatedRequest, res: 
     const bom = wo.plan.bom;
     const qtyTarget = wo.qtyTarget;
 
-    // 1. Calculate Standard Cost from BOM recipe
+    // 1. Calculate Standard Cost from BOM recipe & Job Card outsourced configurations
     let standardMaterialCost = 0;
     if (bom && bom.components) {
       for (const comp of bom.components) {
@@ -1904,11 +1949,17 @@ export async function getWorkOrderActualCosting(req: AuthenticatedRequest, res: 
         standardMaterialCost += grossQty * comp.product.pricing * qtyTarget;
       }
     }
+    let standardOutsourceCost = 0;
+    for (const card of wo.jobCards) {
+      if (card.operationType === 'OUTSOURCED') {
+        standardOutsourceCost += card.qtyTarget * card.outsourceCost;
+      }
+    }
     const standardLaborCost = bom ? (bom.laborHours * bom.laborRate * qtyTarget) : 0;
     const standardOverheadCost = bom ? (bom.overheadAllocation * qtyTarget) : 0;
-    const standardTotalCost = standardMaterialCost + standardLaborCost + standardOverheadCost;
+    const standardTotalCost = standardMaterialCost + standardLaborCost + standardOverheadCost + standardOutsourceCost;
 
-    // 2. Calculate Actual Cost from Issued Materials, Job Cards cycle times
+    // 2. Calculate Actual Cost from Issued Materials, Job Cards cycle times, and subcontract POs
     let actualMaterialCost = 0;
     for (const issue of wo.materialIssues) {
       actualMaterialCost += issue.quantity * issue.product.pricing;
@@ -1916,20 +1967,33 @@ export async function getWorkOrderActualCosting(req: AuthenticatedRequest, res: 
 
     let actualLaborCost = 0;
     let actualOverheadCost = 0;
+    let actualOutsourceCost = 0;
     const laborRate = bom ? bom.laborRate : 15.0; // default operator rate
     const overheadRate = bom ? bom.overheadAllocation : 10.0; // default work center rate
 
     for (const card of wo.jobCards) {
-      const hours = card.cycleTimeMinutes / 60.0;
-      actualLaborCost += hours * laborRate;
-      actualOverheadCost += hours * overheadRate;
+      if (card.operationType === 'OUTSOURCED') {
+        const linkedPos = await prisma.purchaseOrder.findMany({
+          where: { jobCardId: card.id, companyId }
+        });
+        for (const po of linkedPos) {
+          if (po.status === 'COMPLETED' || po.status === 'APPROVED' || po.status === 'SHIPPED') {
+            actualOutsourceCost += po.total;
+          }
+        }
+      } else {
+        const hours = card.cycleTimeMinutes / 60.0;
+        actualLaborCost += hours * laborRate;
+        actualOverheadCost += hours * overheadRate;
+      }
     }
-    const actualTotalCost = actualMaterialCost + actualLaborCost + actualOverheadCost;
+    const actualTotalCost = actualMaterialCost + actualLaborCost + actualOverheadCost + actualOutsourceCost;
 
     // 3. Compute Variances
     const materialVariance = actualMaterialCost - standardMaterialCost;
     const laborVariance = actualLaborCost - standardLaborCost;
     const overheadVariance = actualOverheadCost - standardOverheadCost;
+    const outsourceVariance = actualOutsourceCost - standardOutsourceCost;
     const totalVariance = actualTotalCost - standardTotalCost;
 
     return res.json({
@@ -1941,23 +2005,142 @@ export async function getWorkOrderActualCosting(req: AuthenticatedRequest, res: 
           materialCost: Math.round(standardMaterialCost * 100) / 100,
           laborCost: Math.round(standardLaborCost * 100) / 100,
           overheadCost: Math.round(standardOverheadCost * 100) / 100,
+          outsourceCost: Math.round(standardOutsourceCost * 100) / 100,
           totalCost: Math.round(standardTotalCost * 100) / 100
         },
         actual: {
           materialCost: Math.round(actualMaterialCost * 100) / 100,
           laborCost: Math.round(actualLaborCost * 100) / 100,
           overheadCost: Math.round(actualOverheadCost * 100) / 100,
+          outsourceCost: Math.round(actualOutsourceCost * 100) / 100,
           totalCost: Math.round(actualTotalCost * 100) / 100
         },
         variance: {
           material: Math.round(materialVariance * 100) / 100,
           labor: Math.round(laborVariance * 100) / 100,
           overhead: Math.round(overheadVariance * 100) / 100,
+          outsource: Math.round(outsourceVariance * 100) / 100,
           total: Math.round(totalVariance * 100) / 100
         }
       }
     });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function createSubcontractPO(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = getCompanyId(req, res);
+    if (!companyId) return;
+
+    const { id } = req.params; // jobCardId
+
+    const jobCard = await prisma.jobCard.findFirst({
+      where: { id, companyId },
+      include: {
+        workOrder: {
+          include: {
+            plan: {
+              include: {
+                finishedProduct: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!jobCard) {
+      return res.status(404).json({ error: "Job Card not found" });
+    }
+
+    if (jobCard.operationType !== 'OUTSOURCED') {
+      return res.status(400).json({ error: "Job Card is not an outsourced operation" });
+    }
+
+    if (!jobCard.vendorId) {
+      return res.status(400).json({ error: "Job Card does not have an assigned vendor/subcontractor" });
+    }
+
+    // Check if PO already exists for this jobCardId
+    const existingPo = await prisma.purchaseOrder.findFirst({
+      where: { jobCardId: jobCard.id, companyId }
+    });
+
+    if (existingPo) {
+      return res.status(409).json({ error: `A subcontract PO (${existingPo.poNo}) has already been created for this Job Card.` });
+    }
+
+    const vendor = await prisma.vendor.findUnique({
+      where: { id: jobCard.vendorId }
+    });
+
+    if (!vendor) {
+      return res.status(404).json({ error: "Assigned vendor not found" });
+    }
+
+    // Count existing POs to generate sequential number
+    const count = await prisma.purchaseOrder.count({ where: { companyId } });
+    const poNo = `PO-SUB-${new Date().getFullYear()}-${(count + 1).toString().padStart(4, '0')}`;
+
+    const totalCost = jobCard.qtyTarget * jobCard.outsourceCost;
+
+    const po = await prisma.purchaseOrder.create({
+      data: {
+        companyId,
+        vendorId: jobCard.vendorId,
+        poNo,
+        date: new Date(),
+        deliveryDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), // Default lead time of 3 days
+        subtotal: totalCost,
+        discount: 0,
+        tax: 0,
+        total: totalCost,
+        status: "APPROVED", // Auto-approved for subcontract POs to speed up flow
+        isSubcontract: true,
+        jobCardId: jobCard.id,
+        workOrderId: jobCard.woId,
+        items: {
+          create: [
+            {
+              productId: jobCard.workOrder.plan.finishedProductId,
+              quantity: jobCard.qtyTarget,
+              price: jobCard.outsourceCost,
+              discount: 0
+            }
+          ]
+        }
+      },
+      include: {
+        items: true
+      }
+    });
+
+    // Update the Job Card to RUNNING
+    await prisma.jobCard.update({
+      where: { id },
+      data: {
+        status: "RUNNING",
+        startTime: new Date()
+      }
+    });
+
+    await logAudit(
+      companyId,
+      req.user?.userId || null,
+      req.user?.username || null,
+      'purchase_order',
+      'CREATE',
+      null,
+      { id: po.id, poNo: po.poNo, type: 'SUBCONTRACT' },
+      req.ip,
+      req.headers['user-agent']
+    );
+
+    return res.status(201).json({ message: "Subcontract Purchase Order created successfully", purchaseOrder: po });
+  } catch (error: any) {
+    console.error("[createSubcontractPO Error]:", error);
+    return res.status(500).json({ error: error.message || "Failed to create subcontract Purchase Order" });
   }
 }

@@ -36,6 +36,50 @@ export default function DeliveryChallan({
 
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [companyProfile, setCompanyProfile] = useState<any>(null);
+  const [salesOrders, setSalesOrders] = useState<any[]>([]);
+  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
+  const [templates, setTemplates] = useState<any[]>([]);
+
+  // Print Preview States
+  const [customizingInvoice, setCustomizingInvoice] = useState<any>(null);
+  const [activePrintInvoice, setActivePrintInvoice] = useState<any>(null);
+  const [customTitle, setCustomTitle] = useState('DELIVERY CHALLAN');
+  const [customNotes, setCustomNotes] = useState('1. Please receive the goods in sound physical condition.\n2. Return duplicate copy duly signed and stamped.');
+  const [themeColor, setThemeColor] = useState('emerald');
+  const [pdfCustomizer, setPdfCustomizer] = useState({
+    showLogo: true,
+    showCompanyDetails: true,
+    showBillingAddress: true,
+    showShippingAddress: true,
+    showTerms: true,
+    colProductCode: true,
+    colUnitPrice: true,
+    colDiscount: false,
+    colTax: false,
+    logoBase64: null as string | null,
+    headerAlign: 'left' as 'left' | 'center' | 'right',
+    titleAlign: 'left' as 'left' | 'center' | 'right',
+    addressAlign: 'left' as 'left' | 'center' | 'right',
+    totalsAlign: 'right' as 'left' | 'center' | 'right',
+    termsAlign: 'center' as 'left' | 'center' | 'right',
+    headerFontSize: 14,
+    titleFontSize: 16,
+    bodyFontSize: 10,
+    headerPadding: 16,
+    sectionSpacing: 24,
+    logoSize: 48,
+  });
+
+  const getThemeHex = (colorName: string) => {
+    switch (colorName) {
+      case 'emerald': return '#10b981';
+      case 'rose': return '#f43f5e';
+      case 'amber': return '#f59e0b';
+      case 'slate': return '#64748b';
+      default: return '#6366f1'; // indigo
+    }
+  };
+  const currentThemeHex = getThemeHex(themeColor);
 
   React.useEffect(() => {
     const fetchProfile = async () => {
@@ -46,15 +90,153 @@ export default function DeliveryChallan({
         console.error(e);
       }
     };
+    const fetchOrdersData = async () => {
+      try {
+        const res = await apiClient.get<{ orders: any[] }>('/api/sales/orders');
+        setSalesOrders(res.orders || []);
+      } catch (e) {
+        console.error('Failed to load Sales Orders:', e);
+      }
+    };
+    const fetchTemplates = async () => {
+      try {
+        const res = await apiClient.get<{ templates: any[] }>('/api/sales/templates?docType=CHALLAN');
+        setTemplates(res.templates || []);
+      } catch (e) {
+        console.error('Failed to load templates:', e);
+      }
+    };
     fetchProfile();
-  }, []);
+    fetchOrdersData();
+    fetchTemplates();
+  }, [showModal, customizingInvoice]);
+
+  const applyTemplateSettings = (tpl: any) => {
+    setCustomTitle(tpl.title || 'DELIVERY CHALLAN');
+    setCustomNotes(tpl.terms || '');
+    setThemeColor(tpl.themeColor || 'emerald');
+    setPdfCustomizer({
+      showLogo: tpl.showLogo ?? true,
+      showCompanyDetails: tpl.showCompanyDetails ?? true,
+      showBillingAddress: tpl.showBillingAddress ?? true,
+      showShippingAddress: tpl.showShippingAddress ?? true,
+      showTerms: tpl.showTerms ?? true,
+      colProductCode: tpl.colProductCode ?? true,
+      colUnitPrice: tpl.colUnitPrice ?? true,
+      colDiscount: tpl.colDiscount ?? false,
+      colTax: tpl.colTax ?? false,
+      logoBase64: tpl.logoBase64 || null,
+      headerAlign: tpl.headerAlign || 'left',
+      titleAlign: tpl.titleAlign || 'left',
+      addressAlign: tpl.addressAlign || 'left',
+      totalsAlign: tpl.totalsAlign || 'right',
+      termsAlign: tpl.termsAlign || 'center',
+      headerFontSize: tpl.headerFontSize || 14,
+      titleFontSize: tpl.titleFontSize || 16,
+      bodyFontSize: tpl.bodyFontSize || 10,
+      headerPadding: tpl.headerPadding || 16,
+      sectionSpacing: tpl.sectionSpacing || 24,
+      logoSize: tpl.logoSize || 48,
+    });
+  };
+
+  React.useEffect(() => {
+    if (customizingInvoice && templates.length > 0) {
+      const defaultTpl = templates.find(t => t.isDefault);
+      if (defaultTpl) {
+        setSelectedTemplateId(defaultTpl.id);
+        applyTemplateSettings(defaultTpl);
+      } else {
+        setSelectedTemplateId('');
+      }
+    }
+  }, [customizingInvoice, templates]);
+
+  React.useEffect(() => {
+    if (activePrintInvoice) {
+      const timer = setTimeout(() => {
+        window.print();
+        setActivePrintInvoice(null);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [activePrintInvoice]);
 
   const [customerId, setCustomerId] = useState('');
   const [status, setStatus] = useState('ISSUED');
 
   // Partial Transit state
-  const [transitMode, setTransitMode] = useState<'FULL' | 'PARTIAL'>('FULL');
+  const [transitMode, setTransitMode] = useState<'FULL' | 'PARTIAL' | 'CUSTOM'>('FULL');
   const [transitFactor, setTransitFactor] = useState('50.00'); // % of volume to dispatch
+
+  React.useEffect(() => {
+    setSelectedOrderIds([]);
+  }, [customerId]);
+
+  const applySalesOrderTransit = (orderIds: string[], style: 'FULL' | 'PARTIAL' | 'CUSTOM', factor: number) => {
+    const selectedOrders = salesOrders.filter(so => orderIds.includes(so.id));
+    const mergedItems: Record<string, { productId: string; quantity: number; price: number }> = {};
+
+    for (const order of selectedOrders) {
+      for (const item of order.items) {
+        const remaining = item.remainingChallanQuantity !== undefined ? item.remainingChallanQuantity : (item.quantity - (item.shippedQuantity || 0));
+        if (remaining <= 0) continue;
+
+        let qtyToShip = remaining;
+        if (style === 'PARTIAL') {
+          qtyToShip = remaining * (factor / 100);
+        }
+
+        if (mergedItems[item.productId]) {
+          mergedItems[item.productId].quantity += qtyToShip;
+        } else {
+          mergedItems[item.productId] = {
+            productId: item.productId,
+            quantity: qtyToShip,
+            price: item.price
+          };
+        }
+      }
+    }
+
+    const newItemsList = Object.values(mergedItems).map(item => ({
+      productId: item.productId,
+      quantity: String(Number(item.quantity.toFixed(4))),
+      price: String(item.price)
+    }));
+
+    setItems(newItemsList.length > 0 ? newItemsList : [{ productId: products[0]?.id || '', quantity: '1', price: String(products[0]?.pricing || 0) }]);
+  };
+
+  const prevTransitModeRef = React.useRef(transitMode);
+  const prevTransitFactorRef = React.useRef(transitFactor);
+  const prevSelectedOrderIdsRef = React.useRef(selectedOrderIds);
+
+  React.useEffect(() => {
+    const modeChanged = prevTransitModeRef.current !== transitMode;
+    const factorChanged = prevTransitFactorRef.current !== transitFactor;
+    const ordersChanged = JSON.stringify(prevSelectedOrderIdsRef.current) !== JSON.stringify(selectedOrderIds);
+
+    if (ordersChanged || (modeChanged && transitMode !== 'CUSTOM') || (factorChanged && transitMode === 'PARTIAL')) {
+      if (selectedOrderIds.length > 0) {
+        applySalesOrderTransit(selectedOrderIds, transitMode, parseFloat(transitFactor) || 100);
+      }
+    }
+
+    prevTransitModeRef.current = transitMode;
+    prevTransitFactorRef.current = transitFactor;
+    prevSelectedOrderIdsRef.current = selectedOrderIds;
+  }, [transitMode, transitFactor, selectedOrderIds]);
+
+  const handleToggleSalesOrder = (soId: string) => {
+    let updatedIds = [...selectedOrderIds];
+    if (updatedIds.includes(soId)) {
+      updatedIds = updatedIds.filter(id => id !== soId);
+    } else {
+      updatedIds.push(soId);
+    }
+    setSelectedOrderIds(updatedIds);
+  };
 
   const [items, setItems] = useState<ChallanItemInput[]>([]);
   const [localErr, setLocalErr] = useState<string | null>(null);
@@ -67,6 +249,7 @@ export default function DeliveryChallan({
     setStatus('ISSUED');
     setTransitMode('FULL');
     setTransitFactor('50.00');
+    setSelectedOrderIds([]);
     setItems([{ productId: products[0]?.id || '', quantity: '1', price: String(products[0]?.pricing || 0) }]);
     setIsEditing(false);
     setEditingId(null);
@@ -78,8 +261,24 @@ export default function DeliveryChallan({
   const openEditModal = (dc: any) => {
     setCustomerId(dc.customerId);
     setStatus(dc.status || 'ISSUED');
-    setTransitMode('FULL');
+    setTransitMode('CUSTOM');
     setTransitFactor('100.00');
+
+    let resolvedOrderIds: string[] = [];
+    if (dc.salesOrderId) {
+      resolvedOrderIds.push(dc.salesOrderId);
+    }
+    if (dc.salesOrderIds) {
+      try {
+        const parsed = JSON.parse(dc.salesOrderIds);
+        if (Array.isArray(parsed)) {
+          resolvedOrderIds = Array.from(new Set([...resolvedOrderIds, ...parsed]));
+        }
+      } catch (e) {
+        console.error("Failed to parse salesOrderIds", e);
+      }
+    }
+    setSelectedOrderIds(resolvedOrderIds);
 
     const mappedItems = (dc.items || []).map((item: any) => ({
       productId: item.productId,
@@ -116,8 +315,6 @@ export default function DeliveryChallan({
     setItems(updated);
   };
 
-  const transitPct = transitMode === 'PARTIAL' ? (parseFloat(transitFactor) || 50) : 100;
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerId || items.length === 0) {
@@ -127,14 +324,38 @@ export default function DeliveryChallan({
 
     setLocalErr(null);
     setLocalSuccess(null);
+
+    // Validate remaining quantity limits
+    if (selectedOrderIds.length > 0) {
+      const selectedOrders = salesOrders.filter(so => selectedOrderIds.includes(so.id));
+      for (const item of items) {
+        let limit = 0;
+        for (const order of selectedOrders) {
+          for (const oItem of order.items) {
+            if (oItem.productId === item.productId) {
+              limit += oItem.remainingChallanQuantity !== undefined ? oItem.remainingChallanQuantity : (oItem.quantity - (oItem.shippedQuantity || 0));
+            }
+          }
+        }
+        const inputQty = parseFloat(item.quantity) || 0;
+        if (inputQty > limit) {
+          const prod = products.find(p => p.id === item.productId);
+          setLocalErr(`Quantity for product '${prod?.name || item.productId}' exceeds the total remaining shipping limit of ${limit} in the selected Sales Order(s).`);
+          return;
+        }
+      }
+    }
+
     setLoading(true);
 
     const payload = {
       customerId,
       status,
+      salesOrderId: selectedOrderIds.length === 1 ? selectedOrderIds[0] : null,
+      salesOrderIds: selectedOrderIds.length > 1 ? JSON.stringify(selectedOrderIds) : null,
       items: items.map(item => ({
         productId: item.productId,
-        quantity: (parseFloat(item.quantity) || 1.0) * (transitPct / 100), // Scale quantity by transit factor
+        quantity: parseFloat(item.quantity) || 1.0, // quantity is already scaled or custom in grid
         price: parseFloat(item.price) || 0.0 // Locked to Product Master price
       }))
     };
@@ -180,168 +401,7 @@ export default function DeliveryChallan({
   };
 
   const handleDownloadPDF = (dc: any) => {
-    const cust = customers.find(c => c.id === dc.customerId);
-    
-    // Load custom template if selected
-    let tpl: any = null;
-    if (selectedTemplateId) {
-      try {
-        const saved = localStorage.getItem('erp_pdf_templates');
-        if (saved) {
-          const templates = JSON.parse(saved);
-          tpl = templates.find((t: any) => t.id === selectedTemplateId);
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    }
-
-    const title = tpl?.title || 'DELIVERY CHALLAN';
-    const headerName = tpl?.headerName || companyProfile?.name || 'ANB INDUSTRIES PRIVATE LIMITED';
-    const headerSubtitle = tpl?.headerSubtitle || 'Consignment Gate Pass & Delivery Memo';
-    const terms = tpl?.terms || '1. Please receive the goods in sound physical condition.\n2. Return duplicate copy duly signed and stamped.';
-    const themeColor = tpl?.themeColor || 'emerald';
-    
-    const showLogo = tpl?.showLogo ?? true;
-    const showCompanyDetails = tpl?.showCompanyDetails ?? true;
-    const showBillingAddress = tpl?.showBillingAddress ?? true;
-    const showShippingAddress = tpl?.showShippingAddress ?? true;
-    const showTerms = tpl?.showTerms ?? true;
-    
-    const colProductCode = tpl?.colProductCode ?? true;
-
-    const getThemeHex = (colorName: string) => {
-      switch (colorName) {
-        case 'emerald': return '#10b981';
-        case 'rose': return '#f43f5e';
-        case 'amber': return '#f59e0b';
-        case 'slate': return '#64748b';
-        default: return '#6366f1'; // indigo
-      }
-    };
-    const currentThemeHex = getThemeHex(themeColor);
-
-    const docHtml = `
-      <html>
-        <head>
-          <title>${title} - ${dc.challanNo}</title>
-          <style>
-            body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #333; padding: 40px; background: #fff; }
-            .header { display: flex; justify-content: space-between; border-bottom: 2px solid ${currentThemeHex}; padding-bottom: 20px; margin-bottom: 30px; }
-            .title { font-size: 24px; font-weight: bold; color: ${currentThemeHex}; text-transform: uppercase; }
-            .meta { font-size: 11px; text-align: right; color: #555; }
-            .section { margin-bottom: 25px; }
-            .section-title { font-size: 12px; font-weight: bold; text-transform: uppercase; color: ${currentThemeHex}; border-bottom: 1px solid #eee; padding-bottom: 4px; margin-bottom: 8px; }
-            .client-details { font-size: 12px; line-height: 1.5; }
-            table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-            th { background: #f8fafc; border-bottom: 2px solid ${currentThemeHex}; color: #475569; font-weight: bold; font-size: 11px; text-transform: uppercase; padding: 10px; text-align: left; }
-            td { padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 12px; color: #334155; }
-            .footer { margin-top: 50px; border-top: 1px solid #eee; padding-top: 15px; font-size: 10px; text-align: center; color: #94a3b8; }
-            .sign-box { display: flex; justify-content: space-between; margin-top: 80px; font-size: 11px; color: #475569; }
-            .sign-line { width: 200px; border-top: 1px dashed #94a3b8; text-align: center; padding-top: 5px; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div>
-              ${showLogo && companyProfile?.logoUrl ? `<img src="${companyProfile.logoUrl}" alt="Logo" style="max-height: 40px; margin-bottom: 8px;" />` : ''}
-              <div class="title">${title}</div>
-              <div style="font-size: 12px; color: #64748b; font-weight: bold; margin-top: 5px;">${dc.challanNo}</div>
-            </div>
-            <div class="meta">
-              ${showCompanyDetails && companyProfile ? `
-                <div style="margin-bottom: 8px; font-size: 10px; color: #475569;">
-                  <strong>${headerName}</strong><br/>
-                  ${headerSubtitle}<br/>
-                  ${companyProfile.addressLine1 || ''} ${companyProfile.city || ''}<br/>
-                </div>
-              ` : ''}
-              <div>Challan Date: ${new Date(dc.date).toLocaleDateString()}</div>
-              <div>Status: <strong>${dc.status}</strong></div>
-            </div>
-          </div>
-          
-          <div style="display: flex; gap: 40px; margin-bottom: 20px;">
-            ${showBillingAddress ? `
-              <div class="section" style="flex: 1;">
-                <div class="section-title">Billing Corporate Recipient</div>
-                <div class="client-details">
-                  <strong>${cust?.name || 'Customer Profile'}</strong><br/>
-                  Classification: ${cust?.clientClassification || 'NATIONAL'}<br/>
-                  Billing Destination: ${cust?.billingAddress || 'N/A'}
-                </div>
-              </div>
-            ` : ''}
-
-            ${showShippingAddress ? `
-              <div class="section" style="flex: 1;">
-                <div class="section-title">Shipping Delivery Destination</div>
-                <div class="client-details">
-                  <strong>${cust?.name || 'Customer Profile'}</strong><br/>
-                  Mobile No: ${cust?.mobileNo || 'N/A'}<br/>
-                  Shipping Destination Address:<br/>
-                  <strong>${cust?.shippingAddress || cust?.billingAddress || 'N/A'}</strong>
-                </div>
-              </div>
-            ` : ''}
-          </div>
-
-          <div class="section">
-            <div class="section-title">Transit Items Checklist</div>
-            <table>
-              <thead>
-                <tr>
-                  <th>Stock Product Item</th>
-                  ${colProductCode ? `<th>SKU / Code</th>` : ''}
-                  <th style="text-align: right;">Quantity Shipped</th>
-                  <th style="text-align: right;">Assumed Unit Value</th>
-                  <th style="text-align: right;">Declared Subtotal</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${(dc.items || []).map((it: any) => {
-                  const prod = products.find(p => p.id === it.productId);
-                  const itemVal = (it.price || 0);
-                  const sub = it.quantity * itemVal;
-                  return `
-                    <tr>
-                      <td><strong>${prod?.name || 'Stock Item'}</strong></td>
-                      ${colProductCode ? `<td>${prod?.sku || 'N/A'}</td>` : ''}
-                      <td style="text-align: right;">${it.quantity}</td>
-                      <td style="text-align: right;">${currencySymbol}${itemVal.toFixed(2)}</td>
-                      <td style="text-align: right;">${currencySymbol}${sub.toFixed(2)}</td>
-                    </tr>
-                  `;
-                }).join('')}
-              </tbody>
-            </table>
-          </div>
-
-          <div class="sign-box">
-            <div class="sign-line">Authorized Dispatch Signature</div>
-            <div class="sign-line">Recipient / Customer Signature</div>
-          </div>
-
-          ${showTerms && terms ? `
-            <div class="footer">
-              <strong style="display: block; margin-bottom: 5px; color: #475569;">Declarations & Terms</strong>
-              ${terms.split('\n').map(line => `<div>${line}</div>`).join('')}
-            </div>
-          ` : ''}
-          <script>
-            window.onload = function() {
-              window.print();
-            }
-          </script>
-        </body>
-      </html>
-    `;
-
-    const printWin = window.open('', '_blank');
-    if (printWin) {
-      printWin.document.write(docHtml);
-      printWin.document.close();
-    }
+    setCustomizingInvoice(dc);
   };
 
   const getCustomerName = (id: string) => customers.find(c => c.id === id)?.name || 'Customer';
@@ -365,30 +425,6 @@ export default function DeliveryChallan({
         </div>
 
         <div className="flex items-center gap-3 w-full md:w-auto shrink-0">
-          <div className="flex items-center gap-1.5 shrink-0 bg-slate-900/30 border border-[var(--border-color)] px-2.5 py-1.5 rounded-xl">
-            <span className="text-[10px] text-[var(--text-secondary)] font-semibold uppercase">Template:</span>
-            <select
-              value={selectedTemplateId}
-              onChange={e => setSelectedTemplateId(e.target.value)}
-              className="bg-transparent text-[var(--text-primary)] text-xs border-0 outline-none cursor-pointer pr-4 font-semibold"
-            >
-              <option value="" className="bg-slate-950">-- Default --</option>
-              {(() => {
-                const saved = localStorage.getItem('erp_pdf_templates');
-                if (!saved) return null;
-                try {
-                  const templates = JSON.parse(saved);
-                  return templates
-                    .filter((t: any) => t.type === 'CHALLAN')
-                    .map((t: any) => (
-                      <option key={t.id} value={t.id} className="bg-slate-950">{t.name}</option>
-                    ));
-                } catch (e) {
-                  return null;
-                }
-              })()}
-            </select>
-          </div>
 
           <div className="relative flex-1 md:w-64">
             <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
@@ -568,16 +604,45 @@ export default function DeliveryChallan({
                 </select>
               </div>
 
+              {/* Sales Orders merge selector */}
+              {customerId && salesOrders.filter(so => so.customerId === customerId && so.status !== 'COMPLETED' && so.status !== 'CANCELLED').length > 0 && (
+                <div className="md:col-span-2 bg-slate-950/20 p-3.5 border border-slate-800 rounded-xl space-y-2">
+                  <label className="text-[9px] font-bold text-indigo-400 tracking-wider uppercase block">Link Sales Orders (Check multiple to merge same company)</label>
+                  <div className="flex flex-wrap gap-2">
+                    {salesOrders
+                      .filter(so => so.customerId === customerId && so.status !== 'COMPLETED' && so.status !== 'CANCELLED')
+                      .map(so => {
+                        const isChecked = selectedOrderIds.includes(so.id);
+                        return (
+                          <button
+                            key={so.id}
+                            type="button"
+                            onClick={() => handleToggleSalesOrder(so.id)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                              isChecked
+                                ? 'bg-indigo-650/20 border-indigo-500/60 text-indigo-400 font-bold'
+                                : 'bg-slate-900 border-slate-800 text-slate-455 hover:text-slate-200'
+                            }`}
+                          >
+                            {so.orderNo} ({so.status})
+                          </button>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
+
               {/* Transit Arrangement Mode */}
               <div>
                 <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Transit Arrangement *</label>
                 <select
                   value={transitMode}
-                  onChange={e => setTransitMode(e.target.value as 'FULL' | 'PARTIAL')}
+                  onChange={e => setTransitMode(e.target.value as 'FULL' | 'PARTIAL' | 'CUSTOM')}
                   className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none cursor-pointer"
                 >
                   <option value="FULL">FULL TRANSIT (100% Volume)</option>
                   <option value="PARTIAL">PARTIAL TRANSIT (Split Volumes / Partial Dispatch)</option>
+                  <option value="CUSTOM">CUSTOM TRANSIT (Manual/Freeform)</option>
                 </select>
               </div>
 
@@ -645,6 +710,23 @@ export default function DeliveryChallan({
                           onChange={e => handleItemChange(index, 'quantity', e.target.value)}
                           className="w-full bg-[var(--bg-secondary)] border border-[var(--border-color)] py-1.5 px-2.5 rounded-md text-xs text-[var(--text-primary)] focus:outline-none font-mono"
                         />
+                        {selectedOrderIds.length > 0 && (() => {
+                          let limit = 0;
+                          const selectedOrders = salesOrders.filter(so => selectedOrderIds.includes(so.id));
+                          for (const order of selectedOrders) {
+                            for (const oItem of order.items) {
+                              if (oItem.productId === item.productId) {
+                                limit += oItem.remainingChallanQuantity !== undefined ? oItem.remainingChallanQuantity : (oItem.quantity - (oItem.shippedQuantity || 0));
+                              }
+                            }
+                          }
+                          return (
+                            <div className="mt-1 text-[9px] text-[var(--text-muted)] flex justify-between">
+                              <span>Remaining:</span>
+                              <span className={parseFloat(item.quantity) > limit ? "text-rose-400 font-bold" : "text-emerald-400 font-semibold"}>{limit}</span>
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       {/* Price (Valuation) */}
@@ -698,6 +780,443 @@ export default function DeliveryChallan({
           </div>
         </div>
       )}
+
+      {/* ==========================================
+          MODAL: PDF TEMPLATE CUSTOMIZER & PRINT HUB
+          ========================================== */}
+      {customizingInvoice && (() => {
+        const dc = customizingInvoice;
+        const cust = customers.find(c => c.id === dc.customerId);
+        
+        return (
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in text-left">
+            <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl w-full max-w-5xl h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-scale-up">
+              {/* Header */}
+              <div className="flex items-center justify-between p-5 border-b border-[var(--border-color)] shrink-0">
+                <div>
+                  <h3 className="font-bold text-base text-[var(--text-primary)]">Custom Print Template Studio</h3>
+                  <p className="text-[var(--text-secondary)] text-[10px]">Select layout configurations and click print to trigger a direct print stream.</p>
+                </div>
+                <button
+                  onClick={() => setCustomizingInvoice(null)}
+                  className="text-[var(--text-muted)] hover:text-white cursor-pointer bg-transparent border-0"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="flex-1 flex overflow-hidden min-h-0">
+                {/* Left Side: Controls */}
+                <div className="w-80 border-r border-[var(--border-color)] p-5 overflow-y-auto space-y-5 shrink-0 bg-slate-950/20">
+                  <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block border-b border-[var(--border-color)] pb-2 mb-3">Template Options</span>
+
+                  {/* Load Custom Template Selection */}
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Select Print Template *</label>
+                    <select
+                      value={selectedTemplateId}
+                      onChange={(e) => {
+                        const tplId = e.target.value;
+                        setSelectedTemplateId(tplId);
+                        if (!tplId) return;
+                        const tpl = templates.find((t: any) => t.id === tplId);
+                        if (tpl) {
+                          applyTemplateSettings(tpl);
+                        }
+                      }}
+                      className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] py-1.5 px-3 rounded-lg text-xs text-white focus:outline-none cursor-pointer"
+                    >
+                      <option value="">-- Choose custom template --</option>
+                      {templates.map((t: any) => (
+                        <option key={t.id} value={t.id}>{t.name} {t.isDefault ? '(Default)' : ''}</option>
+                      ))}
+                    </select>
+                    {templates.length === 0 && (
+                      <p className="text-[10px] text-amber-400 mt-2 italic">
+                        No database templates found. Configure layouts in the PDF Print Studio.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right Side: Visual Preview */}
+                <div className="flex-1 bg-slate-950 p-8 overflow-y-auto flex justify-center">
+                  {/* Paper sheet */}
+                  <div
+                    className="w-[210mm] min-h-[297mm] bg-white text-black p-10 shadow-2xl relative flex flex-col justify-between font-sans leading-relaxed select-text"
+                    style={{
+                      fontSize: `${pdfCustomizer.bodyFontSize}px`
+                    }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: `${pdfCustomizer.sectionSpacing}px` }}>
+                      {/* Document Header */}
+                      <div
+                        className="border-b-2"
+                        style={{
+                          borderColor: currentThemeHex,
+                          paddingBottom: `${pdfCustomizer.headerPadding}px`,
+                          marginBottom: `${pdfCustomizer.sectionSpacing}px`,
+                          display: 'flex',
+                          flexDirection: pdfCustomizer.headerAlign === 'center' ? 'column' : 'row',
+                          alignItems: pdfCustomizer.headerAlign === 'center' ? 'center' : 'flex-start',
+                          justifyContent: 'space-between',
+                          textAlign: pdfCustomizer.headerAlign
+                        }}
+                      >
+                        <div style={{ textAlign: pdfCustomizer.headerAlign }}>
+                          {pdfCustomizer.showLogo && (pdfCustomizer.logoBase64 || companyProfile?.logoUrl) && (
+                            <img
+                              src={pdfCustomizer.logoBase64 || companyProfile?.logoUrl}
+                              alt="Logo"
+                              style={{ height: `${pdfCustomizer.logoSize}px`, objectFit: 'contain' }}
+                              className="mb-3"
+                            />
+                          )}
+                          <div
+                            className="font-extrabold uppercase title-text"
+                            style={{
+                              color: currentThemeHex,
+                              fontSize: `${pdfCustomizer.titleFontSize}px`,
+                              textAlign: pdfCustomizer.titleAlign
+                            }}
+                          >
+                            {customTitle}
+                          </div>
+                          <div className="font-mono text-[10px] text-slate-650 mt-1">Challan No: {dc.challanNo}</div>
+                        </div>
+
+                        {pdfCustomizer.showCompanyDetails && companyProfile && (
+                          <div
+                            style={{
+                              textAlign: pdfCustomizer.headerAlign === 'center' ? 'center' : pdfCustomizer.headerAlign === 'right' ? 'left' : 'right',
+                              fontSize: `${pdfCustomizer.headerFontSize}px`
+                            }}
+                            className="text-slate-700 leading-normal max-w-xs"
+                          >
+                            <strong className="text-slate-900 text-[11px]">{companyProfile.name}</strong><br/>
+                            {companyProfile.addressLine1 && `${companyProfile.addressLine1}, `}
+                            {companyProfile.addressLine2 && `${companyProfile.addressLine2}, `}<br/>
+                            {companyProfile.city && `${companyProfile.city}, `}
+                            {companyProfile.state && `${companyProfile.state} - `}
+                            {companyProfile.pincode && companyProfile.pincode}<br/>
+                            {companyProfile.gstNumber && <strong>GSTIN: {companyProfile.gstNumber}</strong>}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Meta Columns */}
+                      <div className="grid grid-cols-2 gap-6 text-[10px] text-slate-700">
+                        <div className="space-y-1">
+                          <div className="text-[9px] uppercase font-bold text-slate-450">Document Metadata</div>
+                          <div>Issue Date: <span className="font-semibold text-slate-900">{new Date(dc.date).toLocaleDateString()}</span></div>
+                          <div>Status: <span className="font-semibold text-slate-900">{dc.status}</span></div>
+                        </div>
+                        <div className="space-y-1 text-right">
+                          <div className="text-[9px] uppercase font-bold text-slate-450">Recipient Details</div>
+                          <div className="font-semibold text-slate-900">{cust?.name || 'Client Name'}</div>
+                          <div>Type: {cust?.customerType || 'INDIVIDUAL'}</div>
+                          {cust?.contactNo && <div>Tel: {cust.contactNo}</div>}
+                        </div>
+                      </div>
+
+                      {/* Addresses Row */}
+                      <div className="grid grid-cols-2 gap-6 border-t border-slate-200 pt-4" style={{ textAlign: pdfCustomizer.addressAlign }}>
+                        {/* Bill To */}
+                        {pdfCustomizer.showBillingAddress && (
+                          <div className="text-slate-700 leading-relaxed" style={{ textAlign: pdfCustomizer.addressAlign }}>
+                            <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Billing Address</span>
+                            <strong className="text-slate-900">{cust?.name}</strong><br/>
+                            {cust?.billingAddress || 'Billing address pending'}
+                          </div>
+                        )}
+                        
+                        {/* Ship To */}
+                        {pdfCustomizer.showShippingAddress && (
+                          <div className="text-slate-700 leading-relaxed text-right" style={{ textAlign: pdfCustomizer.addressAlign === 'left' ? 'left' : pdfCustomizer.addressAlign === 'center' ? 'center' : 'right' }}>
+                            <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Shipping Destination (Ship To)</span>
+                            <strong className="text-slate-900">{cust?.name}</strong><br/>
+                            {cust?.shippingAddress || cust?.billingAddress || 'Shipping address pending'}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Items Table */}
+                      <div className="pt-2">
+                        <table className="w-full text-left border-collapse" style={{ fontSize: `${pdfCustomizer.bodyFontSize}px` }}>
+                          <thead>
+                            <tr className="border-b-2 font-bold bg-slate-50" style={{ borderBottomColor: currentThemeHex }}>
+                              <th className="py-2.5 px-2 text-slate-800">Description</th>
+                              {pdfCustomizer.colProductCode && <th className="py-2.5 px-2">SKU / Code</th>}
+                              <th className="py-2.5 px-2 text-right">Quantity</th>
+                              {pdfCustomizer.colUnitPrice && <th className="py-2.5 px-2 text-right">Unit Value</th>}
+                              <th className="py-2.5 px-2 text-right">Total Valuation</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(dc.items || []).map((it: any) => {
+                              const prod = products.find(p => p.id === it.productId);
+                              const itemSub = it.quantity * (it.price || 0);
+                              return (
+                                <tr key={it.id || it.productId} className="border-b border-slate-100">
+                                  <td className="py-2.5 px-2 font-medium text-slate-900">
+                                    {prod?.name || 'Unknown Product'}
+                                    {prod?.description && <span className="block text-[8px] text-slate-500 font-normal mt-0.5">{prod.description}</span>}
+                                  </td>
+                                  {pdfCustomizer.colProductCode && (
+                                    <td className="py-2.5 px-2 font-mono text-slate-650">{prod?.sku || 'N/A'}</td>
+                                  )}
+                                  <td className="py-2.5 px-2 text-right font-mono">{it.quantity} {prod?.uom || 'PCS'}</td>
+                                  {pdfCustomizer.colUnitPrice && (
+                                    <td className="py-2.5 px-2 text-right font-mono">₹{(it.price || 0).toFixed(2)}</td>
+                                  )}
+                                  <td className="py-2.5 px-2 text-right font-mono font-semibold text-slate-900">₹{itemSub.toFixed(2)}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Calculations Table / Summary */}
+                      <div className={`flex ${pdfCustomizer.totalsAlign === 'left' ? 'justify-start' : pdfCustomizer.totalsAlign === 'center' ? 'justify-center' : 'justify-end'} pt-2`}>
+                        <table className="w-[50%] text-slate-700" style={{ fontSize: `${pdfCustomizer.bodyFontSize}px` }}>
+                          <tbody>
+                            <tr className="border-t-2 font-extrabold text-[12px]" style={{ color: currentThemeHex, borderTopColor: currentThemeHex }}>
+                              <td className="py-2.5 text-left">Total Valuation:</td>
+                              <td className="py-2.5 text-right font-mono">
+                                ₹{(dc.items || []).reduce((sum: number, it: any) => sum + (it.quantity * (it.price || 0)), 0).toFixed(2)}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Footer */}
+                    {pdfCustomizer.showTerms && (
+                      <div
+                        className="border-t border-slate-200 pt-4 mt-12 text-slate-550 leading-normal"
+                        style={{
+                          textAlign: pdfCustomizer.termsAlign,
+                          fontSize: `${pdfCustomizer.bodyFontSize - 1}px`
+                        }}
+                      >
+                        {customNotes}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer Buttons */}
+              <div className="p-4 border-t border-[var(--border-color)] shrink-0 flex justify-end gap-3 bg-slate-950/20">
+                <button
+                  onClick={() => setCustomizingInvoice(null)}
+                  className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-350 font-bold text-xs rounded-xl border-0 cursor-pointer transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setActivePrintInvoice(dc);
+                  }}
+                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl border-0 cursor-pointer transition-all shadow-lg shadow-emerald-600/10"
+                >
+                  Print Challan Directly
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ==========================================
+          HIDDEN PRINT CONTAINER FOR MEDIA PRINT STREAMS
+          ========================================== */}
+      {activePrintInvoice && (() => {
+        const dc = activePrintInvoice;
+        const cust = customers.find(c => c.id === dc.customerId);
+        const logoSrc = pdfCustomizer.logoBase64 || companyProfile?.logoUrl;
+
+        return (
+          <div
+            id="print-section"
+            className="hidden print:block fixed inset-0 z-[99999] bg-white text-black p-10"
+            style={{
+              fontSize: `${pdfCustomizer.bodyFontSize}px`
+            }}
+          >
+            <style dangerouslySetInnerHTML={{__html: `
+              @media print {
+                body * {
+                  visibility: hidden !important;
+                }
+                #print-section, #print-section * {
+                  visibility: visible !important;
+                }
+                #print-section {
+                  position: absolute !important;
+                  left: 0 !important;
+                  top: 0 !important;
+                  width: 100% !important;
+                  background: white !important;
+                  color: black !important;
+                  font-size: ${pdfCustomizer.bodyFontSize}px !important;
+                }
+              }
+            `}} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: `${pdfCustomizer.sectionSpacing}px` }}>
+              {/* Header */}
+              <div
+                className="border-b-2"
+                style={{
+                  borderColor: currentThemeHex,
+                  paddingBottom: `${pdfCustomizer.headerPadding}px`,
+                  marginBottom: `${pdfCustomizer.sectionSpacing}px`,
+                  display: 'flex',
+                  flexDirection: pdfCustomizer.headerAlign === 'center' ? 'column' : 'row',
+                  alignItems: pdfCustomizer.headerAlign === 'center' ? 'center' : 'flex-start',
+                  justifyContent: 'space-between',
+                  textAlign: pdfCustomizer.headerAlign
+                }}
+              >
+                <div style={{ textAlign: pdfCustomizer.headerAlign }}>
+                  {pdfCustomizer.showLogo && logoSrc && (
+                    <img src={logoSrc} alt="Logo" style={{ height: `${pdfCustomizer.logoSize}px`, objectFit: 'contain' }} className="mb-3" />
+                  )}
+                  <div
+                    className="font-extrabold uppercase title-text"
+                    style={{
+                      color: currentThemeHex,
+                      fontSize: `${pdfCustomizer.titleFontSize}px`,
+                      textAlign: pdfCustomizer.titleAlign
+                    }}
+                  >
+                    {customTitle}
+                  </div>
+                  <div className="font-mono text-[10px] text-slate-650 mt-1">Challan No: {dc.challanNo}</div>
+                </div>
+
+                {pdfCustomizer.showCompanyDetails && companyProfile && (
+                  <div
+                    style={{
+                      textAlign: pdfCustomizer.headerAlign === 'center' ? 'center' : pdfCustomizer.headerAlign === 'right' ? 'left' : 'right',
+                      fontSize: `${pdfCustomizer.headerFontSize}px`
+                    }}
+                    className="text-slate-700 leading-normal max-w-xs"
+                  >
+                    <strong className="text-slate-900 text-[11px]">{companyProfile.name}</strong><br/>
+                    {companyProfile.addressLine1 && `${companyProfile.addressLine1}, `}
+                    {companyProfile.addressLine2 && `${companyProfile.addressLine2}, `}<br/>
+                    {companyProfile.city && `${companyProfile.city}, `}
+                    {companyProfile.state && `${companyProfile.state} - `}
+                    {companyProfile.pincode && companyProfile.pincode}<br/>
+                    {companyProfile.gstNumber && <strong>GSTIN: {companyProfile.gstNumber}</strong>}
+                  </div>
+                )}
+              </div>
+
+              {/* Meta */}
+              <div className="grid grid-cols-2 gap-6 text-[10px] text-slate-700">
+                <div className="space-y-1">
+                  <div className="text-[9px] uppercase font-bold text-slate-455">Document Metadata</div>
+                  <div>Issue Date: <span className="font-semibold text-slate-900">{new Date(dc.date).toLocaleDateString()}</span></div>
+                  <div>Status: <span className="font-semibold text-slate-900">{dc.status}</span></div>
+                </div>
+                <div className="space-y-1 text-right">
+                  <div className="text-[9px] uppercase font-bold text-slate-455">Recipient Details</div>
+                  <div className="font-semibold text-slate-900">{cust?.name || 'Client Name'}</div>
+                  <div>Type: {cust?.customerType || 'INDIVIDUAL'}</div>
+                  {cust?.contactNo && <div>Tel: {cust.contactNo}</div>}
+                </div>
+              </div>
+
+              {/* Addresses Row */}
+              <div className="grid grid-cols-2 gap-6 border-t border-slate-200 pt-4" style={{ textAlign: pdfCustomizer.addressAlign }}>
+                {pdfCustomizer.showBillingAddress && (
+                  <div className="text-slate-700 leading-relaxed" style={{ textAlign: pdfCustomizer.addressAlign }}>
+                    <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Billing Address</span>
+                    <strong className="text-slate-900">{cust?.name}</strong><br/>
+                    {cust?.billingAddress || 'Billing address pending'}
+                  </div>
+                )}
+                
+                {pdfCustomizer.showShippingAddress && (
+                  <div className="text-slate-700 leading-relaxed text-right" style={{ textAlign: pdfCustomizer.addressAlign === 'left' ? 'left' : pdfCustomizer.addressAlign === 'center' ? 'center' : 'right' }}>
+                    <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Shipping Destination (Ship To)</span>
+                    <strong className="text-slate-900">{cust?.name}</strong><br/>
+                    {cust?.shippingAddress || cust?.billingAddress || 'Shipping address pending'}
+                  </div>
+                )}
+              </div>
+
+              {/* Items Table */}
+              <div className="pt-2">
+                <table className="w-full text-left border-collapse" style={{ fontSize: `${pdfCustomizer.bodyFontSize}px` }}>
+                  <thead>
+                    <tr className="border-b-2 font-bold bg-slate-50" style={{ borderBottomColor: currentThemeHex }}>
+                      <th className="py-2.5 px-2 text-slate-800">Description</th>
+                      {pdfCustomizer.colProductCode && <th className="py-2.5 px-2">SKU / Code</th>}
+                      <th className="py-2.5 px-2 text-right">Quantity</th>
+                      {pdfCustomizer.colUnitPrice && <th className="py-2.5 px-2 text-right">Unit Value</th>}
+                      <th className="py-2.5 px-2 text-right">Total Valuation</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(dc.items || []).map((it: any) => {
+                      const prod = products.find(p => p.id === it.productId);
+                      const itemSub = it.quantity * (it.price || 0);
+                      return (
+                        <tr key={it.id || it.productId} className="border-b border-slate-100">
+                          <td className="py-2.5 px-2 font-medium text-slate-900">
+                            {prod?.name || 'Unknown Product'}
+                            {prod?.description && <span className="block text-[8px] text-slate-500 font-normal mt-0.5">{prod.description}</span>}
+                          </td>
+                          {pdfCustomizer.colProductCode && (
+                            <td className="py-2.5 px-2 font-mono text-slate-650">{prod?.sku || 'N/A'}</td>
+                          )}
+                          <td className="py-2.5 px-2 text-right font-mono">{it.quantity} {prod?.uom || 'PCS'}</td>
+                          {pdfCustomizer.colUnitPrice && (
+                            <td className="py-2.5 px-2 text-right font-mono">₹{(it.price || 0).toFixed(2)}</td>
+                          )}
+                          <td className="py-2.5 px-2 text-right font-mono font-semibold text-slate-900">₹{itemSub.toFixed(2)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Calculations Table */}
+              <div className={`flex ${pdfCustomizer.totalsAlign === 'left' ? 'justify-start' : pdfCustomizer.totalsAlign === 'center' ? 'justify-center' : 'justify-end'} pt-2`}>
+                <table className="w-[50%] text-slate-700" style={{ fontSize: `${pdfCustomizer.bodyFontSize}px` }}>
+                  <tbody>
+                    <tr className="border-t-2 font-extrabold text-[12px]" style={{ color: currentThemeHex, borderTopColor: currentThemeHex }}>
+                      <td className="py-2.5 text-left">Total Valuation:</td>
+                      <td className="py-2.5 text-right font-mono">
+                        ₹{(dc.items || []).reduce((sum: number, it: any) => sum + (it.quantity * (it.price || 0)), 0).toFixed(2)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {pdfCustomizer.showTerms && (
+              <div
+                className="border-t border-slate-200 pt-4 mt-12 text-slate-550 text-center leading-normal"
+                style={{
+                  textAlign: pdfCustomizer.termsAlign,
+                  fontSize: `${pdfCustomizer.bodyFontSize - 1}px`
+                }}
+              >
+                {customNotes}
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

@@ -52,6 +52,7 @@ export const HIERARCHICAL_FEATURES = [
   { key: "SALES_DISPATCH", name: "Dispatch Management", description: "Coordinate shipments, carrier tracking and vehicles details" },
   { key: "SALES_QUOTATION", name: "Sales Quotations", description: "Generate, edit, and dispatch legal price quotations" },
   { key: "SALES_POST_SERVICE", name: "Post-Sales Service & Maintenance", description: "Coordinate warranty claims, maintenance logs, and service sheets" },
+  { key: "SALES_PDF_EDITOR", name: "PDF Print Studio", description: "Configure custom print layouts, logos, headers, colors, and terms for documents" },
 
   { key: "CRM_DATA", name: "CRM PORTAL", description: "Customer Relationship Management portal" },
   { key: "CRM_LEAD", name: "CRM Leads Hub", description: "Capture, log, track, and assign sales leads" },

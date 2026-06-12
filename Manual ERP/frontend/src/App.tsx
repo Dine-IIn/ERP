@@ -168,7 +168,7 @@ const ensureManufacturingFeatures = (featuresList: any) => {
     'MANUFACTURING_REPORTS',
     'MANUFACTURING_COSTING'
   ];
-  return Array.from(new Set([...list, ...manufacturingKeys]));
+  return Array.from(new Set([...list, ...manufacturingKeys, 'SALES_PDF_EDITOR']));
 };
 
 interface UserProfile {
@@ -4174,7 +4174,7 @@ export default function App() {
           {/* ==========================================
               MAIN CONTENT VIEWPORT
               ========================================== */}
-          <div className={`flex-1 ml-16 ${sidebarCollapsed ? 'md:ml-16' : 'md:ml-64'} flex flex-col min-h-screen max-w-[calc(100vw-64px)] overflow-x-hidden transition-all duration-300`}>
+          <div className={`flex-1 ml-16 ${sidebarCollapsed ? 'md:ml-16' : 'md:ml-64'} flex flex-col h-screen max-w-[calc(100vw-64px)] overflow-x-hidden overflow-y-auto transition-all duration-300`}>
             
             <header className="sticky top-0 z-35 bg-[var(--bg-secondary)] border-b border-[var(--border-color)] px-4 md:px-6 py-4 flex items-center justify-between select-none">
               <div className="flex items-center gap-2.5">
@@ -4501,6 +4501,10 @@ export default function App() {
                       />
                     )}
 
+                    {activeWorkspaceSubModule === 'SALES_PDF_EDITOR' && (
+                      <PdfTemplateEditor />
+                    )}
+
                   </div>
                 </div>
               )}
@@ -4597,9 +4601,6 @@ export default function App() {
                       />
                     )}
 
-                    {activeWorkspaceSubModule === 'SALES_PDF_EDITOR' && (
-                      <PdfTemplateEditor />
-                    )}
 
                   </div>
                 </div>

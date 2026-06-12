@@ -428,17 +428,6 @@ export default function CustomizableDashboard({
 
   return (
     <div className="space-y-6 select-none">
-      {/* Top Welcome Panel */}
-      <div className="bg-slate-900/40 p-6 rounded-2xl border border-slate-800/80 backdrop-blur-xl text-left">
-        <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-          <LayoutGrid className="w-5.5 h-5.5 text-indigo-400" />
-          Centralized Business Dashboard
-        </h2>
-        <p className="text-slate-400 text-xs mt-1">
-          Realtime ERP monitoring console with custom branding accent themes and custom layout grids.
-        </p>
-      </div>
-
       {/* Grid Dashboard */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6" style={{ gridAutoRows: '200px' }}>
         {widgets.map((w, idx) => {

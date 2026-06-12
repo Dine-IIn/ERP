@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { ShoppingCart, Search, Plus, Trash2, X, AlertCircle, CheckCircle2, DollarSign, Calendar, Tag, Trash, Eye, Edit } from 'lucide-react';
+import { ShoppingCart, Search, Plus, Trash2, X, AlertCircle, CheckCircle2, DollarSign, Calendar, Tag, Trash, Eye, Edit, Download } from 'lucide-react';
+import { apiClient } from '../../utils/apiService';
 
 interface PurchaseOrderItem {
   id?: string;
@@ -68,6 +69,111 @@ export default function PurchaseOrders({
   const [status, setStatus] = useState('PENDING');
 
   const [items, setItems] = useState<ItemInput[]>([]);
+
+  // Print Template customizer states for PO
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
+  const [companyProfile, setCompanyProfile] = useState<any>(null);
+  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
+  const [customizingOrder, setCustomizingOrder] = useState<any>(null);
+  const [activePrintOrder, setActivePrintOrder] = useState<any>(null);
+  const [customTitle, setCustomTitle] = useState('Purchase Order');
+  const [customNotes, setCustomNotes] = useState('We require delivery within the specified date range. Please send invoice copies on dispatch.');
+  const [pdfCustomizer, setPdfCustomizer] = useState({
+    showLogo: true,
+    showCompanyDetails: true,
+    showBillingAddress: true,
+    showShippingAddress: true,
+    showBankDetails: true,
+    showTerms: true,
+    colProductCode: true,
+    colUnitPrice: true,
+    colDiscount: true,
+    colTax: true,
+  });
+  const [themeColor, setThemeColor] = useState('indigo');
+
+  const getThemeHex = (colorName: string) => {
+    switch (colorName) {
+      case 'emerald': return '#10b981';
+      case 'rose': return '#f43f5e';
+      case 'amber': return '#f59e0b';
+      case 'slate': return '#64748b';
+      default: return '#6366f1'; // indigo
+    }
+  };
+  const currentThemeHex = getThemeHex(themeColor);
+
+  React.useEffect(() => {
+    const fetchProfileData = async () => {
+      try {
+        const profileData = await apiClient.get<any>('/api/admin/company/profile');
+        setCompanyProfile(profileData.company || null);
+      } catch (err) {
+        console.error('Failed to load company profile:', err);
+      }
+    };
+    const fetchBankData = async () => {
+      try {
+        const bankData = await apiClient.get<{ bankAccounts: any[] }>('/api/finance/bank-accounts');
+        setBankAccounts(bankData.bankAccounts || []);
+      } catch (err) {
+        console.error('Failed to load bank accounts:', err);
+      }
+    };
+    const fetchTemplatesData = async () => {
+      try {
+        const data = await apiClient.get<{ templates: any[] }>('/api/sales/templates?docType=PURCHASE_ORDER');
+        setTemplates(data.templates || []);
+      } catch (err) {
+        console.error('Failed to load templates:', err);
+      }
+    };
+
+    fetchProfileData();
+    fetchBankData();
+    fetchTemplatesData();
+  }, [showModal, customizingOrder]);
+
+  const applyTemplateSettings = (tpl: any) => {
+    setCustomTitle(tpl.title || 'Purchase Order');
+    setCustomNotes(tpl.terms || '');
+    setThemeColor(tpl.themeColor || 'indigo');
+    setPdfCustomizer({
+      showLogo: tpl.showLogo ?? true,
+      showCompanyDetails: tpl.showCompanyDetails ?? true,
+      showBillingAddress: tpl.showBillingAddress ?? true,
+      showShippingAddress: tpl.showShippingAddress ?? true,
+      showBankDetails: tpl.showBankDetails ?? true,
+      showTerms: tpl.showTerms ?? true,
+      colProductCode: tpl.colProductCode ?? true,
+      colUnitPrice: tpl.colUnitPrice ?? true,
+      colDiscount: tpl.colDiscount ?? true,
+      colTax: tpl.colTax ?? true,
+    });
+  };
+
+  React.useEffect(() => {
+    if (customizingOrder && templates.length > 0) {
+      const defaultTpl = templates.find(t => t.isDefault);
+      if (defaultTpl) {
+        setSelectedTemplateId(defaultTpl.id);
+        applyTemplateSettings(defaultTpl);
+      } else {
+        setSelectedTemplateId('');
+      }
+    }
+  }, [customizingOrder, templates]);
+
+  React.useEffect(() => {
+    if (activePrintOrder) {
+      const timer = setTimeout(() => {
+        window.print();
+        setActivePrintOrder(null);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [activePrintOrder]);
   const [localErr, setLocalErr] = useState<string | null>(null);
   const [localSuccess, setLocalSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -302,6 +408,13 @@ export default function PurchaseOrders({
                       </span>
                     </td>
                     <td className="py-4 px-6 text-right space-x-2">
+                      <button
+                        onClick={() => setCustomizingOrder(o)}
+                        className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-emerald-400 transition-all rounded-lg"
+                        title="Print PO PDF"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
                       <button
                         onClick={() => setSelectedDetailOrder(o)}
                         className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-indigo-400 transition-all rounded-lg"
@@ -737,6 +850,409 @@ export default function PurchaseOrders({
           </div>
         </div>
       )}
+
+      {/* ==========================================
+          MODAL: PDF TEMPLATE CUSTOMIZER & PRINT HUB
+          ========================================== */}
+      {customizingOrder && (() => {
+        const order = customizingOrder;
+        const discountVal = order.subtotal * ((order.discount || 0) / 100);
+        const taxVal = (order.subtotal - discountVal) * ((order.tax || 0) / 100);
+        
+        return (
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in text-left">
+            <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl w-full max-w-5xl h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-scale-up">
+              {/* Header */}
+              <div className="flex items-center justify-between p-5 border-b border-[var(--border-color)] shrink-0">
+                <div>
+                  <h3 className="font-bold text-base text-[var(--text-primary)]">Custom Print Template Studio</h3>
+                  <p className="text-[var(--text-secondary)] text-[10px]">Toggle order columns, sections, headers, and click print to trigger a direct print stream.</p>
+                </div>
+                <button
+                  onClick={() => setCustomizingOrder(null)}
+                  className="text-[var(--text-muted)] hover:text-white cursor-pointer bg-transparent border-0"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="flex-1 flex overflow-hidden min-h-0">
+                {/* Left Side: Controls */}
+                <div className="w-80 border-r border-[var(--border-color)] p-5 overflow-y-auto space-y-5 shrink-0 bg-slate-950/20">
+                  <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block border-b border-[var(--border-color)] pb-2 mb-3">Template Options</span>
+
+                  {/* Load Custom Template Selection */}
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold text-slate-450 uppercase block mb-1">Select Print Template *</label>
+                    <select
+                      value={selectedTemplateId}
+                      onChange={(e) => {
+                        const tplId = e.target.value;
+                        setSelectedTemplateId(tplId);
+                        if (!tplId) return;
+                        const tpl = templates.find((t: any) => t.id === tplId);
+                        if (tpl) {
+                          applyTemplateSettings(tpl);
+                        }
+                      }}
+                      className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] py-1.5 px-3 rounded-lg text-xs text-white focus:outline-none cursor-pointer"
+                    >
+                      <option value="">-- Choose custom template --</option>
+                      {templates.map((t: any) => (
+                        <option key={t.id} value={t.id}>{t.name} {t.isDefault ? '(Default)' : ''}</option>
+                      ))}
+                    </select>
+                    {templates.length === 0 && (
+                      <p className="text-[10px] text-amber-400 mt-2 italic">
+                        No database templates found. Configure layouts in the PDF Print Studio.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right Side: Visual Preview */}
+                <div className="flex-1 bg-slate-950 p-8 overflow-y-auto flex justify-center">
+                  {/* Paper sheet */}
+                  <div className="w-[210mm] min-h-[297mm] bg-white text-black p-10 shadow-2xl text-[11px] relative flex flex-col justify-between font-sans leading-relaxed select-text">
+                    <div className="space-y-6">
+                      {/* Document Header */}
+                      <div className="flex justify-between items-start border-b-2 pb-5" style={{ borderColor: currentThemeHex }}>
+                        <div>
+                          {pdfCustomizer.showLogo && companyProfile?.logoUrl && (
+                            <img src={companyProfile.logoUrl} alt="Logo" className="max-h-12 object-contain mb-3" />
+                          )}
+                          <div className="text-xl font-extrabold uppercase" style={{ color: currentThemeHex }}>{customTitle}</div>
+                          <div className="font-mono text-[10px] text-slate-650 mt-1">PO No: {order.poNo}</div>
+                        </div>
+
+                        {pdfCustomizer.showCompanyDetails && companyProfile && (
+                          <div className="text-right text-[10px] text-slate-700 leading-normal max-w-xs">
+                            <strong className="text-slate-900 text-[11px]">{companyProfile.name}</strong><br/>
+                            {companyProfile.addressLine1 && `${companyProfile.addressLine1}, `}
+                            {companyProfile.addressLine2 && `${companyProfile.addressLine2}, `}<br/>
+                            {companyProfile.city && `${companyProfile.city}, `}
+                            {companyProfile.state && `${companyProfile.state} - `}
+                            {companyProfile.pincode && companyProfile.pincode}<br/>
+                            {companyProfile.gstNumber && <strong>GSTIN: {companyProfile.gstNumber}</strong>}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Meta Columns */}
+                      <div className="grid grid-cols-2 gap-6 text-[10px] text-slate-700">
+                        <div className="space-y-1">
+                          <div className="text-[9px] uppercase font-bold text-slate-450">PO Metadata</div>
+                          <div>PO Issue Date: <span className="font-semibold text-slate-900">{new Date(order.date).toLocaleDateString()}</span></div>
+                          <div>Expected Delivery: <span className="font-semibold text-slate-900">{order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString() : 'N/A'}</span></div>
+                          <div>Status: <span className="font-semibold text-slate-900">{order.status}</span></div>
+                        </div>
+                        <div className="space-y-1 text-right">
+                          <div className="text-[9px] uppercase font-bold text-slate-455">Vendor Partner</div>
+                          <div className="font-semibold text-slate-900">{order.vendor?.name}</div>
+                          {order.vendor?.contactNo && <div>Tel: {order.vendor.contactNo}</div>}
+                        </div>
+                      </div>
+
+                      {/* Addresses Row */}
+                      <div className="grid grid-cols-2 gap-6 border-t border-slate-200 pt-4">
+                        {/* Supplier */}
+                        {pdfCustomizer.showBillingAddress && (
+                          <div className="text-[10px] text-slate-700 leading-relaxed">
+                            <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Supplier Vendor</span>
+                            <strong className="text-slate-900">{order.vendor?.name}</strong><br/>
+                            {order.vendor?.address || 'Supplier address records'}
+                          </div>
+                        )}
+                        
+                        {/* Ship To Destination (our company) */}
+                        {pdfCustomizer.showShippingAddress && companyProfile && (
+                          <div className="text-[10px] text-slate-700 leading-relaxed text-right">
+                            <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Delivery Destination</span>
+                            <strong className="text-slate-900">{companyProfile.name}</strong><br/>
+                            {companyProfile.addressLine1 && `${companyProfile.addressLine1}, `}
+                            {companyProfile.addressLine2 && companyProfile.addressLine2}<br/>
+                            {companyProfile.city && `${companyProfile.city}, `}
+                            {companyProfile.state && `${companyProfile.state}`}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Items Table */}
+                      <div className="pt-2">
+                        <table className="w-full text-left text-[10px] border-collapse">
+                          <thead>
+                            <tr className="border-b-2 font-bold bg-slate-50" style={{ borderBottomColor: currentThemeHex }}>
+                              <th className="py-2.5 px-2 text-slate-800">Description</th>
+                              {pdfCustomizer.colProductCode && <th className="py-2.5 px-2">SKU / Code</th>}
+                              <th className="py-2.5 px-2 text-right">Qty</th>
+                              {pdfCustomizer.colUnitPrice && <th className="py-2.5 px-2 text-right">Price</th>}
+                              {pdfCustomizer.colDiscount && <th className="py-2.5 px-2 text-right">Discount</th>}
+                              <th className="py-2.5 px-2 text-right">Subtotal</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(order.items || []).map((it: any) => {
+                              const prod = products.find(p => p.id === it.productId);
+                              const itemSub = it.quantity * it.price;
+                              const itemDisc = itemSub * ((it.discount || 0) / 100);
+                              return (
+                                <tr key={it.id} className="border-b border-slate-100">
+                                  <td className="py-2.5 px-2">
+                                    <strong className="text-slate-900">{prod?.name || it.product?.name || 'Stock Item'}</strong>
+                                    {prod?.hsnSacCode && <span className="text-[9px] text-slate-550 block mt-0.5">HSN Code: {prod.hsnSacCode}</span>}
+                                  </td>
+                                  {pdfCustomizer.colProductCode && (
+                                    <td className="py-2.5 px-2 font-mono text-slate-650">{prod?.sku || 'N/A'}</td>
+                                  )}
+                                  <td className="py-2.5 px-2 text-right font-mono">{it.quantity} {prod?.uom || it.product?.uom || 'PCS'}</td>
+                                  {pdfCustomizer.colUnitPrice && (
+                                    <td className="py-2.5 px-2 text-right font-mono">₹{it.price.toFixed(2)}</td>
+                                  )}
+                                  {pdfCustomizer.colDiscount && (
+                                    <td className="py-2.5 px-2 text-right font-mono">{it.discount || 0}%</td>
+                                  )}
+                                  <td className="py-2.5 px-2 text-right font-mono font-semibold text-slate-900">₹{(itemSub - itemDisc).toFixed(2)}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Calculations Table */}
+                      <div className="flex justify-end pt-2">
+                        <table className="w-[50%] text-[10px] text-slate-700">
+                          <tbody>
+                            <tr className="border-b border-slate-100">
+                              <td className="py-1.5 text-left">Gross Subtotal:</td>
+                              <td className="py-1.5 text-right font-mono text-slate-900">₹{order.subtotal.toFixed(2)}</td>
+                            </tr>
+                            {order.discount > 0 && (
+                              <tr className="border-b border-slate-100">
+                                <td className="py-1.5 text-left text-red-500">Global Sourcing Discount ({order.discount}%):</td>
+                                <td className="py-1.5 text-right font-mono text-red-500">-₹{discountVal.toFixed(2)}</td>
+                              </tr>
+                            )}
+
+                            {pdfCustomizer.colTax && (
+                              <tr className="border-b border-slate-100">
+                                <td className="py-1.5 text-left">Sourcing GST ({order.tax}%):</td>
+                                <td className="py-1.5 text-right font-mono text-slate-900">₹{taxVal.toFixed(2)}</td>
+                              </tr>
+                            )}
+
+                            <tr className="border-t-2 font-extrabold text-[12px]" style={{ color: currentThemeHex, borderTopColor: currentThemeHex }}>
+                              <td className="py-2.5 text-left">Total PO Cost:</td>
+                              <td className="py-2.5 text-right font-mono">₹{order.total.toFixed(2)}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Footer */}
+                    {pdfCustomizer.showTerms && (
+                      <div className="border-t border-slate-200 pt-4 mt-12 text-[9px] text-slate-550 text-center leading-normal whitespace-pre-line">
+                        {customNotes}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer Buttons */}
+              <div className="p-4 border-t border-[var(--border-color)] shrink-0 flex justify-end gap-3 bg-slate-950/20">
+                <button
+                  onClick={() => setCustomizingOrder(null)}
+                  className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-350 font-bold text-xs rounded-xl border-0 cursor-pointer transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setActivePrintOrder(order);
+                  }}
+                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl border-0 cursor-pointer transition-all shadow-lg shadow-emerald-600/10"
+                >
+                  Print PDF Directly
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ==========================================
+          HIDDEN PRINT CONTAINER FOR MEDIA PRINT STREAMS
+          ========================================== */}
+      {activePrintOrder && (() => {
+        const order = activePrintOrder;
+        const discountVal = order.subtotal * ((order.discount || 0) / 100);
+        const taxVal = (order.subtotal - discountVal) * ((order.tax || 0) / 100);
+
+        return (
+          <div id="print-section" className="hidden print:block fixed inset-0 z-[99999] bg-white text-black p-10">
+            <style dangerouslySetInnerHTML={{__html: `
+              @media print {
+                body * {
+                  visibility: hidden !important;
+                }
+                #print-section, #print-section * {
+                  visibility: visible !important;
+                }
+                #print-section {
+                  position: absolute !important;
+                  left: 0 !important;
+                  top: 0 !important;
+                  width: 100% !important;
+                  background: white !important;
+                  color: black !important;
+                }
+              }
+            `}} />
+            <div className="space-y-6">
+              {/* Header */}
+              <div className="flex justify-between items-start border-b-2 pb-5" style={{ borderColor: currentThemeHex }}>
+                <div>
+                  {pdfCustomizer.showLogo && companyProfile?.logoUrl && (
+                    <img src={companyProfile.logoUrl} alt="Logo" className="max-h-12 object-contain mb-3" />
+                  )}
+                  <div className="text-xl font-extrabold uppercase" style={{ color: currentThemeHex }}>{customTitle}</div>
+                  <div className="font-mono text-[10px] text-slate-650 mt-1">PO No: {order.poNo}</div>
+                </div>
+
+                {pdfCustomizer.showCompanyDetails && companyProfile && (
+                  <div className="text-right text-[10px] text-slate-700 leading-normal max-w-xs">
+                    <strong className="text-slate-900 text-[11px]">{companyProfile.name}</strong><br/>
+                    {companyProfile.addressLine1 && `${companyProfile.addressLine1}, `}
+                    {companyProfile.addressLine2 && `${companyProfile.addressLine2}, `}<br/>
+                    {companyProfile.city && `${companyProfile.city}, `}
+                    {companyProfile.state && `${companyProfile.state} - `}
+                    {companyProfile.pincode && companyProfile.pincode}<br/>
+                    {companyProfile.gstNumber && <strong>GSTIN: {companyProfile.gstNumber}</strong>}
+                  </div>
+                )}
+              </div>
+
+              {/* Meta */}
+              <div className="grid grid-cols-2 gap-6 text-[10px] text-slate-700">
+                <div className="space-y-1">
+                  <div className="text-[9px] uppercase font-bold text-slate-450">PO Metadata</div>
+                  <div>PO Issue Date: <span className="font-semibold text-slate-900">{new Date(order.date).toLocaleDateString()}</span></div>
+                  <div>Expected Delivery: <span className="font-semibold text-slate-900">{order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString() : 'N/A'}</span></div>
+                  <div>Status: <span className="font-semibold text-slate-900">{order.status}</span></div>
+                </div>
+                <div className="space-y-1 text-right">
+                  <div className="text-[9px] uppercase font-bold text-slate-455">Vendor Partner</div>
+                  <div className="font-semibold text-slate-900">{order.vendor?.name}</div>
+                  {order.vendor?.contactNo && <div>Tel: {order.vendor.contactNo}</div>}
+                </div>
+              </div>
+
+              {/* Addresses Row */}
+              <div className="grid grid-cols-2 gap-6 border-t border-slate-200 pt-4">
+                {pdfCustomizer.showBillingAddress && (
+                  <div className="text-[10px] text-slate-700 leading-relaxed">
+                    <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Supplier Vendor</span>
+                    <strong className="text-slate-900">{order.vendor?.name}</strong><br/>
+                    {order.vendor?.address || 'Supplier address records'}
+                  </div>
+                )}
+                
+                {pdfCustomizer.showShippingAddress && companyProfile && (
+                  <div className="text-[10px] text-slate-700 leading-relaxed text-right">
+                    <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Delivery Destination</span>
+                    <strong className="text-slate-900">{companyProfile.name}</strong><br/>
+                    {companyProfile.addressLine1 && `${companyProfile.addressLine1}, `}
+                    {companyProfile.addressLine2 && companyProfile.addressLine2}<br/>
+                    {companyProfile.city && `${companyProfile.city}, `}
+                    {companyProfile.state && `${companyProfile.state}`}
+                  </div>
+                )}
+              </div>
+
+              {/* Items Table */}
+              <div className="pt-2">
+                <table className="w-full text-left text-[10px] border-collapse">
+                  <thead>
+                    <tr className="border-b-2 font-bold bg-slate-50" style={{ borderBottomColor: currentThemeHex }}>
+                      <th className="py-2.5 px-2 text-slate-800">Description</th>
+                      {pdfCustomizer.colProductCode && <th className="py-2.5 px-2">SKU / Code</th>}
+                      <th className="py-2.5 px-2 text-right">Qty</th>
+                      {pdfCustomizer.colUnitPrice && <th className="py-2.5 px-2 text-right">Price</th>}
+                      {pdfCustomizer.colDiscount && <th className="py-2.5 px-2 text-right">Discount</th>}
+                      <th className="py-2.5 px-2 text-right">Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(order.items || []).map((it: any) => {
+                      const prod = products.find(p => p.id === it.productId);
+                      const itemSub = it.quantity * it.price;
+                      const itemDisc = itemSub * ((it.discount || 0) / 100);
+                      return (
+                        <tr key={it.id} className="border-b border-slate-100">
+                          <td className="py-2.5 px-2">
+                            <strong className="text-slate-900">{prod?.name || it.product?.name || 'Stock Item'}</strong>
+                            {prod?.hsnSacCode && <span className="text-[9px] text-slate-550 block mt-0.5">HSN Code: {prod.hsnSacCode}</span>}
+                          </td>
+                          {pdfCustomizer.colProductCode && (
+                            <td className="py-2.5 px-2 font-mono text-slate-650">{prod?.sku || 'N/A'}</td>
+                          )}
+                          <td className="py-2.5 px-2 text-right font-mono">{it.quantity} {prod?.uom || it.product?.uom || 'PCS'}</td>
+                          {pdfCustomizer.colUnitPrice && (
+                            <td className="py-2.5 px-2 text-right font-mono">₹{it.price.toFixed(2)}</td>
+                          )}
+                          {pdfCustomizer.colDiscount && (
+                            <td className="py-2.5 px-2 text-right font-mono">{it.discount || 0}%</td>
+                          )}
+                          <td className="py-2.5 px-2 text-right font-mono font-semibold text-slate-900">₹{(itemSub - itemDisc).toFixed(2)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Calculations Table */}
+              <div className="flex justify-end pt-2">
+                <table className="w-[50%] text-[10px] text-slate-700">
+                  <tbody>
+                    <tr className="border-b border-slate-100">
+                      <td className="py-1.5 text-left">Gross Subtotal:</td>
+                      <td className="py-1.5 text-right font-mono text-slate-900">₹{order.subtotal.toFixed(2)}</td>
+                    </tr>
+                    {order.discount > 0 && (
+                      <tr className="border-b border-slate-100">
+                        <td className="py-1.5 text-left text-red-500">Global Sourcing Discount ({order.discount}%):</td>
+                        <td className="py-1.5 text-right font-mono text-red-550">-₹{discountVal.toFixed(2)}</td>
+                      </tr>
+                    )}
+
+                    {pdfCustomizer.colTax && (
+                      <tr className="border-b border-slate-100">
+                        <td className="py-1.5 text-left">Sourcing GST ({order.tax}%):</td>
+                        <td className="py-1.5 text-right font-mono text-slate-900">₹{taxVal.toFixed(2)}</td>
+                      </tr>
+                    )}
+
+                    <tr className="border-t-2 font-extrabold text-[12px]" style={{ color: currentThemeHex, borderTopColor: currentThemeHex }}>
+                      <td className="py-2.5 text-left">Total PO Cost:</td>
+                      <td className="py-2.5 text-right font-mono">₹{order.total.toFixed(2)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {pdfCustomizer.showTerms && (
+              <div className="border-t border-slate-200 pt-4 mt-12 text-[9px] text-slate-550 text-center leading-normal whitespace-pre-line">
+                {customNotes}
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

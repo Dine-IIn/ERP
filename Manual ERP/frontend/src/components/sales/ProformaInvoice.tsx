@@ -37,6 +37,50 @@ export default function ProformaInvoice({
 
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [companyProfile, setCompanyProfile] = useState<any>(null);
+  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
+  const [templates, setTemplates] = useState<any[]>([]);
+
+  // Print Preview States
+  const [customizingInvoice, setCustomizingInvoice] = useState<any>(null);
+  const [activePrintInvoice, setActivePrintInvoice] = useState<any>(null);
+  const [customTitle, setCustomTitle] = useState('PROFORMA ESTIMATE');
+  const [customNotes, setCustomNotes] = useState('1. This is a proforma estimate and not a tax declaration invoice.\n2. Material dispatch only after advance payment confirmation.');
+  const [themeColor, setThemeColor] = useState('amber');
+  const [pdfCustomizer, setPdfCustomizer] = useState({
+    showLogo: true,
+    showCompanyDetails: true,
+    showBillingAddress: true,
+    showShippingAddress: true,
+    showBankDetails: true,
+    showTerms: true,
+    colProductCode: true,
+    colUnitPrice: true,
+    colDiscount: true,
+    colTax: true,
+    logoBase64: null as string | null,
+    headerAlign: 'left' as 'left' | 'center' | 'right',
+    titleAlign: 'left' as 'left' | 'center' | 'right',
+    addressAlign: 'left' as 'left' | 'center' | 'right',
+    totalsAlign: 'right' as 'left' | 'center' | 'right',
+    termsAlign: 'center' as 'left' | 'center' | 'right',
+    headerFontSize: 14,
+    titleFontSize: 16,
+    bodyFontSize: 10,
+    headerPadding: 16,
+    sectionSpacing: 24,
+    logoSize: 48,
+  });
+
+  const getThemeHex = (colorName: string) => {
+    switch (colorName) {
+      case 'emerald': return '#10b981';
+      case 'rose': return '#f43f5e';
+      case 'amber': return '#f59e0b';
+      case 'slate': return '#64748b';
+      default: return '#6366f1'; // indigo
+    }
+  };
+  const currentThemeHex = getThemeHex(themeColor);
 
   React.useEffect(() => {
     const fetchProfile = async () => {
@@ -47,8 +91,79 @@ export default function ProformaInvoice({
         console.error(e);
       }
     };
+    const fetchBankData = async () => {
+      try {
+        const bankData = await apiClient.get<{ bankAccounts: any[] }>('/api/finance/bank-accounts');
+        setBankAccounts(bankData.bankAccounts || []);
+      } catch (err) {
+        console.error('Failed to load bank accounts:', err);
+      }
+    };
+    const fetchTemplates = async () => {
+      try {
+        const res = await apiClient.get<{ templates: any[] }>('/api/sales/templates?docType=PROFORMA');
+        setTemplates(res.templates || []);
+      } catch (e) {
+        console.error(e);
+      }
+    };
     fetchProfile();
-  }, []);
+    fetchBankData();
+    fetchTemplates();
+  }, [showModal, customizingInvoice]);
+
+  const applyTemplateSettings = (tpl: any) => {
+    setCustomTitle(tpl.title || 'PROFORMA ESTIMATE');
+    setCustomNotes(tpl.terms || '');
+    setThemeColor(tpl.themeColor || 'amber');
+    setPdfCustomizer({
+      showLogo: tpl.showLogo ?? true,
+      showCompanyDetails: tpl.showCompanyDetails ?? true,
+      showBillingAddress: tpl.showBillingAddress ?? true,
+      showShippingAddress: tpl.showShippingAddress ?? true,
+      showBankDetails: tpl.showBankDetails ?? true,
+      showTerms: tpl.showTerms ?? true,
+      colProductCode: tpl.colProductCode ?? true,
+      colUnitPrice: tpl.colUnitPrice ?? true,
+      colDiscount: tpl.colDiscount ?? true,
+      colTax: tpl.colTax ?? true,
+      logoBase64: tpl.logoBase64 || null,
+      headerAlign: tpl.headerAlign || 'left',
+      titleAlign: tpl.titleAlign || 'left',
+      addressAlign: tpl.addressAlign || 'left',
+      totalsAlign: tpl.totalsAlign || 'right',
+      termsAlign: tpl.termsAlign || 'center',
+      headerFontSize: tpl.headerFontSize || 14,
+      titleFontSize: tpl.titleFontSize || 16,
+      bodyFontSize: tpl.bodyFontSize || 10,
+      headerPadding: tpl.headerPadding || 16,
+      sectionSpacing: tpl.sectionSpacing || 24,
+      logoSize: tpl.logoSize || 48,
+    });
+  };
+
+  React.useEffect(() => {
+    if (customizingInvoice && templates.length > 0) {
+      const defaultTpl = templates.find(t => t.isDefault);
+      if (defaultTpl) {
+        setSelectedTemplateId(defaultTpl.id);
+        applyTemplateSettings(defaultTpl);
+      } else {
+        setSelectedTemplateId('');
+      }
+    }
+  }, [customizingInvoice, templates]);
+
+  React.useEffect(() => {
+    if (activePrintInvoice) {
+      const timer = setTimeout(() => {
+        window.print();
+        setActivePrintInvoice(null);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [activePrintInvoice]);
+
 
   const [customerId, setCustomerId] = useState('');
   const [dueDate, setDueDate] = useState('');
@@ -57,7 +172,7 @@ export default function ProformaInvoice({
   const [status, setStatus] = useState('DRAFT');
 
   // Partial Billing state
-  const [billingMode, setBillingMode] = useState<'FULL' | 'PARTIAL'>('FULL');
+  const [billingMode, setBillingMode] = useState<'FULL' | 'PARTIAL' | 'CUSTOM'>('FULL');
   const [billingFactor, setBillingFactor] = useState('50.00'); // percentage of quantity to bill
 
   const [items, setItems] = useState<InvoiceItemInput[]>([]);
@@ -92,8 +207,8 @@ export default function ProformaInvoice({
     const estTaxPct = ((taxVal / sub) * 100).toFixed(1);
     setTax(estTaxPct);
     setStatus(inv.status || 'DRAFT');
-    setBillingMode('FULL'); // Default to full when editing (allows custom re-scaling)
-    setBillingFactor('100.00');
+    setBillingMode('CUSTOM'); // Default to custom when editing (allows custom re-scaling)
+    setBillingFactor('100.05');
 
     const mappedItems = (inv.items || []).map((item: any) => ({
       productId: item.productId,
@@ -132,7 +247,7 @@ export default function ProformaInvoice({
   };
 
   // Calculations
-  const stdSubtotal = items.reduce((sum, item) => {
+  const subtotal = items.reduce((sum, item) => {
     const qty = parseFloat(item.quantity) || 0;
     const price = parseFloat(item.price) || 0;
     const itemDiscPercent = parseFloat(item.discount) || 0;
@@ -140,9 +255,6 @@ export default function ProformaInvoice({
     const itemDiscVal = itemSub * (itemDiscPercent / 100);
     return sum + (itemSub - itemDiscVal);
   }, 0);
-
-  const billingPct = billingMode === 'PARTIAL' ? (parseFloat(billingFactor) || 50) : 100;
-  const subtotal = stdSubtotal * (billingPct / 100);
 
   const discPct = parseFloat(discount) || 0;
   const discVal = subtotal * (discPct / 100); // Compute absolute value of discount from %
@@ -172,7 +284,7 @@ export default function ProformaInvoice({
       status,
       items: items.map(item => ({
         productId: item.productId,
-        quantity: (parseFloat(item.quantity) || 1.0) * (billingPct / 100), // Scale quantity by partial billing factor
+        quantity: parseFloat(item.quantity) || 1.0, // Quantity is already scaled or custom in the grid
         price: parseFloat(item.price) || 0.0, // Locked to Product Master
         discount: parseFloat(item.discount) || 0.0 // Discount %
       }))
@@ -219,238 +331,7 @@ export default function ProformaInvoice({
   };
 
   const handleDownloadPDF = (inv: any) => {
-    const cust = customers.find(c => c.id === inv.customerId);
-    
-    // Load custom template if selected
-    let tpl: any = null;
-    if (selectedTemplateId) {
-      try {
-        const saved = localStorage.getItem('erp_pdf_templates');
-        if (saved) {
-          const templates = JSON.parse(saved);
-          tpl = templates.find((t: any) => t.id === selectedTemplateId);
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    }
-
-    const title = tpl?.title || 'PROFORMA ESTIMATE';
-    const headerName = tpl?.headerName || companyProfile?.name || 'ANB INDUSTRIES PRIVATE LIMITED';
-    const headerSubtitle = tpl?.headerSubtitle || 'Pre-shipment Valuation Estimate';
-    const terms = tpl?.terms || '1. This is a proforma estimate and not a tax declaration invoice.\n2. Material dispatch only after advance payment confirmation.';
-    const themeColor = tpl?.themeColor || 'amber';
-    
-    const showLogo = tpl?.showLogo ?? true;
-    const showCompanyDetails = tpl?.showCompanyDetails ?? true;
-    const showBillingAddress = tpl?.showBillingAddress ?? true;
-    const showShippingAddress = tpl?.showShippingAddress ?? false;
-    const showBankDetails = tpl?.showBankDetails ?? true;
-    const showTerms = tpl?.showTerms ?? true;
-    
-    const colProductCode = tpl?.colProductCode ?? true;
-    const colUnitPrice = tpl?.colUnitPrice ?? true;
-    const colDiscount = tpl?.colDiscount ?? true;
-    const colTax = tpl?.colTax ?? true;
-
-    const getThemeHex = (colorName: string) => {
-      switch (colorName) {
-        case 'emerald': return '#10b981';
-        case 'rose': return '#f43f5e';
-        case 'amber': return '#f59e0b';
-        case 'slate': return '#64748b';
-        default: return '#6366f1'; // indigo
-      }
-    };
-    const currentThemeHex = getThemeHex(themeColor);
-
-    const isSameState = companyProfile && cust?.state === companyProfile.state;
-    const isInternational = cust?.clientClassification === 'INTERNATIONAL';
-
-    const docHtml = `
-      <html>
-        <head>
-          <title>${title} - ${inv.invoiceNo}</title>
-          <style>
-            body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #333; padding: 40px; background: #fff; }
-            .header { display: flex; justify-content: space-between; border-bottom: 2px solid ${currentThemeHex}; padding-bottom: 20px; margin-bottom: 30px; }
-            .title { font-size: 24px; font-weight: bold; color: ${currentThemeHex}; text-transform: uppercase; }
-            .meta { font-size: 11px; text-align: right; color: #555; }
-            .section { margin-bottom: 25px; }
-            .section-title { font-size: 12px; font-weight: bold; text-transform: uppercase; color: ${currentThemeHex}; border-bottom: 1px solid #eee; padding-bottom: 4px; margin-bottom: 8px; }
-            .client-details { font-size: 12px; line-height: 1.5; }
-            table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-            th { background: #f8fafc; border-bottom: 2px solid ${currentThemeHex}; color: #475569; font-weight: bold; font-size: 11px; text-transform: uppercase; padding: 10px; text-align: left; }
-            td { padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 12px; color: #334155; }
-            .total-table { width: 45%; margin-left: auto; margin-top: 20px; }
-            .total-table td { border-bottom: none; padding: 6px 10px; font-size: 11px; }
-            .grand-total { font-weight: bold; color: ${currentThemeHex}; font-size: 14px; border-top: 2px solid ${currentThemeHex}; }
-            .footer { margin-top: 50px; border-top: 1px solid #eee; padding-top: 15px; font-size: 10px; text-align: center; color: #94a3b8; }
-            .bank-details { margin-top: 20px; padding: 15px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 11px; color: #475569; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div>
-              ${showLogo && companyProfile?.logoUrl ? `<img src="${companyProfile.logoUrl}" alt="Logo" style="max-height: 40px; margin-bottom: 8px;" />` : ''}
-              <div class="title">${title}</div>
-              <div style="font-size: 12px; color: #64748b; font-weight: bold; margin-top: 5px;">${inv.invoiceNo}</div>
-            </div>
-            <div class="meta">
-              ${showCompanyDetails && companyProfile ? `
-                <div style="margin-bottom: 8px; font-size: 10px; color: #475569;">
-                  <strong>${headerName}</strong><br/>
-                  ${headerSubtitle}<br/>
-                  ${companyProfile.addressLine1 || ''} ${companyProfile.city || ''}<br/>
-                  ${companyProfile.gstNumber ? `GSTIN: ${companyProfile.gstNumber}` : ''}
-                </div>
-              ` : ''}
-              <div>Date: ${new Date(inv.date).toLocaleDateString()}</div>
-              <div>Due Date: ${inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : 'Upon Dispatch'}</div>
-              <div>Status: <strong>${inv.status}</strong></div>
-            </div>
-          </div>
-          
-          <div style="display: flex; gap: 40px; margin-bottom: 20px;">
-            ${showBillingAddress ? `
-              <div class="section" style="flex: 1;">
-                <div class="section-title">Bill To Customer</div>
-                <div class="client-details">
-                  <strong>${cust?.name || 'Customer Profile'}</strong><br/>
-                  Classification: ${cust?.clientClassification || 'NATIONAL'}<br/>
-                  Email ID: ${cust?.email || 'N/A'}<br/>
-                  Mobile: ${cust?.mobileNo || 'N/A'}<br/>
-                  Billing Destination: ${cust?.billingAddress || 'N/A'}
-                </div>
-              </div>
-            ` : ''}
-
-            ${showShippingAddress ? `
-              <div class="section" style="flex: 1;">
-                <div class="section-title">Ship To Destination</div>
-                <div class="client-details">
-                  <strong>${inv.shippingName || cust?.name || 'Customer Profile'}</strong><br/>
-                  Shipping Address: ${inv.shippingAddress || cust?.shippingAddress || cust?.billingAddress || 'N/A'}<br/>
-                  State: ${inv.shippingState || cust?.state || 'N/A'}
-                </div>
-              </div>
-            ` : ''}
-          </div>
-
-          <div class="section">
-            <div class="section-title">Stock Items Summary</div>
-            <table>
-              <thead>
-                <tr>
-                  <th>Product Item</th>
-                  ${colProductCode ? `<th>SKU / Code</th>` : ''}
-                  <th style="text-align: right;">Qty</th>
-                  ${colUnitPrice ? `<th style="text-align: right;">Unit Price</th>` : ''}
-                  ${colDiscount ? `<th style="text-align: right;">Discount</th>` : ''}
-                  <th style="text-align: right;">Subtotal</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${(inv.items || []).map((it: any) => {
-                  const prod = products.find(p => p.id === it.productId);
-                  const sub = (it.quantity * it.price) * (1 - (it.discount || 0) / 100);
-                  return `
-                    <tr>
-                      <td><strong>${prod?.name || 'Stock Item'}</strong></td>
-                      ${colProductCode ? `<td>${prod?.sku || 'N/A'}</td>` : ''}
-                      <td style="text-align: right;">${it.quantity}</td>
-                      ${colUnitPrice ? `<td style="text-align: right;">${currencySymbol}${it.price.toFixed(2)}</td>` : ''}
-                      ${colDiscount ? `<td style="text-align: right;">${(it.discount || 0).toFixed(1)}%</td>` : ''}
-                      <td style="text-align: right;">${currencySymbol}${sub.toFixed(2)}</td>
-                    </tr>
-                  `;
-                }).join('')}
-              </tbody>
-            </table>
-          </div>
-
-          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-            ${showBankDetails && companyProfile ? `
-              <div class="bank-details" style="width: 45%;">
-                <strong>Corporate Payout Account</strong><br/>
-                Banker: State Bank of India<br/>
-                A/C Name: ${companyProfile.name}<br/>
-                A/C No: 40921005671094<br/>
-                IFS Code: SBIN0001094
-              </div>
-            ` : '<div></div>'}
-
-            <table class="total-table">
-              <tr>
-                <td>Subtotal Value:</td>
-                <td style="text-align: right;">${currencySymbol}${inv.subtotal.toFixed(2)}</td>
-              </tr>
-              ${inv.discount > 0 ? `
-              <tr>
-                <td style="color: #ef4444;">Overall Discount (${inv.discount}%):</td>
-                <td style="text-align: right; color: #ef4444;">-${currencySymbol}${(inv.subtotal * (inv.discount / 100)).toFixed(2)}</td>
-              </tr>` : ''}
-              ${colTax ? (() => {
-                if (isInternational) {
-                  return `
-                    <tr>
-                      <td style="font-style: italic;">Zero-rated Export (0%):</td>
-                      <td style="text-align: right;">${currencySymbol}0.00</td>
-                    </tr>
-                  `;
-                } else if (isSameState) {
-                  const halfTax = (inv.tax || 0) / 2;
-                  return `
-                    <tr>
-                      <td>CGST (9.0%):</td>
-                      <td style="text-align: right;">${currencySymbol}${halfTax.toFixed(2)}</td>
-                    </tr>
-                    <tr>
-                      <td>SGST (9.0%):</td>
-                      <td style="text-align: right;">${currencySymbol}${halfTax.toFixed(2)}</td>
-                    </tr>
-                  `;
-                } else {
-                  return `
-                    <tr>
-                      <td>IGST (18.0%):</td>
-                      <td style="text-align: right;">${currencySymbol}${(inv.tax || 0).toFixed(2)}</td>
-                    </tr>
-                  `;
-                }
-              })() : `
-                <tr>
-                  <td>Sales Tax / GST Charge:</td>
-                  <td style="text-align: right;">${currencySymbol}${(inv.tax || 0).toFixed(2)}</td>
-                </tr>
-              `}
-              <tr class="grand-total">
-                <td>Grand Total:</td>
-                <td style="text-align: right;">${currencySymbol}${inv.total.toFixed(2)}</td>
-              </tr>
-            </table>
-          </div>
-
-          ${showTerms && terms ? `
-            <div class="footer">
-              <strong style="display: block; margin-bottom: 5px; color: #475569;">Declarations & Terms</strong>
-              ${terms.split('\n').map(line => `<div>${line}</div>`).join('')}
-            </div>
-          ` : ''}
-          <script>
-            window.onload = function() {
-              window.print();
-            }
-          </script>
-        </body>
-      </html>
-    `;
-
-    const printWin = window.open('', '_blank');
-    if (printWin) {
-      printWin.document.write(docHtml);
-      printWin.document.close();
-    }
+    setCustomizingInvoice(inv);
   };
 
   const getCustomerName = (id: string) => customers.find(c => c.id === id)?.name || 'Customer';
@@ -474,30 +355,6 @@ export default function ProformaInvoice({
         </div>
 
         <div className="flex items-center gap-3 w-full md:w-auto shrink-0">
-          <div className="flex items-center gap-1.5 shrink-0 bg-slate-900/30 border border-[var(--border-color)] px-2.5 py-1.5 rounded-xl">
-            <span className="text-[10px] text-[var(--text-secondary)] font-semibold uppercase">Template:</span>
-            <select
-              value={selectedTemplateId}
-              onChange={e => setSelectedTemplateId(e.target.value)}
-              className="bg-transparent text-[var(--text-primary)] text-xs border-0 outline-none cursor-pointer pr-4 font-semibold"
-            >
-              <option value="" className="bg-slate-950">-- Default --</option>
-              {(() => {
-                const saved = localStorage.getItem('erp_pdf_templates');
-                if (!saved) return null;
-                try {
-                  const templates = JSON.parse(saved);
-                  return templates
-                    .filter((t: any) => t.type === 'PROFORMA')
-                    .map((t: any) => (
-                      <option key={t.id} value={t.id} className="bg-slate-950">{t.name}</option>
-                    ));
-                } catch (e) {
-                  return null;
-                }
-              })()}
-            </select>
-          </div>
 
           <div className="relative flex-1 md:w-64">
             <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
@@ -709,16 +566,17 @@ export default function ProformaInvoice({
                 />
               </div>
 
-              {/* Billing Mode (Full vs Partial) */}
+              {/* Billing Mode (Full vs Partial vs Custom) */}
               <div>
                 <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Billing Arrangement *</label>
                 <select
                   value={billingMode}
-                  onChange={e => setBillingMode(e.target.value as 'FULL' | 'PARTIAL')}
+                  onChange={e => setBillingMode(e.target.value as 'FULL' | 'PARTIAL' | 'CUSTOM')}
                   className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-amber-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none cursor-pointer"
                 >
                   <option value="FULL">FULL BILLING (100% Volume)</option>
                   <option value="PARTIAL">PARTIAL BILLING (Pro-Rata / Down-Payment)</option>
+                  <option value="CUSTOM">CUSTOM BILLING (Manual/Freeform)</option>
                 </select>
               </div>
 
@@ -756,10 +614,7 @@ export default function ProformaInvoice({
 
               {/* Summary of Totals */}
               <div className="bg-[var(--bg-tertiary)]/30 border border-[var(--border-color)]/60 rounded-xl p-3 flex flex-col justify-center text-xs font-mono text-[var(--text-secondary)] gap-1">
-                <span className="flex justify-between"><span>Std Subtotal (100%):</span> <span>{currencySymbol}{stdSubtotal.toFixed(2)}</span></span>
-                {billingMode === 'PARTIAL' && (
-                  <span className="flex justify-between text-amber-400"><span>Billed Subtotal ({billingPct}%):</span> <span>{currencySymbol}{subtotal.toFixed(2)}</span></span>
-                )}
+                <span className="flex justify-between"><span>Subtotal:</span> <span>{currencySymbol}{subtotal.toFixed(2)}</span></span>
                 <span className="flex justify-between text-rose-400"><span>Discount ({discPct}%):</span> <span>-{currencySymbol}{discVal.toFixed(2)}</span></span>
                 <span className="flex justify-between text-emerald-400"><span>Tax ({taxPct}%):</span> <span>+{currencySymbol}{taxVal.toFixed(2)}</span></span>
                 <span className="flex justify-between border-t border-[var(--border-color)]/60 pt-1 text-sm font-bold text-amber-400"><span>Grand Total:</span> <span>{currencySymbol}{totalVal.toFixed(2)}</span></span>
@@ -877,6 +732,533 @@ export default function ProformaInvoice({
           </div>
         </div>
       )}
+      {/* ==========================================
+          MODAL: PDF TEMPLATE CUSTOMIZER & PRINT HUB
+          ========================================== */}
+      {customizingInvoice && (() => {
+        const inv = customizingInvoice;
+        const cust = customers.find(c => c.id === inv.customerId);
+        const discountVal = inv.subtotal * ((inv.discount || 0) / 100);
+        const isInternational = cust?.clientClassification === 'INTERNATIONAL';
+        const isSameState = companyProfile && cust?.state === companyProfile.state;
+        
+        return (
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in text-left">
+            <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl w-full max-w-5xl h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-scale-up">
+              {/* Header */}
+              <div className="flex items-center justify-between p-5 border-b border-[var(--border-color)] shrink-0">
+                <div>
+                  <h3 className="font-bold text-base text-[var(--text-primary)]">Custom Print Template Studio</h3>
+                  <p className="text-[var(--text-secondary)] text-[10px]">Select layout configurations and click print to trigger a direct print stream.</p>
+                </div>
+                <button
+                  onClick={() => setCustomizingInvoice(null)}
+                  className="text-[var(--text-muted)] hover:text-white cursor-pointer bg-transparent border-0"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="flex-1 flex overflow-hidden min-h-0">
+                {/* Left Side: Controls */}
+                <div className="w-80 border-r border-[var(--border-color)] p-5 overflow-y-auto space-y-5 shrink-0 bg-slate-950/20">
+                  <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block border-b border-[var(--border-color)] pb-2 mb-3">Template Options</span>
+
+                  {/* Load Custom Template Selection */}
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Select Print Template *</label>
+                    <select
+                      value={selectedTemplateId}
+                      onChange={(e) => {
+                        const tplId = e.target.value;
+                        setSelectedTemplateId(tplId);
+                        if (!tplId) return;
+                        const tpl = templates.find((t: any) => t.id === tplId);
+                        if (tpl) {
+                          applyTemplateSettings(tpl);
+                        }
+                      }}
+                      className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] py-1.5 px-3 rounded-lg text-xs text-white focus:outline-none cursor-pointer"
+                    >
+                      <option value="">-- Choose custom template --</option>
+                      {templates.map((t: any) => (
+                        <option key={t.id} value={t.id}>{t.name} {t.isDefault ? '(Default)' : ''}</option>
+                      ))}
+                    </select>
+                    {templates.length === 0 && (
+                      <p className="text-[10px] text-amber-400 mt-2 italic">
+                        No database templates found. Configure layouts in the PDF Print Studio.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right Side: Visual Preview */}
+                <div className="flex-1 bg-slate-950 p-8 overflow-y-auto flex justify-center">
+                  {/* Paper sheet */}
+                  <div className="w-[210mm] min-h-[297mm] bg-white text-black p-10 shadow-2xl text-[11px] relative flex flex-col justify-between font-sans leading-relaxed select-text">
+                    <div className="space-y-6">
+                      {/* Document Header */}
+                      <div className="flex justify-between items-start border-b-2 pb-5" style={{ borderColor: currentThemeHex }}>
+                        <div>
+                          {pdfCustomizer.showLogo && companyProfile?.logoUrl && (
+                            <img src={companyProfile.logoUrl} alt="Logo" className="max-h-12 object-contain mb-3" />
+                          )}
+                          <div className="text-xl font-extrabold uppercase" style={{ color: currentThemeHex }}>{customTitle}</div>
+                          <div className="font-mono text-[10px] text-slate-650 mt-1">Estimate No: {inv.invoiceNo}</div>
+                        </div>
+
+                        {pdfCustomizer.showCompanyDetails && companyProfile && (
+                          <div className="text-right text-[10px] text-slate-700 leading-normal max-w-xs">
+                            <strong className="text-slate-900 text-[11px]">{companyProfile.name}</strong><br/>
+                            {companyProfile.addressLine1 && `${companyProfile.addressLine1}, `}
+                            {companyProfile.addressLine2 && `${companyProfile.addressLine2}, `}<br/>
+                            {companyProfile.city && `${companyProfile.city}, `}
+                            {companyProfile.state && `${companyProfile.state} - `}
+                            {companyProfile.pincode && companyProfile.pincode}<br/>
+                            {companyProfile.gstNumber && <strong>GSTIN: {companyProfile.gstNumber}</strong>}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Meta Columns */}
+                      <div className="grid grid-cols-2 gap-6 text-[10px] text-slate-700">
+                        <div className="space-y-1">
+                          <div className="text-[9px] uppercase font-bold text-slate-450">Proforma Metadata</div>
+                          <div>Document Date: <span className="font-semibold text-slate-900">{new Date(inv.date).toLocaleDateString()}</span></div>
+                          <div>Expiry Date: <span className="font-semibold text-slate-900">{inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : 'Awaiting dispatch'}</span></div>
+                          <div>Status: <span className="font-semibold text-slate-900">{inv.status}</span></div>
+                        </div>
+                        <div className="space-y-1 text-right">
+                          <div className="text-[9px] uppercase font-bold text-slate-450">Customer Classification</div>
+                          <div className="font-semibold text-slate-900">{cust?.name || 'Client Name'}</div>
+                          <div>Type: {cust?.customerType || 'INDIVIDUAL'}</div>
+                          <div>Category: {cust?.customerGroup || 'Standard Group'}</div>
+                          {cust?.contactNo && <div>Tel: {cust.contactNo}</div>}
+                        </div>
+                      </div>
+
+                      {/* Addresses Row */}
+                      <div className="grid grid-cols-2 gap-6 border-t border-slate-200 pt-4">
+                        {/* Bill To */}
+                        {pdfCustomizer.showBillingAddress && (
+                          <div className="text-[10px] text-slate-700 leading-relaxed">
+                            <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Billing Destination (Bill To)</span>
+                            <strong className="text-slate-900">{cust?.name}</strong><br/>
+                            {inv.billingAddress || cust?.billingAddress || 'Billing address pending'}
+                          </div>
+                        )}
+                        
+                        {/* Ship To */}
+                        {pdfCustomizer.showShippingAddress && (
+                          <div className="text-[10px] text-slate-700 leading-relaxed text-right">
+                            <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Shipping Destination (Ship To)</span>
+                            <strong className="text-slate-900">{inv.shippingName || cust?.name}</strong><br/>
+                            {inv.shippingAddress || cust?.shippingAddress || inv.billingAddress || cust?.billingAddress || 'Shipping address pending'}<br/>
+                            {inv.shippingState && <span>State: {inv.shippingState}</span>}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Items Table */}
+                      <div className="pt-2">
+                        <table className="w-full text-left text-[10px] border-collapse">
+                          <thead>
+                            <tr className="border-b-2 font-bold bg-slate-50" style={{ borderBottomColor: currentThemeHex }}>
+                              <th className="py-2.5 px-2 text-slate-800">Description</th>
+                              {pdfCustomizer.colProductCode && <th className="py-2.5 px-2">SKU / Code</th>}
+                              <th className="py-2.5 px-2 text-right">Qty</th>
+                              {pdfCustomizer.colUnitPrice && <th className="py-2.5 px-2 text-right">Price</th>}
+                              {pdfCustomizer.colDiscount && <th className="py-2.5 px-2 text-right">Discount</th>}
+                              <th className="py-2.5 px-2 text-right">Subtotal</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(inv.items || []).map((it: any) => {
+                              const prod = products.find(p => p.id === it.productId);
+                              const itemSub = it.quantity * it.price;
+                              const itemDisc = itemSub * ((it.discount || 0) / 100);
+                              return (
+                                <tr key={it.id} className="border-b border-slate-100">
+                                  <td className="py-2.5 px-2">
+                                    <strong className="text-slate-900">{prod?.name || 'Stock Item'}</strong>
+                                    {prod?.hsnSacCode && <span className="text-[9px] text-slate-550 block mt-0.5">HSN Code: {prod.hsnSacCode}</span>}
+                                  </td>
+                                  {pdfCustomizer.colProductCode && (
+                                    <td className="py-2.5 px-2 font-mono text-slate-650">{prod?.sku || 'N/A'}</td>
+                                  )}
+                                  <td className="py-2.5 px-2 text-right font-mono">{it.quantity} {prod?.uom || 'PCS'}</td>
+                                  {pdfCustomizer.colUnitPrice && (
+                                    <td className="py-2.5 px-2 text-right font-mono">₹{it.price.toFixed(2)}</td>
+                                  )}
+                                  {pdfCustomizer.colDiscount && (
+                                    <td className="py-2.5 px-2 text-right font-mono">{it.discount || 0}%</td>
+                                  )}
+                                  <td className="py-2.5 px-2 text-right font-mono font-semibold text-slate-900">₹{(itemSub - itemDisc).toFixed(2)}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Calculations Table */}
+                      <div className="flex justify-end pt-2">
+                        <table className="w-[50%] text-[10px] text-slate-700">
+                          <tbody>
+                            <tr className="border-b border-slate-100">
+                              <td className="py-1.5 text-left">Subtotal:</td>
+                              <td className="py-1.5 text-right font-mono text-slate-900">₹{inv.subtotal.toFixed(2)}</td>
+                            </tr>
+                            {inv.discount > 0 && (
+                              <tr className="border-b border-slate-100">
+                                <td className="py-1.5 text-left text-red-500">Discount ({inv.discount}%):</td>
+                                <td className="py-1.5 text-right font-mono text-red-555">-₹{discountVal.toFixed(2)}</td>
+                              </tr>
+                            )}
+
+                            {/* Tax split layout */}
+                            {pdfCustomizer.colTax && (
+                              <>
+                                {isInternational ? (
+                                  <tr className="border-b border-slate-100">
+                                    <td className="py-1.5 text-left italic">Zero-rated Export (0%):</td>
+                                    <td className="py-1.5 text-right font-mono text-slate-900">₹0.00</td>
+                                  </tr>
+                                ) : isSameState ? (
+                                  <>
+                                    <tr className="border-b border-slate-100">
+                                      <td className="py-1.5 text-left">CGST (9.0%):</td>
+                                      <td className="py-1.5 text-right font-mono text-slate-900">₹{(inv.tax / 2).toFixed(2)}</td>
+                                    </tr>
+                                    <tr className="border-b border-slate-100">
+                                      <td className="py-1.5 text-left">SGST (9.0%):</td>
+                                      <td className="py-1.5 text-right font-mono text-slate-900">₹{(inv.tax / 2).toFixed(2)}</td>
+                                    </tr>
+                                  </>
+                                ) : (
+                                  <tr className="border-b border-slate-100">
+                                    <td className="py-1.5 text-left">IGST (18.0%):</td>
+                                    <td className="py-1.5 text-right font-mono text-slate-900">₹{inv.tax.toFixed(2)}</td>
+                                  </tr>
+                                )}
+                              </>
+                            )}
+
+                            {!pdfCustomizer.colTax && (
+                              <tr className="border-b border-slate-100">
+                                <td className="py-1.5 text-left">Sales Tax / GST:</td>
+                                <td className="py-1.5 text-right font-mono text-slate-900">₹{inv.tax.toFixed(2)}</td>
+                              </tr>
+                            )}
+
+                            <tr className="border-t-2 font-extrabold text-[12px]" style={{ color: currentThemeHex, borderTopColor: currentThemeHex }}>
+                              <td className="py-2.5 text-left">Grand Total:</td>
+                              <td className="py-2.5 text-right font-mono">₹{inv.total.toFixed(2)}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Bank Accounts details */}
+                      {pdfCustomizer.showBankDetails && bankAccounts.length > 0 && (
+                        <div className="border border-slate-200 bg-slate-50 p-3.5 rounded-lg text-[9px] text-slate-700 leading-normal space-y-1.5 mt-8">
+                          <span className="font-extrabold text-slate-900 uppercase block tracking-wider">Payment Bank Destination</span>
+                          <div className="grid grid-cols-3 gap-4">
+                            <div><strong>Bank Name:</strong> {bankAccounts[0].bankName}</div>
+                            <div><strong>Account Number:</strong> {bankAccounts[0].accountNo}</div>
+                            <div><strong>IFSC Code:</strong> {bankAccounts[0].ifscCode}</div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Footer */}
+                    {pdfCustomizer.showTerms && (
+                      <div className="border-t border-slate-200 pt-4 mt-12 text-[9px] text-slate-550 text-center leading-normal">
+                        {customNotes}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer Buttons */}
+              <div className="p-4 border-t border-[var(--border-color)] shrink-0 flex justify-end gap-3 bg-slate-950/20">
+                <button
+                  onClick={() => setCustomizingInvoice(null)}
+                  className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-350 font-bold text-xs rounded-xl border-0 cursor-pointer transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setActivePrintInvoice(inv);
+                  }}
+                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl border-0 cursor-pointer transition-all shadow-lg shadow-emerald-600/10"
+                >
+                  Print PDF Directly
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ==========================================
+          HIDDEN PRINT CONTAINER FOR MEDIA PRINT STREAMS
+          ========================================== */}
+      {activePrintInvoice && (() => {
+        const inv = activePrintInvoice;
+        const cust = customers.find(c => c.id === inv.customerId);
+        const discountVal = inv.subtotal * ((inv.discount || 0) / 100);
+        const isInternational = cust?.clientClassification === 'INTERNATIONAL';
+        const isSameState = companyProfile && cust?.state === companyProfile.state;
+        const logoSrc = pdfCustomizer.logoBase64 || companyProfile?.logoUrl;
+
+        return (
+          <div
+            id="print-section"
+            className="hidden print:block fixed inset-0 z-[99999] bg-white text-black p-10"
+            style={{
+              fontSize: `${pdfCustomizer.bodyFontSize}px`
+            }}
+          >
+            <style dangerouslySetInnerHTML={{__html: `
+              @media print {
+                body * {
+                  visibility: hidden !important;
+                }
+                #print-section, #print-section * {
+                  visibility: visible !important;
+                }
+                #print-section {
+                  position: absolute !important;
+                  left: 0 !important;
+                  top: 0 !important;
+                  width: 100% !important;
+                  background: white !important;
+                  color: black !important;
+                  font-size: ${pdfCustomizer.bodyFontSize}px !important;
+                }
+              }
+            `}} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: `${pdfCustomizer.sectionSpacing}px` }}>
+              {/* Header */}
+              <div
+                className="border-b-2"
+                style={{
+                  borderColor: currentThemeHex,
+                  paddingBottom: `${pdfCustomizer.headerPadding}px`,
+                  marginBottom: `${pdfCustomizer.sectionSpacing}px`,
+                  display: 'flex',
+                  flexDirection: pdfCustomizer.headerAlign === 'center' ? 'column' : 'row',
+                  alignItems: pdfCustomizer.headerAlign === 'center' ? 'center' : 'flex-start',
+                  justifyContent: 'space-between',
+                  textAlign: pdfCustomizer.headerAlign
+                }}
+              >
+                <div style={{ textAlign: pdfCustomizer.headerAlign }}>
+                  {pdfCustomizer.showLogo && logoSrc && (
+                    <img src={logoSrc} alt="Logo" style={{ height: `${pdfCustomizer.logoSize}px`, objectFit: 'contain' }} className="mb-3" />
+                  )}
+                  <div
+                    className="font-extrabold uppercase title-text"
+                    style={{
+                      color: currentThemeHex,
+                      fontSize: `${pdfCustomizer.titleFontSize}px`,
+                      textAlign: pdfCustomizer.titleAlign
+                    }}
+                  >
+                    {customTitle}
+                  </div>
+                  <div className="font-mono text-[10px] text-slate-650 mt-1">Estimate No: {inv.invoiceNo}</div>
+                </div>
+
+                {pdfCustomizer.showCompanyDetails && companyProfile && (
+                  <div
+                    style={{
+                      textAlign: pdfCustomizer.headerAlign === 'center' ? 'center' : pdfCustomizer.headerAlign === 'right' ? 'left' : 'right',
+                      fontSize: `${pdfCustomizer.headerFontSize}px`
+                    }}
+                    className="text-slate-700 leading-normal max-w-xs"
+                  >
+                    <strong className="text-slate-900 text-[11px]">{companyProfile.name}</strong><br/>
+                    {companyProfile.addressLine1 && `${companyProfile.addressLine1}, `}
+                    {companyProfile.addressLine2 && `${companyProfile.addressLine2}, `}<br/>
+                    {companyProfile.city && `${companyProfile.city}, `}
+                    {companyProfile.state && `${companyProfile.state} - `}
+                    {companyProfile.pincode && companyProfile.pincode}<br/>
+                    {companyProfile.gstNumber && <strong>GSTIN: {companyProfile.gstNumber}</strong>}
+                  </div>
+                )}
+              </div>
+
+              {/* Meta */}
+              <div className="grid grid-cols-2 gap-6 text-[10px] text-slate-700">
+                <div className="space-y-1">
+                  <div className="text-[9px] uppercase font-bold text-slate-455">Proforma Metadata</div>
+                  <div>Document Date: <span className="font-semibold text-slate-900">{new Date(inv.date).toLocaleDateString()}</span></div>
+                  <div>Expiry Date: <span className="font-semibold text-slate-900">{inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : 'Awaiting dispatch'}</span></div>
+                  <div>Status: <span className="font-semibold text-slate-900">{inv.status}</span></div>
+                </div>
+                <div className="space-y-1 text-right">
+                  <div className="text-[9px] uppercase font-bold text-slate-455">Customer Classification</div>
+                  <div className="font-semibold text-slate-900">{cust?.name || 'Client Name'}</div>
+                  <div>Type: {cust?.customerType || 'INDIVIDUAL'}</div>
+                  <div>Category: {cust?.customerGroup || 'Standard Group'}</div>
+                  {cust?.contactNo && <div>Tel: {cust.contactNo}</div>}
+                </div>
+              </div>
+
+              {/* Addresses Row */}
+              <div className="grid grid-cols-2 gap-6 border-t border-slate-200 pt-4" style={{ textAlign: pdfCustomizer.addressAlign }}>
+                {pdfCustomizer.showBillingAddress && (
+                  <div className="text-slate-700 leading-relaxed" style={{ textAlign: pdfCustomizer.addressAlign }}>
+                    <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Billing Destination (Bill To)</span>
+                    <strong className="text-slate-900">{cust?.name}</strong><br/>
+                    {inv.billingAddress || cust?.billingAddress || 'Billing address pending'}
+                  </div>
+                )}
+                
+                {pdfCustomizer.showShippingAddress && (
+                  <div className="text-slate-700 leading-relaxed text-right" style={{ textAlign: pdfCustomizer.addressAlign === 'left' ? 'left' : pdfCustomizer.addressAlign === 'center' ? 'center' : 'right' }}>
+                    <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Shipping Destination (Ship To)</span>
+                    <strong className="text-slate-900">{inv.shippingName || cust?.name}</strong><br/>
+                    {inv.shippingAddress || cust?.shippingAddress || inv.billingAddress || cust?.billingAddress || 'Shipping address pending'}<br/>
+                    {inv.shippingState && <span>State: {inv.shippingState}</span>}
+                  </div>
+                )}
+              </div>
+
+              {/* Items Table */}
+              <div className="pt-2">
+                <table className="w-full text-left border-collapse" style={{ fontSize: `${pdfCustomizer.bodyFontSize}px` }}>
+                  <thead>
+                    <tr className="border-b-2 font-bold bg-slate-50" style={{ borderBottomColor: currentThemeHex }}>
+                      <th className="py-2.5 px-2 text-slate-800">Description</th>
+                      {pdfCustomizer.colProductCode && <th className="py-2.5 px-2">SKU / Code</th>}
+                      <th className="py-2.5 px-2 text-right">Qty</th>
+                      {pdfCustomizer.colUnitPrice && <th className="py-2.5 px-2 text-right">Price</th>}
+                      {pdfCustomizer.colDiscount && <th className="py-2.5 px-2 text-right">Discount</th>}
+                      <th className="py-2.5 px-2 text-right">Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(inv.items || []).map((it: any) => {
+                      const prod = products.find(p => p.id === it.productId);
+                      const itemSub = it.quantity * it.price;
+                      const itemDisc = itemSub * ((it.discount || 0) / 100);
+                      return (
+                        <tr key={it.id || it.productId} className="border-b border-slate-100">
+                          <td className="py-2.5 px-2 font-medium text-slate-900">
+                            {prod?.name || 'Unknown Product'}
+                            {prod?.description && <span className="block text-[8px] text-slate-500 font-normal mt-0.5">{prod.description}</span>}
+                          </td>
+                          {pdfCustomizer.colProductCode && (
+                            <td className="py-2.5 px-2 font-mono text-slate-650">{prod?.sku || 'N/A'}</td>
+                          )}
+                          <td className="py-2.5 px-2 text-right font-mono">{it.quantity} {prod?.uom || 'PCS'}</td>
+                          {pdfCustomizer.colUnitPrice && (
+                            <td className="py-2.5 px-2 text-right font-mono">₹{it.price.toFixed(2)}</td>
+                          )}
+                          {pdfCustomizer.colDiscount && (
+                            <td className="py-2.5 px-2 text-right font-mono">{it.discount || 0}%</td>
+                          )}
+                          <td className="py-2.5 px-2 text-right font-mono font-semibold text-slate-900">₹{(itemSub - itemDisc).toFixed(2)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Calculations Table */}
+              <div className={`flex ${pdfCustomizer.totalsAlign === 'left' ? 'justify-start' : pdfCustomizer.totalsAlign === 'center' ? 'justify-center' : 'justify-end'} pt-2`}>
+                <table className="w-[50%] text-slate-700" style={{ fontSize: `${pdfCustomizer.bodyFontSize}px` }}>
+                  <tbody>
+                    <tr className="border-b border-slate-100">
+                      <td className="py-1.5 text-left">Subtotal:</td>
+                      <td className="py-1.5 text-right font-mono text-slate-900">₹{inv.subtotal.toFixed(2)}</td>
+                    </tr>
+                    {inv.discount > 0 && (
+                      <tr className="border-b border-slate-100">
+                        <td className="py-1.5 text-left text-red-500">Discount ({inv.discount}%):</td>
+                        <td className="py-1.5 text-right font-mono text-red-500">-₹{discountVal.toFixed(2)}</td>
+                      </tr>
+                    )}
+
+                    {pdfCustomizer.colTax && (
+                      <>
+                        {isInternational ? (
+                          <tr className="border-b border-slate-100">
+                            <td className="py-1.5 text-left italic">Zero-rated Export (0%):</td>
+                            <td className="py-1.5 text-right font-mono text-slate-900">₹0.00</td>
+                          </tr>
+                        ) : isSameState ? (
+                          <>
+                            <tr className="border-b border-slate-100">
+                              <td className="py-1.5 text-left">CGST (9.0%):</td>
+                              <td className="py-1.5 text-right font-mono text-slate-900">₹{(inv.tax / 2).toFixed(2)}</td>
+                            </tr>
+                            <tr className="border-b border-slate-100">
+                              <td className="py-1.5 text-left">SGST (9.0%):</td>
+                              <td className="py-1.5 text-right font-mono text-slate-900">₹{(inv.tax / 2).toFixed(2)}</td>
+                            </tr>
+                          </>
+                        ) : (
+                          <tr className="border-b border-slate-100">
+                            <td className="py-1.5 text-left">IGST (18.0%):</td>
+                            <td className="py-1.5 text-right font-mono text-slate-900">₹{inv.tax.toFixed(2)}</td>
+                          </tr>
+                        )}
+                      </>
+                    )}
+
+                    {!pdfCustomizer.colTax && (
+                      <tr className="border-b border-slate-100">
+                        <td className="py-1.5 text-left">Sales Tax / GST:</td>
+                        <td className="py-1.5 text-right font-mono text-slate-900">₹{inv.tax.toFixed(2)}</td>
+                      </tr>
+                    )}
+
+                    <tr className="border-t-2 font-extrabold text-[12px]" style={{ color: currentThemeHex, borderTopColor: currentThemeHex }}>
+                      <td className="py-2.5 text-left">Grand Total:</td>
+                      <td className="py-2.5 text-right font-mono">₹{inv.total.toFixed(2)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Bank Accounts details */}
+              {pdfCustomizer.showBankDetails && bankAccounts.length > 0 && (
+                <div className="border border-slate-200 bg-slate-50 p-3.5 rounded-lg text-slate-700 leading-normal space-y-1.5 mt-8" style={{ fontSize: `${pdfCustomizer.bodyFontSize - 1}px` }}>
+                  <span className="font-extrabold text-slate-900 uppercase block tracking-wider">Payment Bank Destination</span>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div><strong>Bank Name:</strong> {bankAccounts[0].bankName}</div>
+                    <div><strong>Account Number:</strong> {bankAccounts[0].accountNo}</div>
+                    <div><strong>IFSC Code:</strong> {bankAccounts[0].ifscCode}</div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {pdfCustomizer.showTerms && (
+              <div
+                className="border-t border-slate-200 pt-4 mt-12 text-slate-550 text-center leading-normal"
+                style={{
+                  textAlign: pdfCustomizer.termsAlign,
+                  fontSize: `${pdfCustomizer.bodyFontSize - 1}px`
+                }}
+              >
+                {customNotes}
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
+

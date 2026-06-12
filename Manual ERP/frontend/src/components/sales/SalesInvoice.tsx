@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Receipt, Search, Plus, Edit, Trash2, X, AlertCircle, Calendar, CheckCircle2, Mail, Download, Layers } from 'lucide-react';
+import { apiClient } from '../../utils/apiService';
 
 const INDIAN_STATES = [
   "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
@@ -52,8 +53,11 @@ export default function SalesInvoice({
   const [status, setStatus] = useState('UNPAID');
 
   // Partial Billing state
-  const [billingMode, setBillingMode] = useState<'FULL' | 'PARTIAL'>('FULL');
+  const [billingMode, setBillingMode] = useState<'FULL' | 'PARTIAL' | 'CUSTOM'>('FULL');
   const [billingFactor, setBillingFactor] = useState('50.00'); // percentage of volume to bill
+
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
 
   const [items, setItems] = useState<InvoiceItemInput[]>([]);
   const [localErr, setLocalErr] = useState<string | null>(null);
@@ -89,6 +93,18 @@ export default function SalesInvoice({
     colUnitPrice: true,
     colDiscount: true,
     colTax: true,
+    logoBase64: null as string | null,
+    headerAlign: 'left' as 'left' | 'center' | 'right',
+    titleAlign: 'left' as 'left' | 'center' | 'right',
+    addressAlign: 'left' as 'left' | 'center' | 'right',
+    totalsAlign: 'right' as 'left' | 'center' | 'right',
+    termsAlign: 'center' as 'left' | 'center' | 'right',
+    headerFontSize: 14,
+    titleFontSize: 16,
+    bodyFontSize: 10,
+    headerPadding: 16,
+    sectionSpacing: 24,
+    logoSize: 48,
   });
 
   const [themeColor, setThemeColor] = useState('indigo');
@@ -139,11 +155,62 @@ export default function SalesInvoice({
         console.error('Failed to load Sales Orders:', err);
       }
     };
+    const fetchTemplatesData = async () => {
+      try {
+        const data = await apiClient.get<{ templates: any[] }>('/api/sales/templates?docType=INVOICE');
+        setTemplates(data.templates || []);
+      } catch (err) {
+        console.error('Failed to load templates:', err);
+      }
+    };
 
     fetchProfileData();
     fetchBankData();
     fetchOrdersData();
+    fetchTemplatesData();
   }, [showModal, customizingInvoice]);
+
+  const applyTemplateSettings = (tpl: any) => {
+    setCustomTitle(tpl.title || 'Tax Invoice');
+    setCustomNotes(tpl.terms || '');
+    setThemeColor(tpl.themeColor || 'indigo');
+    setPdfCustomizer({
+      showLogo: tpl.showLogo ?? true,
+      showCompanyDetails: tpl.showCompanyDetails ?? true,
+      showBillingAddress: tpl.showBillingAddress ?? true,
+      showShippingAddress: tpl.showShippingAddress ?? true,
+      showBankDetails: tpl.showBankDetails ?? true,
+      showTerms: tpl.showTerms ?? true,
+      colProductCode: tpl.colProductCode ?? true,
+      colUnitPrice: tpl.colUnitPrice ?? true,
+      colDiscount: tpl.colDiscount ?? true,
+      colTax: tpl.colTax ?? true,
+      logoBase64: tpl.logoBase64 || null,
+      headerAlign: tpl.headerAlign || 'left',
+      titleAlign: tpl.titleAlign || 'left',
+      addressAlign: tpl.addressAlign || 'left',
+      totalsAlign: tpl.totalsAlign || 'right',
+      termsAlign: tpl.termsAlign || 'center',
+      headerFontSize: tpl.headerFontSize || 14,
+      titleFontSize: tpl.titleFontSize || 16,
+      bodyFontSize: tpl.bodyFontSize || 10,
+      headerPadding: tpl.headerPadding || 16,
+      sectionSpacing: tpl.sectionSpacing || 24,
+      logoSize: tpl.logoSize || 48,
+    });
+  };
+
+  React.useEffect(() => {
+    if (customizingInvoice && templates.length > 0) {
+      const defaultTpl = templates.find(t => t.isDefault);
+      if (defaultTpl) {
+        setSelectedTemplateId(defaultTpl.id);
+        applyTemplateSettings(defaultTpl);
+      } else {
+        setSelectedTemplateId('');
+      }
+    }
+  }, [customizingInvoice, templates]);
 
   // Sync customer state and default shipping addresses
   React.useEffect(() => {
@@ -170,17 +237,12 @@ export default function SalesInvoice({
     }
   }, [customerId, companyProfile, diffShipping]);
 
-  // Toggle order in list & merge its items
-  const handleToggleSalesOrder = (soId: string) => {
-    let updatedIds = [...selectedOrderIds];
-    if (updatedIds.includes(soId)) {
-      updatedIds = updatedIds.filter(id => id !== soId);
-    } else {
-      updatedIds.push(soId);
-    }
-    setSelectedOrderIds(updatedIds);
+  React.useEffect(() => {
+    setSelectedOrderIds([]);
+  }, [customerId]);
 
-    const selectedOrders = salesOrders.filter(so => updatedIds.includes(so.id));
+  const applySalesOrderBilling = (orderIds: string[], style: 'FULL' | 'PARTIAL' | 'CUSTOM', factor: number) => {
+    const selectedOrders = salesOrders.filter(so => orderIds.includes(so.id));
     const mergedItems: Record<string, { productId: string; quantity: number; price: number; discount: number }> = {};
 
     for (const order of selectedOrders) {
@@ -188,12 +250,17 @@ export default function SalesInvoice({
         const remaining = item.remainingQuantity !== undefined ? item.remainingQuantity : item.quantity;
         if (remaining <= 0) continue;
 
+        let qtyToBill = remaining;
+        if (style === 'PARTIAL') {
+          qtyToBill = remaining * (factor / 100);
+        }
+
         if (mergedItems[item.productId]) {
-          mergedItems[item.productId].quantity += remaining;
+          mergedItems[item.productId].quantity += qtyToBill;
         } else {
           mergedItems[item.productId] = {
             productId: item.productId,
-            quantity: remaining,
+            quantity: qtyToBill,
             price: item.price,
             discount: item.discount || 0
           };
@@ -203,12 +270,43 @@ export default function SalesInvoice({
 
     const newItemsList = Object.values(mergedItems).map(item => ({
       productId: item.productId,
-      quantity: String(item.quantity),
+      quantity: String(Number(item.quantity.toFixed(4))),
       price: String(item.price),
       discount: String(item.discount)
     }));
 
     setItems(newItemsList.length > 0 ? newItemsList : [{ productId: products[0]?.id || '', quantity: '1', price: String(products[0]?.pricing || 0), discount: '0.00' }]);
+  };
+
+  const prevBillingModeRef = React.useRef(billingMode);
+  const prevBillingFactorRef = React.useRef(billingFactor);
+  const prevSelectedOrderIdsRef = React.useRef(selectedOrderIds);
+
+  React.useEffect(() => {
+    const modeChanged = prevBillingModeRef.current !== billingMode;
+    const factorChanged = prevBillingFactorRef.current !== billingFactor;
+    const ordersChanged = JSON.stringify(prevSelectedOrderIdsRef.current) !== JSON.stringify(selectedOrderIds);
+
+    if (ordersChanged || (modeChanged && billingMode !== 'CUSTOM') || (factorChanged && billingMode === 'PARTIAL')) {
+      if (selectedOrderIds.length > 0) {
+        applySalesOrderBilling(selectedOrderIds, billingMode, parseFloat(billingFactor) || 100);
+      }
+    }
+
+    prevBillingModeRef.current = billingMode;
+    prevBillingFactorRef.current = billingFactor;
+    prevSelectedOrderIdsRef.current = selectedOrderIds;
+  }, [billingMode, billingFactor, selectedOrderIds]);
+
+  // Toggle order in list
+  const handleToggleSalesOrder = (soId: string) => {
+    let updatedIds = [...selectedOrderIds];
+    if (updatedIds.includes(soId)) {
+      updatedIds = updatedIds.filter(id => id !== soId);
+    } else {
+      updatedIds.push(soId);
+    }
+    setSelectedOrderIds(updatedIds);
   };
 
   const openAddModal = () => {
@@ -246,7 +344,7 @@ export default function SalesInvoice({
     const estTaxPct = ((taxVal / sub) * 100).toFixed(1);
     setTax(estTaxPct);
     setStatus(inv.status || 'UNPAID');
-    setBillingMode('FULL');
+    setBillingMode('CUSTOM');
     setBillingFactor('100.00');
 
     // Load new states
@@ -309,7 +407,7 @@ export default function SalesInvoice({
   };
 
   // Calculations
-  const stdSubtotal = items.reduce((sum, item) => {
+  const subtotal = items.reduce((sum, item) => {
     const qty = parseFloat(item.quantity) || 0;
     const price = parseFloat(item.price) || 0;
     const itemDiscPercent = parseFloat(item.discount) || 0;
@@ -318,15 +416,13 @@ export default function SalesInvoice({
     return sum + (itemSub - itemDiscVal);
   }, 0);
 
-  const billingPct = billingMode === 'PARTIAL' ? (parseFloat(billingFactor) || 50) : 100;
-  const subtotal = stdSubtotal * (billingPct / 100);
-
   const discPct = parseFloat(discount) || 0;
   const discVal = subtotal * (discPct / 100); // overall discount absolute computed value
   
   const taxPct = parseFloat(tax) || 0;
   const taxVal = Math.max(0, subtotal - discVal) * (taxPct / 100);
   const totalVal = Math.max(0, subtotal - discVal) + taxVal;
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -377,7 +473,7 @@ export default function SalesInvoice({
       salesOrderIds: selectedOrderIds.length > 1 ? JSON.stringify(selectedOrderIds) : null,
       items: items.map(item => ({
         productId: item.productId,
-        quantity: (parseFloat(item.quantity) || 1.0) * (billingPct / 100), // Scale quantity by partial billing factor
+        quantity: parseFloat(item.quantity) || 1.0, // Quantity is already scaled or custom in the grid
         price: parseFloat(item.price) || 0.0, // Locked to Product Master
         discount: parseFloat(item.discount) || 0.0 // Discount %
       }))
@@ -754,16 +850,17 @@ export default function SalesInvoice({
                 />
               </div>
 
-              {/* Billing Mode (Full vs Partial) */}
+              {/* Billing Mode (Full vs Partial vs Custom) */}
               <div>
                 <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Billing Arrangement *</label>
                 <select
                   value={billingMode}
-                  onChange={e => setBillingMode(e.target.value as 'FULL' | 'PARTIAL')}
+                  onChange={e => setBillingMode(e.target.value as 'FULL' | 'PARTIAL' | 'CUSTOM')}
                   className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-emerald-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none cursor-pointer"
                 >
                   <option value="FULL">FULL TAX BILLING (100% Volume)</option>
                   <option value="PARTIAL">PARTIAL TAX BILLING (Installments / Pro-Rata)</option>
+                  <option value="CUSTOM">CUSTOM BILLING (Manual/Freeform)</option>
                 </select>
               </div>
 
@@ -772,14 +869,14 @@ export default function SalesInvoice({
                 <div>
                   <label className="text-[9px] font-bold text-emerald-400 tracking-wider uppercase block mb-1">Billed Factor Percentage (%) *</label>
                   <input
-                    type="number"
-                    step="0.1"
-                    min="1"
-                    max="100"
-                    required
-                    value={billingFactor}
-                    onChange={e => setBillingFactor(e.target.value)}
-                    className="w-full bg-[var(--bg-primary)] border border-emerald-500/30 focus:border-emerald-500 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none font-mono"
+                     type="number"
+                     step="0.1"
+                     min="1"
+                     max="100"
+                     required
+                     value={billingFactor}
+                     onChange={e => setBillingFactor(e.target.value)}
+                     className="w-full bg-[var(--bg-primary)] border border-emerald-500/30 focus:border-emerald-500 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none font-mono"
                   />
                 </div>
               )}
@@ -801,10 +898,7 @@ export default function SalesInvoice({
 
               {/* Total Card */}
               <div className="bg-[var(--bg-tertiary)]/30 border border-[var(--border-color)]/60 rounded-xl p-3 flex flex-col justify-center text-xs font-mono text-[var(--text-secondary)] gap-1">
-                <span className="flex justify-between"><span>Std Subtotal (100%):</span> <span>{currencySymbol}{stdSubtotal.toFixed(2)}</span></span>
-                {billingMode === 'PARTIAL' && (
-                  <span className="flex justify-between text-amber-400"><span>Billed Subtotal ({billingPct}%):</span> <span>{currencySymbol}{subtotal.toFixed(2)}</span></span>
-                )}
+                <span className="flex justify-between"><span>Subtotal:</span> <span>{currencySymbol}{subtotal.toFixed(2)}</span></span>
                 <span className="flex justify-between text-rose-400"><span>Discount ({discPct}%):</span> <span>-{currencySymbol}{discVal.toFixed(2)}</span></span>
                 {(() => {
                   const cust = customers.find(c => c.id === customerId);
@@ -1004,230 +1098,93 @@ export default function SalesInvoice({
               </div>
 
               {/* Body */}
-              <div className="flex-1 flex overflow-hidden min-h-0">
-                {/* Left Side: Controls */}
+              <div className="flex-1 flex overflow-hidden min-h-0">                {/* Left Side: Controls */}
                 <div className="w-80 border-r border-[var(--border-color)] p-5 overflow-y-auto space-y-5 shrink-0 bg-slate-950/20">
                   <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block border-b border-[var(--border-color)] pb-2 mb-3">Template Options</span>
 
                   {/* Load Custom Template Selection */}
                   <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-slate-400 uppercase">Load Custom Template Preset</label>
+                    <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Select Print Template *</label>
                     <select
+                      value={selectedTemplateId}
                       onChange={(e) => {
                         const tplId = e.target.value;
+                        setSelectedTemplateId(tplId);
                         if (!tplId) return;
-                        const saved = localStorage.getItem('erp_pdf_templates');
-                        if (saved) {
-                          try {
-                            const templates = JSON.parse(saved);
-                            const tpl = templates.find((t: any) => t.id === tplId);
-                            if (tpl) {
-                              setCustomTitle(tpl.title || 'Tax Invoice');
-                              setCustomNotes(tpl.terms || '');
-                              setThemeColor(tpl.themeColor || 'indigo');
-                              setPdfCustomizer({
-                                showLogo: tpl.showLogo ?? true,
-                                showCompanyDetails: tpl.showCompanyDetails ?? true,
-                                showBillingAddress: tpl.showBillingAddress ?? true,
-                                showShippingAddress: tpl.showShippingAddress ?? true,
-                                showBankDetails: tpl.showBankDetails ?? true,
-                                showTerms: tpl.showTerms ?? true,
-                                colProductCode: tpl.colProductCode ?? true,
-                                colUnitPrice: tpl.colUnitPrice ?? true,
-                                colDiscount: tpl.colDiscount ?? true,
-                                colTax: tpl.colTax ?? true,
-                              });
-                            }
-                          } catch (err) {
-                            console.error(err);
-                          }
+                        const tpl = templates.find((t: any) => t.id === tplId);
+                        if (tpl) {
+                          applyTemplateSettings(tpl);
                         }
                       }}
                       className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] py-1.5 px-3 rounded-lg text-xs text-white focus:outline-none cursor-pointer"
                     >
                       <option value="">-- Choose custom template --</option>
-                      {(() => {
-                        const saved = localStorage.getItem('erp_pdf_templates');
-                        if (!saved) return null;
-                        try {
-                          const templates = JSON.parse(saved);
-                          return templates
-                            .filter((t: any) => t.type === 'INVOICE')
-                            .map((t: any) => (
-                              <option key={t.id} value={t.id}>{t.name}</option>
-                            ));
-                        } catch (err) {
-                          return null;
-                        }
-                      })()}
-                    </select>
-                  </div>
-                  
-                  {/* Title Customizer */}
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-slate-400 uppercase">Document Title</label>
-                    <input
-                      type="text"
-                      value={customTitle}
-                      onChange={e => setCustomTitle(e.target.value)}
-                      className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] py-1.5 px-3 rounded-lg text-xs text-white focus:outline-none"
-                    />
-                  </div>
-
-                  {/* Theme Color Selector */}
-                  <div className="space-y-2">
-                    <label className="text-[9px] font-bold text-slate-400 uppercase block">Theme Accent Color</label>
-                    <div className="flex gap-2.5">
-                      {['indigo', 'emerald', 'rose', 'amber', 'slate'].map(color => (
-                        <button
-                          key={color}
-                          type="button"
-                          onClick={() => setThemeColor(color)}
-                          style={{ backgroundColor: getThemeHex(color) }}
-                          className={`w-5.5 h-5.5 rounded-full border border-black cursor-pointer transition-all active:scale-90 ${
-                            themeColor === color ? 'ring-2 ring-indigo-500 ring-offset-2 ring-offset-slate-950' : 'opacity-70 hover:opacity-100'
-                          }`}
-                          title={color}
-                        />
+                      {templates.map((t: any) => (
+                        <option key={t.id} value={t.id}>{t.name} {t.isDefault ? '(Default)' : ''}</option>
                       ))}
-                    </div>
+                    </select>
+                    {templates.length === 0 && (
+                      <p className="text-[10px] text-amber-400 mt-2 italic">
+                        No database templates found. Configure layouts in the PDF Print Studio.
+                      </p>
+                    )}
                   </div>
-
-                  {/* Toggles */}
-                  <div className="space-y-3">
-                    <span className="text-[8.5px] font-extrabold text-slate-505 uppercase block tracking-wider">Layout Blocks</span>
-                    <div className="flex flex-col gap-2">
-                      <label className="flex items-center gap-2 text-xs text-slate-350 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={pdfCustomizer.showLogo}
-                          onChange={e => setPdfCustomizer({ ...pdfCustomizer, showLogo: e.target.checked })}
-                          className="accent-indigo-500"
-                        />
-                        Include Corporate Logo
-                      </label>
-                      <label className="flex items-center gap-2 text-xs text-slate-350 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={pdfCustomizer.showCompanyDetails}
-                          onChange={e => setPdfCustomizer({ ...pdfCustomizer, showCompanyDetails: e.target.checked })}
-                          className="accent-indigo-500"
-                        />
-                        Show Company Info
-                      </label>
-                      <label className="flex items-center gap-2 text-xs text-slate-350 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={pdfCustomizer.showBillingAddress}
-                          onChange={e => setPdfCustomizer({ ...pdfCustomizer, showBillingAddress: e.target.checked })}
-                          className="accent-indigo-500"
-                        />
-                        Show Billing Address
-                      </label>
-                      <label className="flex items-center gap-2 text-xs text-slate-350 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={pdfCustomizer.showShippingAddress}
-                          onChange={e => setPdfCustomizer({ ...pdfCustomizer, showShippingAddress: e.target.checked })}
-                          className="accent-indigo-500"
-                        />
-                        Show Shipping Address
-                      </label>
-                      <label className="flex items-center gap-2 text-xs text-slate-350 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={pdfCustomizer.showBankDetails}
-                          onChange={e => setPdfCustomizer({ ...pdfCustomizer, showBankDetails: e.target.checked })}
-                          className="accent-indigo-500"
-                        />
-                        Include Bank Details
-                      </label>
-                      <label className="flex items-center gap-2 text-xs text-slate-350 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={pdfCustomizer.showTerms}
-                          onChange={e => setPdfCustomizer({ ...pdfCustomizer, showTerms: e.target.checked })}
-                          className="accent-indigo-500"
-                        />
-                        Include T&C Notes
-                      </label>
-                    </div>
-                  </div>
-
-                  {/* Columns */}
-                  <div className="space-y-3">
-                    <span className="text-[8.5px] font-extrabold text-slate-505 uppercase block tracking-wider">Item Table Columns</span>
-                    <div className="flex flex-col gap-2">
-                      <label className="flex items-center gap-2 text-xs text-slate-350 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={pdfCustomizer.colProductCode}
-                          onChange={e => setPdfCustomizer({ ...pdfCustomizer, colProductCode: e.target.checked })}
-                          className="accent-indigo-500"
-                        />
-                        Show Product Code/SKU
-                      </label>
-                      <label className="flex items-center gap-2 text-xs text-slate-350 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={pdfCustomizer.colUnitPrice}
-                          onChange={e => setPdfCustomizer({ ...pdfCustomizer, colUnitPrice: e.target.checked })}
-                          className="accent-indigo-500"
-                        />
-                        Show Unit Pricing
-                      </label>
-                      <label className="flex items-center gap-2 text-xs text-slate-350 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={pdfCustomizer.colDiscount}
-                          onChange={e => setPdfCustomizer({ ...pdfCustomizer, colDiscount: e.target.checked })}
-                          className="accent-indigo-500"
-                        />
-                        Show Item Discounts %
-                      </label>
-                      <label className="flex items-center gap-2 text-xs text-slate-350 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={pdfCustomizer.colTax}
-                          onChange={e => setPdfCustomizer({ ...pdfCustomizer, colTax: e.target.checked })}
-                          className="accent-indigo-500"
-                        />
-                        Show GST / Tax breakdown
-                      </label>
-                    </div>
-                  </div>
-
-                  {/* Terms text */}
-                  {pdfCustomizer.showTerms && (
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-slate-400 uppercase">Custom Terms / Notes</label>
-                      <textarea
-                        rows={3}
-                        value={customNotes}
-                        onChange={e => setCustomNotes(e.target.value)}
-                        className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] py-1.5 px-3 rounded-lg text-xs text-white focus:outline-none"
-                      />
-                    </div>
-                  )}
                 </div>
 
                 {/* Right Side: Visual Preview */}
                 <div className="flex-1 bg-slate-950 p-8 overflow-y-auto flex justify-center">
                   {/* Paper sheet */}
-                  <div className="w-[210mm] min-h-[297mm] bg-white text-black p-10 shadow-2xl text-[11px] relative flex flex-col justify-between font-sans leading-relaxed select-text">
-                    <div className="space-y-6">
+                  <div
+                    className="w-[210mm] min-h-[297mm] bg-white text-black p-10 shadow-2xl relative flex flex-col justify-between font-sans leading-relaxed select-text"
+                    style={{
+                      fontSize: `${pdfCustomizer.bodyFontSize}px`
+                    }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: `${pdfCustomizer.sectionSpacing}px` }}>
                       {/* Document Header */}
-                      <div className="flex justify-between items-start border-b-2 pb-5" style={{ borderColor: currentThemeHex }}>
-                        <div>
-                          {pdfCustomizer.showLogo && companyProfile?.logoUrl && (
-                            <img src={companyProfile.logoUrl} alt="Logo" className="max-h-12 object-contain mb-3" />
+                      <div
+                        className="border-b-2"
+                        style={{
+                          borderColor: currentThemeHex,
+                          paddingBottom: `${pdfCustomizer.headerPadding}px`,
+                          marginBottom: `${pdfCustomizer.sectionSpacing}px`,
+                          display: 'flex',
+                          flexDirection: pdfCustomizer.headerAlign === 'center' ? 'column' : 'row',
+                          alignItems: pdfCustomizer.headerAlign === 'center' ? 'center' : 'flex-start',
+                          justifyContent: 'space-between',
+                          textAlign: pdfCustomizer.headerAlign
+                        }}
+                      >
+                        <div style={{ textAlign: pdfCustomizer.headerAlign }}>
+                          {pdfCustomizer.showLogo && (pdfCustomizer.logoBase64 || companyProfile?.logoUrl) && (
+                            <img
+                              src={pdfCustomizer.logoBase64 || companyProfile?.logoUrl}
+                              alt="Logo"
+                              style={{ height: `${pdfCustomizer.logoSize}px`, objectFit: 'contain' }}
+                              className="mb-3"
+                            />
                           )}
-                          <div className="text-xl font-extrabold uppercase" style={{ color: currentThemeHex }}>{customTitle}</div>
+                          <div
+                            className="font-extrabold uppercase title-text"
+                            style={{
+                              color: currentThemeHex,
+                              fontSize: `${pdfCustomizer.titleFontSize}px`,
+                              textAlign: pdfCustomizer.titleAlign
+                            }}
+                          >
+                            {customTitle}
+                          </div>
                           <div className="font-mono text-[10px] text-slate-650 mt-1">Invoice No: {inv.invoiceNo}</div>
                         </div>
 
                         {pdfCustomizer.showCompanyDetails && companyProfile && (
-                          <div className="text-right text-[10px] text-slate-700 leading-normal max-w-xs">
+                          <div
+                            style={{
+                              textAlign: pdfCustomizer.headerAlign === 'center' ? 'center' : pdfCustomizer.headerAlign === 'right' ? 'left' : 'right',
+                              fontSize: `${pdfCustomizer.headerFontSize}px`
+                            }}
+                            className="text-slate-700 leading-normal max-w-xs"
+                          >
                             <strong className="text-slate-900 text-[11px]">{companyProfile.name}</strong><br/>
                             {companyProfile.addressLine1 && `${companyProfile.addressLine1}, `}
                             {companyProfile.addressLine2 && `${companyProfile.addressLine2}, `}<br/>
@@ -1257,10 +1214,10 @@ export default function SalesInvoice({
                       </div>
 
                       {/* Addresses Row */}
-                      <div className="grid grid-cols-2 gap-6 border-t border-slate-200 pt-4">
+                      <div className="grid grid-cols-2 gap-6 border-t border-slate-200 pt-4" style={{ textAlign: pdfCustomizer.addressAlign }}>
                         {/* Bill To */}
                         {pdfCustomizer.showBillingAddress && (
-                          <div className="text-[10px] text-slate-700 leading-relaxed">
+                          <div className="text-slate-700 leading-relaxed" style={{ textAlign: pdfCustomizer.addressAlign }}>
                             <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Billing Destination (Bill To)</span>
                             <strong className="text-slate-900">{cust?.name}</strong><br/>
                             {inv.billingAddress || cust?.billingAddress || 'Billing address pending'}
@@ -1269,7 +1226,7 @@ export default function SalesInvoice({
                         
                         {/* Ship To */}
                         {pdfCustomizer.showShippingAddress && (
-                          <div className="text-[10px] text-slate-700 leading-relaxed text-right">
+                          <div className="text-slate-700 leading-relaxed text-right" style={{ textAlign: pdfCustomizer.addressAlign === 'left' ? 'left' : pdfCustomizer.addressAlign === 'center' ? 'center' : 'right' }}>
                             <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Shipping Destination (Ship To)</span>
                             <strong className="text-slate-900">{inv.shippingName || cust?.name}</strong><br/>
                             {inv.shippingAddress || cust?.shippingAddress || inv.billingAddress || cust?.billingAddress || 'Shipping address pending'}<br/>
@@ -1280,7 +1237,7 @@ export default function SalesInvoice({
 
                       {/* Items Table */}
                       <div className="pt-2">
-                        <table className="w-full text-left text-[10px] border-collapse">
+                        <table className="w-full text-left border-collapse" style={{ fontSize: `${pdfCustomizer.bodyFontSize}px` }}>
                           <thead>
                             <tr className="border-b-2 font-bold bg-slate-50" style={{ borderBottomColor: currentThemeHex }}>
                               <th className="py-2.5 px-2 text-slate-800">Description</th>
@@ -1297,10 +1254,10 @@ export default function SalesInvoice({
                               const itemSub = it.quantity * it.price;
                               const itemDisc = itemSub * ((it.discount || 0) / 100);
                               return (
-                                <tr key={it.id} className="border-b border-slate-100">
-                                  <td className="py-2.5 px-2">
-                                    <strong className="text-slate-900">{prod?.name || 'Stock Item'}</strong>
-                                    {prod?.hsnSacCode && <span className="text-[9px] text-slate-550 block mt-0.5">HSN Code: {prod.hsnSacCode}</span>}
+                                <tr key={it.id || it.productId} className="border-b border-slate-100">
+                                  <td className="py-2.5 px-2 font-medium text-slate-900">
+                                    {prod?.name || 'Unknown Product'}
+                                    {prod?.description && <span className="block text-[8px] text-slate-500 font-normal mt-0.5">{prod.description}</span>}
                                   </td>
                                   {pdfCustomizer.colProductCode && (
                                     <td className="py-2.5 px-2 font-mono text-slate-650">{prod?.sku || 'N/A'}</td>
@@ -1321,8 +1278,8 @@ export default function SalesInvoice({
                       </div>
 
                       {/* Calculations Table */}
-                      <div className="flex justify-end pt-2">
-                        <table className="w-[50%] text-[10px] text-slate-700">
+                      <div className={`flex ${pdfCustomizer.totalsAlign === 'left' ? 'justify-start' : pdfCustomizer.totalsAlign === 'center' ? 'justify-center' : 'justify-end'} pt-2`}>
+                        <table className="w-[50%] text-slate-700" style={{ fontSize: `${pdfCustomizer.bodyFontSize}px` }}>
                           <tbody>
                             <tr className="border-b border-slate-100">
                               <td className="py-1.5 text-left">Subtotal:</td>
@@ -1380,7 +1337,7 @@ export default function SalesInvoice({
 
                       {/* Bank Accounts details */}
                       {pdfCustomizer.showBankDetails && bankAccounts.length > 0 && (
-                        <div className="border border-slate-200 bg-slate-50 p-3.5 rounded-lg text-[9px] text-slate-700 leading-normal space-y-1.5 mt-8">
+                        <div className="border border-slate-200 bg-slate-50 p-3.5 rounded-lg text-slate-700 leading-normal space-y-1.5 mt-8" style={{ fontSize: `${pdfCustomizer.bodyFontSize - 1}px` }}>
                           <span className="font-extrabold text-slate-900 uppercase block tracking-wider">Payment Bank Destination</span>
                           <div className="grid grid-cols-3 gap-4">
                             <div><strong>Bank Name:</strong> {bankAccounts[0].bankName}</div>
@@ -1393,7 +1350,13 @@ export default function SalesInvoice({
 
                     {/* Footer */}
                     {pdfCustomizer.showTerms && (
-                      <div className="border-t border-slate-200 pt-4 mt-12 text-[9px] text-slate-550 text-center leading-normal">
+                      <div
+                        className="border-t border-slate-200 pt-4 mt-12 text-slate-550 leading-normal"
+                        style={{
+                          textAlign: pdfCustomizer.termsAlign,
+                          fontSize: `${pdfCustomizer.bodyFontSize - 1}px`
+                        }}
+                      >
                         {customNotes}
                       </div>
                     )}
@@ -1432,9 +1395,16 @@ export default function SalesInvoice({
         const discountVal = inv.subtotal * ((inv.discount || 0) / 100);
         const isInternational = cust?.clientClassification === 'INTERNATIONAL';
         const isSameState = companyProfile && cust?.state === companyProfile.state;
+        const logoSrc = pdfCustomizer.logoBase64 || companyProfile?.logoUrl;
 
         return (
-          <div id="print-section" className="hidden print:block fixed inset-0 z-[99999] bg-white text-black p-10">
+          <div
+            id="print-section"
+            className="hidden print:block fixed inset-0 z-[99999] bg-white text-black p-10"
+            style={{
+              fontSize: `${pdfCustomizer.bodyFontSize}px`
+            }}
+          >
             <style dangerouslySetInnerHTML={{__html: `
               @media print {
                 body * {
@@ -1450,22 +1420,50 @@ export default function SalesInvoice({
                   width: 100% !important;
                   background: white !important;
                   color: black !important;
+                  font-size: ${pdfCustomizer.bodyFontSize}px !important;
                 }
               }
             `}} />
-            <div className="space-y-6">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: `${pdfCustomizer.sectionSpacing}px` }}>
               {/* Header */}
-              <div className="flex justify-between items-start border-b-2 pb-5" style={{ borderColor: currentThemeHex }}>
-                <div>
-                  {pdfCustomizer.showLogo && companyProfile?.logoUrl && (
-                    <img src={companyProfile.logoUrl} alt="Logo" className="max-h-12 object-contain mb-3" />
+              <div
+                className="border-b-2"
+                style={{
+                  borderColor: currentThemeHex,
+                  paddingBottom: `${pdfCustomizer.headerPadding}px`,
+                  marginBottom: `${pdfCustomizer.sectionSpacing}px`,
+                  display: 'flex',
+                  flexDirection: pdfCustomizer.headerAlign === 'center' ? 'column' : 'row',
+                  alignItems: pdfCustomizer.headerAlign === 'center' ? 'center' : 'flex-start',
+                  justifyContent: 'space-between',
+                  textAlign: pdfCustomizer.headerAlign
+                }}
+              >
+                <div style={{ textAlign: pdfCustomizer.headerAlign }}>
+                  {pdfCustomizer.showLogo && logoSrc && (
+                    <img src={logoSrc} alt="Logo" style={{ height: `${pdfCustomizer.logoSize}px`, objectFit: 'contain' }} className="mb-3" />
                   )}
-                  <div className="text-xl font-extrabold uppercase" style={{ color: currentThemeHex }}>{customTitle}</div>
+                  <div
+                    className="font-extrabold uppercase title-text"
+                    style={{
+                      color: currentThemeHex,
+                      fontSize: `${pdfCustomizer.titleFontSize}px`,
+                      textAlign: pdfCustomizer.titleAlign
+                    }}
+                  >
+                    {customTitle}
+                  </div>
                   <div className="font-mono text-[10px] text-slate-650 mt-1">Invoice No: {inv.invoiceNo}</div>
                 </div>
 
                 {pdfCustomizer.showCompanyDetails && companyProfile && (
-                  <div className="text-right text-[10px] text-slate-700 leading-normal max-w-xs">
+                  <div
+                    style={{
+                      textAlign: pdfCustomizer.headerAlign === 'center' ? 'center' : pdfCustomizer.headerAlign === 'right' ? 'left' : 'right',
+                      fontSize: `${pdfCustomizer.headerFontSize}px`
+                    }}
+                    className="text-slate-700 leading-normal max-w-xs"
+                  >
                     <strong className="text-slate-900 text-[11px]">{companyProfile.name}</strong><br/>
                     {companyProfile.addressLine1 && `${companyProfile.addressLine1}, `}
                     {companyProfile.addressLine2 && `${companyProfile.addressLine2}, `}<br/>
@@ -1495,9 +1493,9 @@ export default function SalesInvoice({
               </div>
 
               {/* Addresses Row */}
-              <div className="grid grid-cols-2 gap-6 border-t border-slate-200 pt-4">
+              <div className="grid grid-cols-2 gap-6 border-t border-slate-200 pt-4" style={{ textAlign: pdfCustomizer.addressAlign }}>
                 {pdfCustomizer.showBillingAddress && (
-                  <div className="text-[10px] text-slate-700 leading-relaxed">
+                  <div className="text-slate-700 leading-relaxed" style={{ textAlign: pdfCustomizer.addressAlign }}>
                     <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Billing Destination (Bill To)</span>
                     <strong className="text-slate-900">{cust?.name}</strong><br/>
                     {inv.billingAddress || cust?.billingAddress || 'Billing address pending'}
@@ -1505,7 +1503,7 @@ export default function SalesInvoice({
                 )}
                 
                 {pdfCustomizer.showShippingAddress && (
-                  <div className="text-[10px] text-slate-700 leading-relaxed text-right">
+                  <div className="text-slate-700 leading-relaxed text-right" style={{ textAlign: pdfCustomizer.addressAlign === 'left' ? 'left' : pdfCustomizer.addressAlign === 'center' ? 'center' : 'right' }}>
                     <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Shipping Destination (Ship To)</span>
                     <strong className="text-slate-900">{inv.shippingName || cust?.name}</strong><br/>
                     {inv.shippingAddress || cust?.shippingAddress || inv.billingAddress || cust?.billingAddress || 'Shipping address pending'}<br/>
@@ -1516,7 +1514,7 @@ export default function SalesInvoice({
 
               {/* Items Table */}
               <div className="pt-2">
-                <table className="w-full text-left text-[10px] border-collapse">
+                <table className="w-full text-left border-collapse" style={{ fontSize: `${pdfCustomizer.bodyFontSize}px` }}>
                   <thead>
                     <tr className="border-b-2 font-bold bg-slate-50" style={{ borderBottomColor: currentThemeHex }}>
                       <th className="py-2.5 px-2 text-slate-800">Description</th>
@@ -1533,10 +1531,10 @@ export default function SalesInvoice({
                       const itemSub = it.quantity * it.price;
                       const itemDisc = itemSub * ((it.discount || 0) / 100);
                       return (
-                        <tr key={it.id} className="border-b border-slate-100">
-                          <td className="py-2.5 px-2">
-                            <strong className="text-slate-900">{prod?.name || 'Stock Item'}</strong>
-                            {prod?.hsnSacCode && <span className="text-[9px] text-slate-550 block mt-0.5">HSN Code: {prod.hsnSacCode}</span>}
+                        <tr key={it.id || it.productId} className="border-b border-slate-100">
+                          <td className="py-2.5 px-2 font-medium text-slate-900">
+                            {prod?.name || 'Unknown Product'}
+                            {prod?.description && <span className="block text-[8px] text-slate-500 font-normal mt-0.5">{prod.description}</span>}
                           </td>
                           {pdfCustomizer.colProductCode && (
                             <td className="py-2.5 px-2 font-mono text-slate-650">{prod?.sku || 'N/A'}</td>
@@ -1557,8 +1555,8 @@ export default function SalesInvoice({
               </div>
 
               {/* Calculations Table */}
-              <div className="flex justify-end pt-2">
-                <table className="w-[50%] text-[10px] text-slate-700">
+              <div className={`flex ${pdfCustomizer.totalsAlign === 'left' ? 'justify-start' : pdfCustomizer.totalsAlign === 'center' ? 'justify-center' : 'justify-end'} pt-2`}>
+                <table className="w-[50%] text-slate-700" style={{ fontSize: `${pdfCustomizer.bodyFontSize}px` }}>
                   <tbody>
                     <tr className="border-b border-slate-100">
                       <td className="py-1.5 text-left">Subtotal:</td>
@@ -1615,7 +1613,7 @@ export default function SalesInvoice({
 
               {/* Bank Accounts details */}
               {pdfCustomizer.showBankDetails && bankAccounts.length > 0 && (
-                <div className="border border-slate-200 bg-slate-50 p-3.5 rounded-lg text-[9px] text-slate-700 leading-normal space-y-1.5 mt-8">
+                <div className="border border-slate-200 bg-slate-50 p-3.5 rounded-lg text-slate-700 leading-normal space-y-1.5 mt-8" style={{ fontSize: `${pdfCustomizer.bodyFontSize - 1}px` }}>
                   <span className="font-extrabold text-slate-900 uppercase block tracking-wider">Payment Bank Destination</span>
                   <div className="grid grid-cols-3 gap-4">
                     <div><strong>Bank Name:</strong> {bankAccounts[0].bankName}</div>
@@ -1627,7 +1625,13 @@ export default function SalesInvoice({
             </div>
 
             {pdfCustomizer.showTerms && (
-              <div className="border-t border-slate-200 pt-4 mt-12 text-[9px] text-slate-550 text-center leading-normal">
+              <div
+                className="border-t border-slate-200 pt-4 mt-12 text-slate-550 text-center leading-normal"
+                style={{
+                  textAlign: pdfCustomizer.termsAlign,
+                  fontSize: `${pdfCustomizer.bodyFontSize - 1}px`
+                }}
+              >
                 {customNotes}
               </div>
             )}

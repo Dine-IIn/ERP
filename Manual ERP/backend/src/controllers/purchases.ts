@@ -396,6 +396,32 @@ export async function createGrn(req: AuthenticatedRequest, res: Response) {
         }
       }
 
+      // Check if PO is Subcontract PO and hook it to complete the Job Card
+      const purchaseOrder = await tx.purchaseOrder.findUnique({
+        where: { id: poId }
+      });
+
+      // Auto-update PO status to COMPLETED when GRN is completed
+      await tx.purchaseOrder.update({
+        where: { id: poId },
+        data: { status: "COMPLETED" }
+      });
+
+      if (purchaseOrder && purchaseOrder.isSubcontract && purchaseOrder.jobCardId) {
+        const totalAccepted = items.reduce((sum: number, it: any) => sum + (parseFloat(it.qtyAccepted) || 0.0), 0);
+        const totalScrapped = items.reduce((sum: number, it: any) => sum + (parseFloat(it.qtyRejected) || 0.0), 0);
+        
+        await tx.jobCard.update({
+          where: { id: purchaseOrder.jobCardId },
+          data: {
+            status: "COMPLETED",
+            endTime: new Date(),
+            qtyAccepted: totalAccepted,
+            qtyScrapped: totalScrapped
+          }
+        });
+      }
+
       return createdGrn;
     });
 
