@@ -17,7 +17,7 @@ interface SalesReportsProps {
 
 export default function SalesReports({
   salesData,
-  token
+  token,
   currencySymbol = '$',
 }: SalesReportsProps) {
   const handleExportCsv = () => {

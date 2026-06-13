@@ -17,7 +17,7 @@ interface PurchaseReportsProps {
 
 export default function PurchaseReports({
   purchaseData,
-  token
+  token,
   currencySymbol = '$',
 }: PurchaseReportsProps) {
   const handleExportCsv = () => {

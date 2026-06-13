@@ -17,7 +17,7 @@ interface HrReportsProps {
 
 export default function HrReports({
   hrData,
-  token
+  token,
   currencySymbol = '$',
 }: HrReportsProps) {
   const handleExportCsv = () => {

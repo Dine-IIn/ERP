@@ -25,7 +25,7 @@ interface InventoryReportsProps {
 
 export default function InventoryReports({
   inventoryData,
-  token
+  token,
   currencySymbol = '$',
 }: InventoryReportsProps) {
   const handleExportCsv = () => {

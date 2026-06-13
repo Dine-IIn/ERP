@@ -23,7 +23,7 @@ interface FinancialReportsProps {
 
 export default function FinancialReports({
   financialData,
-  token
+  token,
   currencySymbol = '$',
 }: FinancialReportsProps) {
   const handleExportCsv = () => {
