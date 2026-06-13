@@ -890,12 +890,12 @@ export default function ProformaInvoice({
                                   )}
                                   <td className="py-2.5 px-2 text-right font-mono">{it.quantity} {prod?.uom || 'PCS'}</td>
                                   {pdfCustomizer.colUnitPrice && (
-                                    <td className="py-2.5 px-2 text-right font-mono">₹{it.price.toFixed(2)}</td>
+                                    <td className="py-2.5 px-2 text-right font-mono">{currencySymbol}{it.price.toFixed(2)}</td>
                                   )}
                                   {pdfCustomizer.colDiscount && (
                                     <td className="py-2.5 px-2 text-right font-mono">{it.discount || 0}%</td>
                                   )}
-                                  <td className="py-2.5 px-2 text-right font-mono font-semibold text-slate-900">₹{(itemSub - itemDisc).toFixed(2)}</td>
+                                  <td className="py-2.5 px-2 text-right font-mono font-semibold text-slate-900">{currencySymbol}{(itemSub - itemDisc).toFixed(2)}</td>
                                 </tr>
                               );
                             })}
@@ -909,12 +909,12 @@ export default function ProformaInvoice({
                           <tbody>
                             <tr className="border-b border-slate-100">
                               <td className="py-1.5 text-left">Subtotal:</td>
-                              <td className="py-1.5 text-right font-mono text-slate-900">₹{inv.subtotal.toFixed(2)}</td>
+                              <td className="py-1.5 text-right font-mono text-slate-900">{currencySymbol}{inv.subtotal.toFixed(2)}</td>
                             </tr>
                             {inv.discount > 0 && (
                               <tr className="border-b border-slate-100">
                                 <td className="py-1.5 text-left text-red-500">Discount ({inv.discount}%):</td>
-                                <td className="py-1.5 text-right font-mono text-red-555">-₹{discountVal.toFixed(2)}</td>
+                                <td className="py-1.5 text-right font-mono text-red-555">-{currencySymbol}{discountVal.toFixed(2)}</td>
                               </tr>
                             )}
 
@@ -924,23 +924,23 @@ export default function ProformaInvoice({
                                 {isInternational ? (
                                   <tr className="border-b border-slate-100">
                                     <td className="py-1.5 text-left italic">Zero-rated Export (0%):</td>
-                                    <td className="py-1.5 text-right font-mono text-slate-900">₹0.00</td>
+                                    <td className="py-1.5 text-right font-mono text-slate-900">{currencySymbol}0.00</td>
                                   </tr>
                                 ) : isSameState ? (
                                   <>
                                     <tr className="border-b border-slate-100">
                                       <td className="py-1.5 text-left">CGST (9.0%):</td>
-                                      <td className="py-1.5 text-right font-mono text-slate-900">₹{(inv.tax / 2).toFixed(2)}</td>
+                                      <td className="py-1.5 text-right font-mono text-slate-900">{currencySymbol}{(inv.tax / 2).toFixed(2)}</td>
                                     </tr>
                                     <tr className="border-b border-slate-100">
                                       <td className="py-1.5 text-left">SGST (9.0%):</td>
-                                      <td className="py-1.5 text-right font-mono text-slate-900">₹{(inv.tax / 2).toFixed(2)}</td>
+                                      <td className="py-1.5 text-right font-mono text-slate-900">{currencySymbol}{(inv.tax / 2).toFixed(2)}</td>
                                     </tr>
                                   </>
                                 ) : (
                                   <tr className="border-b border-slate-100">
                                     <td className="py-1.5 text-left">IGST (18.0%):</td>
-                                    <td className="py-1.5 text-right font-mono text-slate-900">₹{inv.tax.toFixed(2)}</td>
+                                    <td className="py-1.5 text-right font-mono text-slate-900">{currencySymbol}{inv.tax.toFixed(2)}</td>
                                   </tr>
                                 )}
                               </>
@@ -949,13 +949,13 @@ export default function ProformaInvoice({
                             {!pdfCustomizer.colTax && (
                               <tr className="border-b border-slate-100">
                                 <td className="py-1.5 text-left">Sales Tax / GST:</td>
-                                <td className="py-1.5 text-right font-mono text-slate-900">₹{inv.tax.toFixed(2)}</td>
+                                <td className="py-1.5 text-right font-mono text-slate-900">{currencySymbol}{inv.tax.toFixed(2)}</td>
                               </tr>
                             )}
 
                             <tr className="border-t-2 font-extrabold text-[12px]" style={{ color: currentThemeHex, borderTopColor: currentThemeHex }}>
                               <td className="py-2.5 text-left">Grand Total:</td>
-                              <td className="py-2.5 text-right font-mono">₹{inv.total.toFixed(2)}</td>
+                              <td className="py-2.5 text-right font-mono">{currencySymbol}{inv.total.toFixed(2)}</td>
                             </tr>
                           </tbody>
                         </table>
@@ -1159,14 +1159,14 @@ export default function ProformaInvoice({
                           {pdfCustomizer.colProductCode && (
                             <td className="py-2.5 px-2 font-mono text-slate-650">{prod?.sku || 'N/A'}</td>
                           )}
-                          <td className="py-2.5 px-2 text-right font-mono">{it.quantity} {prod?.uom || 'PCS'}</td>
-                          {pdfCustomizer.colUnitPrice && (
-                            <td className="py-2.5 px-2 text-right font-mono">₹{it.price.toFixed(2)}</td>
+                           <td className="py-2.5 px-2 text-right font-mono">{it.quantity} {prod?.uom || 'PCS'}</td>
+                           {pdfCustomizer.colUnitPrice && (
+                            <td className="py-2.5 px-2 text-right font-mono">{currencySymbol}{it.price.toFixed(2)}</td>
                           )}
                           {pdfCustomizer.colDiscount && (
                             <td className="py-2.5 px-2 text-right font-mono">{it.discount || 0}%</td>
                           )}
-                          <td className="py-2.5 px-2 text-right font-mono font-semibold text-slate-900">₹{(itemSub - itemDisc).toFixed(2)}</td>
+                          <td className="py-2.5 px-2 text-right font-mono font-semibold text-slate-900">{currencySymbol}{(itemSub - itemDisc).toFixed(2)}</td>
                         </tr>
                       );
                     })}
@@ -1180,12 +1180,12 @@ export default function ProformaInvoice({
                   <tbody>
                     <tr className="border-b border-slate-100">
                       <td className="py-1.5 text-left">Subtotal:</td>
-                      <td className="py-1.5 text-right font-mono text-slate-900">₹{inv.subtotal.toFixed(2)}</td>
+                      <td className="py-1.5 text-right font-mono text-slate-900">{currencySymbol}{inv.subtotal.toFixed(2)}</td>
                     </tr>
                     {inv.discount > 0 && (
                       <tr className="border-b border-slate-100">
                         <td className="py-1.5 text-left text-red-500">Discount ({inv.discount}%):</td>
-                        <td className="py-1.5 text-right font-mono text-red-500">-₹{discountVal.toFixed(2)}</td>
+                        <td className="py-1.5 text-right font-mono text-red-550">-{currencySymbol}{discountVal.toFixed(2)}</td>
                       </tr>
                     )}
 
@@ -1194,23 +1194,23 @@ export default function ProformaInvoice({
                         {isInternational ? (
                           <tr className="border-b border-slate-100">
                             <td className="py-1.5 text-left italic">Zero-rated Export (0%):</td>
-                            <td className="py-1.5 text-right font-mono text-slate-900">₹0.00</td>
+                            <td className="py-1.5 text-right font-mono text-slate-900">{currencySymbol}0.00</td>
                           </tr>
                         ) : isSameState ? (
                           <>
                             <tr className="border-b border-slate-100">
                               <td className="py-1.5 text-left">CGST (9.0%):</td>
-                              <td className="py-1.5 text-right font-mono text-slate-900">₹{(inv.tax / 2).toFixed(2)}</td>
+                              <td className="py-1.5 text-right font-mono text-slate-900">{currencySymbol}{(inv.tax / 2).toFixed(2)}</td>
                             </tr>
                             <tr className="border-b border-slate-100">
                               <td className="py-1.5 text-left">SGST (9.0%):</td>
-                              <td className="py-1.5 text-right font-mono text-slate-900">₹{(inv.tax / 2).toFixed(2)}</td>
+                              <td className="py-1.5 text-right font-mono text-slate-900">{currencySymbol}{(inv.tax / 2).toFixed(2)}</td>
                             </tr>
                           </>
                         ) : (
                           <tr className="border-b border-slate-100">
                             <td className="py-1.5 text-left">IGST (18.0%):</td>
-                            <td className="py-1.5 text-right font-mono text-slate-900">₹{inv.tax.toFixed(2)}</td>
+                            <td className="py-1.5 text-right font-mono text-slate-900">{currencySymbol}{inv.tax.toFixed(2)}</td>
                           </tr>
                         )}
                       </>
@@ -1219,13 +1219,13 @@ export default function ProformaInvoice({
                     {!pdfCustomizer.colTax && (
                       <tr className="border-b border-slate-100">
                         <td className="py-1.5 text-left">Sales Tax / GST:</td>
-                        <td className="py-1.5 text-right font-mono text-slate-900">₹{inv.tax.toFixed(2)}</td>
+                        <td className="py-1.5 text-right font-mono text-slate-900">{currencySymbol}{inv.tax.toFixed(2)}</td>
                       </tr>
                     )}
 
                     <tr className="border-t-2 font-extrabold text-[12px]" style={{ color: currentThemeHex, borderTopColor: currentThemeHex }}>
                       <td className="py-2.5 text-left">Grand Total:</td>
-                      <td className="py-2.5 text-right font-mono">₹{inv.total.toFixed(2)}</td>
+                      <td className="py-2.5 text-right font-mono">{currencySymbol}{inv.total.toFixed(2)}</td>
                     </tr>
                   </tbody>
                 </table>

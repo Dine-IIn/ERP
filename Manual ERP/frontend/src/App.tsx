@@ -1800,14 +1800,6 @@ export default function App() {
   // ==========================================
   
   const apiRequest = async (url: string, method: 'GET' | 'POST' | 'PATCH' | 'DELETE' = 'GET', body?: any): Promise<any> => {
-    console.log('================ API DEBUG ================');
-    console.log('FULL URL:', `${getDynamicBackendUrl()}${url}`);
-    console.log('METHOD:', method);
-    console.log('BODY:', body);
-    console.log('window.location.origin:', window.location.origin);
-    console.log('window.location.href:', window.location.href);
-    console.log('navigator.userAgent:', navigator.userAgent);
-    console.log('===========================================');
     setErrorMsg(null);
     setSuccessMsg(null);
     setLoading(true);
@@ -4756,7 +4748,7 @@ export default function App() {
                     )}
 
                     {activeWorkspaceSubModule === 'INVENTORY_COMPLETE_VIEW' && (
-                      <CompleteInventoryView products={productsList} />
+                      <CompleteInventoryView products={productsList} currencySymbol={currencySymbol} />
                     )}
 
                   </div>
@@ -4819,6 +4811,7 @@ export default function App() {
                         employees={companyUsers}
                         onGeneratePayroll={handleGeneratePayroll}
                         onDisbursePayroll={handleDisbursePayroll}
+                        currencySymbol={currencySymbol}
                       />
                     )}
 
@@ -4836,7 +4829,7 @@ export default function App() {
                     {activeWorkspaceSubModule === 'FINANCE_EXPENSES' && (
                       <Expenses
                         expenses={financeExpenses}
-                        onCreateExpense={handleCreateExpense}
+                        onAddExpense={handleCreateExpense}
                         onDeleteExpense={async (id) => {
                           if (window.confirm("Are you sure you want to delete this expense?")) {
                             await apiRequest(`/api/finance/expenses/${id}`, 'DELETE');
@@ -4846,6 +4839,7 @@ export default function App() {
                           }
                         }}
                         companyUsers={companyUsers}
+                        currencySymbol={currencySymbol}
                       />
                     )}
 
@@ -4861,7 +4855,8 @@ export default function App() {
                     {activeWorkspaceSubModule === 'FINANCE_RECEIPTS' && (
                       <Receipts
                         receipts={financeReceipts}
-                        onCreateReceipt={handleCreateReceipt}
+                        onAddReceipt={handleCreateReceipt}
+                        currencySymbol={currencySymbol}
                       />
                     )}
 
@@ -4870,6 +4865,7 @@ export default function App() {
                         vouchers={financeCashbook}
                         openingBalance={financeCashbookOpening}
                         closingBalance={financeCashbookClosing}
+                        currencySymbol={currencySymbol}
                       />
                     )}
 
@@ -4930,6 +4926,7 @@ export default function App() {
                           invoiceCount: 0
                         }}
                         token={token || ""}
+                        currencySymbol={currencySymbol}
                       />
                     )}
 
@@ -4943,6 +4940,7 @@ export default function App() {
                           purchaseCount: 0
                         }}
                         token={token || ""}
+                        currencySymbol={currencySymbol}
                       />
                     )}
 
@@ -4955,6 +4953,7 @@ export default function App() {
                           totalProductsCount: 0
                         }}
                         token={token || ""}
+                        currencySymbol={currencySymbol}
                       />
                     )}
 
@@ -4968,6 +4967,7 @@ export default function App() {
                           totalSalaryDisbursed: 0
                         }}
                         token={token || ""}
+                        currencySymbol={currencySymbol}
                       />
                     )}
 
@@ -4980,6 +4980,7 @@ export default function App() {
                           netSavings: 0
                         }}
                         token={token || ""}
+                        currencySymbol={currencySymbol}
                       />
                     )}
 
@@ -4988,7 +4989,7 @@ export default function App() {
                     )}
 
                     {activeWorkspaceSubModule === 'MANUFACTURING_COSTING' && (
-                      <ManufacturingCosting token={token || ""} />
+                      <ManufacturingCosting token={token || ""} currencySymbol={currencySymbol} />
                     )}
 
                   </div>
@@ -5003,7 +5004,7 @@ export default function App() {
                   <div className="w-full bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl p-6 shadow-sm min-h-[480px]">
                     
                     {activeWorkspaceSubModule === 'MANUFACTURING_BOM' && (
-                      <BomManagement products={productsList} />
+                      <BomManagement products={productsList} currencySymbol={currencySymbol} />
                     )}
 
                     {activeWorkspaceSubModule === 'MANUFACTURING_PLAN' && (
@@ -5011,7 +5012,7 @@ export default function App() {
                     )}
 
                     {activeWorkspaceSubModule === 'MANUFACTURING_WORK_ORDER' && (
-                      <WorkOrders employees={companyUsers} />
+                      <WorkOrders employees={companyUsers} currencySymbol={currencySymbol} />
                     )}
 
                     {activeWorkspaceSubModule === 'MANUFACTURING_PRODUCTION' && (
@@ -7664,10 +7665,7 @@ export default function App() {
                           <span className="text-[var(--text-secondary)] font-medium">Company Code</span>
                           <span className="font-mono text-indigo-400 font-bold uppercase">{localStorage.getItem('erp_company_code') || 'N/A'}</span>
                         </div>
-                        <div className="flex flex-col gap-1 text-[11px]">
-                          <span className="text-[var(--text-muted)] font-medium">Server Endpoint URL</span>
-                          <span className="font-mono text-[var(--text-secondary)] break-all bg-[var(--bg-primary)] p-2 rounded-lg border border-[var(--border-color)]">{localStorage.getItem('erp_server_url') || 'N/A'}</span>
-                        </div>
+
                         <div className="flex gap-2 mt-1">
                           <button
                             type="button"

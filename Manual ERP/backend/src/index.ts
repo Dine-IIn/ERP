@@ -269,7 +269,7 @@ const corsOptions: cors.CorsOptions = {
     }
   },
   methods: ["GET", "POST", "PATCH", "DELETE", "PUT"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+  allowedHeaders: ["Content-Type", "Authorization", "x-otp-code"],
   credentials: true
 };
 

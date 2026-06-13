@@ -16,9 +16,10 @@ interface Product {
 
 interface CompleteInventoryViewProps {
   products: Product[];
+  currencySymbol?: string;
 }
 
-export default function CompleteInventoryView({ products = [] }: CompleteInventoryViewProps) {
+export default function CompleteInventoryView({ products = [], currencySymbol = '$' }: CompleteInventoryViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL'); // ALL, SAFE, LOW
@@ -103,7 +104,7 @@ export default function CompleteInventoryView({ products = [] }: CompleteInvento
             <DollarSign className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-2xl font-black text-white">₹{totalValuation.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+            <div className="text-2xl font-black text-white">{currencySymbol}{totalValuation.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
             <div className="text-[10px] text-slate-450 uppercase font-bold tracking-wider mt-0.5">Asset Inventory Valuation</div>
           </div>
         </div>
@@ -225,10 +226,10 @@ export default function CompleteInventoryView({ products = [] }: CompleteInvento
                         {reorderLevel} <span className="text-[9px] text-slate-500 uppercase font-sans font-medium">{p.uom || 'PCS'}</span>
                       </td>
                       <td className="py-4 px-5 font-mono text-slate-300">
-                        ₹{pricing.toFixed(2)}
+                        {currencySymbol}{pricing.toFixed(2)}
                       </td>
                       <td className="py-4 px-5 font-mono text-emerald-400 font-bold text-sm">
-                        ₹{totalVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {currencySymbol}{totalVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                       <td className="py-4 px-5">
                         {isLow ? (

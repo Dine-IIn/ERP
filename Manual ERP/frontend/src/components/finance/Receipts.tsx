@@ -16,11 +16,13 @@ interface Receipt {
 interface ReceiptsProps {
   receipts: Receipt[];
   onAddReceipt: (data: any) => Promise<void>;
+  currencySymbol?: string;
 }
 
 export default function Receipts({
   receipts,
-  onAddReceipt
+  onAddReceipt,
+  currencySymbol = '$'
 }: ReceiptsProps) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [amount, setAmount] = useState('');
@@ -155,7 +157,7 @@ export default function Receipts({
                     <td className="py-3.5 px-5 font-bold text-indigo-400">{r.paymentMethod}</td>
                     <td className="py-3.5 px-5 font-mono text-slate-350 font-semibold">{r.referenceNo || '-'}</td>
                     <td className="py-3.5 px-5 font-mono text-emerald-400 text-right font-black text-sm">
-                      +${r.amount.toFixed(2)}
+                      +{currencySymbol}{r.amount.toFixed(2)}
                     </td>
                   </tr>
                 ))}

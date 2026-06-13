@@ -12,11 +12,13 @@ interface HrReportData {
 interface HrReportsProps {
   hrData: HrReportData;
   token: string;
+  currencySymbol?: string;
 }
 
 export default function HrReports({
   hrData,
   token
+  currencySymbol = '$',
 }: HrReportsProps) {
   const handleExportCsv = () => {
     fetch('/api/reports/hr?format=csv', {
@@ -78,7 +80,7 @@ export default function HrReports({
         <div className="p-5 bg-slate-900/35 border border-slate-800/80 backdrop-blur-xl rounded-2xl flex justify-between items-center">
           <div className="space-y-1">
             <span className="text-slate-555 text-[10px] uppercase font-bold tracking-wider">Disbursed Wages (Sum)</span>
-            <h3 className="text-2xl font-black text-white font-mono">${hrData.totalSalaryDisbursed?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</h3>
+            <h3 className="text-2xl font-black text-white font-mono">{currencySymbol}{hrData.totalSalaryDisbursed?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</h3>
           </div>
           <DollarSign className="w-6 h-6 text-emerald-450 bg-emerald-500/10 p-1 rounded-lg border border-emerald-500/10" />
         </div>
@@ -122,7 +124,7 @@ export default function HrReports({
           <div className="p-5 bg-slate-950/40 border border-slate-850 rounded-xl flex items-center justify-center flex-col text-center space-y-2">
             <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Average wage payout</span>
             <h4 className="text-3xl font-black text-emerald-450 font-mono">
-              ${hrData.headcount > 0 ? Math.round((hrData.totalSalaryDisbursed / hrData.headcount) * 100) / 100 : 0}
+              {currencySymbol}{hrData.headcount > 0 ? Math.round((hrData.totalSalaryDisbursed / hrData.headcount) * 100) / 100 : 0}
             </h4>
             <span className="text-[10px] text-slate-400 font-medium">Disbursed salary per capita</span>
           </div>

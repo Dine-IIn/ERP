@@ -18,11 +18,13 @@ interface FinancialReportData {
 interface FinancialReportsProps {
   financialData: FinancialReportData;
   token: string;
+  currencySymbol?: string;
 }
 
 export default function FinancialReports({
   financialData,
   token
+  currencySymbol = '$',
 }: FinancialReportsProps) {
   const handleExportCsv = () => {
     fetch('/api/reports/financial?format=csv', {
@@ -68,7 +70,7 @@ export default function FinancialReports({
         <div className="p-5 bg-slate-900/35 border border-slate-800/80 backdrop-blur-xl rounded-2xl flex items-center justify-between">
           <div className="space-y-1">
             <span className="text-slate-550 text-[10px] uppercase font-bold tracking-wider">Total Cash Inflow (Receipts)</span>
-            <h3 className="text-2xl font-black text-emerald-450 font-mono">+${financialData.totalInflow?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</h3>
+            <h3 className="text-2xl font-black text-emerald-450 font-mono">+{currencySymbol}{financialData.totalInflow?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</h3>
           </div>
           <ArrowUpRight className="w-6 h-6 text-emerald-455 bg-emerald-500/10 p-1 rounded-lg border border-emerald-500/10" />
         </div>
@@ -76,7 +78,7 @@ export default function FinancialReports({
         <div className="p-5 bg-slate-900/35 border border-slate-800/80 backdrop-blur-xl rounded-2xl flex items-center justify-between">
           <div className="space-y-1">
             <span className="text-slate-550 text-[10px] uppercase font-bold tracking-wider">Total Cash Outflow (Expenses)</span>
-            <h3 className="text-2xl font-black text-rose-405 font-mono">-${financialData.totalOutflow?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</h3>
+            <h3 className="text-2xl font-black text-rose-405 font-mono">-{currencySymbol}{financialData.totalOutflow?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</h3>
           </div>
           <ArrowDownRight className="w-6 h-6 text-rose-405 bg-rose-500/10 p-1 rounded-lg border border-rose-500/10" />
         </div>
@@ -84,7 +86,7 @@ export default function FinancialReports({
         <div className="p-5 bg-slate-900/35 border border-slate-800/80 backdrop-blur-xl rounded-2xl flex items-center justify-between border-indigo-500/20 bg-indigo-500/5">
           <div className="space-y-1">
             <span className="text-slate-550 text-[10px] uppercase font-bold tracking-wider">Corporate savings / surplus</span>
-            <h3 className="text-2xl font-black text-white font-mono">${financialData.netSavings?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</h3>
+            <h3 className="text-2xl font-black text-white font-mono">{currencySymbol}{financialData.netSavings?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</h3>
           </div>
           <TrendingUp className="w-6 h-6 text-indigo-400 bg-indigo-500/10 p-1 rounded-lg border border-indigo-500/10" />
         </div>
@@ -103,8 +105,8 @@ export default function FinancialReports({
                 <div className="flex items-center justify-between text-xs font-semibold">
                   <span className="text-slate-300 font-bold">{item.month}</span>
                   <div className="space-x-4 flex font-mono text-[11px]">
-                    <span className="text-emerald-450">Inward: +${item.inward}</span>
-                    <span className="text-rose-450">Outward: -${item.outward}</span>
+                    <span className="text-emerald-450">Inward: +{currencySymbol}{item.inward}</span>
+                    <span className="text-rose-450">Outward: -{currencySymbol}{item.outward}</span>
                   </div>
                 </div>
                 {/* Visual Bar Comparison */}

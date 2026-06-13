@@ -32,9 +32,10 @@ interface BOM {
 
 interface BomManagementProps {
   products: any[];
+  currencySymbol?: string;
 }
 
-export default function BomManagement({ products = [] }: BomManagementProps) {
+export default function BomManagement({ products = [], currencySymbol = '$' }: BomManagementProps) {
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
 
   const toggleNode = (nodeId: string) => {
@@ -636,7 +637,7 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
                       </div>
                       <div className="text-right">
                         <span className="text-[9px] text-slate-500 block uppercase tracking-wider font-semibold">Total Cost</span>
-                        <span className="text-base font-extrabold text-white mt-1 block">₹{totalCost.toFixed(2)}</span>
+                        <span className="text-base font-extrabold text-white mt-1 block">{currencySymbol}{totalCost.toFixed(2)}</span>
                       </div>
                     </div>
 
@@ -678,7 +679,7 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
                                   </div>
                                   <div className="text-slate-500 text-[9px] mt-0.5">
                                     {isOutsource
-                                      ? `Service Fee: ₹${op.outsourceCost} | Lead Time: ${op.leadTimeDays}d`
+                                      ? `Service Fee: {currencySymbol}${op.outsourceCost} | Lead Time: ${op.leadTimeDays}d`
                                       : `Setup: ${op.setupTimeMins}m | Run/unit: ${op.runTimePerUnit}m`
                                     }
                                   </div>
@@ -693,15 +694,15 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
                     <div className="grid grid-cols-3 gap-2.5 border-t border-slate-850 pt-3.5 text-left">
                       <div>
                         <span className="text-[9px] text-slate-500 block uppercase font-bold tracking-wider">Materials</span>
-                        <span className="text-[11px] font-bold text-slate-300">₹{matCost.toFixed(1)}</span>
+                        <span className="text-[11px] font-bold text-slate-300">{currencySymbol}{matCost.toFixed(1)}</span>
                       </div>
                       <div>
                         <span className="text-[9px] text-slate-500 block uppercase font-bold tracking-wider">Labor Time</span>
-                        <span className="text-[11px] font-bold text-slate-300">₹{laborCost.toFixed(1)} <span className="text-[9px] text-slate-500">({formatLaborTime(bom.laborHours)})</span></span>
+                        <span className="text-[11px] font-bold text-slate-300">{currencySymbol}{laborCost.toFixed(1)} <span className="text-[9px] text-slate-500">({formatLaborTime(bom.laborHours)})</span></span>
                       </div>
                       <div>
                         <span className="text-[9px] text-slate-500 block uppercase font-bold tracking-wider">Overhead</span>
-                        <span className="text-[11px] font-bold text-slate-300">₹{bom.overheadAllocation.toFixed(1)}</span>
+                        <span className="text-[11px] font-bold text-slate-300">{currencySymbol}{bom.overheadAllocation.toFixed(1)}</span>
                       </div>
                     </div>
 
@@ -773,7 +774,7 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
                         <h4 className="font-bold text-xs text-white">{bom.finishedProductName}</h4>
                         <span className="text-[9px] text-indigo-400 font-mono tracking-widest uppercase mt-0.5 block">{bom.finishedProductCode} - Version {bom.version}</span>
                       </div>
-                      <span className="text-xs font-black text-indigo-400">Total: ₹{totalCost.toFixed(0)}</span>
+                      <span className="text-xs font-black text-indigo-400">Total: {currencySymbol}{totalCost.toFixed(0)}</span>
                     </div>
 
                     {/* Cost Distribution Progress Bars */}
@@ -781,7 +782,7 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
                       <div>
                         <div className="flex justify-between text-[10px] font-bold text-slate-400 mb-1">
                           <span>Materials Cost</span>
-                          <span className="font-mono text-slate-300">₹{matCost.toFixed(0)} ({matPercent.toFixed(1)}%)</span>
+                          <span className="font-mono text-slate-300">{currencySymbol}{matCost.toFixed(0)} ({matPercent.toFixed(1)}%)</span>
                         </div>
                         <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden">
                           <div className="bg-indigo-500 h-full rounded-full" style={{ width: `${matPercent}%` }}></div>
@@ -791,7 +792,7 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
                       <div>
                         <div className="flex justify-between text-[10px] font-bold text-slate-400 mb-1">
                           <span>Labor Allocations</span>
-                          <span className="font-mono text-slate-300">₹{laborCost.toFixed(0)} ({laborPercent.toFixed(1)}%)</span>
+                          <span className="font-mono text-slate-300">{currencySymbol}{laborCost.toFixed(0)} ({laborPercent.toFixed(1)}%)</span>
                         </div>
                         <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden">
                           <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${laborPercent}%` }}></div>
@@ -801,7 +802,7 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
                       <div>
                         <div className="flex justify-between text-[10px] font-bold text-slate-400 mb-1">
                           <span>Factory Overheads</span>
-                          <span className="font-mono text-slate-300">₹{bom.overheadAllocation.toFixed(0)} ({overheadPercent.toFixed(1)}%)</span>
+                          <span className="font-mono text-slate-300">{currencySymbol}{bom.overheadAllocation.toFixed(0)} ({overheadPercent.toFixed(1)}%)</span>
                         </div>
                         <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden">
                           <div className="bg-amber-500 h-full rounded-full" style={{ width: `${overheadPercent}%` }}></div>
@@ -940,7 +941,7 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
                             if (isServ) label += " 🛠️ (Service/Process)";
                             else if (hasSubBom) label += " 📦 (Has Sub-BOM)";
                             return (
-                              <option key={p.id} value={p.id}>{label} (₹{p.pricing})</option>
+                              <option key={p.id} value={p.id}>{label} ({currencySymbol}{p.pricing})</option>
                             );
                           })}
                         </select>
@@ -1068,7 +1069,7 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
                       </div>
                     </div>
                     <div>
-                      <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Labor Rate/hr (₹)</label>
+                      <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Labor Rate/hr ({currencySymbol})</label>
                       <input
                         type="number"
                         value={newBomLaborRate}
@@ -1079,7 +1080,7 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
                       />
                     </div>
                     <div>
-                      <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Overhead Allocation (₹)</label>
+                      <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Overhead Allocation ({currencySymbol})</label>
                       <input
                         type="number"
                         value={newBomOverhead}
@@ -1259,7 +1260,7 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
                     ) : (
                       <div className="grid grid-cols-3 gap-3 pt-1">
                         <div>
-                          <label className="text-[8px] font-bold text-slate-500 uppercase block mb-1">Fee/Unit (₹)</label>
+                          <label className="text-[8px] font-bold text-slate-500 uppercase block mb-1">Fee/Unit ({currencySymbol})</label>
                           <input
                             type="number"
                             step="0.01"
@@ -1359,7 +1360,7 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
                             <div className="flex items-center gap-2">
                               <span className="font-mono text-slate-400 text-[10px] mr-2">
                                 {isOutsource
-                                  ? `Cost: ₹${step.outsourceCost} | LT: ${step.leadTimeDays}d`
+                                  ? `Cost: {currencySymbol}${step.outsourceCost} | LT: ${step.leadTimeDays}d`
                                   : `Setup: ${step.setupTimeMins}m | Run/u: ${step.runTimePerUnit}m`
                                 }
                               </span>
@@ -1499,11 +1500,11 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
                 <div className="bg-[var(--bg-tertiary)]/30 border border-[var(--border-color)]/60 rounded-xl p-3 flex flex-col justify-center text-xs font-mono text-[var(--text-secondary)]">
                   <span className="flex justify-between">
                     <span>Base Formulation Unit Cost:</span> 
-                    <span>₹{(totalLeafCost / exportQty).toFixed(2)}</span>
+                    <span>{currencySymbol}{(totalLeafCost / exportQty).toFixed(2)}</span>
                   </span>
                   <span className="flex justify-between border-t border-[var(--border-color)]/60 pt-1 text-sm font-bold text-emerald-450 mt-1">
                     <span>Batch Valuation Total:</span> 
-                    <span>₹{totalLeafCost.toFixed(2)}</span>
+                    <span>{currencySymbol}{totalLeafCost.toFixed(2)}</span>
                   </span>
                 </div>
               </div>
@@ -1532,8 +1533,8 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
                             <td className="p-2.5 font-semibold text-slate-200">{item.name}</td>
                             <td className="p-2.5 text-right font-mono text-white">{scaledQty.toFixed(3)}</td>
                             <td className="p-2.5 text-slate-400 text-[10px]">{item.unit}</td>
-                            <td className="p-2.5 text-right font-mono text-slate-400 font-mono">₹{item.costPerUnit.toFixed(2)}</td>
-                            <td className="p-2.5 text-right font-mono text-emerald-400 font-bold">₹{itemTotalCost.toFixed(2)}</td>
+                            <td className="p-2.5 text-right font-mono text-slate-400 font-mono">{currencySymbol}{item.costPerUnit.toFixed(2)}</td>
+                            <td className="p-2.5 text-right font-mono text-emerald-400 font-bold">{currencySymbol}{itemTotalCost.toFixed(2)}</td>
                           </tr>
                         );
                       })}
@@ -1617,7 +1618,7 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
                   <strong>Target Batch Run Quantity:</strong> {exportQty} units
                 </div>
                 <div className="text-right">
-                  <strong>Estimated Total Batch Cost:</strong> ₹{totalLeafCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  <strong>Estimated Total Batch Cost:</strong> {currencySymbol}{totalLeafCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </div>
               </div>
 
@@ -1644,8 +1645,8 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
                           <td className="py-2.5 px-2 font-bold text-slate-900">{item.name}</td>
                           <td className="py-2.5 px-2 text-right font-mono text-slate-900">{scaledQty.toFixed(3)}</td>
                           <td className="py-2.5 px-2 text-slate-700">{item.unit}</td>
-                          <td className="py-2.5 px-2 text-right font-mono text-slate-700">₹{item.costPerUnit.toFixed(2)}</td>
-                          <td className="py-2.5 px-2 text-right font-mono font-bold text-slate-900">₹{itemTotalCost.toFixed(2)}</td>
+                          <td className="py-2.5 px-2 text-right font-mono text-slate-700">{currencySymbol}{item.costPerUnit.toFixed(2)}</td>
+                          <td className="py-2.5 px-2 text-right font-mono font-bold text-slate-900">{currencySymbol}{itemTotalCost.toFixed(2)}</td>
                         </tr>
                       );
                     })}
@@ -1658,11 +1659,11 @@ export default function BomManagement({ products = [] }: BomManagementProps) {
                 <div className="w-[55%] text-[11px] text-slate-800 space-y-1.5 font-mono">
                   <div className="flex justify-between">
                     <span>Base Formulation Unit Material Cost:</span>
-                    <span className="font-bold text-slate-950">₹{(totalLeafCost / exportQty).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    <span className="font-bold text-slate-950">{currencySymbol}{(totalLeafCost / exportQty).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                   </div>
                   <div className="flex justify-between border-t-2 border-emerald-600 pt-2 text-[13px] font-extrabold text-emerald-800">
                     <span>Grand Batch Valuation Cost:</span>
-                    <span>₹{totalLeafCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    <span>{currencySymbol}{totalLeafCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                   </div>
                 </div>
               </div>

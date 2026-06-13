@@ -17,12 +17,14 @@ interface CashbookProps {
   vouchers: Voucher[];
   openingBalance: number;
   closingBalance: number;
+  currencySymbol?: string;
 }
 
 export default function Cashbook({
   vouchers,
   openingBalance,
-  closingBalance
+  closingBalance,
+  currencySymbol = '$'
 }: CashbookProps) {
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -64,13 +66,13 @@ export default function Cashbook({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <div className="p-5 bg-slate-900/35 border border-slate-800/80 rounded-2xl space-y-1">
           <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Opening Balance</span>
-          <h3 className="text-2xl font-black text-slate-350 font-mono">${openingBalance.toFixed(2)}</h3>
+          <h3 className="text-2xl font-black text-slate-355 font-mono">{currencySymbol}{openingBalance.toFixed(2)}</h3>
         </div>
 
         <div className="p-5 bg-slate-900/35 border border-slate-800/80 rounded-2xl space-y-1 flex justify-between items-center">
           <div className="space-y-1">
             <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Total Cash Inflow</span>
-            <h3 className="text-2xl font-black text-emerald-450 font-mono">+${totalInward.toFixed(2)}</h3>
+            <h3 className="text-2xl font-black text-emerald-450 font-mono">+{currencySymbol}{totalInward.toFixed(2)}</h3>
           </div>
           <ArrowUpRight className="w-6 h-6 text-emerald-450 bg-emerald-500/10 rounded-lg p-1 border border-emerald-500/10" />
         </div>
@@ -78,7 +80,7 @@ export default function Cashbook({
         <div className="p-5 bg-slate-900/35 border border-slate-800/80 rounded-2xl space-y-1 flex justify-between items-center">
           <div className="space-y-1">
             <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Total Cash Outflow</span>
-            <h3 className="text-2xl font-black text-rose-405 font-mono">-${totalOutward.toFixed(2)}</h3>
+            <h3 className="text-2xl font-black text-rose-405 font-mono">-{currencySymbol}{totalOutward.toFixed(2)}</h3>
           </div>
           <ArrowDownRight className="w-6 h-6 text-rose-405 bg-rose-500/10 rounded-lg p-1 border border-rose-500/10" />
         </div>
@@ -86,7 +88,7 @@ export default function Cashbook({
         <div className="p-5 bg-slate-900/35 border border-slate-800/80 rounded-2xl space-y-1 flex justify-between items-center border-indigo-500/20 bg-indigo-500/5">
           <div className="space-y-1">
             <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Closing Balance (Net)</span>
-            <h3 className="text-2xl font-black text-white font-mono">${closingBalance.toFixed(2)}</h3>
+            <h3 className="text-2xl font-black text-white font-mono">{currencySymbol}{closingBalance.toFixed(2)}</h3>
           </div>
           <TrendingUp className="w-6 h-6 text-indigo-400 bg-indigo-500/10 rounded-lg p-1 border border-indigo-500/10" />
         </div>
@@ -143,12 +145,12 @@ export default function Cashbook({
                       <span>{v.description}</span>
                     </td>
                     <td className="py-4 px-5 font-mono text-slate-350">{v.referenceNo || '-'}</td>
-                    <td className="py-4 px-5 font-mono text-slate-500">${v.previousBal.toFixed(2)}</td>
+                    <td className="py-4 px-5 font-mono text-slate-500">{currencySymbol}{v.previousBal.toFixed(2)}</td>
                     <td className={`py-4 px-5 font-mono font-black ${v.entryType === 'INWARD_RECEIPT' ? 'text-emerald-400' : 'text-rose-400'}`}>
-                      {v.entryType === 'INWARD_RECEIPT' ? '+' : '-'}${v.amount.toFixed(2)}
+                      {v.entryType === 'INWARD_RECEIPT' ? '+' : '-'}{currencySymbol}{v.amount.toFixed(2)}
                     </td>
                     <td className="py-4 px-5 font-mono text-white font-black text-right text-sm">
-                      ${v.currentBal.toFixed(2)}
+                      {currencySymbol}{v.currentBal.toFixed(2)}
                     </td>
                   </tr>
                 ))}

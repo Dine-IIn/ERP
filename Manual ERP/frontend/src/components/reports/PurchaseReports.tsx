@@ -12,11 +12,13 @@ interface PurchaseReportData {
 interface PurchaseReportsProps {
   purchaseData: PurchaseReportData;
   token: string;
+  currencySymbol?: string;
 }
 
 export default function PurchaseReports({
   purchaseData,
   token
+  currencySymbol = '$',
 }: PurchaseReportsProps) {
   const handleExportCsv = () => {
     fetch('/api/reports/purchase?format=csv', {
@@ -61,7 +63,7 @@ export default function PurchaseReports({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <div className="p-5 bg-slate-900/35 border border-slate-800/80 backdrop-blur-xl rounded-2xl space-y-1">
           <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Total Purchase commitments</span>
-          <h3 className="text-2xl font-black text-white font-mono">${purchaseData.totalPurchasesValuation?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</h3>
+          <h3 className="text-2xl font-black text-white font-mono">{currencySymbol}{purchaseData.totalPurchasesValuation?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</h3>
         </div>
 
         <div className="p-5 bg-slate-900/35 border border-slate-800/80 backdrop-blur-xl rounded-2xl space-y-1 flex items-center justify-between">
@@ -104,7 +106,7 @@ export default function PurchaseReports({
                 <div key={idx} className="space-y-1.5">
                   <div className="flex items-center justify-between text-xs font-semibold">
                     <span className="text-slate-300 font-bold">{item.month}</span>
-                    <span className="text-white font-mono">${item.value?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    <span className="text-white font-mono">{currencySymbol}{item.value?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                   </div>
                   <div className="w-full h-3 bg-slate-950 rounded-full overflow-hidden border border-slate-900">
                     <div

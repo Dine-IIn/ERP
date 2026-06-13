@@ -20,11 +20,13 @@ interface InventoryReportData {
 interface InventoryReportsProps {
   inventoryData: InventoryReportData;
   token: string;
+  currencySymbol?: string;
 }
 
 export default function InventoryReports({
   inventoryData,
   token
+  currencySymbol = '$',
 }: InventoryReportsProps) {
   const handleExportCsv = () => {
     fetch('/api/reports/inventory?format=csv', {
@@ -70,7 +72,7 @@ export default function InventoryReports({
         <div className="p-5 bg-slate-900/35 border border-slate-800/80 backdrop-blur-xl rounded-2xl flex items-center justify-between">
           <div className="space-y-1">
             <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Total Warehouse asset value</span>
-            <h3 className="text-2xl font-black text-white font-mono">${inventoryData.totalAssetValuation?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</h3>
+            <h3 className="text-2xl font-black text-white font-mono">{currencySymbol}{inventoryData.totalAssetValuation?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</h3>
           </div>
           <Layers className="w-6 h-6 text-indigo-400 bg-indigo-500/10 p-1 rounded-lg border border-indigo-500/10" />
         </div>
@@ -124,8 +126,8 @@ export default function InventoryReports({
                     <td className="py-3 px-5 font-bold text-slate-200">{prod.name}</td>
                     <td className="py-3 px-5 text-slate-450 font-bold uppercase">{prod.uom}</td>
                     <td className="py-3 px-5 font-mono text-slate-300">{prod.stock}</td>
-                    <td className="py-3 px-5 font-mono text-slate-350">${prod.pricing?.toFixed(2)}</td>
-                    <td className="py-3 px-5 font-mono text-white font-black text-sm">${prod.assetValue?.toFixed(2)}</td>
+                    <td className="py-3 px-5 font-mono text-slate-350">{currencySymbol}{prod.pricing?.toFixed(2)}</td>
+                    <td className="py-3 px-5 font-mono text-white font-black text-sm">{currencySymbol}{prod.assetValue?.toFixed(2)}</td>
                     <td className="py-3 px-5 text-right">
                       {prod.isLowStock === "YES" ? (
                         <span className="px-2 py-0.5 bg-amber-500/10 border border-amber-500/15 text-amber-400 font-bold rounded-full text-[9px]">

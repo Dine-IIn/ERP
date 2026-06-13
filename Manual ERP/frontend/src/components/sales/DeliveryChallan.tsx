@@ -968,9 +968,9 @@ export default function DeliveryChallan({
                                   )}
                                   <td className="py-2.5 px-2 text-right font-mono">{it.quantity} {prod?.uom || 'PCS'}</td>
                                   {pdfCustomizer.colUnitPrice && (
-                                    <td className="py-2.5 px-2 text-right font-mono">₹{(it.price || 0).toFixed(2)}</td>
+                                    <td className="py-2.5 px-2 text-right font-mono">{currencySymbol}{(it.price || 0).toFixed(2)}</td>
                                   )}
-                                  <td className="py-2.5 px-2 text-right font-mono font-semibold text-slate-900">₹{itemSub.toFixed(2)}</td>
+                                  <td className="py-2.5 px-2 text-right font-mono font-semibold text-slate-900">{currencySymbol}{itemSub.toFixed(2)}</td>
                                 </tr>
                               );
                             })}
@@ -985,7 +985,7 @@ export default function DeliveryChallan({
                             <tr className="border-t-2 font-extrabold text-[12px]" style={{ color: currentThemeHex, borderTopColor: currentThemeHex }}>
                               <td className="py-2.5 text-left">Total Valuation:</td>
                               <td className="py-2.5 text-right font-mono">
-                                ₹{(dc.items || []).reduce((sum: number, it: any) => sum + (it.quantity * (it.price || 0)), 0).toFixed(2)}
+                                {currencySymbol}{(dc.items || []).reduce((sum: number, it: any) => sum + (it.quantity * (it.price || 0)), 0).toFixed(2)}
                               </td>
                             </tr>
                           </tbody>
@@ -1178,9 +1178,9 @@ export default function DeliveryChallan({
                           )}
                           <td className="py-2.5 px-2 text-right font-mono">{it.quantity} {prod?.uom || 'PCS'}</td>
                           {pdfCustomizer.colUnitPrice && (
-                            <td className="py-2.5 px-2 text-right font-mono">₹{(it.price || 0).toFixed(2)}</td>
+                            <td className="py-2.5 px-2 text-right font-mono">{currencySymbol}{(it.price || 0).toFixed(2)}</td>
                           )}
-                          <td className="py-2.5 px-2 text-right font-mono font-semibold text-slate-900">₹{itemSub.toFixed(2)}</td>
+                          <td className="py-2.5 px-2 text-right font-mono font-semibold text-slate-900">{currencySymbol}{itemSub.toFixed(2)}</td>
                         </tr>
                       );
                     })}
@@ -1195,7 +1195,7 @@ export default function DeliveryChallan({
                     <tr className="border-t-2 font-extrabold text-[12px]" style={{ color: currentThemeHex, borderTopColor: currentThemeHex }}>
                       <td className="py-2.5 text-left">Total Valuation:</td>
                       <td className="py-2.5 text-right font-mono">
-                        ₹{(dc.items || []).reduce((sum: number, it: any) => sum + (it.quantity * (it.price || 0)), 0).toFixed(2)}
+                        {currencySymbol}{(dc.items || []).reduce((sum: number, it: any) => sum + (it.quantity * (it.price || 0)), 0).toFixed(2)}
                       </td>
                     </tr>
                   </tbody>

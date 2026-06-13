@@ -40,6 +40,7 @@ interface JobCard {
 
 interface WorkOrdersProps {
   employees: any[];
+  currencySymbol?: string;
 }
 
 interface JobCardRowProps {
@@ -57,6 +58,7 @@ interface JobCardRowProps {
   setEditingJobId: (id: string) => void;
   setShowAddJobModal: (show: boolean) => void;
   handleCreateSubcontractPo: (id: string) => void;
+  currencySymbol?: string;
 }
 
 const JobCardRow: React.FC<JobCardRowProps> = ({
@@ -73,7 +75,8 @@ const JobCardRow: React.FC<JobCardRowProps> = ({
   setIsEditingJob,
   setEditingJobId,
   setShowAddJobModal,
-  handleCreateSubcontractPo
+  handleCreateSubcontractPo,
+  currencySymbol = '$'
 }) => {
   const [accepted, setAccepted] = useState(job.qtyTarget);
   const [scrapped, setScrapped] = useState(0);
@@ -111,7 +114,7 @@ const JobCardRow: React.FC<JobCardRowProps> = ({
         <div className="flex gap-4 text-[10px] text-slate-500 pt-1.5 flex-wrap">
           {isOutsource ? (
             <>
-              <span className="flex items-center gap-1">Processing cost/unit: <strong className="text-slate-300">₹{job.outsourceCost}</strong></span>
+              <span className="flex items-center gap-1">Processing cost/unit: <strong className="text-slate-300">{currencySymbol}{job.outsourceCost}</strong></span>
               <span className="flex items-center gap-1">Quantity: <strong className="text-slate-300">{job.qtyTarget} units</strong></span>
             </>
           ) : (
@@ -238,7 +241,7 @@ const JobCardRow: React.FC<JobCardRowProps> = ({
   );
 };
 
-export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
+export default function WorkOrders({ employees = [], currencySymbol = '$' }: WorkOrdersProps) {
   const [activeTab, setActiveTab] = useState<'wo' | 'jobs'>('wo');
   const [woSearch, setWoSearch] = useState('');
   const [jobsSearch, setJobsSearch] = useState('');
@@ -735,6 +738,7 @@ export default function WorkOrders({ employees = [] }: WorkOrdersProps) {
                 <JobCardRow
                   key={job.id}
                   job={job}
+                  currencySymbol={currencySymbol}
                   handleStartJob={handleStartJob}
                   handleCompleteJob={handleCompleteJob}
                   handleDeleteJob={handleDeleteJob}

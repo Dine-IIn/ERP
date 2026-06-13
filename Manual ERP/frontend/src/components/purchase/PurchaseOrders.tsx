@@ -1007,12 +1007,12 @@ export default function PurchaseOrders({
                                   )}
                                   <td className="py-2.5 px-2 text-right font-mono">{it.quantity} {prod?.uom || it.product?.uom || 'PCS'}</td>
                                   {pdfCustomizer.colUnitPrice && (
-                                    <td className="py-2.5 px-2 text-right font-mono">₹{it.price.toFixed(2)}</td>
+                                    <td className="py-2.5 px-2 text-right font-mono">{currencySymbol}{it.price.toFixed(2)}</td>
                                   )}
                                   {pdfCustomizer.colDiscount && (
                                     <td className="py-2.5 px-2 text-right font-mono">{it.discount || 0}%</td>
                                   )}
-                                  <td className="py-2.5 px-2 text-right font-mono font-semibold text-slate-900">₹{(itemSub - itemDisc).toFixed(2)}</td>
+                                  <td className="py-2.5 px-2 text-right font-mono font-semibold text-slate-900">{currencySymbol}{(itemSub - itemDisc).toFixed(2)}</td>
                                 </tr>
                               );
                             })}
@@ -1026,25 +1026,25 @@ export default function PurchaseOrders({
                           <tbody>
                             <tr className="border-b border-slate-100">
                               <td className="py-1.5 text-left">Gross Subtotal:</td>
-                              <td className="py-1.5 text-right font-mono text-slate-900">₹{order.subtotal.toFixed(2)}</td>
+                              <td className="py-1.5 text-right font-mono text-slate-900">{currencySymbol}{order.subtotal.toFixed(2)}</td>
                             </tr>
                             {order.discount > 0 && (
                               <tr className="border-b border-slate-100">
                                 <td className="py-1.5 text-left text-red-500">Global Sourcing Discount ({order.discount}%):</td>
-                                <td className="py-1.5 text-right font-mono text-red-500">-₹{discountVal.toFixed(2)}</td>
+                                <td className="py-1.5 text-right font-mono text-red-500">-{currencySymbol}{discountVal.toFixed(2)}</td>
                               </tr>
                             )}
 
                             {pdfCustomizer.colTax && (
                               <tr className="border-b border-slate-100">
                                 <td className="py-1.5 text-left">Sourcing GST ({order.tax}%):</td>
-                                <td className="py-1.5 text-right font-mono text-slate-900">₹{taxVal.toFixed(2)}</td>
+                                <td className="py-1.5 text-right font-mono text-slate-900">{currencySymbol}{taxVal.toFixed(2)}</td>
                               </tr>
                             )}
 
                             <tr className="border-t-2 font-extrabold text-[12px]" style={{ color: currentThemeHex, borderTopColor: currentThemeHex }}>
                               <td className="py-2.5 text-left">Total PO Cost:</td>
-                              <td className="py-2.5 text-right font-mono">₹{order.total.toFixed(2)}</td>
+                              <td className="py-2.5 text-right font-mono">{currencySymbol}{order.total.toFixed(2)}</td>
                             </tr>
                           </tbody>
                         </table>
@@ -1201,12 +1201,12 @@ export default function PurchaseOrders({
                           )}
                           <td className="py-2.5 px-2 text-right font-mono">{it.quantity} {prod?.uom || it.product?.uom || 'PCS'}</td>
                           {pdfCustomizer.colUnitPrice && (
-                            <td className="py-2.5 px-2 text-right font-mono">₹{it.price.toFixed(2)}</td>
+                            <td className="py-2.5 px-2 text-right font-mono">{currencySymbol}{it.price.toFixed(2)}</td>
                           )}
                           {pdfCustomizer.colDiscount && (
                             <td className="py-2.5 px-2 text-right font-mono">{it.discount || 0}%</td>
                           )}
-                          <td className="py-2.5 px-2 text-right font-mono font-semibold text-slate-900">₹{(itemSub - itemDisc).toFixed(2)}</td>
+                          <td className="py-2.5 px-2 text-right font-mono font-semibold text-slate-900">{currencySymbol}{(itemSub - itemDisc).toFixed(2)}</td>
                         </tr>
                       );
                     })}
@@ -1220,25 +1220,25 @@ export default function PurchaseOrders({
                   <tbody>
                     <tr className="border-b border-slate-100">
                       <td className="py-1.5 text-left">Gross Subtotal:</td>
-                      <td className="py-1.5 text-right font-mono text-slate-900">₹{order.subtotal.toFixed(2)}</td>
+                      <td className="py-1.5 text-right font-mono text-slate-900">{currencySymbol}{order.subtotal.toFixed(2)}</td>
                     </tr>
                     {order.discount > 0 && (
                       <tr className="border-b border-slate-100">
                         <td className="py-1.5 text-left text-red-500">Global Sourcing Discount ({order.discount}%):</td>
-                        <td className="py-1.5 text-right font-mono text-red-550">-₹{discountVal.toFixed(2)}</td>
+                        <td className="py-1.5 text-right font-mono text-red-550">-{currencySymbol}{discountVal.toFixed(2)}</td>
                       </tr>
                     )}
 
                     {pdfCustomizer.colTax && (
                       <tr className="border-b border-slate-100">
                         <td className="py-1.5 text-left">Sourcing GST ({order.tax}%):</td>
-                        <td className="py-1.5 text-right font-mono text-slate-900">₹{taxVal.toFixed(2)}</td>
+                        <td className="py-1.5 text-right font-mono text-slate-900">{currencySymbol}{taxVal.toFixed(2)}</td>
                       </tr>
                     )}
 
                     <tr className="border-t-2 font-extrabold text-[12px]" style={{ color: currentThemeHex, borderTopColor: currentThemeHex }}>
                       <td className="py-2.5 text-left">Total PO Cost:</td>
-                      <td className="py-2.5 text-right font-mono">₹{order.total.toFixed(2)}</td>
+                      <td className="py-2.5 text-right font-mono">{currencySymbol}{order.total.toFixed(2)}</td>
                     </tr>
                   </tbody>
                 </table>

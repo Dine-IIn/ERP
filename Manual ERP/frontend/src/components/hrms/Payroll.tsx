@@ -22,13 +22,15 @@ interface PayrollProps {
   employees: any[];
   onGeneratePayroll: (data: any) => Promise<void>;
   onDisbursePayroll: (id: string, refNo: string, notes: string) => Promise<void>;
+  currencySymbol?: string;
 }
 
 export default function Payroll({
   payrolls,
   employees,
   onGeneratePayroll,
-  onDisbursePayroll
+  onDisbursePayroll,
+  currencySymbol = '$'
 }: PayrollProps) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [userId, setUserId] = useState('');
@@ -186,10 +188,10 @@ export default function Payroll({
                   <tr key={payroll.id} className="hover:bg-slate-800/10 transition-colors">
                     <td className="py-4 px-5 font-bold text-slate-250">{payroll.user?.username || 'Staff'}</td>
                     <td className="py-4 px-5 font-medium text-slate-450">{getMonthName(payroll.month)} {payroll.year}</td>
-                    <td className="py-4 px-5 font-mono text-slate-300">${payroll.basicSalary.toFixed(2)}</td>
-                    <td className="py-4 px-5 font-mono text-emerald-400">+${payroll.allowances.toFixed(2)}</td>
-                    <td className="py-4 px-5 font-mono text-rose-400">-${payroll.deductions.toFixed(2)}</td>
-                    <td className="py-4 px-5 font-mono text-white font-bold">${payroll.netSalary.toFixed(2)}</td>
+                    <td className="py-4 px-5 font-mono text-slate-300">{currencySymbol}{payroll.basicSalary.toFixed(2)}</td>
+                    <td className="py-4 px-5 font-mono text-emerald-400">+{currencySymbol}{payroll.allowances.toFixed(2)}</td>
+                    <td className="py-4 px-5 font-mono text-rose-400">-{currencySymbol}{payroll.deductions.toFixed(2)}</td>
+                    <td className="py-4 px-5 font-mono text-white font-bold">{currencySymbol}{payroll.netSalary.toFixed(2)}</td>
                     <td className="py-4 px-5">
                       <span className={`px-2 py-0.5 rounded-full border text-[10px] font-bold ${payroll.status === "DISBURSED" ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-450" : "bg-amber-500/10 border-amber-500/20 text-amber-400"}`}>
                         {payroll.status}
@@ -366,11 +368,11 @@ export default function Payroll({
               <div className="p-4 bg-slate-950/60 border border-slate-850 rounded-xl space-y-1.5 text-xs">
                 <div className="flex items-center justify-between">
                   <span className="text-slate-500 font-bold uppercase">Basic wage:</span>
-                  <span className="font-mono text-slate-200">${activePayroll.basicSalary}</span>
+                  <span className="font-mono text-slate-200">{currencySymbol}{activePayroll.basicSalary}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-slate-500 font-bold uppercase">Net salary due:</span>
-                  <span className="font-mono text-emerald-400 font-extrabold text-sm">${activePayroll.netSalary}</span>
+                  <span className="font-mono text-emerald-400 font-extrabold text-sm">{currencySymbol}{activePayroll.netSalary}</span>
                 </div>
               </div>
 

@@ -15,11 +15,13 @@ interface Expense {
 interface ExpensesProps {
   expenses: Expense[];
   onAddExpense: (data: any) => Promise<void>;
+  currencySymbol?: string;
 }
 
 export default function Expenses({
   expenses,
-  onAddExpense
+  onAddExpense,
+  currencySymbol = '$'
 }: ExpensesProps) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [amount, setAmount] = useState('');
@@ -131,7 +133,7 @@ export default function Expenses({
         <div className="p-5 bg-slate-900/35 border border-slate-800/80 backdrop-blur-xl rounded-2xl flex items-center justify-between">
           <div className="space-y-1">
             <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Total Expenses Sum</span>
-            <h3 className="text-2xl font-black text-white font-mono">${totalExpenseSum.toLocaleString(undefined, { minimumFractionDigits: 2 })}</h3>
+            <h3 className="text-2xl font-black text-white font-mono">{currencySymbol}{totalExpenseSum.toLocaleString(undefined, { minimumFractionDigits: 2 })}</h3>
           </div>
           <div className="p-3 bg-rose-500/10 text-rose-400 rounded-xl border border-rose-500/15">
             <DollarSign className="w-5 h-5" />
@@ -205,7 +207,7 @@ export default function Expenses({
                     </td>
                     <td className="py-3.5 px-5 text-slate-300 font-medium">{exp.paidBy?.username || 'System'}</td>
                     <td className="py-3.5 px-5 font-mono text-white text-right font-black text-sm">
-                      ${exp.amount.toFixed(2)}
+                      {currencySymbol}{exp.amount.toFixed(2)}
                     </td>
                   </tr>
                 ))}

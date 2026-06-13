@@ -3,9 +3,10 @@ import { TrendingUp, Download, DollarSign, Calculator, Layers, Sliders, ArrowUpR
 
 interface ManufacturingCostingProps {
   token?: string;
+  currencySymbol?: string;
 }
 
-export default function ManufacturingCosting({ token }: ManufacturingCostingProps) {
+export default function ManufacturingCosting({ token, currencySymbol = '$' }: ManufacturingCostingProps) {
   const [costBreakdown, setCostBreakdown] = useState<any[]>([]);
   const [totalSummary, setTotalSummary] = useState({ materials: 0, labor: 0, overhead: 0 });
   const [absoluteTotal, setAbsoluteTotal] = useState(0);
@@ -132,7 +133,7 @@ export default function ManufacturingCosting({ token }: ManufacturingCostingProp
               </div>
               <div>
                 <span className="text-[10px] text-slate-500 block uppercase font-bold tracking-wider">Total Production Cost</span>
-                <span className="text-lg font-black text-white mt-1 block">₹{absoluteTotal.toLocaleString()}</span>
+                <span className="text-lg font-black text-white mt-1 block">{currencySymbol}{absoluteTotal.toLocaleString()}</span>
               </div>
             </div>
 
@@ -143,7 +144,7 @@ export default function ManufacturingCosting({ token }: ManufacturingCostingProp
               <div>
                 <span className="text-[10px] text-slate-500 block uppercase font-bold tracking-wider">Materials Absorption</span>
                 <span className="text-lg font-black text-white mt-1 block">
-                  ₹{totalSummary.materials.toLocaleString()}{' '}
+                  {currencySymbol}{totalSummary.materials.toLocaleString()}{' '}
                   <span className="text-[10px] text-emerald-400 font-bold">
                     ({absoluteTotal > 0 ? ((totalSummary.materials / absoluteTotal) * 100).toFixed(1) : 0}%)
                   </span>
@@ -158,7 +159,7 @@ export default function ManufacturingCosting({ token }: ManufacturingCostingProp
               <div>
                 <span className="text-[10px] text-slate-500 block uppercase font-bold tracking-wider">Labor Capital Spent</span>
                 <span className="text-lg font-black text-white mt-1 block">
-                  ₹{totalSummary.labor.toLocaleString()}{' '}
+                  {currencySymbol}{totalSummary.labor.toLocaleString()}{' '}
                   <span className="text-[10px] text-amber-400 font-bold">
                     ({absoluteTotal > 0 ? ((totalSummary.labor / absoluteTotal) * 100).toFixed(1) : 0}%)
                   </span>
@@ -173,7 +174,7 @@ export default function ManufacturingCosting({ token }: ManufacturingCostingProp
               <div>
                 <span className="text-[10px] text-slate-500 block uppercase font-bold tracking-wider">Overheads Overhead</span>
                 <span className="text-lg font-black text-white mt-1 block">
-                  ₹{totalSummary.overhead.toLocaleString()}{' '}
+                  {currencySymbol}{totalSummary.overhead.toLocaleString()}{' '}
                   <span className="text-[10px] text-rose-500">
                     ({absoluteTotal > 0 ? ((totalSummary.overhead / absoluteTotal) * 100).toFixed(1) : 0}%)
                   </span>
@@ -206,10 +207,10 @@ export default function ManufacturingCosting({ token }: ManufacturingCostingProp
                     return (
                       <tr key={idx} className="border-b border-slate-900/50 hover:bg-slate-950/20 transition-colors">
                         <td className="py-3.5 px-3 font-semibold text-slate-200">{row.month}</td>
-                        <td className="py-3.5 px-3 text-center font-mono text-slate-400">₹{row.materials.toLocaleString()}</td>
-                        <td className="py-3.5 px-3 text-center font-mono text-slate-400">₹{row.labor.toLocaleString()}</td>
-                        <td className="py-3.5 px-3 text-center font-mono text-slate-400">₹{row.overhead.toLocaleString()}</td>
-                        <td className="py-3.5 px-3 text-right font-mono font-bold text-white">₹{total.toLocaleString()}</td>
+                        <td className="py-3.5 px-3 text-center font-mono text-slate-400">{currencySymbol}{row.materials.toLocaleString()}</td>
+                        <td className="py-3.5 px-3 text-center font-mono text-slate-400">{currencySymbol}{row.labor.toLocaleString()}</td>
+                        <td className="py-3.5 px-3 text-center font-mono text-slate-400">{currencySymbol}{row.overhead.toLocaleString()}</td>
+                        <td className="py-3.5 px-3 text-right font-mono font-bold text-white">{currencySymbol}{total.toLocaleString()}</td>
                       </tr>
                     );
                   })}

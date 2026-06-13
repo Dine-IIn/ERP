@@ -75,7 +75,7 @@ export const CompanyProfileSchema = z.object({
   companyEmail: z.string().email().optional().or(z.literal("")),
   companyPhone: z.string().optional().or(z.literal("")),
   alternatePhone: z.string().optional().or(z.literal("")),
-  website: z.string().url().optional().or(z.literal("")),
+  website: z.string().optional().or(z.literal("")),
   industryType: z.string().optional().or(z.literal("")),
   businessType: z.string().optional().or(z.literal("")),
   companyDescription: z.string().optional().or(z.literal("")),
