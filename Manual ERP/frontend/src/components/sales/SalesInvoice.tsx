@@ -56,7 +56,7 @@ export default function SalesInvoice({
 
   // Partial Billing state
   const [billingMode, setBillingMode] = useState<'FULL' | 'PARTIAL' | 'CUSTOM'>('FULL');
-  const [billingFactor, setBillingFactor] = useState('50.00'); // percentage of volume to bill
+  const [billingFactor, setBillingFactor] = useState('100.00'); // percentage of volume to bill
 
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
 
@@ -287,7 +287,7 @@ export default function SalesInvoice({
     setTax('18.00');
     setStatus('UNPAID');
     setBillingMode('FULL');
-    setBillingFactor('50.00');
+    setBillingFactor('100.00');
     setItems([{ productId: products[0]?.id || '', quantity: '1', price: String(products[0]?.pricing || 0), discount: '0.00' }]);
     setIsEditing(false);
     setEditingId(null);
@@ -828,36 +828,7 @@ export default function SalesInvoice({
                 />
               </div>
 
-              {/* Billing Mode (Full vs Partial vs Custom) */}
-              <div>
-                <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Billing Arrangement *</label>
-                <select
-                  value={billingMode}
-                  onChange={e => setBillingMode(e.target.value as 'FULL' | 'PARTIAL' | 'CUSTOM')}
-                  className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-emerald-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none cursor-pointer"
-                >
-                  <option value="FULL">FULL TAX BILLING (100% Volume)</option>
-                  <option value="PARTIAL">PARTIAL TAX BILLING (Installments / Pro-Rata)</option>
-                  <option value="CUSTOM">CUSTOM BILLING (Manual/Freeform)</option>
-                </select>
-              </div>
 
-              {/* Billed Percentage */}
-              {billingMode === 'PARTIAL' && (
-                <div>
-                  <label className="text-[9px] font-bold text-emerald-400 tracking-wider uppercase block mb-1">Billed Factor Percentage (%) *</label>
-                  <input
-                     type="number"
-                     step="0.1"
-                     min="1"
-                     max="100"
-                     required
-                     value={billingFactor}
-                     onChange={e => setBillingFactor(e.target.value)}
-                     className="w-full bg-[var(--bg-primary)] border border-emerald-500/30 focus:border-emerald-500 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none font-mono"
-                  />
-                </div>
-              )}
 
               {/* Status */}
               <div>
