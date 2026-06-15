@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Receipt, Search, Plus, Edit, Trash2, X, AlertCircle, Calendar, CheckCircle2, Mail, Download, Layers } from 'lucide-react';
 import { apiClient } from '../../utils/apiService';
+import { useQuery } from '@tanstack/react-query';
+import { CreateSalesInvoiceBodySchema } from '../../utils/schemas';
 
 const INDIAN_STATES = [
   "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
@@ -56,7 +58,6 @@ export default function SalesInvoice({
   const [billingMode, setBillingMode] = useState<'FULL' | 'PARTIAL' | 'CUSTOM'>('FULL');
   const [billingFactor, setBillingFactor] = useState('50.00'); // percentage of volume to bill
 
-  const [templates, setTemplates] = useState<any[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
 
   const [items, setItems] = useState<InvoiceItemInput[]>([]);
@@ -66,10 +67,19 @@ export default function SalesInvoice({
   const [emailingId, setEmailingId] = useState<string | null>(null);
 
   // --- NEW STATES FOR ADVANCED INVOICING, MERGING, SHIPPING & PRINTING ---
-  const [companyProfile, setCompanyProfile] = useState<any>(null);
-  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
-  const [salesOrders, setSalesOrders] = useState<any[]>([]);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
+  
+  const { data: profileData } = useQuery({ queryKey: ['companyProfile'], queryFn: () => apiClient.get<any>('/api/admin/company/profile') });
+  const companyProfile = profileData?.company || null;
+
+  const { data: bankData } = useQuery({ queryKey: ['bankAccounts'], queryFn: () => apiClient.get<{ bankAccounts: any[] }>('/api/finance/bank-accounts') });
+  const bankAccounts = bankData?.bankAccounts || [];
+
+  const { data: ordersData } = useQuery({ queryKey: ['salesOrders'], queryFn: () => apiClient.get<{ orders: any[] }>('/api/sales/orders') });
+  const salesOrders = ordersData?.orders || [];
+
+  const { data: templatesData } = useQuery({ queryKey: ['templates', 'INVOICE'], queryFn: () => apiClient.get<{ templates: any[] }>('/api/sales/templates?docType=INVOICE') });
+  const templates = templatesData?.templates || [];
   
   const [billingAddress, setBillingAddress] = useState('');
   const [shippingAddress, setShippingAddress] = useState('');
@@ -129,46 +139,7 @@ export default function SalesInvoice({
     }
   }, [activePrintInvoice]);
 
-  // Load backend profiles, bank accounts, and sales orders
-  React.useEffect(() => {
-    const fetchProfileData = async () => {
-      try {
-        const profileData = await apiClient.get<any>('/api/admin/company/profile');
-        setCompanyProfile(profileData.company || null);
-      } catch (err) {
-        console.error('Failed to load company profile:', err);
-      }
-    };
-    const fetchBankData = async () => {
-      try {
-        const bankData = await apiClient.get<{ bankAccounts: any[] }>('/api/finance/bank-accounts');
-        setBankAccounts(bankData.bankAccounts || []);
-      } catch (err) {
-        console.error('Failed to load bank accounts:', err);
-      }
-    };
-    const fetchOrdersData = async () => {
-      try {
-        const ordersData = await apiClient.get<{ orders: any[] }>('/api/sales/orders');
-        setSalesOrders(ordersData.orders || []);
-      } catch (err) {
-        console.error('Failed to load Sales Orders:', err);
-      }
-    };
-    const fetchTemplatesData = async () => {
-      try {
-        const data = await apiClient.get<{ templates: any[] }>('/api/sales/templates?docType=INVOICE');
-        setTemplates(data.templates || []);
-      } catch (err) {
-        console.error('Failed to load templates:', err);
-      }
-    };
 
-    fetchProfileData();
-    fetchBankData();
-    fetchOrdersData();
-    fetchTemplatesData();
-  }, [showModal, customizingInvoice]);
 
   const applyTemplateSettings = (tpl: any) => {
     setCustomTitle(tpl.title || 'Tax Invoice');
@@ -478,6 +449,13 @@ export default function SalesInvoice({
         discount: parseFloat(item.discount) || 0.0 // Discount %
       }))
     };
+
+    const parsed = CreateSalesInvoiceBodySchema.safeParse(payload);
+    if (!parsed.success) {
+      setLocalErr("Validation error: " + parsed.error.errors[0].message);
+      setLoading(false);
+      return;
+    }
 
     try {
       if (isEditing && editingId) {

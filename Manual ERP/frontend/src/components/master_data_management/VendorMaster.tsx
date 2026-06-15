@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { VendorSchema } from '../../utils/schemas';
 import { Truck, Search, Plus, Edit, Trash2, X, AlertCircle, Briefcase, CreditCard, ShieldAlert } from 'lucide-react';
 
 interface VendorMasterProps {
@@ -110,9 +111,16 @@ export default function VendorMaster({
       ...form,
       bankDetails: JSON.stringify(bankDetailsForm),
       creditTime: 0 // Removed from UI, default to 0
-    };
+      };
 
-    try {
+      const parsed = VendorSchema.safeParse(payload);
+      if (!parsed.success) {
+        setLocalErr(parsed.error.errors[0].message);
+        setLoading(false);
+        return;
+      }
+
+      try {
       if (isEditing && editingId) {
         await onUpdateVendor(editingId, payload);
         setLocalSuccess("Vendor/Supplier details updated successfully!");

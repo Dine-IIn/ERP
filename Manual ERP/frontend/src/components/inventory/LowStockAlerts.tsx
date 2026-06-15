@@ -12,9 +12,8 @@ interface Product {
 }
 
 interface LowStockAlertsProps {
-  products: Product[];
-  onTriggerReorderRedirect: () => void; // Redirects/switches tab to PO Creation!
-  onTriggerAuditRedirect: () => void; // Redirects/switches tab to Stock Audit!
+  products?: Product[];
+  onTriggerReorderRedirect?: () => void;
 }
 
 export default function LowStockAlerts({
@@ -25,7 +24,7 @@ export default function LowStockAlerts({
   const [searchTerm, setSearchTerm] = useState('');
 
   // Filter products below minimum safety threshold and match search term
-  const alertProducts = (products || [])
+  const alertProducts = activeProducts
     .filter(p => p.stock <= p.reorderLevel)
     .filter(p => {
       const name = p?.name || '';

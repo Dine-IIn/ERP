@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { FileText, Search, Plus, Trash2, X, AlertCircle, CheckCircle2, DollarSign, Calendar, Trash } from 'lucide-react';
+import { Search, Plus, Trash2, X, AlertCircle, FileText, CheckCircle2, Download, RefreshCw } from 'lucide-react';
+import { CreateVendorQuotationBodySchema } from '../../utils/schemas';
 
 interface VendorQuotationItem {
   id?: string;
@@ -132,6 +133,13 @@ export default function VendorQuotations({
         price: parseFloat(it.price) || 0.0
       }))
     };
+
+    const parsed = CreateVendorQuotationBodySchema.safeParse(payload);
+    if (!parsed.success) {
+      setLocalErr("Validation error: " + parsed.error.errors[0].message);
+      setLoading(false);
+      return;
+    }
 
     try {
       await onCreateQuotation(payload);

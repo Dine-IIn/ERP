@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '../../utils/apiService';
+import { FollowUpSchema } from '../../utils/schemas';
 import { CalendarClock, Search, Plus, Edit, Trash2, X, AlertCircle, CheckCircle2, Phone, Mail, Users, MonitorPlay, MessageSquare } from 'lucide-react';
 
 interface FollowUp {
@@ -74,8 +77,19 @@ export default function FollowUps({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!leadId || !scheduledDate || !type || !status) {
-      setLocalErr("Associated prospect, scheduled date-time, interaction type, and status are required.");
+
+    const payload = {
+      leadId: leadId,
+      scheduledDate: scheduledDate,
+      type,
+      status,
+      notes: notes.trim() || null,
+      outcome: outcome.trim() || null
+    };
+
+    const parsed = FollowUpSchema.safeParse(payload);
+    if (!parsed.success) {
+      setLocalErr(parsed.error.errors[0].message);
       return;
     }
 
@@ -83,28 +97,17 @@ export default function FollowUps({
     setLocalSuccess(null);
     setLoading(true);
 
-    const payload = {
-      leadId,
-      scheduledDate: new Date(scheduledDate).toISOString(),
-      type,
-      status,
-      notes: notes.trim() || null,
-      outcome: outcome.trim() || null
-    };
-
     try {
       if (isEditing && editingId) {
-        await onUpdateFollowUp(editingId, payload);
-        setLocalSuccess("Scheduled follow-up updated successfully!");
+        await onUpdateFollowUp(editingId, parsed.data);
+        setLocalSuccess("Schedule updated successfully!");
       } else {
-        await onCreateFollowUp(payload);
-        setLocalSuccess("Follow-up successfully scheduled!");
+        await onCreateFollowUp(parsed.data);
+        setLocalSuccess("Task scheduled successfully!");
       }
-      setTimeout(() => {
-        setShowModal(false);
-      }, 1000);
+      setTimeout(() => setShowModal(false), 1000);
     } catch (err: any) {
-      setLocalErr(err.message || "Failed to process follow-up registry.");
+      setLocalErr(err.message || "Failed to save schedule.");
     } finally {
       setLoading(false);
     }

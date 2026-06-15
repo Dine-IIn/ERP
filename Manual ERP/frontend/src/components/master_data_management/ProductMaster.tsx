@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiClient } from '../../utils/apiService';
+import { useQuery } from '@tanstack/react-query';
+import { ProductSchema } from '../../utils/schemas';
 import { Package, Search, Plus, Edit, Trash2, X, AlertCircle, DollarSign, Tag, Image, FileText, Ruler, ListPlus, Sliders, Layers } from 'lucide-react';
 
 interface ProductVariantForm {
@@ -36,23 +38,18 @@ export default function ProductMaster({
   currencySymbol = '$',
 }: ProductMasterProps) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [boms, setBoms] = useState<any[]>([]);
+  const { data: bomsData } = useQuery({
+    queryKey: ['boms'],
+    queryFn: async () => {
+      const data = await apiClient.get<{ boms: any[] }>('/api/manufacturing/boms');
+      return data;
+    }
+  });
+  const boms = bomsData?.boms || [];
   const [bomSearch, setBomSearch] = useState('');
   const [showBomDropdown, setShowBomDropdown] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState('');
   const [brandFilter, setBrandFilter] = useState('');
-
-  useEffect(() => {
-    const fetchBoms = async () => {
-      try {
-        const data = await apiClient.get<{ boms: any[] }>('/api/manufacturing/boms');
-        setBoms(data.boms || []);
-      } catch (err) {
-        console.error('Failed to load BOMs inside ProductMaster:', err);
-      }
-    };
-    fetchBoms();
-  }, []);
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -178,6 +175,13 @@ export default function ProductMaster({
         priceAddon: parseFloat(v.priceAddon) || 0.0
       })).filter(v => v.name !== '')
     };
+
+    const parsed = ProductSchema.safeParse(payload);
+    if (!parsed.success) {
+      setLocalErr(parsed.error.errors[0].message);
+      setLoading(false);
+      return;
+    }
 
     try {
       if (isEditing && editingId) {

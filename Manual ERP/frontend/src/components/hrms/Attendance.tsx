@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '../../utils/apiService';
+
 import { Clock, Search, ShieldAlert, CheckCircle, Fingerprint, Calendar, UserCheck, Play, Square } from 'lucide-react';
 
 interface AttendanceLog {
@@ -13,11 +16,11 @@ interface AttendanceLog {
 }
 
 interface AttendanceProps {
-  attendances: AttendanceLog[];
-  employees: any[];
-  currentUser: any;
-  onPunchAttendance: () => Promise<void>;
-  onFetchFilteredAttendance: (userId?: string, start?: string, end?: string) => Promise<void>;
+  attendances?: AttendanceLog[];
+  employees?: any[];
+  currentUser?: any;
+  onPunchAttendance?: () => Promise<void>;
+  onFetchFilteredAttendance?: (userId?: string, start?: string, end?: string) => Promise<void>;
 }
 
 export default function Attendance({
@@ -27,6 +30,20 @@ export default function Attendance({
   onPunchAttendance,
   onFetchFilteredAttendance
 }: AttendanceProps) {
+  const queryClient = useQueryClient();
+
+  const { data: fetchedAttendances } = useQuery({
+    queryKey: ['hrms-attendance'],
+    queryFn: () => apiClient.get<AttendanceLog[]>('/api/hrms/attendance')
+  });
+  
+  const punchMutation = useMutation({
+    mutationFn: () => apiClient.post('/api/hrms/attendance/punch', {}),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['hrms-attendance'] })
+  });
+
+  const activeAttendances = attendances || fetchedAttendances || [];
+
   const [filterUser, setFilterUser] = useState('');
   const [filterStart, setFilterStart] = useState('');
   const [filterEnd, setFilterEnd] = useState('');
@@ -35,14 +52,18 @@ export default function Attendance({
   const [searchTerm, setSearchTerm] = useState('');
 
   // Check if current user is checked-in (last log has checkOut null)
-  const userLogs = attendances.filter(a => a.userId === currentUser.id);
+  const userLogs = activeAttendances.filter(a => a.userId === currentUser.id);
   const isCheckedIn = userLogs.length > 0 && !userLogs[0].checkOut;
   const activeLog = isCheckedIn ? userLogs[0] : null;
 
   const handlePunch = async () => {
     setPunching(true);
     try {
-      await onPunchAttendance();
+      if (onPunchAttendance) {
+        await onPunchAttendance();
+      } else {
+        await punchMutation.mutateAsync();
+      }
     } catch (e: any) {
       alert(e.message || "Failed to log punch event.");
     } finally {
@@ -79,7 +100,7 @@ export default function Attendance({
     }
   };
 
-  const filteredAttendances = (attendances || []).filter(log => {
+  const filteredAttendances = activeAttendances.filter(log => {
     const username = log.user?.username || currentUser.username || '';
     const status = log.status || '';
     const term = (searchTerm || '').toLowerCase();

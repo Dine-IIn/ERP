@@ -3,6 +3,7 @@ import { AuthenticatedRequest } from '../middlewares/auth';
 import prisma from '../services/db';
 import { ioInstance } from './index';
 import { sendPushNotifications } from '../services/firebase';
+import { CreateChatGroupSchema, SendChatMessageSchema, ManageChatGroupMembersSchema, UpdateChatGroupSettingsSchema, GetChatGroupMessagesQuerySchema } from '../types';
 
 /**
  * 1. List all chat groups and individual DMs available to the user
@@ -95,7 +96,9 @@ export async function createChatGroup(req: AuthenticatedRequest, res: Response) 
       return res.status(401).json({ error: "Unauthorized access" });
     }
 
-    const { name, type, recipientId, settings } = req.body;
+    const parsed = CreateChatGroupSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors });
+    const { name, type, recipientId, settings } = parsed.data;
 
     if (!type || !['GENERAL', 'EXPENSE', 'DIRECT'].includes(type)) {
       return res.status(400).json({ error: "Invalid group type" });
@@ -186,8 +189,8 @@ export async function createChatGroup(req: AuthenticatedRequest, res: Response) 
 
     // Role verification (Unless Company Admin or Super Admin, require permissions)
     if (user.role !== 'Admin' && !user.isSuperAdmin) {
-      const dbUser = await prisma.user.findUnique({
-        where: { id: user.userId },
+      const dbUser = await prisma.user.findFirst({
+        where: { id: user.userId, companyId: user.companyId },
         include: { role: true }
       });
       const permissions = JSON.parse(dbUser?.role?.permissions || '{}');
@@ -255,8 +258,9 @@ export async function getChatGroupMessages(req: AuthenticatedRequest, res: Respo
     }
 
     const { groupId } = req.params;
-    const cursor = req.query.cursor as string;
-    const limit = parseInt(req.query.limit as string) || 50;
+    const parsedQuery = GetChatGroupMessagesQuerySchema.safeParse(req.query);
+    if (!parsedQuery.success) return res.status(400).json({ error: parsedQuery.error.errors });
+    const { cursor, limit } = parsedQuery.data;
 
     // Verify room exists in this company
     const group = await prisma.chatGroup.findFirst({
@@ -292,8 +296,8 @@ export async function getChatGroupMessages(req: AuthenticatedRequest, res: Respo
     };
 
     if (cursor) {
-      const cursorMessage = await prisma.chatMessage.findUnique({
-        where: { id: cursor }
+      const cursorMessage = await prisma.chatMessage.findFirst({
+        where: { id: cursor, groupId }
       });
       if (cursorMessage) {
         queryOptions.where.createdAt = {
@@ -325,7 +329,9 @@ export async function sendChatGroupMessage(req: AuthenticatedRequest, res: Respo
     }
 
     const { groupId } = req.params;
-    const { message, type, expenseData } = req.body;
+    const parsed = SendChatMessageSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors });
+    const { message, type, expenseData } = parsed.data;
 
     const group = await prisma.chatGroup.findFirst({
       where: { id: groupId, companyId: user.companyId }
@@ -499,7 +505,9 @@ export async function manageChatGroupMembers(req: AuthenticatedRequest, res: Res
     }
 
     const { groupId } = req.params;
-    const { targetUserId, action } = req.body; // action: "ADD" | "REMOVE"
+    const parsed = ManageChatGroupMembersSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors });
+    const { targetUserId, action } = parsed.data;
 
     if (!targetUserId || !['ADD', 'REMOVE'].includes(action)) {
       return res.status(400).json({ error: "Invalid action parameters" });
@@ -594,7 +602,9 @@ export async function updateChatGroupSettings(req: AuthenticatedRequest, res: Re
     }
 
     const { groupId } = req.params;
-    const { name, isPrivate, connectToCashbook } = req.body;
+    const parsed = UpdateChatGroupSettingsSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors });
+    const { name, isPrivate, connectToCashbook } = parsed.data;
 
     const group = await prisma.chatGroup.findFirst({
       where: { id: groupId, companyId: user.companyId }

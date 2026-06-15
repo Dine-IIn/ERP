@@ -1,4 +1,8 @@
 import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '../../utils/apiService';
+import { PayrollGenerateSchema } from '../../utils/schemas';
+
 import { DollarSign, Plus, Check, X, AlertCircle, CheckCircle2, Award, ClipboardList, Send, Search } from 'lucide-react';
 
 interface PayrollRecord {
@@ -18,10 +22,10 @@ interface PayrollRecord {
 }
 
 interface PayrollProps {
-  payrolls: PayrollRecord[];
-  employees: any[];
-  onGeneratePayroll: (data: any) => Promise<void>;
-  onDisbursePayroll: (id: string, refNo: string, notes: string) => Promise<void>;
+  payrolls?: PayrollRecord[];
+  employees?: any[];
+  onGeneratePayroll?: (data: any) => Promise<void>;
+  onDisbursePayroll?: (id: string, refNo: string, notes: string) => Promise<void>;
   currencySymbol?: string;
 }
 
@@ -32,6 +36,25 @@ export default function Payroll({
   onDisbursePayroll,
   currencySymbol = '$'
 }: PayrollProps) {
+  const queryClient = useQueryClient();
+
+  const { data: fetchedPayrolls } = useQuery({
+    queryKey: ['hrms-payroll'],
+    queryFn: () => apiClient.get<PayrollRecord[]>('/api/hrms/payroll')
+  });
+
+  const generateMutation = useMutation({
+    mutationFn: (data: any) => apiClient.post('/api/hrms/payroll/generate', data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['hrms-payroll'] })
+  });
+
+  const disburseMutation = useMutation({
+    mutationFn: ({ id, refNo, notes }: { id: string, refNo: string, notes: string }) => apiClient.patch(`/api/hrms/payroll/disburse/${id}`, { referenceNo: refNo, notes }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['hrms-payroll'] })
+  });
+
+  const activePayrolls = payrolls || fetchedPayrolls || [];
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [userId, setUserId] = useState('');
   const [month, setMonth] = useState(new Date().getMonth() + 1);
@@ -50,7 +73,7 @@ export default function Payroll({
   const [localSuccess, setLocalSuccess] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
-  const filteredPayrolls = (payrolls || []).filter(payroll => {
+  const filteredPayrolls = activePayrolls.filter(payroll => {
     const employee = payroll?.user?.username || '';
     const status = payroll?.status || '';
     const reference = payroll?.referenceNo || '';
@@ -71,15 +94,27 @@ export default function Payroll({
     setLocalSuccess(null);
     setLoading(true);
 
-    try {
-      await onGeneratePayroll({
+    const payload = {
         userId,
         month: Number(month),
         year: Number(year),
         basicSalary: parseFloat(basicSalary),
         allowances: allowances ? parseFloat(allowances) : 0,
         deductions: deductions ? parseFloat(deductions) : 0
-      });
+    };
+    const parseResult = PayrollGenerateSchema.safeParse(payload);
+    if (!parseResult.success) {
+      setLocalErr(parseResult.error.errors[0].message);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      if (onGeneratePayroll) {
+        await onGeneratePayroll(parseResult.data);
+      } else {
+        await generateMutation.mutateAsync(parseResult.data);
+      }
       setLocalSuccess("Salary sheet successfully generated!");
       setTimeout(() => {
         setShowAddModal(false);
@@ -97,7 +132,11 @@ export default function Payroll({
 
     setLoading(true);
     try {
-      await onDisbursePayroll(activePayroll.id, referenceNo.trim(), notes.trim());
+      if (onDisbursePayroll) {
+        await onDisbursePayroll(activePayroll.id, referenceNo.trim(), notes.trim());
+      } else {
+        await disburseMutation.mutateAsync({ id: activePayroll.id, refNo: referenceNo.trim(), notes: notes.trim() });
+      }
       setShowDisburseModal(false);
       setReferenceNo('');
       setNotes('');

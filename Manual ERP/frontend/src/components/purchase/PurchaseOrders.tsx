@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { ShoppingCart, Search, Plus, Trash2, X, AlertCircle, CheckCircle2, DollarSign, Calendar, Tag, Trash, Eye, Edit, Download } from 'lucide-react';
 import { apiClient } from '../../utils/apiService';
+import { useQuery } from '@tanstack/react-query';
+import { CreatePurchaseOrderBodySchema } from '../../utils/schemas';
 
 interface PurchaseOrderItem {
   id?: string;
@@ -71,12 +73,18 @@ export default function PurchaseOrders({
   const [items, setItems] = useState<ItemInput[]>([]);
 
   // Print Template customizer states for PO
-  const [templates, setTemplates] = useState<any[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
-  const [companyProfile, setCompanyProfile] = useState<any>(null);
-  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
   const [customizingOrder, setCustomizingOrder] = useState<any>(null);
   const [activePrintOrder, setActivePrintOrder] = useState<any>(null);
+
+  const { data: profileData } = useQuery({ queryKey: ['companyProfile'], queryFn: () => apiClient.get<any>('/api/admin/company/profile') });
+  const companyProfile = profileData?.company || null;
+
+  const { data: bankData } = useQuery({ queryKey: ['bankAccounts'], queryFn: () => apiClient.get<{ bankAccounts: any[] }>('/api/finance/bank-accounts') });
+  const bankAccounts = bankData?.bankAccounts || [];
+
+  const { data: templatesData } = useQuery({ queryKey: ['templates', 'PURCHASE_ORDER'], queryFn: () => apiClient.get<{ templates: any[] }>('/api/sales/templates?docType=PURCHASE_ORDER') });
+  const templates = templatesData?.templates || [];
   const [customTitle, setCustomTitle] = useState('Purchase Order');
   const [customNotes, setCustomNotes] = useState('We require delivery within the specified date range. Please send invoice copies on dispatch.');
   const [pdfCustomizer, setPdfCustomizer] = useState({
@@ -104,36 +112,7 @@ export default function PurchaseOrders({
   };
   const currentThemeHex = getThemeHex(themeColor);
 
-  React.useEffect(() => {
-    const fetchProfileData = async () => {
-      try {
-        const profileData = await apiClient.get<any>('/api/admin/company/profile');
-        setCompanyProfile(profileData.company || null);
-      } catch (err) {
-        console.error('Failed to load company profile:', err);
-      }
-    };
-    const fetchBankData = async () => {
-      try {
-        const bankData = await apiClient.get<{ bankAccounts: any[] }>('/api/finance/bank-accounts');
-        setBankAccounts(bankData.bankAccounts || []);
-      } catch (err) {
-        console.error('Failed to load bank accounts:', err);
-      }
-    };
-    const fetchTemplatesData = async () => {
-      try {
-        const data = await apiClient.get<{ templates: any[] }>('/api/sales/templates?docType=PURCHASE_ORDER');
-        setTemplates(data.templates || []);
-      } catch (err) {
-        console.error('Failed to load templates:', err);
-      }
-    };
 
-    fetchProfileData();
-    fetchBankData();
-    fetchTemplatesData();
-  }, [showModal, customizingOrder]);
 
   const applyTemplateSettings = (tpl: any) => {
     setCustomTitle(tpl.title || 'Purchase Order');
@@ -281,6 +260,13 @@ export default function PurchaseOrders({
         discount: parseFloat(it.discount) || 0.0
       }))
     };
+
+    const parsed = CreatePurchaseOrderBodySchema.safeParse(payload);
+    if (!parsed.success) {
+      setLocalErr("Validation error: " + parsed.error.errors[0].message);
+      setLoading(false);
+      return;
+    }
 
     try {
       if (isEditing && editOrderId) {

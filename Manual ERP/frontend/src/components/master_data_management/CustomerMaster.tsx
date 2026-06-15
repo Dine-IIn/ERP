@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { CustomerSchema } from '../../utils/schemas';
 import { UserCheck, Search, Plus, Edit, Trash2, X, AlertCircle, MapPin, DollarSign, Clock } from 'lucide-react';
 
 const INDIAN_STATES = [
@@ -104,10 +105,17 @@ export default function CustomerMaster({
     }
 
     setLocalErr(null);
-    setLocalSuccess(null);
-    setLoading(true);
+      setLocalSuccess(null);
+      setLoading(true);
 
-    try {
+      const parsed = CustomerSchema.safeParse(form);
+      if (!parsed.success) {
+        setLocalErr(parsed.error.errors[0].message);
+        setLoading(false);
+        return;
+      }
+
+      try {
       if (isEditing && editingId) {
         await onUpdateCustomer(editingId, form);
         setLocalSuccess("Customer details updated successfully!");

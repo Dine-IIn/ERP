@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import prisma from '../services/db';
 import { logAudit } from '../utils/audit';
+import { LeadSchema, OpportunitySchema, FollowUpSchema } from '../types';
 
 // ==========================================
 // 1. LEADS CONTROLLER
@@ -29,11 +30,9 @@ export async function createLead(req: AuthenticatedRequest, res: Response) {
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { name, companyName, email, phone, source, status, assignedToId, notes } = req.body;
-
-    if (!name || !phone || !source || !status) {
-      return res.status(400).json({ error: "Name, phone, source, and status are required fields." });
-    }
+    const parsed = LeadSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.format() });
+    const { name, companyName, email, phone, source, status, assignedToId, notes } = parsed.data;
 
     const lead = await prisma.lead.create({
       data: {
@@ -74,7 +73,9 @@ export async function updateLead(req: AuthenticatedRequest, res: Response) {
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
-    const { name, companyName, email, phone, source, status, assignedToId, notes } = req.body;
+    const parsed = LeadSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.format() });
+    const { name, companyName, email, phone, source, status, assignedToId, notes } = parsed.data;
 
     const leadToUpdate = await prisma.lead.findFirst({
       where: { id, companyId }
@@ -176,11 +177,9 @@ export async function createOpportunity(req: AuthenticatedRequest, res: Response
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { leadId, title, value, stage, probability, closeDate } = req.body;
-
-    if (!leadId || !title || value === undefined || !stage || probability === undefined) {
-      return res.status(400).json({ error: "LeadId, title, value, stage, and probability are required." });
-    }
+    const parsed = OpportunitySchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.format() });
+    const { leadId, title, value, stage, probability, closeDate } = parsed.data;
 
     const opportunity = await prisma.opportunity.create({
       data: {
@@ -219,7 +218,9 @@ export async function updateOpportunity(req: AuthenticatedRequest, res: Response
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
-    const { title, value, stage, probability, closeDate } = req.body;
+    const parsed = OpportunitySchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.format() });
+    const { title, value, stage, probability, closeDate } = parsed.data;
 
     const opp = await prisma.opportunity.findFirst({
       where: { id, companyId }
@@ -316,11 +317,9 @@ export async function createFollowUp(req: AuthenticatedRequest, res: Response) {
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { leadId, scheduledDate, type, status, notes, outcome } = req.body;
-
-    if (!leadId || !scheduledDate || !type || !status) {
-      return res.status(400).json({ error: "LeadId, scheduledDate, type, and status are required." });
-    }
+    const parsed = FollowUpSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.format() });
+    const { leadId, scheduledDate, type, status, notes, outcome } = parsed.data;
 
     const followup = await prisma.followUp.create({
       data: {
@@ -359,7 +358,9 @@ export async function updateFollowUp(req: AuthenticatedRequest, res: Response) {
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
-    const { scheduledDate, type, status, notes, outcome } = req.body;
+    const parsed = FollowUpSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.format() });
+    const { scheduledDate, type, status, notes, outcome } = parsed.data;
 
     const fup = await prisma.followUp.findFirst({
       where: { id, companyId }

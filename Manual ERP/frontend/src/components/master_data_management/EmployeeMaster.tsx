@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { EmployeeSchema } from '../../utils/schemas';
 import { Users, User, Shield, Briefcase, Calendar, Lock, Plus, Trash2, Edit, Check, AlertCircle, X, Search } from 'lucide-react';
 
 interface EmployeeMasterProps {
@@ -148,9 +149,15 @@ const EmployeeMaster = React.memo(function EmployeeMaster({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLocalErr(null);
+      setLocalErr(null);
 
-    try {
+      const parsed = EmployeeSchema.safeParse(adminUserForm);
+      if (!parsed.success) {
+        setLocalErr(parsed.error.errors[0].message);
+        return;
+      }
+
+      try {
       await handleCreateOrUpdateAdminUserSubmit(e);
       setShowFormModal(false);
       setSelectedUser(null);

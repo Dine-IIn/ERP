@@ -1,4 +1,8 @@
 import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '../../utils/apiService';
+import { LeaveRequestSchema } from '../../utils/schemas';
+
 import { CalendarRange, Plus, Check, X, AlertCircle, CheckCircle2, User, FileText, ChevronRight, MessageSquare, Search } from 'lucide-react';
 
 interface LeaveRequest {
@@ -17,10 +21,10 @@ interface LeaveRequest {
 }
 
 interface LeaveManagementProps {
-  leaveRequests: LeaveRequest[];
-  currentUser: any;
-  onCreateLeaveRequest: (data: any) => Promise<void>;
-  onUpdateLeaveStatus: (id: string, status: string, notes: string) => Promise<void>;
+  leaveRequests?: LeaveRequest[];
+  currentUser?: any;
+  onCreateLeaveRequest?: (data: any) => Promise<void>;
+  onUpdateLeaveStatus?: (id: string, status: string, notes: string) => Promise<void>;
 }
 
 export default function LeaveManagement({
@@ -29,6 +33,25 @@ export default function LeaveManagement({
   onCreateLeaveRequest,
   onUpdateLeaveStatus
 }: LeaveManagementProps) {
+  const queryClient = useQueryClient();
+
+  const { data: fetchedLeaveRequests } = useQuery({
+    queryKey: ['hrms-leaves'],
+    queryFn: () => apiClient.get<LeaveRequest[]>('/api/hrms/leaves')
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (data: any) => apiClient.post('/api/hrms/leaves', data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['hrms-leaves'] })
+  });
+
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ id, status, notes }: { id: string, status: string, notes: string }) => apiClient.patch(`/api/hrms/leaves/${id}`, { status, notes }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['hrms-leaves'] })
+  });
+
+  const activeLeaveRequests = leaveRequests || fetchedLeaveRequests || [];
+
   const [showApplyModal, setShowApplyModal] = useState(false);
   const [type, setType] = useState('SICK');
   const [startDate, setStartDate] = useState('');
@@ -45,7 +68,7 @@ export default function LeaveManagement({
 
   const [searchTerm, setSearchTerm] = useState('');
 
-  const myRequests = (leaveRequests || [])
+  const myRequests = activeLeaveRequests
     .filter(l => l.userId === currentUser.id)
     .filter(l => {
       const type = l?.type || '';
@@ -54,7 +77,7 @@ export default function LeaveManagement({
       return type.toLowerCase().includes(term) || reason.toLowerCase().includes(term);
     });
 
-  const pendingRequests = (leaveRequests || [])
+  const pendingRequests = activeLeaveRequests
     .filter(l => l.status === "PENDING" && l.userId !== currentUser.id)
     .filter(l => {
       const username = l?.user?.username || '';
@@ -77,13 +100,20 @@ export default function LeaveManagement({
     setLocalSuccess(null);
     setLoading(true);
 
+    const payload = { type, startDate, endDate, reason: reason.trim() };
+    const parseResult = LeaveRequestSchema.safeParse(payload);
+    if (!parseResult.success) {
+      setLocalErr(parseResult.error.errors[0].message);
+      setLoading(false);
+      return;
+    }
+
     try {
-      await onCreateLeaveRequest({
-        type,
-        startDate,
-        endDate,
-        reason: reason.trim()
-      });
+      if (onCreateLeaveRequest) {
+        await onCreateLeaveRequest(parseResult.data);
+      } else {
+        await createMutation.mutateAsync(parseResult.data);
+      }
       setLocalSuccess("Leave request submitted successfully!");
       setTimeout(() => {
         setShowApplyModal(false);
@@ -102,7 +132,11 @@ export default function LeaveManagement({
     if (!activeRequest) return;
     setLoading(true);
     try {
-      await onUpdateLeaveStatus(activeRequest.id, status, notes.trim());
+      if (onUpdateLeaveStatus) {
+        await onUpdateLeaveStatus(activeRequest.id, status, notes.trim());
+      } else {
+        await updateStatusMutation.mutateAsync({ id: activeRequest.id, status, notes: notes.trim() });
+      }
       setShowApprovalModal(false);
       setNotes('');
       setActiveRequest(null);

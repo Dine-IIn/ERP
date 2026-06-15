@@ -1,4 +1,8 @@
 import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '../../utils/apiService';
+import { ShiftRosterSchema } from '../../utils/schemas';
+
 import { CalendarClock, Plus, Clock, X, AlertCircle, CheckCircle2, Sliders, CalendarDays, Zap, Search } from 'lucide-react';
 
 interface ShiftRoster {
@@ -11,14 +15,28 @@ interface ShiftRoster {
 }
 
 interface ShiftsProps {
-  shiftRosters: ShiftRoster[];
-  onCreateShiftRoster: (data: any) => Promise<void>;
+  shiftRosters?: ShiftRoster[];
+  onCreateShiftRoster?: (data: any) => Promise<void>;
 }
 
 export default function Shifts({
   shiftRosters,
   onCreateShiftRoster
 }: ShiftsProps) {
+  const queryClient = useQueryClient();
+
+  const { data: fetchedShiftRosters } = useQuery({
+    queryKey: ['hrms-shifts'],
+    queryFn: () => apiClient.get<ShiftRoster[]>('/api/hrms/shifts')
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (data: any) => apiClient.post('/api/hrms/shifts', data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['hrms-shifts'] })
+  });
+
+  const activeShiftRosters = shiftRosters || fetchedShiftRosters || [];
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [name, setName] = useState('');
   const [startTime, setStartTime] = useState('09:00');
@@ -30,7 +48,7 @@ export default function Shifts({
   const [localSuccess, setLocalSuccess] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
-  const filteredRosters = (shiftRosters || []).filter(roster => {
+  const filteredRosters = activeShiftRosters.filter(roster => {
     const shiftName = roster?.name || '';
     const start = roster?.startTime || '';
     const end = roster?.endTime || '';
@@ -51,13 +69,20 @@ export default function Shifts({
     setLocalSuccess(null);
     setLoading(true);
 
+    const payload = { name: name.trim(), startTime, endTime, gracePeriod: Number(gracePeriod) };
+    const parseResult = ShiftRosterSchema.safeParse(payload);
+    if (!parseResult.success) {
+      setLocalErr(parseResult.error.errors[0].message);
+      setLoading(false);
+      return;
+    }
+
     try {
-      await onCreateShiftRoster({
-        name: name.trim(),
-        startTime,
-        endTime,
-        gracePeriod: Number(gracePeriod)
-      });
+      if (onCreateShiftRoster) {
+        await onCreateShiftRoster(parseResult.data);
+      } else {
+        await createMutation.mutateAsync(parseResult.data);
+      }
       setLocalSuccess("Shift roster configured successfully!");
       setTimeout(() => {
         setShowAddModal(false);

@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '../../utils/apiService';
+import { OpportunitySchema } from '../../utils/schemas';
 import { DollarSign, Calendar, Search, Plus, Edit, Trash2, X, AlertCircle, CheckCircle2, TrendingUp, Layers, LayoutGrid, List } from 'lucide-react';
 
 interface Opportunity {
@@ -50,6 +53,7 @@ export default function Opportunities({
   const [stage, setStage] = useState('PROSPECTING');
   const [probability, setProbability] = useState('20');
   const [closeDate, setCloseDate] = useState('');
+  const [notes, setNotes] = useState('');
 
   const [localErr, setLocalErr] = useState<string | null>(null);
   const [localSuccess, setLocalSuccess] = useState<string | null>(null);
@@ -62,6 +66,7 @@ export default function Opportunities({
     setStage('PROSPECTING');
     setProbability('20');
     setCloseDate('');
+    setNotes('');
     setIsEditing(false);
     setEditingId(null);
     setLocalErr(null);
@@ -76,6 +81,7 @@ export default function Opportunities({
     setStage(opp.stage);
     setProbability(String(opp.probability));
     setCloseDate(opp.closeDate ? opp.closeDate.substring(0, 10) : '');
+    setNotes(opp.notes || '');
     setIsEditing(true);
     setEditingId(opp.id);
     setLocalErr(null);
@@ -98,8 +104,20 @@ export default function Opportunities({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!leadId || !title.trim() || !value.trim() || !stage) {
-      setLocalErr("Associated lead, opportunity title, valuation, and sales stage are required.");
+
+    const payload = {
+      title: title.trim(),
+      leadId: leadId,
+      value: value ? parseFloat(value) : 0,
+      stage,
+      probability: probability ? parseInt(probability, 10) : 50,
+      closeDate: closeDate || null,
+      notes: notes.trim() || null
+    };
+
+    const parsed = OpportunitySchema.safeParse(payload);
+    if (!parsed.success) {
+      setLocalErr(parsed.error.errors[0].message);
       return;
     }
 
@@ -107,26 +125,15 @@ export default function Opportunities({
     setLocalSuccess(null);
     setLoading(true);
 
-    const payload = {
-      leadId,
-      title: title.trim(),
-      value: parseFloat(value) || 0.0,
-      stage,
-      probability: parseFloat(probability) || 0.0,
-      closeDate: closeDate || null
-    };
-
     try {
       if (isEditing && editingId) {
-        await onUpdateOpportunity(editingId, payload);
-        setLocalSuccess("Sales opportunity successfully updated!");
+        await onUpdateOpportunity(editingId, parsed.data);
+        setLocalSuccess("Opportunity modified successfully!");
       } else {
-        await onCreateOpportunity(payload);
-        setLocalSuccess("New sales opportunity registered successfully!");
+        await onCreateOpportunity(parsed.data);
+        setLocalSuccess("Opportunity mapped successfully!");
       }
-      setTimeout(() => {
-        setShowModal(false);
-      }, 1000);
+      setTimeout(() => setShowModal(false), 1000);
     } catch (err: any) {
       setLocalErr(err.message || "Failed to process opportunity.");
     } finally {

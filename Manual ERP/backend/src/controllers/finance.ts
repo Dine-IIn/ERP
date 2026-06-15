@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import prisma from '../services/db';
 import { logAudit } from '../utils/audit';
+import { ExpenseSchema, PaymentSchema, ReceiptSchema, BankAccountSchema } from '../types';
 
 // Helper: Append a Cashbook voucher and compute running balances
 async function addCashbookVoucher(
@@ -75,16 +76,9 @@ export async function createExpense(req: AuthenticatedRequest, res: Response) {
     const userId = req.user?.userId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { amount, description, category, date, syncToCashbook, referenceNo } = req.body;
-
-    if (!amount || !description || !category) {
-      return res.status(400).json({ error: "Amount, description, and category are required" });
-    }
-
-    const parsedAmount = parseFloat(amount);
-    if (isNaN(parsedAmount) || parsedAmount <= 0) {
-      return res.status(400).json({ error: "Amount must be a positive number" });
-    }
+    const parsed = ExpenseSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.format() });
+    const { amount: parsedAmount, description, category, date, syncToCashbook, referenceNo } = parsed.data;
 
     // Create Expense Book entry
     const expense = await prisma.companyExpense.create({
@@ -156,13 +150,9 @@ export async function createPayment(req: AuthenticatedRequest, res: Response) {
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { vendorId, amount, paymentMethod, referenceNo, bankDetails, notes } = req.body;
-
-    if (!vendorId || !amount || !paymentMethod) {
-      return res.status(400).json({ error: "Vendor, amount, and payment method are required" });
-    }
-
-    const parsedAmount = parseFloat(amount);
+    const parsed = PaymentSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.format() });
+    const { vendorId, amount: parsedAmount, paymentMethod, referenceNo, bankDetails, notes } = parsed.data;
     const count = await prisma.vendorPayment.count({ where: { companyId } });
     const paymentNo = `PAY-${new Date().getFullYear()}-${(count + 1).toString().padStart(5, '0')}`;
 
@@ -181,7 +171,7 @@ export async function createPayment(req: AuthenticatedRequest, res: Response) {
     });
 
     // Auto-record Outward payment inside cashbook voucher ledger
-    const vendor = await prisma.vendor.findUnique({ where: { id: vendorId }, select: { name: true } });
+    const vendor = await prisma.vendor.findFirst({ where: { id: vendorId, companyId }, select: { name: true } });
     await addCashbookVoucher(
       companyId,
       'OUTWARD_PAYMENT',
@@ -221,13 +211,9 @@ export async function createReceipt(req: AuthenticatedRequest, res: Response) {
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { amount, payerName, category, paymentMethod, referenceNo, notes } = req.body;
-
-    if (!amount || !payerName || !category || !paymentMethod) {
-      return res.status(400).json({ error: "Amount, payer name, category, and payment method are required" });
-    }
-
-    const parsedAmount = parseFloat(amount);
+    const parsed = ReceiptSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.format() });
+    const { amount: parsedAmount, payerName, category, paymentMethod, referenceNo, notes } = parsed.data;
 
     const receipt = await prisma.companyReceipt.create({
       data: {
@@ -299,8 +285,7 @@ export async function getGstWorksheet(req: AuthenticatedRequest, res: Response) 
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    // Fetch company GST details
-    const company = await prisma.company.findUnique({
+    const company = await prisma.company.findFirst({
       where: { id: companyId },
       select: { name: true, gstin: true, pan: true }
     });
@@ -360,13 +345,9 @@ export async function createBankAccount(req: AuthenticatedRequest, res: Response
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { bankName, accountNo, branchName, ifscCode, accountType, balance } = req.body;
-
-    if (!bankName || !accountNo || !ifscCode || !accountType) {
-      return res.status(400).json({ error: "Bank name, Account Number, IFSC code, and Account Type are required" });
-    }
-
-    const parsedBalance = balance !== undefined ? parseFloat(balance) : 0.0;
+    const parsed = BankAccountSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.format() });
+    const { bankName, accountNo, branchName, ifscCode, accountType, balance: parsedBalance = 0.0 } = parsed.data;
 
     // Check unique accountNo in company
     const existing = await prisma.companyBankAccount.findFirst({

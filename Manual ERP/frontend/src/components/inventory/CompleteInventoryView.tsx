@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { apiClient } from '../../utils/apiService';
+
 import { Package, Search, Warehouse, ShieldAlert, CheckCircle, ShieldCheck, DollarSign, Sliders } from 'lucide-react';
 
 interface Product {
@@ -15,22 +18,29 @@ interface Product {
 }
 
 interface CompleteInventoryViewProps {
-  products: Product[];
+  products?: Product[];
   currencySymbol?: string;
 }
 
 export default function CompleteInventoryView({ products = [], currencySymbol = '$' }: CompleteInventoryViewProps) {
+  const { data: fetchedProducts } = useQuery({
+    queryKey: ['inventory-products'],
+    queryFn: () => apiClient.get<Product[]>('/api/inventory/products')
+  });
+
+  const activeProducts = products || fetchedProducts || [];
+
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL'); // ALL, SAFE, LOW
 
   // Compute Categories list
   const categories = Array.from(
-    new Set((products || []).map(p => p?.category?.name).filter(Boolean))
+    new Set(activeProducts.map(p => p?.category?.name).filter(Boolean))
   ) as string[];
 
   // Filter products
-  const filteredProducts = (products || []).filter(p => {
+  const filteredProducts = activeProducts.filter(p => {
     if (!p) return false;
     const name = p.name || '';
     const sku = p.sku || '';
@@ -54,10 +64,10 @@ export default function CompleteInventoryView({ products = [], currencySymbol = 
   });
 
   // Calculate high-level summary cards stats
-  const totalProducts = (products || []).length;
-  const totalStockItems = (products || []).reduce((sum, p) => sum + Math.max(0, p?.stock || 0), 0);
-  const totalValuation = (products || []).reduce((sum, p) => sum + (Math.max(0, p?.stock || 0) * (p?.pricing || 0)), 0);
-  const criticalItemsCount = (products || []).filter(p => (p?.stock || 0) <= (p?.reorderLevel || 0)).length;
+  const totalProducts = activeProducts.length;
+  const totalStockItems = activeProducts.reduce((sum, p) => sum + Math.max(0, p?.stock || 0), 0);
+  const totalValuation = activeProducts.reduce((sum, p) => sum + (Math.max(0, p?.stock || 0) * (p?.pricing || 0)), 0);
+  const criticalItemsCount = activeProducts.filter(p => (p?.stock || 0) <= (p?.reorderLevel || 0)).length;
 
   return (
     <div className="space-y-6">

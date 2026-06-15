@@ -64,6 +64,21 @@ export default function CustomizableDashboard({
   const [widgets, setWidgets] = useState<DashboardWidget[]>([]);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [activeTheme, setActiveTheme] = useState('glass-indigo');
+  const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsReady(true);
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const themeClasses = {
+    'glass-indigo': { pageBg: 'bg-indigo-950/10 border border-indigo-500/10' },
+    'glass-emerald': { pageBg: 'bg-emerald-950/10 border border-emerald-500/10' },
+    'glass-rose': { pageBg: 'bg-rose-950/10 border border-rose-500/10' },
+    'glass-amber': { pageBg: 'bg-amber-950/10 border border-amber-500/10' }
+  }[activeTheme as 'glass-indigo' | 'glass-emerald' | 'glass-rose' | 'glass-amber'] || { pageBg: 'bg-indigo-950/10 border border-indigo-500/10' };
 
   // Add Widget Form State
   const [newTitle, setNewTitle] = useState('');
@@ -427,7 +442,22 @@ export default function CustomizableDashboard({
   };
 
   return (
-    <div className="space-y-6 select-none">
+    <div className={`space-y-6 ${themeClasses.pageBg} p-4 rounded-xl min-h-[600px] transition-colors`}>
+      {/* NO ACTIVE USERS BANNER */}
+      {isReady && companyUsers && companyUsers.filter(u => u.status === 'ACTIVE').length === 0 && (
+        <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-6 flex flex-col md:flex-row items-center gap-6 shadow-sm mb-6 animate-pulse" style={{ animationDuration: '3s' }}>
+          <div className="w-12 h-12 rounded-full bg-rose-500/20 flex items-center justify-center shrink-0">
+            <Users className="w-6 h-6 text-rose-500" />
+          </div>
+          <div className="flex-1 text-center md:text-left">
+            <h3 className="text-rose-500 font-bold text-lg mb-1">No Active Users Detected</h3>
+            <p className="text-rose-400 text-sm leading-relaxed">
+              Your organization currently has zero active employees or users configured in the system. To unlock the full collaborative potential of the ERP, navigate to the <strong className="text-rose-300">HRMS Module</strong> to onboard your team, configure roles, and grant system access.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Grid Dashboard */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6" style={{ gridAutoRows: '200px' }}>
         {widgets.map((w, idx) => {

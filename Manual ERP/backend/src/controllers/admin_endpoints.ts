@@ -5,6 +5,7 @@ import { hashPassword, sendSimulatedOTP, verifySimulatedOTP } from '../utils';
 import { logAudit } from '../utils/audit';
 import fs from 'fs';
 import path from 'path';
+import { CreateUserAdminSchema, UpdateUserAdminSchema, UpdateBackupSettingsSchema, CreateDepartmentSchema, UpdateDepartmentSchema, UpdateRolePermissionsSchema, RestoreBackupSchema, ListAuditLogsQuerySchema, DownloadBackupQuerySchema } from '../types';
 
 // Memory store for backup 2FA OTPs
 export const backupOtps = new Map<string, { code: string, expires: number }>();
@@ -18,7 +19,9 @@ export async function listAuditLogs(req: AuthenticatedRequest, res: Response) {
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { username, moduleName, actionType, skip, take } = req.query;
+    const parsedQuery = ListAuditLogsQuerySchema.safeParse(req.query);
+    if (!parsedQuery.success) return res.status(400).json({ error: parsedQuery.error.errors });
+    const { username, moduleName, actionType, skip, take } = parsedQuery.data;
 
     const whereClause: any = { companyId };
     if (username) whereClause.username = { contains: String(username), mode: 'insensitive' };
@@ -212,10 +215,12 @@ export async function downloadBackup(req: AuthenticatedRequest, res: Response) {
     if (!companyId || !userId) return res.status(401).json({ error: "Unauthorized" });
 
     const { filename } = req.params;
-    const { otpCode } = req.query;
+    const parsedQuery = DownloadBackupQuerySchema.safeParse(req.query);
+    if (!parsedQuery.success) return res.status(400).json({ error: parsedQuery.error.errors });
+    const { otpCode } = parsedQuery.data;
 
-    const userDb = await prisma.user.findUnique({
-      where: { id: userId }
+    const userDb = await prisma.user.findFirst({
+      where: { id: userId, companyId }
     });
     if (!userDb) return res.status(404).json({ error: "User profile not found" });
     const target = userDb.email || userDb.mobileNo;
@@ -246,21 +251,13 @@ export async function updateBackupSettings(req: AuthenticatedRequest, res: Respo
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { backupRetentionDays, autoBackupInterval } = req.body;
+    const parsed = UpdateBackupSettingsSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors });
+    const { backupRetentionDays, autoBackupInterval } = parsed.data;
     
     const data: any = {};
-    if (backupRetentionDays !== undefined) {
-      if (isNaN(parseInt(backupRetentionDays))) {
-        return res.status(400).json({ error: "backupRetentionDays must be an integer" });
-      }
-      data.backupRetentionDays = parseInt(backupRetentionDays);
-    }
-    if (autoBackupInterval !== undefined) {
-      if (isNaN(parseInt(autoBackupInterval))) {
-        return res.status(400).json({ error: "autoBackupInterval must be an integer" });
-      }
-      data.autoBackupInterval = parseInt(autoBackupInterval);
-    }
+    if (backupRetentionDays !== undefined) data.backupRetentionDays = backupRetentionDays;
+    if (autoBackupInterval !== undefined) data.autoBackupInterval = autoBackupInterval;
 
     const updatedCompany = await prisma.company.update({
       where: { id: companyId },
@@ -298,11 +295,9 @@ export async function createUserForAdmin(req: AuthenticatedRequest, res: Respons
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { username, mobileNo, email, password, roleId, departmentId, reportsToId, shiftStart, shiftEnd, shiftName, documents } = req.body;
-
-    if (!username || !mobileNo || !password || !roleId) {
-      return res.status(400).json({ error: "username, mobileNo, password and roleId are required fields" });
-    }
+    const parsed = CreateUserAdminSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors });
+    const { username, mobileNo, email, password, roleId, departmentId, reportsToId, shiftStart, shiftEnd, shiftName, documents } = parsed.data;
 
     // Verify username uniqueness inside the company
     const existingUser = await prisma.user.findFirst({
@@ -393,8 +388,10 @@ export async function updateUserForAdmin(req: AuthenticatedRequest, res: Respons
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
+    const parsed = UpdateUserAdminSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors });
     const { userId } = req.params;
-    const { username, mobileNo, email, password, roleId, departmentId, status, reportsToId, shiftStart, shiftEnd, shiftName, documents } = req.body;
+    const { username, mobileNo, email, password, roleId, departmentId, status, reportsToId, shiftStart, shiftEnd, shiftName, documents } = parsed.data;
 
     // Verify user belongs to same company
     const userToUpdate = await prisma.user.findFirst({
@@ -566,11 +563,9 @@ export async function createDepartment(req: AuthenticatedRequest, res: Response)
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { name, description, features, managerId } = req.body;
-
-    if (!name) {
-      return res.status(400).json({ error: "Department name is required" });
-    }
+    const parsed = CreateDepartmentSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors });
+    const { name, description, features, managerId } = parsed.data;
 
     // Verify name uniqueness inside company
     const existing = await prisma.department.findFirst({
@@ -587,8 +582,8 @@ export async function createDepartment(req: AuthenticatedRequest, res: Response)
       });
       if (!user) return res.status(404).json({ error: "Specified manager user not found." });
 
-      const alreadyManaging = await prisma.department.findUnique({
-        where: { managerId }
+      const alreadyManaging = await prisma.department.findFirst({
+        where: { managerId, companyId }
       });
       if (alreadyManaging) {
         return res.status(400).json({ error: `User '${user.username}' is already manager of the '${alreadyManaging.name}' department.` });
@@ -643,7 +638,9 @@ export async function updateDepartment(req: AuthenticatedRequest, res: Response)
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { deptId } = req.params;
-    const { name, description, features, managerId } = req.body;
+    const parsed = UpdateDepartmentSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors });
+    const { name, description, features, managerId } = parsed.data;
 
     const dept = await prisma.department.findFirst({
       where: { id: deptId, companyId }
@@ -760,7 +757,9 @@ export async function updateRolePermissions(req: AuthenticatedRequest, res: Resp
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { roleId } = req.params;
-    const { name, permissions } = req.body;
+    const parsed = UpdateRolePermissionsSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors });
+    const { name, permissions } = parsed.data;
 
     const role = await prisma.role.findFirst({
       where: { id: roleId, companyId }
@@ -866,11 +865,12 @@ export async function deleteRoleForAdmin(req: AuthenticatedRequest, res: Respons
 export async function requestBackupOTP(req: AuthenticatedRequest, res: Response) {
   try {
     const userId = req.user?.userId;
-    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    const companyId = req.user?.companyId;
+    if (!userId || !companyId) return res.status(401).json({ error: "Unauthorized" });
 
     // Fetch user details including company details
-    const userDb = await prisma.user.findUnique({
-      where: { id: userId },
+    const userDb = await prisma.user.findFirst({
+      where: { id: userId, companyId },
       include: { company: true }
     });
 
@@ -906,8 +906,8 @@ export async function deleteBackup(req: AuthenticatedRequest, res: Response) {
 
     const otpHeader = req.headers['x-otp-code'] as string;
     
-    const userDb = await prisma.user.findUnique({
-      where: { id: userId }
+    const userDb = await prisma.user.findFirst({
+      where: { id: userId, companyId }
     });
     if (!userDb) return res.status(404).json({ error: "User profile not found" });
     const target = userDb.email || userDb.mobileNo;
@@ -955,13 +955,12 @@ export async function restoreBackup(req: AuthenticatedRequest, res: Response) {
     const username = req.user?.username;
     if (!companyId || !userId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { filename, otpCode } = req.body;
-    if (!otpCode) {
-      return res.status(400).json({ error: "2FA OTP code is required for database restores" });
-    }
+    const parsed = RestoreBackupSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors });
+    const { filename, otpCode } = parsed.data;
 
-    const userDb = await prisma.user.findUnique({
-      where: { id: userId }
+    const userDb = await prisma.user.findFirst({
+      where: { id: userId, companyId }
     });
     if (!userDb) return res.status(404).json({ error: "User profile not found" });
     const target = userDb.email || userDb.mobileNo;

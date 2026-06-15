@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '../../utils/apiService';
+import { GstSettingSchema } from '../../utils/schemas';
 import { Landmark, RefreshCw, X, AlertCircle, CheckCircle2, FileSpreadsheet, ShieldAlert, Award } from 'lucide-react';
 
 interface GstWorksheet {
@@ -11,19 +14,41 @@ interface GstWorksheet {
   purchasesTaxCredited: number;
 }
 
-interface GstSettingsProps {
-  gstWorksheet: GstWorksheet;
-  companyProfile: any;
-  onUpdateCompanyProfile: (data: any) => Promise<void>;
-  onRefreshWorksheet: () => Promise<void>;
-}
+export default function GstSettings() {
+  const queryClient = useQueryClient();
 
-export default function GstSettings({
-  gstWorksheet,
-  companyProfile,
-  onUpdateCompanyProfile,
-  onRefreshWorksheet
-}: GstSettingsProps) {
+  const { data: gstSettings = [] } = useQuery({
+    queryKey: ['gstSettings'],
+    queryFn: async () => {
+      const res = await apiClient.get<{gstSettings: any[]}>('/api/finance/gst');
+      return res.gstSettings || [];
+    }
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (data: any) => apiClient.patch('/api/admin/company/tax', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['companyProfile'] });
+      queryClient.invalidateQueries({ queryKey: ['gstWorksheet'] });
+    }
+  });
+
+  const { data: companyProfile = {} as any } = useQuery({
+    queryKey: ['companyProfile'],
+    queryFn: async () => {
+      const res = await apiClient.get<any>('/api/admin/company');
+      return res.company || {};
+    }
+  });
+
+  const { data: gstWorksheet = {} as any, refetch: onRefreshWorksheet } = useQuery({
+    queryKey: ['gstWorksheet'],
+    queryFn: async () => {
+      const res = await apiClient.get<any>('/api/finance/gst/worksheet');
+      return res.worksheet || {};
+    }
+  });
+
   const [showEditModal, setShowEditModal] = useState(false);
   const [gstin, setGstin] = useState(companyProfile?.gstin || '');
   const [pan, setPan] = useState(companyProfile?.pan || '');
@@ -40,7 +65,7 @@ export default function GstSettings({
     setLoading(true);
 
     try {
-      await onUpdateCompanyProfile({
+      await updateMutation.mutateAsync({
         gstin: gstin.trim() || null,
         pan: pan.trim() || null
       });

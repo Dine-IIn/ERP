@@ -1,23 +1,20 @@
 import React from 'react';
 import { Users, TrendingUp, Award, Clock, Activity, BarChart3, ArrowRight, Sparkles } from 'lucide-react';
 
-interface CrmDashboardProps {
-  stats: {
-    totalLeads: number;
-    activePipelineVal: number;
-    dealsWonCount: number;
-    totalWonVal: number;
-    statusCounts: Record<string, number>;
-    pipelineStages: Record<string, number>;
-    pendingFollowups: number;
-  } | null;
-  currencySymbol?: string;
-}
+import { useQuery } from '@tanstack/react-query';
+import { apiClient } from '../../utils/apiService';
 
 export default function CrmDashboard({
-  stats,
   currencySymbol = '$'
-}: CrmDashboardProps) {
+}: { currencySymbol?: string }) {
+  const { data: stats } = useQuery({
+    queryKey: ['crmStats'],
+    queryFn: async () => {
+      const res = await apiClient.get<{stats: any}>('/api/crm/stats');
+      return res.stats;
+    }
+  });
+
   // If stats is loading or unavailable, render a stateful mockup based on standard structures
   const data = stats || {
     totalLeads: 0,

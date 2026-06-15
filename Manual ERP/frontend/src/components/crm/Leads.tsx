@@ -1,4 +1,7 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '../../utils/apiService';
+import { LeadSchema } from '../../utils/schemas';
 import { UserCheck, Search, Plus, Edit, Trash2, X, AlertCircle, CheckCircle2, Phone, Mail, FileText, User } from 'lucide-react';
 
 interface Lead {
@@ -15,21 +18,46 @@ interface Lead {
   createdAt: string;
 }
 
-interface LeadsProps {
-  leads: Lead[];
-  companyUsers: any[];
-  onCreateLead: (lead: any) => Promise<void>;
-  onUpdateLead: (id: string, lead: any) => Promise<void>;
-  onDeleteLead: (id: string) => Promise<void>;
-}
+export default React.memo(function Leads() {
+  const queryClient = useQueryClient();
 
-const Leads = React.memo(function Leads({
-  leads,
-  companyUsers,
-  onCreateLead,
-  onUpdateLead,
-  onDeleteLead
-}: LeadsProps) {
+  const { data: leads = [], isLoading: leadsLoading } = useQuery({
+    queryKey: ['leads'],
+    queryFn: async () => {
+      const res = await apiClient.get<{leads: Lead[]}>('/api/crm/leads');
+      return res.leads || [];
+    }
+  });
+
+  const { data: companyUsers = [] } = useQuery({
+    queryKey: ['users'],
+    queryFn: async () => {
+      const res = await apiClient.get<{users: any[]}>('/api/admin/users');
+      return res.users || [];
+    }
+  });
+
+  const createLead = useMutation({
+    mutationFn: (data: any) => apiClient.post('/api/crm/leads', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+    }
+  });
+
+  const updateLead = useMutation({
+    mutationFn: ({ id, data }: { id: string, data: any }) => apiClient.patch(`/api/crm/leads/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+    }
+  });
+
+  const deleteLead = useMutation({
+    mutationFn: (id: string) => apiClient.delete(`/api/crm/leads/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+    }
+  });
+
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -82,14 +110,6 @@ const Leads = React.memo(function Leads({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !phone.trim() || !source || !status) {
-      setLocalErr("Contact name, phone, source, and pipeline status are required.");
-      return;
-    }
-
-    setLocalErr(null);
-    setLocalSuccess(null);
-    setLoading(true);
 
     const payload = {
       name: name.trim(),
@@ -102,12 +122,22 @@ const Leads = React.memo(function Leads({
       notes: notes.trim() || null
     };
 
+    const parsed = LeadSchema.safeParse(payload);
+    if (!parsed.success) {
+      setLocalErr(parsed.error.errors[0].message);
+      return;
+    }
+
+    setLocalErr(null);
+    setLocalSuccess(null);
+    setLoading(true);
+
     try {
       if (isEditing && editingId) {
-        await onUpdateLead(editingId, payload);
+        await updateLead.mutateAsync({ id: editingId, data: parsed.data });
         setLocalSuccess("Lead dossier modified successfully!");
       } else {
-        await onCreateLead(payload);
+        await createLead.mutateAsync(parsed.data);
         setLocalSuccess("New sales lead logged successfully!");
       }
       setTimeout(() => {
@@ -123,7 +153,7 @@ const Leads = React.memo(function Leads({
   const handleDelete = async (id: string, name: string) => {
     if (window.confirm(`Are you sure you want to permanently discard sales lead for '${name}'?`)) {
       try {
-        await onDeleteLead(id);
+        await deleteLead.mutateAsync(id);
       } catch (err: any) {
         alert(err.message || "Failed to discard lead.");
       }
@@ -436,5 +466,3 @@ const Leads = React.memo(function Leads({
     </div>
   );
 })
-
-export default Leads;

@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '../../utils/apiService';
+import { CashTransactionSchema } from '../../utils/schemas';
 import { BookOpen, Search, ArrowUpRight, ArrowDownRight, TrendingUp, DollarSign } from 'lucide-react';
 
 interface Voucher {
@@ -13,22 +16,25 @@ interface Voucher {
   date: string;
 }
 
-interface CashbookProps {
-  vouchers: Voucher[];
-  openingBalance: number;
-  closingBalance: number;
-  currencySymbol?: string;
-}
+export default function Cashbook() {
+  const queryClient = useQueryClient();
 
-export default function Cashbook({
-  vouchers,
-  openingBalance,
-  closingBalance,
-  currencySymbol = '$'
-}: CashbookProps) {
+  const { data: cashbook = [] } = useQuery({
+    queryKey: ['cashbook'],
+    queryFn: async () => {
+      const res = await apiClient.get<{cashbook: any[]}>('/api/finance/cashbook');
+      return res.cashbook || [];
+    }
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (data: any) => apiClient.post('/api/finance/cashbook', data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['cashbook'] })
+  });
+
   const [searchTerm, setSearchTerm] = useState('');
 
-  const filteredVouchers = (vouchers || []).filter(v => {
+  const filteredVouchers = (cashbook || []).filter(v => {
     const voucherNo = v?.voucherNo || '';
     const description = v?.description || '';
     const referenceNo = v?.referenceNo || '';
@@ -39,13 +45,17 @@ export default function Cashbook({
   });
 
   // Inwards vs Outwards Totals
-  const totalInward = vouchers
+  const totalInward = cashbook
     .filter(v => v.entryType === 'INWARD_RECEIPT')
     .reduce((sum, v) => sum + v.amount, 0.0);
 
-  const totalOutward = vouchers
+  const totalOutward = cashbook
     .filter(v => v.entryType !== 'INWARD_RECEIPT')
     .reduce((sum, v) => sum + v.amount, 0.0);
+
+  const currencySymbol = '$';
+  const openingBalance = cashbook.length > 0 ? cashbook[0].previousBal : 0;
+  const closingBalance = cashbook.length > 0 ? cashbook[cashbook.length - 1].currentBal : 0;
 
   return (
     <div className="space-y-6">

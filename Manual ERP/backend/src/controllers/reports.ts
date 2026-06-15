@@ -1,3 +1,7 @@
+import { GetHrReportQuerySchema } from '../types/index';
+import { GetInventoryReportQuerySchema } from '../types/index';
+import { GetPurchaseReportQuerySchema } from '../types/index';
+import { GetSalesReportQuerySchema } from '../types/index';
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import prisma from '../services/db';
@@ -27,6 +31,10 @@ export async function getSalesReport(req: AuthenticatedRequest, res: Response) {
   try {
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const parsedQuery = GetSalesReportQuerySchema.safeParse(req.query);
+    if (!parsedQuery.success) return res.status(400).json({ error: "Bad Request", details: parsedQuery.error });
+
 
     // Aggregate monthly sales invoice amounts
     const invoices = await prisma.salesInvoice.findMany({

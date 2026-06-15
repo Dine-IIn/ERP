@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, Plus, Trash2, Palette, Eye, Check, AlignLeft, AlignCenter, AlignRight, Upload, X } from 'lucide-react';
 import { apiClient } from '../../utils/apiService';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { CreateDocumentTemplateBodySchema, UpdateDocumentTemplateBodySchema } from '../../utils/schemas';
 
 export interface PdfTemplateConfig {
   id: string;
@@ -38,9 +40,8 @@ export interface PdfTemplateConfig {
 }
 
 export default function PdfTemplateEditor() {
-  const [templates, setTemplates] = useState<PdfTemplateConfig[]>([]);
+  const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string>('');
-  const [loading, setLoading] = useState(false);
 
   // Form states
   const [name, setName] = useState('');
@@ -79,52 +80,40 @@ export default function PdfTemplateEditor() {
   const [isEditing, setIsEditing] = useState(false);
   const [localSuccess, setLocalSuccess] = useState<string | null>(null);
 
-  // Load from backend
-  const fetchTemplates = async (selectIdAfter?: string) => {
-    setLoading(true);
-    try {
-      const res = await apiClient.get<{ templates: any[] }>('/api/sales/templates');
-      const formatted = (res.templates || []).map((t: any) => {
-        let settingsParsed: any = {};
-        try {
-          settingsParsed = typeof t.settings === 'string' ? JSON.parse(t.settings) : t.settings;
-        } catch (e) {
-          console.error(e);
-        }
-        return {
-          id: t.id,
-          name: t.name,
-          type: t.docType as any,
-          title: t.title,
-          isDefault: t.isDefault,
-          terms: t.terms || '',
-          ...settingsParsed
-        } as PdfTemplateConfig;
-      });
+  const { data: res, isLoading: loading } = useQuery({
+    queryKey: ['templates'],
+    queryFn: () => apiClient.get<{ templates: any[] }>('/api/sales/templates')
+  });
 
-      setTemplates(formatted);
-
-      if (formatted.length > 0) {
-        if (selectIdAfter) {
-          const found = formatted.find(t => t.id === selectIdAfter);
-          if (found) loadTemplate(found);
-          else loadTemplate(formatted[0]);
-        } else {
-          loadTemplate(formatted[0]);
-        }
-      } else {
-        handleCreateNew();
+  const templates = React.useMemo(() => {
+    return (res?.templates || []).map((t: any) => {
+      let settingsParsed: any = {};
+      try {
+        settingsParsed = typeof t.settings === 'string' ? JSON.parse(t.settings) : t.settings;
+      } catch (e) {
+        console.error(e);
       }
-    } catch (e: any) {
-      console.error('Failed to load templates:', e);
-    } finally {
-      setLoading(false);
-    }
-  };
+      return {
+        id: t.id,
+        name: t.name,
+        type: t.docType as any,
+        title: t.title,
+        isDefault: t.isDefault,
+        terms: t.terms || '',
+        ...settingsParsed
+      } as PdfTemplateConfig;
+    });
+  }, [res]);
 
   useEffect(() => {
-    fetchTemplates();
-  }, []);
+    if (!loading) {
+      if (templates.length > 0 && !selectedId && !isEditing) {
+        loadTemplate(templates[0]);
+      } else if (templates.length === 0 && !isEditing) {
+        handleCreateNew();
+      }
+    }
+  }, [templates, loading, selectedId, isEditing]);
 
   const loadTemplate = (tpl: PdfTemplateConfig) => {
     setSelectedId(tpl.id);
@@ -216,6 +205,35 @@ export default function PdfTemplateEditor() {
     reader.readAsDataURL(file);
   };
 
+  const createMutation = useMutation({
+    mutationFn: (payload: any) => apiClient.post<{ template: any }>('/api/sales/templates', payload),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['templates'] });
+      setLocalSuccess("New template layout configured and saved successfully!");
+      setTimeout(() => setLocalSuccess(null), 2500);
+      setSelectedId(data.template.id);
+    }
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, payload }: any) => apiClient.patch(`/api/sales/templates/${id}`, payload),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['templates'] });
+      setLocalSuccess("Template layout configured and saved successfully!");
+      setTimeout(() => setLocalSuccess(null), 2500);
+      setSelectedId(variables.id);
+    }
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiClient.delete(`/api/sales/templates/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['templates'] });
+      setSelectedId('');
+      setIsEditing(false);
+    }
+  });
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setLocalSuccess(null);
@@ -258,30 +276,23 @@ export default function PdfTemplateEditor() {
       terms: terms.trim()
     };
 
-    try {
-      if (selectedId) {
-        await apiClient.patch(`/api/sales/templates/${selectedId}`, payload);
-        setLocalSuccess("Template layout configured and saved successfully!");
-        fetchTemplates(selectedId);
-      } else {
-        const res = await apiClient.post<{ template: any }>('/api/sales/templates', payload);
-        setLocalSuccess("New template layout configured and saved successfully!");
-        fetchTemplates(res.template.id);
-      }
-      setTimeout(() => setLocalSuccess(null), 2500);
-    } catch (err: any) {
-      alert(err.message || 'Failed to save template configuration');
+    const schema = selectedId ? UpdateDocumentTemplateBodySchema : CreateDocumentTemplateBodySchema;
+    const parsed = schema.safeParse(payload);
+    if (!parsed.success) {
+      alert("Validation error: " + parsed.error.errors[0].message);
+      return;
+    }
+
+    if (selectedId) {
+      updateMutation.mutate({ id: selectedId, payload });
+    } else {
+      createMutation.mutate(payload);
     }
   };
 
   const handleDelete = async (idToDelete: string) => {
     if (window.confirm("Are you sure you want to permanently delete this print template layout?")) {
-      try {
-        await apiClient.delete(`/api/sales/templates/${idToDelete}`);
-        fetchTemplates();
-      } catch (err: any) {
-        alert(err.message || 'Failed to delete template layout');
-      }
+      deleteMutation.mutate(idToDelete);
     }
   };
 

@@ -1,3 +1,4 @@
+import { AdjustStockBodySchema } from '../types/index';
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import prisma from '../services/db';
@@ -25,7 +26,9 @@ export async function adjustStock(req: AuthenticatedRequest, res: Response) {
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { productId, type, quantity, reason } = req.body;
+    const parsedBody = AdjustStockBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
+    const { productId, type, quantity, reason } = parsedBody.data;
 
     if (!productId || !type || quantity === undefined) {
       return res.status(400).json({ error: "Product reference, adjustment type (MANUAL_ADD/MANUAL_SUB), and quantity are required." });
@@ -36,9 +39,7 @@ export async function adjustStock(req: AuthenticatedRequest, res: Response) {
       return res.status(400).json({ error: "Quantity must be a positive number." });
     }
 
-    const prod = await prisma.product.findUnique({
-      where: { id: productId }
-    });
+    const prod = await prisma.product.findFirst({ where: { id: productId, companyId } });
     if (!prod || prod.companyId !== companyId) {
       return res.status(404).json({ error: "Product catalog entry not found." });
     }

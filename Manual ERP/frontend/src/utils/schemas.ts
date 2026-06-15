@@ -478,33 +478,6 @@ export const CreateWorkCenterBodySchema = z.any();
 export const CreateWorkOrderBodySchema = z.any();
 export const DisbursePayrollSchema = z.any();
 export const DownloadBackupQuerySchema = z.any();
-export const ExpenseSchema = z.any();
-export const FollowUpSchema = z.any();
-export const GeneratePayrollSchema = z.any();
-export const GetChatGroupMessagesQuerySchema = z.any();
-export const IssueMaterialsToWorkOrderBodySchema = z.any();
-export const LeadSchema = z.any();
-export const LeaveRequestSchema = z.any();
-export const ListAttendanceQuerySchema = z.any();
-export const ListAuditLogsQuerySchema = z.any();
-export const ListCustomersQuerySchema = z.any();
-export const ListLeaveRequestsQuerySchema = z.any();
-export const ListPayrollQuerySchema = z.any();
-export const ListProductsQuerySchema = z.any();
-export const ListVendorsQuerySchema = z.any();
-export const ManageChatGroupMembersSchema = z.any();
-export const OpportunitySchema = z.any();
-export const PaymentSchema = z.any();
-export const ReceiptSchema = z.any();
-export const RestoreBackupSchema = z.any();
-export const SendChatMessageSchema = z.any();
-export const ShiftRosterSchema = z.any();
-export const UpdateBackupSettingsSchema = z.any();
-export const UpdateBomBodySchema = z.any();
-export const UpdateChatGroupSettingsSchema = z.any();
-export const UpdateCustomerBodySchema = z.any();
-export const UpdateDepartmentSchema = z.any();
-export const UpdateEmployeeSchema = z.any();
 export const UpdateJobCardBodySchema = z.any();
 export const UpdateLeaveStatusSchema = z.any();
 export const UpdatePlanBodySchema = z.any();
@@ -518,3 +491,94 @@ export const UpdateUserAdminSchema = z.any();
 export const UpdateVendorBodySchema = z.any();
 export const UpdateWorkCenterBodySchema = z.any();
 export const UpdateWorkOrderBodySchema = z.any();
+
+// --- HRMS Schemas ---
+export const EmployeeUpdateSchema = z.object({
+  roleId: z.string().nullable().optional().or(z.literal('')),
+  departmentId: z.string().nullable().optional().or(z.literal('')),
+  status: z.string(),
+  shiftStart: z.string().nullable().optional(),
+  shiftEnd: z.string().nullable().optional(),
+  shiftName: z.string().nullable().optional(),
+  reportsToId: z.string().nullable().optional().or(z.literal('')),
+  mobileNo: z.string().min(1, "Mobile number is required"),
+  email: z.string().email().nullable().optional().or(z.literal(''))
+});
+
+export const LeaveRequestSchema = z.object({
+  type: z.string().min(1, "Leave type is required"),
+  startDate: z.string().min(1, "Start date is required"),
+  endDate: z.string().min(1, "End date is required"),
+  reason: z.string().min(1, "Reason is required")
+});
+
+export const ShiftRosterSchema = z.object({
+  name: z.string().min(1, "Shift name is required"),
+  startTime: z.string().min(1, "Start time is required"),
+  endTime: z.string().min(1, "End time is required"),
+  gracePeriod: z.number().min(0)
+});
+
+export const PayrollGenerateSchema = z.object({
+  userId: z.string().min(1, "Employee is required"),
+  month: z.number().min(1).max(12),
+  year: z.number().min(2000),
+  basicSalary: z.number().min(0),
+  allowances: z.number().min(0).optional(),
+  deductions: z.number().min(0).optional()
+});
+
+// --- Inventory Schemas ---
+export const StockAdjustSchema = z.object({
+  productId: z.string().min(1, "Product is required"),
+  type: z.string().min(1, "Adjustment type is required"),
+  quantity: z.number().min(0.01, "Quantity must be greater than 0"),
+  reason: z.string().min(1, "Reason is required")
+});
+
+export const ProductUpdateSchema = z.object({
+  reorderLevel: z.number().min(0).optional(),
+  warehouseLoc: z.string().optional()
+});
+
+export const GstSettingSchema = z.object({
+  taxName: z.string().min(1, "Tax name is required"),
+  taxCode: z.string().min(1, "Tax code is required"),
+  taxPercentage: z.number().min(0).max(100),
+  taxType: z.string(),
+  effectiveDate: z.string()
+});
+
+
+// Fallbacks for imports
+export const CashTransactionSchema = z.any();
+export const CustomerSchema = z.any();
+export const EmployeeSchema = z.any();
+export const ExpenseSchema = z.any();
+export const FollowUpSchema = z.any();
+export const GeneratePayrollSchema = z.any();
+export const GetChatGroupMessagesQuerySchema = z.any();
+export const IssueMaterialsToWorkOrderBodySchema = z.any();
+export const LeadSchema = z.any();
+export const ListAttendanceQuerySchema = z.any();
+export const ListAuditLogsQuerySchema = z.any();
+export const ListCustomersQuerySchema = z.any();
+export const ListLeaveRequestsQuerySchema = z.any();
+export const ListPayrollQuerySchema = z.any();
+export const ListProductsQuerySchema = z.any();
+export const ListVendorsQuerySchema = z.any();
+export const LogSchema = z.any();
+export const ManageChatGroupMembersSchema = z.any();
+export const OpportunitySchema = z.any();
+export const PaymentSchema = z.any();
+export const ProductSchema = z.any();
+export const ReceiptSchema = z.any();
+export const RestoreBackupSchema = z.any();
+export const SendChatMessageSchema = z.any();
+export const UpdateBackupSettingsSchema = z.any();
+export const UpdateBomBodySchema = z.any();
+export const UpdateChatGroupSettingsSchema = z.any();
+export const UpdateCustomerBodySchema = z.any();
+export const UpdateDepartmentSchema = z.any();
+export const UpdateEmployeeSchema = z.any();
+export const VendorSchema = z.any();

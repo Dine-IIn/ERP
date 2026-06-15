@@ -1,3 +1,10 @@
+import { CreateVendorPaymentBodySchema } from '../types/index';
+import { CreatePurchaseReturnBodySchema } from '../types/index';
+import { CreateGrnBodySchema } from '../types/index';
+import { UpdatePurchaseOrderStatusBodySchema } from '../types/index';
+import { CreatePurchaseOrderBodySchema } from '../types/index';
+import { UpdateVendorQuotationStatusBodySchema } from '../types/index';
+import { CreateVendorQuotationBodySchema } from '../types/index';
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import prisma from '../services/db';
@@ -12,7 +19,7 @@ async function handleOutwardPayment(
   paymentNo: string,
   referenceNo: string | null
 ) {
-  const vendor = await tx.vendor.findUnique({ where: { id: vendorId }, select: { name: true } });
+  const vendor = await tx.vendor.findFirst({ where: { id: vendorId, companyId }, select: { name: true } });
   const vendorName = vendor?.name || "Vendor";
 
   await tx.companyExpense.create({
@@ -110,7 +117,11 @@ export async function createVendorQuotation(req: AuthenticatedRequest, res: Resp
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { vendorId, quoteNo, date, validUntil, subtotal, tax, total, status, items } = req.body;
+    
+    const parsedBody = CreateVendorQuotationBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Bad Request", details: parsedBody.error });
+    const {  vendorId, quoteNo, date, validUntil, subtotal, tax, total, status, items  } = parsedBody.data;
+
 
     if (!vendorId || !quoteNo || !items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "Vendor, Quote Number, and at least one quote item are required." });
@@ -157,7 +168,11 @@ export async function updateVendorQuotationStatus(req: AuthenticatedRequest, res
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
-    const { status } = req.body;
+    
+    const parsedBody = UpdateVendorQuotationStatusBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Bad Request", details: parsedBody.error });
+    const {  status  } = parsedBody.data;
+
 
     const quote = await prisma.vendorQuotation.findFirst({ where: { id, companyId } });
     if (!quote) return res.status(404).json({ error: "Vendor Quotation not found" });
@@ -216,7 +231,11 @@ export async function createPurchaseOrder(req: AuthenticatedRequest, res: Respon
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { vendorId, poNo, date, deliveryDate, subtotal, discount, tax, total, status, items } = req.body;
+    
+    const parsedBody = CreatePurchaseOrderBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Bad Request", details: parsedBody.error });
+    const {  vendorId, poNo, date, deliveryDate, subtotal, discount, tax, total, status, items  } = parsedBody.data;
+
 
     if (!vendorId || !poNo || !items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "Vendor, PO Number, and at least one item are required." });
@@ -265,7 +284,11 @@ export async function updatePurchaseOrderStatus(req: AuthenticatedRequest, res: 
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
-    const { status } = req.body;
+    
+    const parsedBody = UpdatePurchaseOrderStatusBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Bad Request", details: parsedBody.error });
+    const {  status  } = parsedBody.data;
+
 
     const poExist = await prisma.purchaseOrder.findFirst({ where: { id, companyId } });
     if (!poExist) return res.status(404).json({ error: "Purchase Order not found" });
@@ -324,7 +347,11 @@ export async function createGrn(req: AuthenticatedRequest, res: Response) {
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { poId, grnNo, receivedDate, receivedBy, gateEntryNo, challanNo, status, notes, items } = req.body;
+    
+    const parsedBody = CreateGrnBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Bad Request", details: parsedBody.error });
+    const {  poId, grnNo, receivedDate, receivedBy, gateEntryNo, challanNo, status, notes, items  } = parsedBody.data;
+
 
     if (!poId || !grnNo || !items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "PO Reference, GRN Number, and items checklist are required." });
@@ -365,9 +392,7 @@ export async function createGrn(req: AuthenticatedRequest, res: Response) {
 
       // Update product inventory levels (quarantine stock) and stock adjustments ledger logs
       for (const item of items) {
-        const prod = await tx.product.findUnique({
-          where: { id: item.productId }
-        });
+        const prod = await tx.product.findFirst({ where: { id: item.productId, companyId } });
         if (prod) {
           const qtyToAdd = parseFloat(item.qtyAccepted) || 0.0;
           const previousStock = prod.stock || 0.0;
@@ -397,9 +422,7 @@ export async function createGrn(req: AuthenticatedRequest, res: Response) {
       }
 
       // Check if PO is Subcontract PO and hook it to complete the Job Card
-      const purchaseOrder = await tx.purchaseOrder.findUnique({
-        where: { id: poId }
-      });
+      const purchaseOrder = await tx.purchaseOrder.findFirst({ where: { id: poId, companyId }});
 
       // Auto-update PO status to COMPLETED when GRN is completed
       await tx.purchaseOrder.update({
@@ -447,7 +470,7 @@ export async function deleteGrn(req: AuthenticatedRequest, res: Response) {
 
     await prisma.$transaction(async (tx) => {
       for (const item of grn.items) {
-        const prod = await tx.product.findUnique({ where: { id: item.productId } });
+        const prod = await tx.product.findFirst({ where: { id: item.productId, companyId } });
         if (prod) {
           const qtyToSub = item.qtyAccepted;
           const previousStock = prod.stock || 0.0;
@@ -511,7 +534,11 @@ export async function createPurchaseReturn(req: AuthenticatedRequest, res: Respo
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { poId, returnNo, returnDate, reason, status, items } = req.body;
+    
+    const parsedBody = CreatePurchaseReturnBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Bad Request", details: parsedBody.error });
+    const {  poId, returnNo, returnDate, reason, status, items  } = parsedBody.data;
+
 
     if (!poId || !returnNo || !reason || !items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "PO Reference, Return No, Reason, and return items list are required." });
@@ -546,7 +573,7 @@ export async function createPurchaseReturn(req: AuthenticatedRequest, res: Respo
 
       // Deduct stock for returned products
       for (const item of items) {
-        const prod = await tx.product.findUnique({ where: { id: item.productId } });
+        const prod = await tx.product.findFirst({ where: { id: item.productId, companyId } });
         if (prod) {
           const qtyToSub = parseFloat(item.quantity) || 0.0;
           const previousStock = prod.stock || 0.0;
@@ -598,7 +625,7 @@ export async function deletePurchaseReturn(req: AuthenticatedRequest, res: Respo
     await prisma.$transaction(async (tx) => {
       // Re-add stock returning back the voided return volumes
       for (const item of pret.items) {
-        const prod = await tx.product.findUnique({ where: { id: item.productId } });
+        const prod = await tx.product.findFirst({ where: { id: item.productId, companyId } });
         if (prod) {
           const qtyToAdd = item.quantity;
           const previousStock = prod.stock || 0.0;
@@ -660,7 +687,11 @@ export async function createVendorPayment(req: AuthenticatedRequest, res: Respon
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { vendorId, paymentNo, paymentDate, amount, paymentMethod, referenceNo, bankDetails, status, notes } = req.body;
+    
+    const parsedBody = CreateVendorPaymentBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Bad Request", details: parsedBody.error });
+    const {  vendorId, paymentNo, paymentDate, amount, paymentMethod, referenceNo, bankDetails, status, notes  } = parsedBody.data;
+
 
     if (!vendorId || !paymentNo || amount === undefined || !paymentMethod) {
       return res.status(400).json({ error: "Vendor reference, payment number, payout amount, and payment method are required." });

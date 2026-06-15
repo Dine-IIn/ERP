@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { FileText, Search, Plus, Edit, Trash2, X, AlertCircle, Calendar, CheckCircle2, Mail, Download, Layers } from 'lucide-react';
 import { apiClient } from '../../utils/apiService';
+import { useQuery } from '@tanstack/react-query';
+import { CreateProformaInvoiceBodySchema } from '../../utils/schemas';
 
 interface ProformaInvoiceProps {
   invoices: any[];
@@ -36,9 +38,15 @@ export default function ProformaInvoice({
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
-  const [companyProfile, setCompanyProfile] = useState<any>(null);
-  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
-  const [templates, setTemplates] = useState<any[]>([]);
+
+  const { data: profileData } = useQuery({ queryKey: ['companyProfile'], queryFn: () => apiClient.get<any>('/api/admin/company/profile') });
+  const companyProfile = profileData?.company || null;
+
+  const { data: bankData } = useQuery({ queryKey: ['bankAccounts'], queryFn: () => apiClient.get<{ bankAccounts: any[] }>('/api/finance/bank-accounts') });
+  const bankAccounts = bankData?.bankAccounts || [];
+
+  const { data: templatesData } = useQuery({ queryKey: ['templates', 'PROFORMA'], queryFn: () => apiClient.get<{ templates: any[] }>('/api/sales/templates?docType=PROFORMA') });
+  const templates = templatesData?.templates || [];
 
   // Print Preview States
   const [customizingInvoice, setCustomizingInvoice] = useState<any>(null);
@@ -82,35 +90,7 @@ export default function ProformaInvoice({
   };
   const currentThemeHex = getThemeHex(themeColor);
 
-  React.useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const res = await apiClient.get<any>('/api/admin/company/profile');
-        setCompanyProfile(res.company || null);
-      } catch (e) {
-        console.error(e);
-      }
-    };
-    const fetchBankData = async () => {
-      try {
-        const bankData = await apiClient.get<{ bankAccounts: any[] }>('/api/finance/bank-accounts');
-        setBankAccounts(bankData.bankAccounts || []);
-      } catch (err) {
-        console.error('Failed to load bank accounts:', err);
-      }
-    };
-    const fetchTemplates = async () => {
-      try {
-        const res = await apiClient.get<{ templates: any[] }>('/api/sales/templates?docType=PROFORMA');
-        setTemplates(res.templates || []);
-      } catch (e) {
-        console.error(e);
-      }
-    };
-    fetchProfile();
-    fetchBankData();
-    fetchTemplates();
-  }, [showModal, customizingInvoice]);
+
 
   const applyTemplateSettings = (tpl: any) => {
     setCustomTitle(tpl.title || 'PROFORMA ESTIMATE');
@@ -289,6 +269,13 @@ export default function ProformaInvoice({
         discount: parseFloat(item.discount) || 0.0 // Discount %
       }))
     };
+
+    const parsed = CreateProformaInvoiceBodySchema.safeParse(payload);
+    if (!parsed.success) {
+      setLocalErr("Validation error: " + parsed.error.errors[0].message);
+      setLoading(false);
+      return;
+    }
 
     try {
       if (isEditing && editingId) {

@@ -1,3 +1,4 @@
+import { CreateBomBodySchema, CreateWorkCenterBodySchema, CreatePlanBodySchema, CompleteJobCardBodySchema, UpdateBomBodySchema, UpdateWorkCenterBodySchema, CreateJobCardBodySchema, CreateLogBodySchema, UpdateWorkOrderBodySchema, UpdateJobCardBodySchema, CreateShiftBodySchema, UpdateRoutingBodySchema, UpdatePlanBodySchema, UpdateReworkCardBodySchema, CreateWorkOrderBodySchema, UpdateShiftBodySchema, CreateQcRecordBodySchema, UpdateQcRecordBodySchema, IssueMaterialsToWorkOrderBodySchema, CreateRoutingBodySchema } from '../types/index';
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import prisma from '../services/db';
@@ -14,8 +15,7 @@ async function explodeBOM(bomId: string, qty: number, companyId: string, visited
   if (visited.includes(bomId)) return [];
   visited.push(bomId);
 
-  const bom = await prisma.billOfMaterials.findUnique({
-    where: { id: bomId },
+  const bom = await prisma.billOfMaterials.findFirst({ where: { id: bomId, companyId },
     include: { components: true }
   });
   if (!bom) return [];
@@ -113,7 +113,9 @@ export async function createBom(req: AuthenticatedRequest, res: Response) {
     const companyId = getCompanyId(req, res);
     if (!companyId) return;
 
-    const { name, description, finishedProductId, version, laborHours, laborRate, overheadAllocation, components } = req.body;
+    const parsedBody = CreateBomBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
+    const { name, description, finishedProductId, version, laborHours, laborRate, overheadAllocation, components } = parsedBody.data;
 
     if (!finishedProductId || !version || !components || !Array.isArray(components)) {
       return res.status(400).json({ error: 'finishedProductId, version, and components array are required' });
@@ -185,7 +187,9 @@ export async function updateBom(req: AuthenticatedRequest, res: Response) {
     if (!companyId) return;
 
     const { id } = req.params;
-    const { name, description, version, laborHours, laborRate, overheadAllocation, status, components } = req.body;
+    const parsedBody = UpdateBomBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
+    const { name, description, version, laborHours, laborRate, overheadAllocation, status, components } = parsedBody.data;
 
     const existingBom = await prisma.billOfMaterials.findFirst({
       where: { id, companyId }
@@ -226,8 +230,7 @@ export async function updateBom(req: AuthenticatedRequest, res: Response) {
       }
     }
 
-    const finalBom = await prisma.billOfMaterials.findUnique({
-      where: { id },
+    const finalBom = await prisma.billOfMaterials.findFirst({ where: { id, companyId },
       include: { finishedProduct: true, components: true }
     });
 
@@ -320,7 +323,9 @@ export async function createPlan(req: AuthenticatedRequest, res: Response) {
     const companyId = getCompanyId(req, res);
     if (!companyId) return;
 
-    const { salesOrderId, finishedProductId, qtyToProduce, startDate, endDate, bomId } = req.body;
+    const parsedBody = CreatePlanBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
+    const { salesOrderId, finishedProductId, qtyToProduce, startDate, endDate, bomId } = parsedBody.data;
 
     if (!finishedProductId || !qtyToProduce || !startDate || !endDate || !bomId) {
       return res.status(400).json({ error: 'finishedProductId, qtyToProduce, startDate, endDate, and bomId are required' });
@@ -376,7 +381,9 @@ export async function updatePlan(req: AuthenticatedRequest, res: Response) {
     if (!companyId) return;
 
     const { id } = req.params;
-    const { salesOrderId, finishedProductId, qtyToProduce, startDate, endDate, status, bomId } = req.body;
+    const parsedBody = UpdatePlanBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
+    const { salesOrderId, finishedProductId, qtyToProduce, startDate, endDate, status, bomId } = parsedBody.data;
 
     const existing = await prisma.productionPlan.findFirst({
       where: { id, companyId }
@@ -522,7 +529,9 @@ export async function createWorkOrder(req: AuthenticatedRequest, res: Response) 
     const companyId = getCompanyId(req, res);
     if (!companyId) return;
 
-    const { woNo, planId, qtyTarget, priority, routingStage } = req.body;
+    const parsedBody = CreateWorkOrderBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
+    const { woNo, planId, qtyTarget, priority, routingStage } = parsedBody.data;
 
     if (!woNo || !planId || !qtyTarget) {
       return res.status(400).json({ error: 'woNo, planId, and qtyTarget are required' });
@@ -657,7 +666,9 @@ export async function updateWorkOrder(req: AuthenticatedRequest, res: Response) 
     if (!companyId) return;
 
     const { id } = req.params;
-    const { woNo, qtyTarget, qtyProduced, priority, routingStage, status } = req.body;
+    const parsedBody = UpdateWorkOrderBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
+    const { woNo, qtyTarget, qtyProduced, priority, routingStage, status } = parsedBody.data;
 
     const existing = await prisma.workOrder.findFirst({
       where: { id, companyId }
@@ -753,7 +764,9 @@ export async function createJobCard(req: AuthenticatedRequest, res: Response) {
     const companyId = getCompanyId(req, res);
     if (!companyId) return;
 
-    const { woId, operationName, workCenterId, assignedOperatorId, cycleTimeMinutes, qtyTarget, operationType, vendorId, outsourceCost } = req.body;
+    const parsedBody = CreateJobCardBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
+    const { woId, operationName, workCenterId, assignedOperatorId, cycleTimeMinutes, qtyTarget, operationType, vendorId, outsourceCost } = parsedBody.data;
 
     if (!woId || !operationName || !qtyTarget) {
       return res.status(400).json({ error: 'woId, operationName, and qtyTarget are required' });
@@ -864,7 +877,9 @@ export async function updateJobCard(req: AuthenticatedRequest, res: Response) {
     if (!companyId) return;
 
     const { id } = req.params;
-    const { operationName, workCenterId, assignedOperatorId, status, cycleTimeMinutes, qtyTarget, qtyAccepted, qtyScrapped, operationType, vendorId, outsourceCost } = req.body;
+    const parsedBody = UpdateJobCardBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
+    const { operationName, workCenterId, assignedOperatorId, status, cycleTimeMinutes, qtyTarget, qtyAccepted, qtyScrapped, operationType, vendorId, outsourceCost } = parsedBody.data;
 
     const existing = await prisma.jobCard.findFirst({ where: { id, companyId } });
     if (!existing) return res.status(404).json({ error: 'Job Card not found' });
@@ -982,7 +997,9 @@ export async function completeJobCard(req: AuthenticatedRequest, res: Response) 
     if (!companyId) return;
 
     const { id } = req.params;
-    const { qtyAccepted, qtyScrapped } = req.body;
+    const parsedBody = CompleteJobCardBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
+    const { qtyAccepted, qtyScrapped } = parsedBody.data;
 
     const job = await prisma.jobCard.findFirst({ where: { id, companyId } });
     if (!job) return res.status(404).json({ error: 'Job Card not found' });
@@ -1056,7 +1073,9 @@ export async function createLog(req: AuthenticatedRequest, res: Response) {
     const companyId = getCompanyId(req, res);
     if (!companyId) return;
 
-    const { woId, qtyCompleted, qtyScrapped, operatorName } = req.body;
+    const parsedBody = CreateLogBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
+    const { woId, qtyCompleted, qtyScrapped, operatorName } = parsedBody.data;
 
     if (!woId || qtyCompleted === undefined) {
       return res.status(400).json({ error: 'woId and qtyCompleted are required' });
@@ -1253,7 +1272,9 @@ export async function createQcRecord(req: AuthenticatedRequest, res: Response) {
     const companyId = getCompanyId(req, res);
     if (!companyId) return;
 
-    const { batchNo, productId, totalInspected, qtyPassed, inspectorName, status, remarks } = req.body;
+    const parsedBody = CreateQcRecordBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
+    const { batchNo, productId, totalInspected, qtyPassed, inspectorName, status, remarks } = parsedBody.data;
 
     if (!batchNo || !productId || totalInspected === undefined || qtyPassed === undefined) {
       return res.status(400).json({ error: 'batchNo, productId, totalInspected, and qtyPassed are required' });
@@ -1290,7 +1311,7 @@ export async function createQcRecord(req: AuthenticatedRequest, res: Response) {
           }
         });
 
-        const prod = await tx.product.findUnique({ where: { id: productId } });
+        const prod = await tx.product.findFirst({ where: { id: productId, companyId } });
         const previousStock = prod ? prod.stock - passedVal : 0.0;
         const newStock = prod ? prod.stock : 0.0;
 
@@ -1348,7 +1369,9 @@ export async function updateQcRecord(req: AuthenticatedRequest, res: Response) {
     if (!companyId) return;
 
     const { id } = req.params;
-    const { batchNo, totalInspected, qtyPassed, inspectorName, status, remarks } = req.body;
+    const parsedBody = UpdateQcRecordBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
+    const { batchNo, totalInspected, qtyPassed, inspectorName, status, remarks } = parsedBody.data;
 
     const existing = await prisma.qualityControlRecord.findFirst({ where: { id, companyId } });
     if (!existing) return res.status(404).json({ error: 'QC record not found' });
@@ -1423,7 +1446,9 @@ export async function updateReworkCard(req: AuthenticatedRequest, res: Response)
     if (!companyId) return;
 
     const { id } = req.params;
-    const { status, notes, assignedOperatorId, reworkOperation } = req.body;
+    const parsedBody = UpdateReworkCardBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
+    const { status, notes, assignedOperatorId, reworkOperation } = parsedBody.data;
 
     const existing = await prisma.reworkCard.findFirst({ where: { id, companyId } });
     if (!existing) return res.status(404).json({ error: 'Rework Card not found' });
@@ -1486,7 +1511,9 @@ export async function createWorkCenter(req: AuthenticatedRequest, res: Response)
     const companyId = getCompanyId(req, res);
     if (!companyId) return;
 
-    const { name, code, capacityHours, electricityKw, status } = req.body;
+    const parsedBody = CreateWorkCenterBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
+    const { name, code, capacityHours, electricityKw, status } = parsedBody.data;
 
     if (!name || !code || capacityHours === undefined) {
       return res.status(400).json({ error: 'name, code, and capacityHours are required' });
@@ -1529,7 +1556,9 @@ export async function updateWorkCenter(req: AuthenticatedRequest, res: Response)
     if (!companyId) return;
 
     const { id } = req.params;
-    const { name, code, capacityHours, runtimeLogged, efficiencyScore, electricityKw, status } = req.body;
+    const parsedBody = UpdateWorkCenterBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
+    const { name, code, capacityHours, runtimeLogged, efficiencyScore, electricityKw, status } = parsedBody.data;
 
     const existing = await prisma.workCenter.findFirst({ where: { id, companyId } });
     if (!existing) return res.status(404).json({ error: 'Work Center not found' });
@@ -1599,7 +1628,9 @@ export async function createShift(req: AuthenticatedRequest, res: Response) {
     const companyId = getCompanyId(req, res);
     if (!companyId) return;
 
-    const { operatorId, workCenterId, shiftName, shiftHours, assignedMachine, dateScheduled } = req.body;
+    const parsedBody = CreateShiftBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
+    const { operatorId, workCenterId, shiftName, shiftHours, assignedMachine, dateScheduled } = parsedBody.data;
 
     if (!operatorId || !workCenterId || !shiftName || !dateScheduled) {
       return res.status(400).json({ error: 'operatorId, workCenterId, shiftName, and dateScheduled are required' });
@@ -1633,7 +1664,9 @@ export async function updateShift(req: AuthenticatedRequest, res: Response) {
     if (!companyId) return;
 
     const { id } = req.params;
-    const { operatorId, workCenterId, shiftName, shiftHours, assignedMachine, dateScheduled } = req.body;
+    const parsedBody = UpdateShiftBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
+    const { operatorId, workCenterId, shiftName, shiftHours, assignedMachine, dateScheduled } = parsedBody.data;
 
     const existing = await prisma.factoryShift.findFirst({ where: { id, companyId } });
     if (!existing) return res.status(404).json({ error: 'Shift Roster not found' });
@@ -1704,7 +1737,9 @@ export async function createRouting(req: AuthenticatedRequest, res: Response) {
     const companyId = getCompanyId(req, res);
     if (!companyId) return;
 
-    const { productId, name, operations } = req.body;
+    const parsedBody = CreateRoutingBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
+    const { productId, name, operations } = parsedBody.data;
     if (!productId || !name) {
       return res.status(400).json({ error: "productId and name are required" });
     }
@@ -1750,7 +1785,9 @@ export async function updateRouting(req: AuthenticatedRequest, res: Response) {
     if (!companyId) return;
 
     const { id } = req.params;
-    const { name, operations } = req.body;
+    const parsedBody = UpdateRoutingBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
+    const { name, operations } = parsedBody.data;
 
     const existing = await prisma.routing.findFirst({ where: { id, companyId } });
     if (!existing) return res.status(404).json({ error: "Routing not found" });
@@ -1784,8 +1821,7 @@ export async function updateRouting(req: AuthenticatedRequest, res: Response) {
       return r;
     });
 
-    const finalRouting = await prisma.routing.findUnique({
-      where: { id },
+    const finalRouting = await prisma.routing.findFirst({ where: { id, companyId },
       include: { operations: true }
     });
 
@@ -1842,7 +1878,9 @@ export async function issueMaterialsToWorkOrder(req: AuthenticatedRequest, res: 
     const companyId = getCompanyId(req, res);
     if (!companyId) return;
 
-    const { woId, productId, quantity } = req.body;
+    const parsedBody = IssueMaterialsToWorkOrderBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
+    const { woId, productId, quantity } = parsedBody.data;
     if (!woId || !productId || !quantity) {
       return res.status(400).json({ error: "woId, productId, and quantity are required" });
     }
@@ -2072,9 +2110,7 @@ export async function createSubcontractPO(req: AuthenticatedRequest, res: Respon
       return res.status(409).json({ error: `A subcontract PO (${existingPo.poNo}) has already been created for this Job Card.` });
     }
 
-    const vendor = await prisma.vendor.findUnique({
-      where: { id: jobCard.vendorId }
-    });
+    const vendor = await prisma.vendor.findFirst({ where: { id: jobCard.vendorId, companyId } });
 
     if (!vendor) {
       return res.status(404).json({ error: "Assigned vendor not found" });

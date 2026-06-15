@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { PlayCircle, Plus, Search, BarChart3, ShieldCheck, Database, Layers, ArrowUpRight, TrendingUp, Trash2 } from 'lucide-react';
 import { apiClient } from '../../utils/apiService';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { LogSchema } from '../../utils/schemas';
 
 interface ProductionLog {
   id: string;
@@ -38,72 +40,51 @@ export default function ProductionExecution({ products = [] }: ProductionExecuti
   const [showLogModal, setShowLogModal] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Mapped Active Released Work Orders from database
-  const [dispatchedWorkOrders, setDispatchedWorkOrders] = useState<any[]>([]);
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: async ({ method, url, data }: { method: 'post'|'put'|'delete', url: string, data?: any }) => {
+      if (method === 'post') return apiClient.post(url, data);
+      if (method === 'put') return apiClient.put(url, data);
+      if (method === 'delete') return apiClient.delete(url);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries();
+    }
+  });
 
-  // Logs List
-  const [logsList, setLogsList] = useState<ProductionLog[]>([]);
+  const { data: wosRes } = useQuery({ queryKey: ['workOrders'], queryFn: async () => { const res = await apiClient.get<{ workOrders: any[] }>('/api/manufacturing/work-orders'); return res; } });
+  const { data: logsRes } = useQuery({ queryKey: ['logs'], queryFn: async () => { const res = await apiClient.get<{ logs: any[] }>('/api/manufacturing/logs'); return res; } });
+  const { data: adjRes } = useQuery({ queryKey: ['adjustments'], queryFn: async () => { const res = await apiClient.get<{ adjustments: any[] }>('/api/inventory/adjustments'); return res; } });
 
-  // Stock Ledger
-  const [stockLedger, setStockLedger] = useState<StockLedgerEntry[]>([]);
+  const dispatchedWorkOrders = (wosRes?.workOrders || []).filter((w: any) => w.status === 'RELEASED' || w.status === 'IN_PROGRESS');
+  const logsList = (logsRes?.logs || []).map((log: any) => ({
+    id: log.id,
+    woNo: log.workOrder?.woNo || 'UNKNOWN',
+    finishedProductName: log.workOrder?.plan?.finishedProduct?.name || 'Standard Product',
+    qtyTarget: log.workOrder?.qtyTarget || 0,
+    qtyCompleted: log.qtyCompleted,
+    qtyScrapped: log.qtyScrapped,
+    operatorName: log.operatorName,
+    consumptionStatus: log.consumptionStatus,
+    dateLog: log.dateLog?.split('T')[0] || log.createdAt?.split('T')[0] || ''
+  }));
+  const stockLedger = (adjRes?.adjustments || [])
+    .filter((adj: any) => adj.referenceNo || adj.reason?.includes('BOM') || adj.reason?.includes('Yield'))
+    .map((adj: any) => ({
+      id: adj.id,
+      transactionType: adj.quantity > 0 ? 'FG_RECEIPT' : 'RAW_CONSUMPTION',
+      productName: adj.product?.name || 'Material Item',
+      productCode: adj.product?.uom || 'unit',
+      qtyChange: adj.quantity,
+      remainingStock: adj.newStock,
+      referenceNo: adj.referenceNo || adj.adjustmentNo,
+      timestamp: adj.date?.replace('T', ' ').substring(0, 16) || adj.createdAt?.replace('T', ' ').substring(0, 16) || ''
+    }));
 
-  // Log Modal variables
   const [selectedWoId, setSelectedWoId] = useState('');
   const [logQtyCompleted, setLogQtyCompleted] = useState(5);
   const [logQtyScrapped, setLogQtyScrapped] = useState(0);
   const [logOperator, setLogOperator] = useState('');
-
-  const fetchExecutionData = async () => {
-    setLoading(true);
-    try {
-      // 1. Fetch work orders
-      const wosRes = await apiClient.get<{ workOrders: any[] }>('/api/manufacturing/work-orders');
-      const filteredWos = (wosRes.workOrders || []).filter((w: any) => w.status === 'RELEASED' || w.status === 'IN_PROGRESS');
-      setDispatchedWorkOrders(filteredWos);
-      if (filteredWos.length > 0 && !selectedWoId) {
-        setSelectedWoId(filteredWos[0].id);
-      }
-
-      // 2. Fetch Yield logs
-      const logsRes = await apiClient.get<{ logs: any[] }>('/api/manufacturing/logs');
-      const formattedLogs = (logsRes.logs || []).map((log: any) => ({
-        id: log.id,
-        woNo: log.workOrder?.woNo || 'UNKNOWN',
-        finishedProductName: log.workOrder?.plan?.finishedProduct?.name || 'Standard Product',
-        qtyTarget: log.workOrder?.qtyTarget || 0,
-        qtyCompleted: log.qtyCompleted,
-        qtyScrapped: log.qtyScrapped,
-        operatorName: log.operatorName,
-        consumptionStatus: log.consumptionStatus,
-        dateLog: log.dateLog?.split('T')[0] || log.createdAt?.split('T')[0] || ''
-      }));
-      setLogsList(formattedLogs);
-
-      // 3. Fetch Stock Adjustments
-      const adjRes = await apiClient.get<{ adjustments: any[] }>('/api/inventory/adjustments');
-      const formattedLedger = (adjRes.adjustments || [])
-        .filter((adj: any) => adj.referenceNo || adj.reason?.includes('BOM') || adj.reason?.includes('Yield'))
-        .map((adj: any) => ({
-          id: adj.id,
-          transactionType: adj.quantity > 0 ? 'FG_RECEIPT' : 'RAW_CONSUMPTION',
-          productName: adj.product?.name || 'Material Item',
-          productCode: adj.product?.uom || 'unit',
-          qtyChange: adj.quantity,
-          remainingStock: adj.newStock,
-          referenceNo: adj.referenceNo || adj.adjustmentNo,
-          timestamp: adj.date?.replace('T', ' ').substring(0, 16) || adj.createdAt?.replace('T', ' ').substring(0, 16) || ''
-        }));
-      setStockLedger(formattedLedger);
-    } catch (err: any) {
-      console.error('Failed to load production execution data:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchExecutionData();
-  }, [products]);
 
   // Set default dropdown selections when catalog loads
   useEffect(() => {
@@ -116,13 +97,20 @@ export default function ProductionExecution({ products = [] }: ProductionExecuti
     e.preventDefault();
     if (!selectedWoId) return;
 
-    apiClient.post('/api/manufacturing/logs', {
+    const payload = {
       woId: selectedWoId,
       qtyCompleted: Number(logQtyCompleted),
       qtyScrapped: Number(logQtyScrapped),
       operatorName: logOperator
-    }).then(() => {
-      fetchExecutionData();
+    };
+
+    const parsed = LogSchema.safeParse(payload);
+    if (!parsed.success) {
+      alert(parsed.error.errors[0].message);
+      return;
+    }
+
+    mutation.mutateAsync({ method: 'post', url: '/api/manufacturing/logs', data: payload }).then(() => {
       setShowLogModal(false);
       setLogQtyCompleted(5);
       setLogQtyScrapped(0);
@@ -134,8 +122,7 @@ export default function ProductionExecution({ products = [] }: ProductionExecuti
   const handleDeleteLog = async (id: string) => {
     if (!confirm("Are you sure you want to discard this production yield log? Stock adjustments in the ledger will remain, but the execution log entry will be removed.")) return;
     try {
-      await apiClient.delete(`/api/manufacturing/logs/${id}`);
-      fetchExecutionData();
+      await mutation.mutateAsync({ method: 'delete', url: `/api/manufacturing/logs/${id}` });
     } catch (err: any) {
       alert("Error discarding log: " + (err.response?.data?.error || err.message));
     }

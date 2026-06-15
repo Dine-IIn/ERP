@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '../../utils/apiService';
+import { PaymentSchema } from '../../utils/schemas';
 import { Send, Plus, Search, X, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 interface Payment {
@@ -13,17 +16,30 @@ interface Payment {
   vendor: { name: string };
 }
 
-interface PaymentsProps {
-  payments: Payment[];
-  vendors: any[];
-  onAddPayment: (data: any) => Promise<void>;
-}
+export default function Payments() {
+  const queryClient = useQueryClient();
 
-export default function Payments({
-  payments,
-  vendors,
-  onAddPayment
-}: PaymentsProps) {
+  const { data: payments = [] } = useQuery({
+    queryKey: ['payments'],
+    queryFn: async () => {
+      const res = await apiClient.get<{payments: any[]}>('/api/finance/payments');
+      return res.payments || [];
+    }
+  });
+
+  const { data: vendors = [] } = useQuery({
+    queryKey: ['vendors'],
+    queryFn: async () => {
+      const res = await apiClient.get<{vendors: any[]}>('/api/inventory/vendors');
+      return res.vendors || [];
+    }
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (data: any) => apiClient.post('/api/finance/payments', data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['payments'] })
+  });
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [vendorId, setVendorId] = useState('');
   const [amount, setAmount] = useState('');
@@ -50,7 +66,7 @@ export default function Payments({
     setLoading(true);
 
     try {
-      await onAddPayment({
+      const parsed = PaymentSchema.safeParse({
         vendorId,
         amount: parseFloat(amount),
         paymentMethod,
@@ -58,6 +74,8 @@ export default function Payments({
         bankDetails: bankDetails.trim() || null,
         notes: notes.trim() || null
       });
+      if (!parsed.success) throw new Error(parsed.error.errors[0].message);
+      await createMutation.mutateAsync(parsed.data);
       setLocalSuccess("Payment recorded successfully!");
       setTimeout(() => {
         setShowAddModal(false);
@@ -198,7 +216,7 @@ export default function Payments({
                   <label className="text-slate-450 text-xs font-semibold uppercase tracking-wider">Vendor Partner</label>
                   <select
                     value={vendorId}
-                    onChange={(e) => setUserId(e.target.value) || setVendorId(e.target.value)}
+                    onChange={(e) => setVendorId(e.target.value)}
                     className="w-full px-3.5 py-2 bg-slate-950 border border-slate-850 rounded-xl text-white text-sm outline-none"
                     required
                   >

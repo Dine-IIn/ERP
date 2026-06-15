@@ -1,3 +1,4 @@
+import { CreateVendorBodySchema, ListCustomersQuerySchema, CreateBrandBodySchema, ListProductsQuerySchema, CreateCustomerBodySchema, CreateProductBodySchema, ListVendorsQuerySchema, CreateCategoryBodySchema, UpdateProductBodySchema, UpdateCustomerBodySchema, UpdateVendorBodySchema } from '../types/index';
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import prisma from '../services/db';
@@ -12,7 +13,9 @@ export async function listCustomers(req: AuthenticatedRequest, res: Response) {
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { query } = req.query;
+    const parsedQuery = ListCustomersQuerySchema.safeParse(req.query);
+    if (!parsedQuery.success) return res.status(400).json({ error: "Invalid input", details: parsedQuery.error.issues });
+    const { query } = parsedQuery.data;
 
     const whereClause: any = { companyId };
     if (query) {
@@ -39,7 +42,9 @@ export async function createCustomer(req: AuthenticatedRequest, res: Response) {
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { name, customerType, customerGroup, contactPerson, contactNo, email, billingAddress, shippingAddress, creditLimit, creditTime, state, clientClassification } = req.body;
+    const parsedBody = CreateCustomerBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
+    const { name, customerType, customerGroup, contactPerson, contactNo, email, billingAddress, shippingAddress, creditLimit, creditTime, state, clientClassification } = parsedBody.data;
 
     if (!name || !customerType || !contactNo || !state) {
       return res.status(400).json({ error: "Name, customerType, contactNo, and state are required fields" });
@@ -95,7 +100,9 @@ export async function updateCustomer(req: AuthenticatedRequest, res: Response) {
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
-    const { name, customerType, customerGroup, contactPerson, contactNo, email, billingAddress, shippingAddress, creditLimit, creditTime, state, clientClassification } = req.body;
+    const parsedBody = UpdateCustomerBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
+    const { name, customerType, customerGroup, contactPerson, contactNo, email, billingAddress, shippingAddress, creditLimit, creditTime, state, clientClassification } = parsedBody.data;
 
     const customerToUpdate = await prisma.customer.findFirst({
       where: { id, companyId }
@@ -192,7 +199,9 @@ export async function listVendors(req: AuthenticatedRequest, res: Response) {
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { query } = req.query;
+    const parsedQuery = ListVendorsQuerySchema.safeParse(req.query);
+    if (!parsedQuery.success) return res.status(400).json({ error: "Invalid input", details: parsedQuery.error.issues });
+    const { query } = parsedQuery.data;
 
     const whereClause: any = { companyId };
     if (query) {
@@ -219,7 +228,9 @@ export async function createVendor(req: AuthenticatedRequest, res: Response) {
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { name, isVendor, contactNo, email, bankDetails, paymentTerms, gstDetails, creditTime } = req.body;
+    const parsedBody = CreateVendorBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
+    const { name, isVendor, contactNo, email, bankDetails, paymentTerms, gstDetails, creditTime } = parsedBody.data;
 
     if (!name || !contactNo) {
       return res.status(400).json({ error: "Name and contactNo are required fields" });
@@ -270,7 +281,9 @@ export async function updateVendor(req: AuthenticatedRequest, res: Response) {
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
-    const { name, isVendor, contactNo, email, bankDetails, paymentTerms, gstDetails, creditTime } = req.body;
+    const parsedBody = UpdateVendorBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
+    const { name, isVendor, contactNo, email, bankDetails, paymentTerms, gstDetails, creditTime } = parsedBody.data;
 
     const vendorToUpdate = await prisma.vendor.findFirst({
       where: { id, companyId }
@@ -377,7 +390,9 @@ export async function createCategory(req: AuthenticatedRequest, res: Response) {
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { name } = req.body;
+    const parsedBody = CreateCategoryBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
+    const { name } = parsedBody.data;
     if (!name) return res.status(400).json({ error: "Category name is required" });
 
     const exist = await prisma.productCategory.findFirst({ where: { companyId, name } });
@@ -429,7 +444,9 @@ export async function createBrand(req: AuthenticatedRequest, res: Response) {
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { name } = req.body;
+    const parsedBody = CreateBrandBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
+    const { name } = parsedBody.data;
     if (!name) return res.status(400).json({ error: "Brand name is required" });
 
     const exist = await prisma.brand.findFirst({ where: { companyId, name } });
@@ -466,7 +483,9 @@ export async function listProducts(req: AuthenticatedRequest, res: Response) {
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { query } = req.query;
+    const parsedQuery = ListProductsQuerySchema.safeParse(req.query);
+    if (!parsedQuery.success) return res.status(400).json({ error: "Invalid input", details: parsedQuery.error.issues });
+    const { query } = parsedQuery.data;
 
     const whereClause: any = { companyId };
     if (query) {
@@ -497,7 +516,9 @@ export async function createProduct(req: AuthenticatedRequest, res: Response) {
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { name, categoryId, brandId, uom, pricing, hsnSacCode, imageUrl, bomReference, moq, variants, reorderLevel, warehouseLoc } = req.body;
+    const parsedBody = CreateProductBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
+    const { name, categoryId, brandId, uom, pricing, hsnSacCode, imageUrl, bomReference, moq, variants, reorderLevel, warehouseLoc } = parsedBody.data;
 
     if (!name || !uom) {
       return res.status(400).json({ error: "Product name and UOM are required fields" });
@@ -574,7 +595,9 @@ export async function updateProduct(req: AuthenticatedRequest, res: Response) {
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
-    const { name, categoryId, brandId, uom, pricing, hsnSacCode, imageUrl, bomReference, moq, variants, reorderLevel, warehouseLoc } = req.body;
+    const parsedBody = UpdateProductBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
+    const { name, categoryId, brandId, uom, pricing, hsnSacCode, imageUrl, bomReference, moq, variants, reorderLevel, warehouseLoc } = parsedBody.data;
 
     const productToUpdate = await prisma.product.findFirst({
       where: { id, companyId },
@@ -626,8 +649,7 @@ export async function updateProduct(req: AuthenticatedRequest, res: Response) {
       }
     }
 
-    const finalProduct = await prisma.product.findUnique({
-      where: { id },
+    const finalProduct = await prisma.product.findFirst({ where: { id, companyId },
       include: { category: true, brand: true, variants: true }
     });
 

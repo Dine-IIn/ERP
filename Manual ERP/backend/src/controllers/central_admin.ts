@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import { config } from '../config';
+import { CentralLicenseSchema, CentralDiscoverySchema, CentralUpdaterSchema, CentralDevConfigSchema } from '../types';
 
 // Helper to proxy requests to Central Services
 async function proxyCentralAdminCall(req: AuthenticatedRequest, res: Response, method: string, path: string, body?: any) {
@@ -44,7 +45,9 @@ export async function getCentralLicenses(req: AuthenticatedRequest, res: Respons
 }
 
 export async function saveCentralLicense(req: AuthenticatedRequest, res: Response) {
-  return proxyCentralAdminCall(req, res, 'POST', '/admin/licenses', req.body);
+  const parsed = CentralLicenseSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.errors });
+  return proxyCentralAdminCall(req, res, 'POST', '/admin/licenses', parsed.data);
 }
 
 export async function deleteCentralLicense(req: AuthenticatedRequest, res: Response) {
@@ -58,7 +61,9 @@ export async function getCentralDiscovery(req: AuthenticatedRequest, res: Respon
 }
 
 export async function saveCentralDiscovery(req: AuthenticatedRequest, res: Response) {
-  return proxyCentralAdminCall(req, res, 'POST', '/admin/discovery', req.body);
+  const parsed = CentralDiscoverySchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.errors });
+  return proxyCentralAdminCall(req, res, 'POST', '/admin/discovery', parsed.data);
 }
 
 export async function deleteCentralDiscovery(req: AuthenticatedRequest, res: Response) {
@@ -72,7 +77,9 @@ export async function getCentralUpdater(req: AuthenticatedRequest, res: Response
 }
 
 export async function saveCentralUpdater(req: AuthenticatedRequest, res: Response) {
-  return proxyCentralAdminCall(req, res, 'POST', '/admin/updater', req.body);
+  const parsed = CentralUpdaterSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.errors });
+  return proxyCentralAdminCall(req, res, 'POST', '/admin/updater', parsed.data);
 }
 
 // Telemetry Monitor Status Proxy Endpoint
@@ -86,7 +93,9 @@ export async function getCentralDevConfigs(req: AuthenticatedRequest, res: Respo
 }
 
 export async function saveCentralDevConfig(req: AuthenticatedRequest, res: Response) {
-  return proxyCentralAdminCall(req, res, 'POST', '/admin/dev-configs', req.body);
+  const parsed = CentralDevConfigSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.errors });
+  return proxyCentralAdminCall(req, res, 'POST', '/admin/dev-configs', parsed.data);
 }
 
 export async function deleteCentralDevConfig(req: AuthenticatedRequest, res: Response) {

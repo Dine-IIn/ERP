@@ -1,3 +1,5 @@
+import { UpdateTaxBodySchema } from '../types/index';
+import { CreateTaxBodySchema } from '../types/index';
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import prisma from '../services/db';
@@ -24,7 +26,11 @@ export async function createTax(req: AuthenticatedRequest, res: Response) {
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { name, rate, type, isDefault } = req.body;
+    
+    const parsedBody = CreateTaxBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Bad Request", details: parsedBody.error });
+    const {  name, rate, type, isDefault  } = parsedBody.data;
+
 
     if (!name || rate === undefined || !type) {
       return res.status(400).json({ error: "Name, rate, and type are required fields." });
@@ -85,7 +91,11 @@ export async function updateTax(req: AuthenticatedRequest, res: Response) {
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
-    const { name, rate, type, isDefault } = req.body;
+    
+    const parsedBody = UpdateTaxBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Bad Request", details: parsedBody.error });
+    const {  name, rate, type, isDefault  } = parsedBody.data;
+
 
     const taxToUpdate = await prisma.tax.findFirst({
       where: { id, companyId }

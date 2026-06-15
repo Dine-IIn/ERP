@@ -2,6 +2,17 @@ import { Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import prisma from '../services/db';
 import { logAudit } from '../utils/audit';
+import {
+  UpdateEmployeeSchema,
+  LeaveRequestSchema,
+  UpdateLeaveStatusSchema,
+  ShiftRosterSchema,
+  GeneratePayrollSchema,
+  DisbursePayrollSchema,
+  ListAttendanceQuerySchema,
+  ListLeaveRequestsQuerySchema,
+  ListPayrollQuerySchema
+} from '../types';
 
 // =========================================================================
 // 1. Employees Directory (linked to User, Role, Department in administration)
@@ -36,7 +47,9 @@ export async function updateEmployee(req: AuthenticatedRequest, res: Response) {
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
-    const { departmentId, roleId, status, shiftStart, shiftEnd, shiftName, reportsToId, mobileNo, email } = req.body;
+    const parsed = UpdateEmployeeSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.format() });
+    const { departmentId, roleId, status, shiftStart, shiftEnd, shiftName, reportsToId, mobileNo, email } = parsed.data;
 
     const employee = await prisma.user.findFirst({
       where: { id, companyId }
@@ -89,7 +102,9 @@ export async function listAttendance(req: AuthenticatedRequest, res: Response) {
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { userId, startDate, endDate } = req.query;
+    const parsed = ListAttendanceQuerySchema.safeParse(req.query);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.format() });
+    const { userId, startDate, endDate } = parsed.data;
 
     const attendances = await prisma.attendance.findMany({
       where: {
@@ -200,7 +215,9 @@ export async function listLeaveRequests(req: AuthenticatedRequest, res: Response
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { userId } = req.query;
+    const parsed = ListLeaveRequestsQuerySchema.safeParse(req.query);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.format() });
+    const { userId } = parsed.data;
 
     const leaveRequests = await prisma.leaveRequest.findMany({
       where: {
@@ -226,11 +243,9 @@ export async function createLeaveRequest(req: AuthenticatedRequest, res: Respons
     const userId = req.user?.userId;
     if (!companyId || !userId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { type, startDate, endDate, reason } = req.body;
-
-    if (!type || !startDate || !endDate || !reason) {
-      return res.status(400).json({ error: "Type, start date, end date, and reason are required" });
-    }
+    const parsed = LeaveRequestSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.format() });
+    const { type, startDate, endDate, reason } = parsed.data;
 
     const leaveRequest = await prisma.leaveRequest.create({
       data: {
@@ -257,11 +272,9 @@ export async function updateLeaveRequestStatus(req: AuthenticatedRequest, res: R
     if (!companyId || !userId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
-    const { status, notes } = req.body;
-
-    if (!status || !["APPROVED", "REJECTED"].includes(status)) {
-      return res.status(400).json({ error: "Invalid status selection. Must be APPROVED or REJECTED" });
-    }
+    const parsed = UpdateLeaveStatusSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.format() });
+    const { status, notes } = parsed.data;
 
     const leaveRequest = await prisma.leaveRequest.findFirst({
       where: { id, companyId }
@@ -324,11 +337,9 @@ export async function createShiftRoster(req: AuthenticatedRequest, res: Response
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { name, startTime, endTime, gracePeriod } = req.body;
-
-    if (!name || !startTime || !endTime) {
-      return res.status(400).json({ error: "Name, start time, and end time are required fields" });
-    }
+    const parsed = ShiftRosterSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.format() });
+    const { name, startTime, endTime, gracePeriod } = parsed.data;
 
     const roster = await prisma.shiftRoster.create({
       data: {
@@ -336,7 +347,7 @@ export async function createShiftRoster(req: AuthenticatedRequest, res: Response
         name,
         startTime,
         endTime,
-        gracePeriod: gracePeriod !== undefined ? parseInt(gracePeriod) : 15
+        gracePeriod: gracePeriod !== undefined ? gracePeriod : 15
       }
     });
 
@@ -367,7 +378,9 @@ export async function listPayroll(req: AuthenticatedRequest, res: Response) {
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { month, year } = req.query;
+    const parsed = ListPayrollQuerySchema.safeParse(req.query);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.format() });
+    const { month, year } = parsed.data;
 
     const payrolls = await prisma.payrollPeriod.findMany({
       where: {
@@ -392,17 +405,12 @@ export async function generatePayroll(req: AuthenticatedRequest, res: Response) 
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { userId, month, year, basicSalary, allowances, deductions } = req.body;
+    const parsed = GeneratePayrollSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.format() });
+    const { userId, month: parsedMonth, year: parsedYear, basicSalary: parsedBasic, allowances, deductions } = parsed.data;
 
-    if (!userId || !month || !year || basicSalary === undefined) {
-      return res.status(400).json({ error: "User, month, year, and basic salary are required" });
-    }
-
-    const parsedMonth = parseInt(month);
-    const parsedYear = parseInt(year);
-    const parsedBasic = parseFloat(basicSalary);
-    const parsedAllowances = allowances !== undefined ? parseFloat(allowances) : 0.0;
-    const parsedDeductionsInput = deductions !== undefined ? parseFloat(deductions) : 0.0;
+    const parsedAllowances = allowances !== undefined ? allowances : 0.0;
+    const parsedDeductionsInput = deductions !== undefined ? deductions : 0.0;
 
     // --- Dynamic Deductions Calculations ---
     const startDate = new Date(parsedYear, parsedMonth - 1, 1);
@@ -489,7 +497,9 @@ export async function disbursePayroll(req: AuthenticatedRequest, res: Response) 
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
-    const { referenceNo, notes } = req.body;
+    const parsed = DisbursePayrollSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.format() });
+    const { referenceNo, notes } = parsed.data;
 
     const payroll = await prisma.payrollPeriod.findFirst({
       where: { id, companyId },

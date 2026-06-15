@@ -1,4 +1,8 @@
 import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '../../utils/apiService';
+import { StockAdjustSchema, ProductUpdateSchema } from '../../utils/schemas';
+
 import { Package, Search, Plus, Trash2, X, AlertCircle, CheckCircle2, Sliders, Warehouse, Edit } from 'lucide-react';
 import { formatNumber } from '../../utils/apiService';
 
@@ -15,9 +19,9 @@ interface Product {
 }
 
 interface InventoryProductsProps {
-  products: Product[];
-  onAdjustStock: (payload: any) => Promise<void>;
-  onUpdateProduct: (id: string, payload: any) => Promise<void>;
+  products?: Product[];
+  onAdjustStock?: (payload: any) => Promise<void>;
+  onUpdateProduct?: (id: string, payload: any) => Promise<void>;
 }
 
 export default function InventoryProducts({
@@ -25,6 +29,25 @@ export default function InventoryProducts({
   onAdjustStock,
   onUpdateProduct
 }: InventoryProductsProps) {
+  const queryClient = useQueryClient();
+
+  const { data: fetchedProducts } = useQuery({
+    queryKey: ['inventory-products'],
+    queryFn: () => apiClient.get<Product[]>('/api/inventory/products')
+  });
+
+  const adjustMutation = useMutation({
+    mutationFn: (data: any) => apiClient.post('/api/inventory/adjust', data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['inventory-products'] })
+  });
+
+  const updateProductMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: string, payload: any }) => apiClient.patch(`/api/inventory/products/${id}`, payload),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['inventory-products'] })
+  });
+
+  const activeProducts = products || fetchedProducts || [];
+
   const [searchTerm, setSearchTerm] = useState('');
   const [showAdjModal, setShowAdjModal] = useState(false);
   const [showLocationModal, setShowLocationModal] = useState(false);
@@ -45,7 +68,7 @@ export default function InventoryProducts({
   const [loading, setLoading] = useState(false);
 
   const openAdjModal = () => {
-    setProductId((products || [])[0]?.id || '');
+    setProductId((activeProducts)[0]?.id || '');
     setAdjType('MANUAL_ADD');
     setQuantity('');
     setReason('');
@@ -81,8 +104,19 @@ export default function InventoryProducts({
       reason: reason.trim() || "Manual inventory stock audit."
     };
 
+    const parseResult = StockAdjustSchema.safeParse(payload);
+    if (!parseResult.success) {
+      setLocalErr(parseResult.error.errors[0].message);
+      setLoading(false);
+      return;
+    }
+
     try {
-      await onAdjustStock(payload);
+      if (onAdjustStock) {
+        await onAdjustStock(parseResult.data);
+      } else {
+        await adjustMutation.mutateAsync(parseResult.data);
+      }
       setLocalSuccess("Manual stock adjustment registered and physical ledger updated!");
       setTimeout(() => {
         setShowAdjModal(false);
@@ -120,7 +154,7 @@ export default function InventoryProducts({
     }
   };
 
-  const filteredProducts = (products || []).filter(p => {
+  const filteredProducts = (activeProducts).filter(p => {
     if (!p) return false;
     const name = p.name || '';
     const sku = p.sku || '';
@@ -268,7 +302,7 @@ export default function InventoryProducts({
                   required
                 >
                   <option value="" disabled>Select target item</option>
-                  {(products || []).map(p => (
+                  {(activeProducts).map(p => (
                     <option key={p.id} value={p.id}>{p.name || 'Unnamed Product'} (SKU: {p.sku || 'N/A'})</option>
                   ))}
                 </select>

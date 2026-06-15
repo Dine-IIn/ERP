@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Truck, Search, Plus, Edit, Trash2, X, AlertCircle, Calendar, CheckCircle2, Mail, Download, Package } from 'lucide-react';
 import { apiClient } from '../../utils/apiService';
+import { useQuery } from '@tanstack/react-query';
+import { CreateDeliveryChallanBodySchema } from '../../utils/schemas';
 
 interface DeliveryChallanProps {
   challans: any[];
@@ -35,10 +37,25 @@ export default function DeliveryChallan({
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
-  const [companyProfile, setCompanyProfile] = useState<any>(null);
-  const [salesOrders, setSalesOrders] = useState<any[]>([]);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
-  const [templates, setTemplates] = useState<any[]>([]);
+
+  const { data: profileRes } = useQuery({
+    queryKey: ['companyProfile'],
+    queryFn: () => apiClient.get<any>('/api/admin/company/profile')
+  });
+  const companyProfile = profileRes?.company || null;
+
+  const { data: ordersRes } = useQuery({
+    queryKey: ['salesOrders'],
+    queryFn: () => apiClient.get<{ orders: any[] }>('/api/sales/orders')
+  });
+  const salesOrders = ordersRes?.orders || [];
+
+  const { data: templatesRes } = useQuery({
+    queryKey: ['templates', 'CHALLAN'],
+    queryFn: () => apiClient.get<{ templates: any[] }>('/api/sales/templates?docType=CHALLAN')
+  });
+  const templates = templatesRes?.templates || [];
 
   // Print Preview States
   const [customizingInvoice, setCustomizingInvoice] = useState<any>(null);
@@ -81,35 +98,7 @@ export default function DeliveryChallan({
   };
   const currentThemeHex = getThemeHex(themeColor);
 
-  React.useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const res = await apiClient.get<any>('/api/admin/company/profile');
-        setCompanyProfile(res.company || null);
-      } catch (e) {
-        console.error(e);
-      }
-    };
-    const fetchOrdersData = async () => {
-      try {
-        const res = await apiClient.get<{ orders: any[] }>('/api/sales/orders');
-        setSalesOrders(res.orders || []);
-      } catch (e) {
-        console.error('Failed to load Sales Orders:', e);
-      }
-    };
-    const fetchTemplates = async () => {
-      try {
-        const res = await apiClient.get<{ templates: any[] }>('/api/sales/templates?docType=CHALLAN');
-        setTemplates(res.templates || []);
-      } catch (e) {
-        console.error('Failed to load templates:', e);
-      }
-    };
-    fetchProfile();
-    fetchOrdersData();
-    fetchTemplates();
-  }, [showModal, customizingInvoice]);
+
 
   const applyTemplateSettings = (tpl: any) => {
     setCustomTitle(tpl.title || 'DELIVERY CHALLAN');
@@ -359,6 +348,13 @@ export default function DeliveryChallan({
         price: parseFloat(item.price) || 0.0 // Locked to Product Master price
       }))
     };
+
+    const parsed = CreateDeliveryChallanBodySchema.safeParse(payload);
+    if (!parsed.success) {
+      setLocalErr("Validation error: " + parsed.error.errors[0].message);
+      setLoading(false);
+      return;
+    }
 
     try {
       if (isEditing && editingId) {

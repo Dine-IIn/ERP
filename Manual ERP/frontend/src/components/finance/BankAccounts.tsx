@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '../../utils/apiService';
+import { BankAccountSchema } from '../../utils/schemas';
 import { Landmark, Plus, Search, X, AlertCircle, CheckCircle2, DollarSign } from 'lucide-react';
 
 interface BankAccount {
@@ -12,15 +15,22 @@ interface BankAccount {
   createdAt: string;
 }
 
-interface BankAccountsProps {
-  bankAccounts: BankAccount[];
-  onAddBankAccount: (data: any) => Promise<void>;
-}
+export default function BankAccounts() {
+  const queryClient = useQueryClient();
 
-export default function BankAccounts({
-  bankAccounts,
-  onAddBankAccount
-}: BankAccountsProps) {
+  const { data: bankAccounts = [] } = useQuery({
+    queryKey: ['bankAccounts'],
+    queryFn: async () => {
+      const res = await apiClient.get<{bankAccounts: any[]}>('/api/finance/bank-accounts');
+      return res.bankAccounts || [];
+    }
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (data: any) => apiClient.post('/api/finance/bank-accounts', data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['bankAccounts'] })
+  });
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [bankName, setBankName] = useState('');
   const [accountNo, setAccountNo] = useState('');
@@ -47,7 +57,7 @@ export default function BankAccounts({
     setLoading(true);
 
     try {
-      await onAddBankAccount({
+      const parsed = BankAccountSchema.safeParse({
         bankName: bankName.trim(),
         accountNo: accountNo.trim(),
         branchName: branchName.trim() || null,
@@ -55,6 +65,8 @@ export default function BankAccounts({
         accountType,
         balance: balance ? parseFloat(balance) : 0
       });
+      if (!parsed.success) throw new Error(parsed.error.errors[0].message);
+      await createMutation.mutateAsync(parsed.data);
       setLocalSuccess("Bank account registered successfully!");
       setTimeout(() => {
         setShowAddModal(false);

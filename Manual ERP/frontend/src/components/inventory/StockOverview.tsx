@@ -17,16 +17,22 @@ interface StockAdjustment {
 }
 
 interface StockOverviewProps {
-  adjustments: StockAdjustment[];
+  adjustments?: StockAdjustment[];
 }
 
 export default function StockOverview({
   adjustments
 }: StockOverviewProps) {
+  const { data: fetchedAdjustments } = useQuery({
+    queryKey: ['inventory-adjustments'],
+    queryFn: () => apiClient.get<StockAdjustment[]>('/api/inventory/adjustments')
+  });
+
+  const activeAdjustments = adjustments || fetchedAdjustments || [];
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('');
 
-  const filteredAdjustments = (adjustments || []).filter(adj => {
+  const filteredAdjustments = activeAdjustments.filter(adj => {
     if (!adj) return false;
     const productName = adj.product?.name || '';
     const adjNo = adj.adjustmentNo || '';

@@ -1,3 +1,20 @@
+import { UpdateDocumentTemplateBodySchema } from '../types/index';
+import { CreateDocumentTemplateBodySchema } from '../types/index';
+import { ListDocumentTemplatesQuerySchema } from '../types/index';
+import { UpdateServiceTicketBodySchema } from '../types/index';
+import { CreateServiceTicketBodySchema } from '../types/index';
+import { UpdateQuotationStatusBodySchema } from '../types/index';
+import { CreateQuotationBodySchema } from '../types/index';
+import { UpdateDispatchBodySchema } from '../types/index';
+import { CreateDispatchBodySchema } from '../types/index';
+import { UpdateDeliveryChallanBodySchema } from '../types/index';
+import { CreateDeliveryChallanBodySchema } from '../types/index';
+import { UpdateSalesInvoiceBodySchema } from '../types/index';
+import { CreateSalesInvoiceBodySchema } from '../types/index';
+import { UpdateProformaInvoiceBodySchema } from '../types/index';
+import { CreateProformaInvoiceBodySchema } from '../types/index';
+import { UpdateSalesOrderBodySchema } from '../types/index';
+import { CreateSalesOrderBodySchema } from '../types/index';
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import prisma from '../services/db';
@@ -38,7 +55,7 @@ async function handleInwardReceipt(
   invoiceNo: string,
   description: string
 ) {
-  const customer = await tx.customer.findUnique({ where: { id: customerId }, select: { name: true } });
+  const customer = await tx.customer.findFirst({ where: { id: customerId, companyId }, select: { name: true } });
   const payerName = customer?.name || "Customer";
 
   await tx.companyReceipt.create({
@@ -214,7 +231,11 @@ export async function createSalesOrder(req: AuthenticatedRequest, res: Response)
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { customerId, deliveryDate, discount, items } = req.body;
+    
+    const parsedBody = CreateSalesOrderBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Bad Request", details: parsedBody.error });
+    const {  customerId, deliveryDate, discount, items  } = parsedBody.data;
+
 
     if (!customerId || !items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "Customer and at least one product order item are required." });
@@ -279,7 +300,11 @@ export async function updateSalesOrder(req: AuthenticatedRequest, res: Response)
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
-    const { customerId, deliveryDate, discount, status, items } = req.body;
+    
+    const parsedBody = UpdateSalesOrderBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Bad Request", details: parsedBody.error });
+    const {  customerId, deliveryDate, discount, status, items  } = parsedBody.data;
+
 
     const orderToUpdate = await prisma.salesOrder.findFirst({
       where: { id, companyId }
@@ -403,7 +428,11 @@ export async function createProformaInvoice(req: AuthenticatedRequest, res: Resp
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { customerId, dueDate, discount, tax, subtotal, total, status, items } = req.body;
+    
+    const parsedBody = CreateProformaInvoiceBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Bad Request", details: parsedBody.error });
+    const {  customerId, dueDate, discount, tax, subtotal, total, status, items  } = parsedBody.data;
+
 
     if (!customerId || !items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "Customer and at least one item are required." });
@@ -457,7 +486,11 @@ export async function updateProformaInvoice(req: AuthenticatedRequest, res: Resp
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
-    const { customerId, dueDate, discount, tax, subtotal, total, status, items } = req.body;
+    
+    const parsedBody = UpdateProformaInvoiceBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Bad Request", details: parsedBody.error });
+    const {  customerId, dueDate, discount, tax, subtotal, total, status, items  } = parsedBody.data;
+
 
     const invoice = await prisma.proformaInvoice.findFirst({ where: { id, companyId } });
     if (!invoice) return res.status(404).json({ error: "Proforma Invoice not found" });
@@ -577,7 +610,11 @@ export async function createSalesInvoice(req: AuthenticatedRequest, res: Respons
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { customerId, dueDate, discount, tax, subtotal, total, status, items, billingAddress, shippingAddress, shippingState, shippingName, salesOrderId, salesOrderIds } = req.body;
+    
+    const parsedBody = CreateSalesInvoiceBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Bad Request", details: parsedBody.error });
+    const {  customerId, dueDate, discount, tax, subtotal, total, status, items, billingAddress, shippingAddress, shippingState, shippingName, salesOrderId, salesOrderIds  } = parsedBody.data;
+
 
     if (!customerId || !items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "Customer and at least one item are required." });
@@ -641,7 +678,11 @@ export async function updateSalesInvoice(req: AuthenticatedRequest, res: Respons
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
-    const { customerId, dueDate, discount, tax, subtotal, total, status, items, billingAddress, shippingAddress, shippingState, shippingName, salesOrderId, salesOrderIds } = req.body;
+    
+    const parsedBody = UpdateSalesInvoiceBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Bad Request", details: parsedBody.error });
+    const {  customerId, dueDate, discount, tax, subtotal, total, status, items, billingAddress, shippingAddress, shippingState, shippingName, salesOrderId, salesOrderIds  } = parsedBody.data;
+
 
     const invoice = await prisma.salesInvoice.findFirst({ where: { id, companyId } });
     if (!invoice) return res.status(404).json({ error: "Sales Invoice not found" });
@@ -787,7 +828,11 @@ export async function createDeliveryChallan(req: AuthenticatedRequest, res: Resp
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { customerId, status, items, salesOrderId, salesOrderIds } = req.body;
+    
+    const parsedBody = CreateDeliveryChallanBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Bad Request", details: parsedBody.error });
+    const {  customerId, status, items, salesOrderId, salesOrderIds  } = parsedBody.data;
+
 
     if (!customerId || !items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "Customer and at least one item are required." });
@@ -837,7 +882,11 @@ export async function updateDeliveryChallan(req: AuthenticatedRequest, res: Resp
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
-    const { customerId, status, items, salesOrderId, salesOrderIds } = req.body;
+    
+    const parsedBody = UpdateDeliveryChallanBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Bad Request", details: parsedBody.error });
+    const {  customerId, status, items, salesOrderId, salesOrderIds  } = parsedBody.data;
+
 
     const challan = await prisma.deliveryChallan.findFirst({ where: { id, companyId } });
     if (!challan) return res.status(404).json({ error: "Delivery Challan not found" });
@@ -952,7 +1001,11 @@ export async function createDispatch(req: AuthenticatedRequest, res: Response) {
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { orderId, carrier, trackingNo, vehicleNo, shippingCost, status, notes } = req.body;
+    
+    const parsedBody = CreateDispatchBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Bad Request", details: parsedBody.error });
+    const {  orderId, carrier, trackingNo, vehicleNo, shippingCost, status, notes  } = parsedBody.data;
+
 
     if (!orderId) return res.status(400).json({ error: "Active Sales Order ID is required." });
 
@@ -1058,7 +1111,11 @@ export async function updateDispatch(req: AuthenticatedRequest, res: Response) {
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
-    const { orderId, carrier, trackingNo, vehicleNo, shippingCost, status, notes } = req.body;
+    
+    const parsedBody = UpdateDispatchBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Bad Request", details: parsedBody.error });
+    const {  orderId, carrier, trackingNo, vehicleNo, shippingCost, status, notes  } = parsedBody.data;
+
 
     const disp = await prisma.dispatch.findFirst({ where: { id, companyId } });
     if (!disp) return res.status(404).json({ error: "Dispatch record not found" });
@@ -1213,7 +1270,11 @@ export async function createQuotation(req: AuthenticatedRequest, res: Response) 
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { customerId, date, expiryDate, subtotal, discount, tax, total, status, items } = req.body;
+    
+    const parsedBody = CreateQuotationBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Bad Request", details: parsedBody.error });
+    const {  customerId, date, expiryDate, subtotal, discount, tax, total, status, items  } = parsedBody.data;
+
 
     if (!customerId || !items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "Customer reference and at least one item are required." });
@@ -1257,7 +1318,11 @@ export async function updateQuotationStatus(req: AuthenticatedRequest, res: Resp
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
-    const { status } = req.body;
+    
+    const parsedBody = UpdateQuotationStatusBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Bad Request", details: parsedBody.error });
+    const {  status  } = parsedBody.data;
+
 
     const quote = await prisma.quotation.findFirst({ where: { id, companyId } });
     if (!quote) return res.status(404).json({ error: "Quotation not found" });
@@ -1316,7 +1381,11 @@ export async function createServiceTicket(req: AuthenticatedRequest, res: Respon
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { customerId, productId, serialNumber, title, type, priority, status, scheduledDate, resolutionNotes } = req.body;
+    
+    const parsedBody = CreateServiceTicketBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Bad Request", details: parsedBody.error });
+    const {  customerId, productId, serialNumber, title, type, priority, status, scheduledDate, resolutionNotes  } = parsedBody.data;
+
 
     if (!customerId || !productId || !title || !type || !priority) {
       return res.status(400).json({ error: "Customer, Product, Title, Type and Priority are required fields." });
@@ -1352,7 +1421,11 @@ export async function updateServiceTicket(req: AuthenticatedRequest, res: Respon
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
-    const { status, resolutionNotes, scheduledDate, priority } = req.body;
+    
+    const parsedBody = UpdateServiceTicketBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Bad Request", details: parsedBody.error });
+    const {  status, resolutionNotes, scheduledDate, priority  } = parsedBody.data;
+
 
     const exist = await prisma.serviceTicket.findFirst({ where: { id, companyId } });
     if (!exist) return res.status(404).json({ error: "Service ticket not found" });
@@ -1396,7 +1469,11 @@ export async function listDocumentTemplates(req: AuthenticatedRequest, res: Resp
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { docType } = req.query;
+    
+    const parsedQuery = ListDocumentTemplatesQuerySchema.safeParse(req.query);
+    if (!parsedQuery.success) return res.status(400).json({ error: "Bad Request", details: parsedQuery.error });
+    const {  docType  } = parsedQuery.data;
+
 
     const templates = await prisma.documentTemplate.findMany({
       where: {
@@ -1417,7 +1494,11 @@ export async function createDocumentTemplate(req: AuthenticatedRequest, res: Res
     const companyId = req.user?.companyId;
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { name, docType, title, isDefault, settings, terms } = req.body;
+    
+    const parsedBody = CreateDocumentTemplateBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Bad Request", details: parsedBody.error });
+    const {  name, docType, title, isDefault, settings, terms  } = parsedBody.data;
+
 
     if (!name || !docType || !settings) {
       return res.status(400).json({ error: "Name, docType, and settings are required." });
@@ -1455,7 +1536,11 @@ export async function updateDocumentTemplate(req: AuthenticatedRequest, res: Res
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
-    const { name, docType, title, isDefault, settings, terms } = req.body;
+    
+    const parsedBody = UpdateDocumentTemplateBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Bad Request", details: parsedBody.error });
+    const {  name, docType, title, isDefault, settings, terms  } = parsedBody.data;
+
 
     const exist = await prisma.documentTemplate.findFirst({ where: { id, companyId } });
     if (!exist) return res.status(404).json({ error: "Document template not found" });

@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '../../utils/apiService';
+import { ReceiptSchema } from '../../utils/schemas';
 import { Download, Plus, Search, X, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 interface Receipt {
@@ -13,17 +16,22 @@ interface Receipt {
   createdAt: string;
 }
 
-interface ReceiptsProps {
-  receipts: Receipt[];
-  onAddReceipt: (data: any) => Promise<void>;
-  currencySymbol?: string;
-}
+export default function Receipts() {
+  const queryClient = useQueryClient();
 
-export default function Receipts({
-  receipts,
-  onAddReceipt,
-  currencySymbol = '$'
-}: ReceiptsProps) {
+  const { data: receipts = [] } = useQuery({
+    queryKey: ['receipts'],
+    queryFn: async () => {
+      const res = await apiClient.get<{receipts: any[]}>('/api/finance/receipts');
+      return res.receipts || [];
+    }
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (data: any) => apiClient.post('/api/finance/receipts', data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['receipts'] })
+  });
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [amount, setAmount] = useState('');
   const [payerName, setPayerName] = useState('');
@@ -50,7 +58,7 @@ export default function Receipts({
     setLoading(true);
 
     try {
-      await onAddReceipt({
+      const parsed = ReceiptSchema.safeParse({
         amount: parseFloat(amount),
         payerName: payerName.trim(),
         category,
@@ -58,6 +66,8 @@ export default function Receipts({
         referenceNo: referenceNo.trim() || null,
         notes: notes.trim() || null
       });
+      if (!parsed.success) throw new Error(parsed.error.errors[0].message);
+      await createMutation.mutateAsync(parsed.data);
       setLocalSuccess("Receipt recorded successfully!");
       setTimeout(() => {
         setShowAddModal(false);
@@ -82,6 +92,8 @@ export default function Receipts({
       category.toLowerCase().includes(term) ||
       referenceNo.toLowerCase().includes(term);
   });
+
+  const currencySymbol = '$';
 
   return (
     <div className="space-y-6">

@@ -147,6 +147,7 @@ import TauriSetup from './components/auth/TauriSetup';
 import { invoke } from '@tauri-apps/api/core';
 import { check } from '@tauri-apps/plugin-updater';
 import { getVersion } from '@tauri-apps/api/app';
+import { LoginSchema, SignupSchema, CompanyProfileSchema } from './utils/schemas';
 
 const getBackendUrl = () => {
   return getActiveBaseUrl();
@@ -1877,6 +1878,11 @@ export default function App() {
 
   const handleSignupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const parsed = SignupSchema.safeParse(signupForm);
+    if (!parsed.success) {
+      setErrorMsg(parsed.error.errors[0].message);
+      return;
+    }
     try {
       const targetValue = signupVerificationMethod === 'SMS' ? signupForm.mobileNo : signupForm.email;
       const data = await apiRequest('/api/auth/signup', 'POST', {
@@ -1892,6 +1898,12 @@ export default function App() {
     if (e) e.preventDefault();
     setErrorMsg(null);
     setSuccessMsg(null);
+
+    const parsed = LoginSchema.safeParse(loginForm);
+    if (!parsed.success) {
+      setErrorMsg(parsed.error.errors[0].message);
+      return;
+    }
 
     const deviceDetails = getDeviceDetails();
     const payload = {
@@ -4613,24 +4625,11 @@ export default function App() {
                     )}
 
                     {activeWorkspaceSubModule === 'CRM_LEAD' && (
-                      <Leads
-                        leads={leadsList}
-                        companyUsers={companyUsers}
-                        onCreateLead={handleCreateLead}
-                        onUpdateLead={handleUpdateLead}
-                        onDeleteLead={handleDeleteLead}
-                      />
+                      <Leads />
                     )}
 
                     {activeWorkspaceSubModule === 'CRM_OPPORTUNITY' && (
-                      <Opportunities
-                        opportunities={opportunitiesList}
-                        leads={leadsList}
-                        onCreateOpportunity={handleCreateOpportunity}
-                        onUpdateOpportunity={handleUpdateOpportunity}
-                        onDeleteOpportunity={handleDeleteOpportunity}
-                        currencySymbol={currencySymbol}
-                      />
+                      <Opportunities currencySymbol={currencySymbol} />
                     )}
 
                     {activeWorkspaceSubModule === 'CRM_FOLLOWUP' && (
@@ -4898,11 +4897,7 @@ export default function App() {
                     )}
 
                     {activeWorkspaceSubModule === 'FINANCE_BANK' && (
-                      <BankAccounts
-                        bankAccounts={financeBankAccounts}
-                        onCreateBankAccount={handleCreateBankAccount}
-                        currencySymbol={currencySymbol}
-                      />
+                      <BankAccounts />
                     )}
 
                   </div>

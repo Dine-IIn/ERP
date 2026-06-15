@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '../../utils/apiService';
+import { ExpenseSchema } from '../../utils/schemas';
 import { CreditCard, Plus, Search, Filter, X, AlertCircle, CheckCircle2, DollarSign, RefreshCw } from 'lucide-react';
 
 interface Expense {
@@ -12,17 +15,22 @@ interface Expense {
   createdAt: string;
 }
 
-interface ExpensesProps {
-  expenses: Expense[];
-  onAddExpense: (data: any) => Promise<void>;
-  currencySymbol?: string;
-}
+export default function Expenses() {
+  const queryClient = useQueryClient();
 
-export default function Expenses({
-  expenses,
-  onAddExpense,
-  currencySymbol = '$'
-}: ExpensesProps) {
+  const { data: expenses = [] } = useQuery({
+    queryKey: ['expenses'],
+    queryFn: async () => {
+      const res = await apiClient.get<{expenses: any[]}>('/api/finance/expenses');
+      return res.expenses || [];
+    }
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (data: any) => apiClient.post('/api/finance/expenses', data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['expenses'] })
+  });
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
@@ -50,7 +58,7 @@ export default function Expenses({
     setLoading(true);
 
     try {
-      await onAddExpense({
+      const parsed = ExpenseSchema.safeParse({
         amount: parseFloat(amount),
         description: description.trim(),
         category,
@@ -58,6 +66,8 @@ export default function Expenses({
         syncToCashbook,
         referenceNo: referenceNo.trim() || null
       });
+      if (!parsed.success) throw new Error(parsed.error.errors[0].message);
+      await createMutation.mutateAsync(parsed.data);
       setLocalSuccess("Expense successfully recorded!");
       setTimeout(() => {
         setShowAddModal(false);
@@ -89,6 +99,7 @@ export default function Expenses({
   });
 
   // Calculate stats
+  const currencySymbol = '$';
   const totalExpenseSum = filteredExpenses.reduce((sum, e) => sum + e.amount, 0.0);
 
   const getCategoryColor = (cat: string) => {
