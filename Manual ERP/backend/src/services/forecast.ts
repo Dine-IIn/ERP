@@ -9,25 +9,25 @@ export function calculateNextRun(config: { frequency: string; forecastTime: stri
   const minute = parseInt(minStr) || 0;
 
   let nextRun = new Date(now);
-  nextRun.setHours(hour, minute, 0, 0);
+  nextRun.setUTCHours(hour, minute, 0, 0);
 
   if (config.frequency === "DAILY") {
     if (nextRun <= now) {
-      nextRun.setDate(nextRun.getDate() + 1);
+      nextRun.setUTCDate(nextRun.getUTCDate() + 1);
     }
   } else if (config.frequency === "WEEKLY") {
     // Default weekly runs on Sunday
     const dayOfWeek = 0; // Sunday
-    const currentDay = nextRun.getDay();
+    const currentDay = nextRun.getUTCDay();
     const distance = (dayOfWeek + 7 - currentDay) % 7;
-    nextRun.setDate(nextRun.getDate() + distance);
+    nextRun.setUTCDate(nextRun.getUTCDate() + distance);
     if (nextRun <= now) {
-      nextRun.setDate(nextRun.getDate() + 7);
+      nextRun.setUTCDate(nextRun.getUTCDate() + 7);
     }
   } else if (config.frequency === "MONTHLY") {
-    nextRun.setDate(1); // Day 1 of the month
+    nextRun.setUTCDate(1); // Day 1 of the month
     if (nextRun <= now) {
-      nextRun.setMonth(nextRun.getMonth() + 1);
+      nextRun.setUTCMonth(nextRun.getUTCMonth() + 1);
     }
   } else if (config.frequency === "CUSTOM" && config.cronExpression) {
     // Simple custom cron expression evaluator (fallback: run in 24 hours)
@@ -35,7 +35,7 @@ export function calculateNextRun(config: { frequency: string; forecastTime: stri
   } else {
     // Default fallback
     if (nextRun <= now) {
-      nextRun.setDate(nextRun.getDate() + 1);
+      nextRun.setUTCDate(nextRun.getUTCDate() + 1);
     }
   }
   return nextRun;

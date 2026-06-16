@@ -126,7 +126,8 @@ import {
   getTenantForecastStatus,
   runTenantForecast,
   getTenantForecastPredictions,
-  getTenantForecastHistory
+  getTenantForecastHistory,
+  triggerSuperCompanyForecast
 } from './controllers/forecast';
 
 import { startForecastWorkerLoop } from './services/forecast';
@@ -705,6 +706,7 @@ app.post('/api/inventory/adjust', authenticateToken, adjustStock);
 // AI Forecasting Routes
 app.get('/api/super/company/:id/forecast-config', authenticateToken, requireSuperAdmin, getSuperCompanyForecastConfig);
 app.post('/api/super/company/:id/forecast-config', authenticateToken, requireSuperAdmin, saveSuperCompanyForecastConfig);
+app.post('/api/super/company/:id/forecast-trigger', authenticateToken, requireSuperAdmin, triggerSuperCompanyForecast);
 
 app.get('/api/forecast/status', authenticateToken, getTenantForecastStatus);
 app.post('/api/forecast/run', authenticateToken, runTenantForecast);

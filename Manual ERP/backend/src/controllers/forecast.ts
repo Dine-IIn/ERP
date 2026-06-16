@@ -285,3 +285,43 @@ export async function getTenantForecastHistory(req: AuthenticatedRequest, res: R
     return res.status(500).json({ error: error.message });
   }
 }
+
+// 7. Trigger Manual Forecasting for a company (Super Admin Only)
+export async function triggerSuperCompanyForecast(req: AuthenticatedRequest, res: Response) {
+  try {
+    const { id } = req.params; // Company ID
+    if (!id) return res.status(400).json({ error: "Company reference is required." });
+
+    // Verify company has forecasting configured
+    const config = await prisma.forecastConfigurations.findUnique({
+      where: { tenantId: id }
+    });
+
+    if (!config || !config.forecastEnabled) {
+      return res.status(400).json({ error: "Forecasting is currently disabled or unconfigured by Super Admin for this workspace." });
+    }
+
+    // Enqueue manual run asynchronously in background job queue
+    const jobId = await enqueueForecastJob(id);
+
+    // Audit log
+    await logAudit(
+      id,
+      req.user?.userId || null,
+      req.user?.username || null,
+      'super_manual_forecast_trigger',
+      'CREATE',
+      null,
+      { jobId },
+      req.ip,
+      req.headers['user-agent']
+    );
+
+    return res.json({
+      message: "Forecast run requested. Analysis is processing in the background.",
+      jobId
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}

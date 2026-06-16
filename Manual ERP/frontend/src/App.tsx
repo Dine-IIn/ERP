@@ -175,6 +175,26 @@ const ensureManufacturingFeatures = (featuresList: any) => {
   return Array.from(new Set([...list, ...manufacturingKeys, 'SALES_PDF_EDITOR']));
 };
 
+const convertLocalTimeToUtc = (localTime: string): string => {
+  if (!localTime) return "02:00";
+  const [hours, minutes] = localTime.split(':').map(Number);
+  const date = new Date();
+  date.setHours(hours, minutes, 0, 0);
+  const utcHours = String(date.getUTCHours()).padStart(2, '0');
+  const utcMinutes = String(date.getUTCMinutes()).padStart(2, '0');
+  return `${utcHours}:${utcMinutes}`;
+};
+
+const convertUtcToLocalTime = (utcTime: string): string => {
+  if (!utcTime) return "02:00";
+  const [hours, minutes] = utcTime.split(':').map(Number);
+  const date = new Date();
+  date.setUTCHours(hours, minutes, 0, 0);
+  const localHours = String(date.getHours()).padStart(2, '0');
+  const localMinutes = String(date.getMinutes()).padStart(2, '0');
+  return `${localHours}:${localMinutes}`;
+};
+
 interface UserProfile {
   id?: string;
   username: string;
@@ -761,6 +781,7 @@ export default function App() {
   const [selectedCompanyUsers, setSelectedCompanyUsers] = useState<any[]>([]); // Super Admin focused tenant's users list
   const [selectedCompanyForecastConfig, setSelectedCompanyForecastConfig] = useState<any | null>(null);
   const [savingForecastConfig, setSavingForecastConfig] = useState(false);
+  const [triggeringForecast, setTriggeringForecast] = useState(false);
   const [tenantForecastStatus, setTenantForecastStatus] = useState<any | null>(null);
   const [tenantForecastPredictions, setTenantForecastPredictions] = useState<any[]>([]);
   const [tenantForecastHistory, setTenantForecastHistory] = useState<any[]>([]);
@@ -2119,6 +2140,9 @@ export default function App() {
   const fetchCompanyForecastConfig = async (companyId: string) => {
     try {
       const data = await apiRequest(`/api/super/company/${companyId}/forecast-config`, 'GET');
+      if (data.config && data.config.forecastTime) {
+        data.config.forecastTime = convertUtcToLocalTime(data.config.forecastTime);
+      }
       setSelectedCompanyForecastConfig(data.config);
     } catch (e) {
       console.error("Failed to fetch forecast configuration:", e);
@@ -5880,8 +5904,15 @@ export default function App() {
                         e.preventDefault();
                         setSavingForecastConfig(true);
                         try {
-                          const data = await apiRequest(`/api/super/company/${selectedCompany.id}/forecast-config`, 'POST', selectedCompanyForecastConfig);
+                          const payload = {
+                            ...selectedCompanyForecastConfig,
+                            forecastTime: convertLocalTimeToUtc(selectedCompanyForecastConfig.forecastTime)
+                          };
+                          const data = await apiRequest(`/api/super/company/${selectedCompany.id}/forecast-config`, 'POST', payload);
                           setSuccessMsg(data.message);
+                          if (data.config && data.config.forecastTime) {
+                            data.config.forecastTime = convertUtcToLocalTime(data.config.forecastTime);
+                          }
                           setSelectedCompanyForecastConfig(data.config);
                         } catch (err: any) {
                           setErrorMsg(err.message || "Failed to update forecast configuration.");
@@ -6076,7 +6107,26 @@ export default function App() {
                           </div>
                         )}
 
-                        <div className="flex justify-end mt-2">
+                        <div className="flex justify-end gap-3 mt-2">
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!selectedCompany) return;
+                              setTriggeringForecast(true);
+                              try {
+                                const res = await apiRequest(`/api/super/company/${selectedCompany.id}/forecast-trigger`, 'POST');
+                                setSuccessMsg(res.message);
+                              } catch (err: any) {
+                                setErrorMsg(err.message || "Failed to trigger forecast.");
+                              } finally {
+                                setTriggeringForecast(false);
+                              }
+                            }}
+                            disabled={triggeringForecast || !selectedCompanyForecastConfig.forecastEnabled}
+                            className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-md cursor-pointer disabled:opacity-50"
+                          >
+                            {triggeringForecast ? "Triggering..." : "Trigger Forecast Now"}
+                          </button>
                           <button
                             type="submit"
                             disabled={savingForecastConfig}
