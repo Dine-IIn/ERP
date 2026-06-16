@@ -773,7 +773,14 @@ export default function App() {
   const [pendingUsers, setPendingUsers] = useState<any[]>([]); // Company Admin approvals list
   const [companyUsers, setCompanyUsers] = useState<any[]>([]); // Company Admin employees list
   const [companyRoles, setCompanyRoles] = useState<any[]>([]); // Company Admin roles definitions
-  const [companyFeatures, setCompanyFeatures] = useState<string[]>([]); // Mapped workspace modules
+  const [companyFeatures, setCompanyFeatures] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('erp_company_features');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  }); // Mapped workspace modules
   const [activeWorkspaceModule, setActiveWorkspaceModule] = useState<string>('dashboard');
   const [activeWorkspaceSubModule, setActiveWorkspaceSubModule] = useState<string>('');
 
@@ -901,6 +908,12 @@ export default function App() {
       } else {
         setAlertsSubTab('alerts');
       }
+    }
+  }, [companyFeatures]);
+
+  useEffect(() => {
+    if (companyFeatures && companyFeatures.length > 0) {
+      localStorage.setItem('erp_company_features', JSON.stringify(companyFeatures));
     }
   }, [companyFeatures]);
 
@@ -1977,6 +1990,7 @@ export default function App() {
     localStorage.removeItem('erp_token');
     localStorage.removeItem('erp_token_expires');
     localStorage.removeItem('erp_user');
+    localStorage.removeItem('erp_company_features');
     setToken(null);
     setUser(null);
     setNotifications([]);

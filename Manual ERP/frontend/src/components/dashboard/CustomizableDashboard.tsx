@@ -444,7 +444,7 @@ export default function CustomizableDashboard({
   return (
     <div className={`space-y-6 ${themeClasses.pageBg} p-4 rounded-xl min-h-[600px] transition-colors`}>
       {/* NO ACTIVE USERS BANNER */}
-      {isReady && companyUsers && companyUsers.filter(u => u.status === 'ACTIVE').length === 0 && (
+      {isReady && companyUsers && companyUsers.length > 0 && companyUsers.filter(u => u.status === 'ACTIVE').length === 0 && (
         <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-6 flex flex-col md:flex-row items-center gap-6 shadow-sm mb-6 animate-pulse" style={{ animationDuration: '3s' }}>
           <div className="w-12 h-12 rounded-full bg-rose-500/20 flex items-center justify-center shrink-0">
             <Users className="w-6 h-6 text-rose-500" />
