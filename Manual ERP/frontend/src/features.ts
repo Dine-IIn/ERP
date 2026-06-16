@@ -88,7 +88,8 @@ export const MASTER_FEATURES_HIERARCHY = [
       { key: 'INVENTORY_PRODUCT', name: 'Warehouse Stock Levels', desc: 'Conduct manual stock audits, warehouse taggings, and storage logs' },
       { key: 'INVENTORY_STOCK_OVERVIEW', name: 'Stock Ledger Overview', desc: 'View transaction ledgers tracking inward POs and outward SOs' },
       { key: 'INVENTORY_LOW_ALERT', name: 'Low Stock Alerts Console', desc: 'Monitor automatically flagged items dropping below minimum reorder thresholds' },
-      { key: 'INVENTORY_COMPLETE_VIEW', name: 'Complete Inventory View', desc: 'Consolidated view of all warehouse stocks, reorder points, and location shelfs' }
+      { key: 'INVENTORY_COMPLETE_VIEW', name: 'Complete Inventory View', desc: 'Consolidated view of all warehouse stocks, reorder points, and location shelfs' },
+      { key: 'INVENTORY_FORECASTING', name: 'AI Demand Forecasting', desc: 'Predict product demand, track replenishment times, and optimize levels' }
     ]
   },
   {

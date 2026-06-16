@@ -22,6 +22,9 @@ const taxes_1 = require("./controllers/taxes");
 const crm_1 = require("./controllers/crm");
 const purchases_1 = require("./controllers/purchases");
 const inventory_1 = require("./controllers/inventory");
+const forecast_1 = require("./controllers/forecast");
+const forecast_2 = require("./services/forecast");
+const forecastScheduler_1 = require("./services/forecastScheduler");
 const controllers_3 = require("./controllers");
 const sales_1 = require("./controllers/sales");
 const hrms_1 = require("./controllers/hrms");
@@ -69,7 +72,18 @@ const port = process.env.PORT || 5000;
 // Production security and performance middlewares
 app.use((0, helmet_1.default)({
     crossOriginResourcePolicy: { policy: "cross-origin" },
-    contentSecurityPolicy: false
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'"],
+            styleSrc: ["'self'", "'unsafe-inline'"],
+            imgSrc: ["'self'", "data:", "blob:", "https:"],
+            connectSrc: ["'self'", "https:", "wss:"],
+        },
+    },
+    hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+    frameguard: { action: "deny" },
+    noSniff: true
 }));
 app.use((0, compression_1.default)());
 // Define whitelisted production origins for CORS
@@ -103,7 +117,7 @@ const corsOptions = {
         }
     },
     methods: ["GET", "POST", "PATCH", "DELETE", "PUT"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", "x-otp-code"],
     credentials: true
 };
 // Enable CORS and JSON parsing middleware
@@ -396,6 +410,13 @@ app.delete('/api/purchase/payments/:id', auth_1.authenticateToken, purchases_1.d
 // 9.5 Inventory Warehousing: Ledger listings & manual stock adjustments
 app.get('/api/inventory/adjustments', auth_1.authenticateToken, inventory_1.listStockAdjustments);
 app.post('/api/inventory/adjust', auth_1.authenticateToken, inventory_1.adjustStock);
+// AI Forecasting Routes
+app.get('/api/super/company/:id/forecast-config', auth_1.authenticateToken, auth_1.requireSuperAdmin, forecast_1.getSuperCompanyForecastConfig);
+app.post('/api/super/company/:id/forecast-config', auth_1.authenticateToken, auth_1.requireSuperAdmin, forecast_1.saveSuperCompanyForecastConfig);
+app.get('/api/forecast/status', auth_1.authenticateToken, forecast_1.getTenantForecastStatus);
+app.post('/api/forecast/run', auth_1.authenticateToken, forecast_1.runTenantForecast);
+app.get('/api/forecast/predictions', auth_1.authenticateToken, forecast_1.getTenantForecastPredictions);
+app.get('/api/forecast/history', auth_1.authenticateToken, forecast_1.getTenantForecastHistory);
 // 9.55 Manufacturing Operations Routes
 app.get('/api/manufacturing/boms', auth_1.authenticateToken, controllers_3.listBoms);
 app.post('/api/manufacturing/boms', auth_1.authenticateToken, controllers_3.createBom);
@@ -417,6 +438,7 @@ app.put('/api/manufacturing/job-cards/:id', auth_1.authenticateToken, controller
 app.delete('/api/manufacturing/job-cards/:id', auth_1.authenticateToken, controllers_3.deleteJobCard);
 app.post('/api/manufacturing/job-cards/:id/start', auth_1.authenticateToken, controllers_3.startJobCard);
 app.post('/api/manufacturing/job-cards/:id/complete', auth_1.authenticateToken, controllers_3.completeJobCard);
+app.post('/api/manufacturing/job-cards/:id/create-sub-po', auth_1.authenticateToken, controllers_3.createSubcontractPO);
 app.get('/api/manufacturing/logs', auth_1.authenticateToken, controllers_3.listLogs);
 app.post('/api/manufacturing/logs', auth_1.authenticateToken, controllers_3.createLog);
 app.delete('/api/manufacturing/logs/:id', auth_1.authenticateToken, controllers_3.deleteLog);
@@ -525,6 +547,7 @@ async function seedDatabase() {
                         "INVENTORY_PRODUCT",
                         "INVENTORY_STOCK_OVERVIEW",
                         "INVENTORY_LOW_ALERT",
+                        "INVENTORY_FORECASTING",
                         // Phase 2 Modules
                         "HRMS_DATA",
                         "HRMS_EMPLOYEES",
@@ -620,6 +643,7 @@ async function seedDatabase() {
                 permissions.INVENTORY_PRODUCT = ["read", "write", "delete"];
                 permissions.INVENTORY_STOCK_OVERVIEW = ["read", "write", "delete"];
                 permissions.INVENTORY_LOW_ALERT = ["read", "write", "delete"];
+                permissions.INVENTORY_FORECASTING = ["read", "write", "delete"];
                 // Phase 2 Modules
                 permissions.HRMS_DATA = ["read", "write", "delete"];
                 permissions.HRMS_EMPLOYEES = ["read", "write", "delete"];
@@ -669,6 +693,15 @@ seedDatabase().then(() => {
         console.log(`   Realtime WebSockets ready for notifications.`);
         console.log(`   PostgreSQL database connection: ACTIVE.`);
         console.log(`========================================================\n`);
+        // Initialize forecasting scheduler and queue worker poll loop
+        try {
+            (0, forecastScheduler_1.startForecastScheduler)();
+            (0, forecast_2.startForecastWorkerLoop)();
+            console.log("📈 [AI Forecasting] Scheduler and queue worker started successfully.");
+        }
+        catch (err) {
+            console.error("❌ [AI Forecasting] Failed to start scheduler/worker:", err);
+        }
     });
 });
 //# sourceMappingURL=index.js.map

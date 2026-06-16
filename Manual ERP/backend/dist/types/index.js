@@ -1,6 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DepartmentSchema = exports.DashboardLayoutSchema = exports.ApprovalRequestSchema = exports.ApprovalWorkflowSchema = exports.CurrencySchema = exports.TaxSettingSchema = exports.CompanyProfileSchema = exports.CreateRoleSchema = exports.ApproveUserSchema = exports.UpdateCompanyUserSchema = exports.CreateCompanyAdminSchema = exports.UpdateCompanySchema = exports.CreateCompanySchema = exports.LoginSchema = exports.SignupSchema = void 0;
+exports.CentralLicenseSchema = exports.CentralDiscoverySchema = exports.CentralDevConfigSchema = exports.BankAccountSchema = exports.AdjustStockBodySchema = exports.UpdateTaxBodySchema = exports.CreateTaxBodySchema = exports.UpdateDocumentTemplateBodySchema = exports.CreateDocumentTemplateBodySchema = exports.ListDocumentTemplatesQuerySchema = exports.UpdateServiceTicketBodySchema = exports.CreateServiceTicketBodySchema = exports.UpdateQuotationStatusBodySchema = exports.CreateQuotationBodySchema = exports.UpdateDispatchBodySchema = exports.CreateDispatchBodySchema = exports.UpdateDeliveryChallanBodySchema = exports.CreateDeliveryChallanBodySchema = exports.UpdateSalesInvoiceBodySchema = exports.CreateSalesInvoiceBodySchema = exports.UpdateProformaInvoiceBodySchema = exports.CreateProformaInvoiceBodySchema = exports.UpdateSalesOrderBodySchema = exports.CreateSalesOrderBodySchema = exports.GetHrReportQuerySchema = exports.GetInventoryReportQuerySchema = exports.GetPurchaseReportQuerySchema = exports.GetSalesReportQuerySchema = exports.CreateVendorPaymentBodySchema = exports.CreatePurchaseReturnBodySchema = exports.CreateGrnBodySchema = exports.UpdatePurchaseOrderStatusBodySchema = exports.CreatePurchaseOrderBodySchema = exports.UpdateVendorQuotationStatusBodySchema = exports.CreateVendorQuotationBodySchema = exports.DepartmentSchema = exports.DashboardLayoutSchema = exports.ApprovalRequestSchema = exports.ApprovalWorkflowSchema = exports.CurrencySchema = exports.TaxSettingSchema = exports.CompanyProfileSchema = exports.CreateRoleSchema = exports.ApproveUserSchema = exports.UpdateCompanyUserSchema = exports.CreateCompanyAdminSchema = exports.UpdateCompanySchema = exports.CreateCompanySchema = exports.LoginSchema = exports.SignupSchema = void 0;
+exports.UpdateLeaveStatusSchema = exports.UpdateJobCardBodySchema = exports.UpdateEmployeeSchema = exports.UpdateDepartmentSchema = exports.UpdateCustomerBodySchema = exports.UpdateChatGroupSettingsSchema = exports.UpdateBomBodySchema = exports.UpdateBackupSettingsSchema = exports.ShiftRosterSchema = exports.SendChatMessageSchema = exports.RestoreBackupSchema = exports.ReceiptSchema = exports.PaymentSchema = exports.OpportunitySchema = exports.ManageChatGroupMembersSchema = exports.ListVendorsQuerySchema = exports.ListProductsQuerySchema = exports.ListPayrollQuerySchema = exports.ListLeaveRequestsQuerySchema = exports.ListCustomersQuerySchema = exports.ListAuditLogsQuerySchema = exports.ListAttendanceQuerySchema = exports.LeaveRequestSchema = exports.LeadSchema = exports.IssueMaterialsToWorkOrderBodySchema = exports.GetChatGroupMessagesQuerySchema = exports.GeneratePayrollSchema = exports.FollowUpSchema = exports.ExpenseSchema = exports.DownloadBackupQuerySchema = exports.DisbursePayrollSchema = exports.CreateWorkOrderBodySchema = exports.CreateWorkCenterBodySchema = exports.CreateVendorBodySchema = exports.CreateUserAdminSchema = exports.CreateShiftBodySchema = exports.CreateRoutingBodySchema = exports.CreateQcRecordBodySchema = exports.CreateProductBodySchema = exports.CreatePlanBodySchema = exports.CreateLogBodySchema = exports.CreateJobCardBodySchema = exports.CreateDepartmentSchema = exports.CreateCustomerBodySchema = exports.CreateChatGroupSchema = exports.CreateCategoryBodySchema = exports.CreateBrandBodySchema = exports.CreateBomBodySchema = exports.CompleteJobCardBodySchema = exports.CentralUpdaterSchema = void 0;
+exports.UpdateWorkOrderBodySchema = exports.UpdateWorkCenterBodySchema = exports.UpdateVendorBodySchema = exports.UpdateUserAdminSchema = exports.UpdateShiftBodySchema = exports.UpdateRoutingBodySchema = exports.UpdateRolePermissionsSchema = exports.UpdateReworkCardBodySchema = exports.UpdateQcRecordBodySchema = exports.UpdateProductBodySchema = exports.UpdatePlanBodySchema = void 0;
 const zod_1 = require("zod");
 exports.SignupSchema = zod_1.z.object({
     companyCode: zod_1.z.string().min(2).max(12).toUpperCase(),
@@ -68,7 +70,7 @@ exports.CompanyProfileSchema = zod_1.z.object({
     companyEmail: zod_1.z.string().email().optional().or(zod_1.z.literal("")),
     companyPhone: zod_1.z.string().optional().or(zod_1.z.literal("")),
     alternatePhone: zod_1.z.string().optional().or(zod_1.z.literal("")),
-    website: zod_1.z.string().url().optional().or(zod_1.z.literal("")),
+    website: zod_1.z.string().optional().or(zod_1.z.literal("")),
     industryType: zod_1.z.string().optional().or(zod_1.z.literal("")),
     businessType: zod_1.z.string().optional().or(zod_1.z.literal("")),
     companyDescription: zod_1.z.string().optional().or(zod_1.z.literal("")),
@@ -160,4 +162,309 @@ exports.DepartmentSchema = zod_1.z.object({
     managerId: zod_1.z.string().uuid().optional().or(zod_1.z.null()).or(zod_1.z.literal("")),
     parentDepartmentId: zod_1.z.string().uuid().optional().or(zod_1.z.null()).or(zod_1.z.literal("")),
 });
+exports.CreateVendorQuotationBodySchema = zod_1.z.object({
+    vendorId: zod_1.z.any().optional(),
+    quoteNo: zod_1.z.any().optional(),
+    date: zod_1.z.any().optional(),
+    validUntil: zod_1.z.any().optional(),
+    subtotal: zod_1.z.any().optional(),
+    tax: zod_1.z.any().optional(),
+    total: zod_1.z.any().optional(),
+    status: zod_1.z.any().optional(),
+    items: zod_1.z.any().optional()
+}).passthrough();
+exports.UpdateVendorQuotationStatusBodySchema = zod_1.z.object({
+    status: zod_1.z.any().optional()
+}).passthrough();
+exports.CreatePurchaseOrderBodySchema = zod_1.z.object({
+    vendorId: zod_1.z.any().optional(),
+    poNo: zod_1.z.any().optional(),
+    date: zod_1.z.any().optional(),
+    deliveryDate: zod_1.z.any().optional(),
+    subtotal: zod_1.z.any().optional(),
+    discount: zod_1.z.any().optional(),
+    tax: zod_1.z.any().optional(),
+    total: zod_1.z.any().optional(),
+    status: zod_1.z.any().optional(),
+    items: zod_1.z.any().optional()
+}).passthrough();
+exports.UpdatePurchaseOrderStatusBodySchema = zod_1.z.object({
+    status: zod_1.z.any().optional()
+}).passthrough();
+exports.CreateGrnBodySchema = zod_1.z.object({
+    poId: zod_1.z.any().optional(),
+    grnNo: zod_1.z.any().optional(),
+    receivedDate: zod_1.z.any().optional(),
+    receivedBy: zod_1.z.any().optional(),
+    gateEntryNo: zod_1.z.any().optional(),
+    challanNo: zod_1.z.any().optional(),
+    status: zod_1.z.any().optional(),
+    notes: zod_1.z.any().optional(),
+    items: zod_1.z.any().optional()
+}).passthrough();
+exports.CreatePurchaseReturnBodySchema = zod_1.z.object({
+    poId: zod_1.z.any().optional(),
+    returnNo: zod_1.z.any().optional(),
+    returnDate: zod_1.z.any().optional(),
+    reason: zod_1.z.any().optional(),
+    status: zod_1.z.any().optional(),
+    items: zod_1.z.any().optional()
+}).passthrough();
+exports.CreateVendorPaymentBodySchema = zod_1.z.object({
+    vendorId: zod_1.z.any().optional(),
+    paymentNo: zod_1.z.any().optional(),
+    paymentDate: zod_1.z.any().optional(),
+    amount: zod_1.z.any().optional(),
+    paymentMethod: zod_1.z.any().optional(),
+    referenceNo: zod_1.z.any().optional(),
+    bankDetails: zod_1.z.any().optional(),
+    status: zod_1.z.any().optional(),
+    notes: zod_1.z.any().optional()
+}).passthrough();
+exports.GetSalesReportQuerySchema = zod_1.z.object({
+    format: zod_1.z.string().optional(),
+    startDate: zod_1.z.string().optional(),
+    endDate: zod_1.z.string().optional()
+}).passthrough();
+exports.GetPurchaseReportQuerySchema = zod_1.z.object({
+    format: zod_1.z.string().optional(),
+    startDate: zod_1.z.string().optional(),
+    endDate: zod_1.z.string().optional()
+}).passthrough();
+exports.GetInventoryReportQuerySchema = zod_1.z.object({
+    format: zod_1.z.string().optional(),
+    startDate: zod_1.z.string().optional(),
+    endDate: zod_1.z.string().optional()
+}).passthrough();
+exports.GetHrReportQuerySchema = zod_1.z.object({
+    format: zod_1.z.string().optional(),
+    startDate: zod_1.z.string().optional(),
+    endDate: zod_1.z.string().optional()
+}).passthrough();
+exports.CreateSalesOrderBodySchema = zod_1.z.object({
+    customerId: zod_1.z.any().optional(),
+    deliveryDate: zod_1.z.any().optional(),
+    discount: zod_1.z.any().optional(),
+    items: zod_1.z.any().optional()
+}).passthrough();
+exports.UpdateSalesOrderBodySchema = zod_1.z.object({
+    customerId: zod_1.z.any().optional(),
+    deliveryDate: zod_1.z.any().optional(),
+    discount: zod_1.z.any().optional(),
+    status: zod_1.z.any().optional(),
+    items: zod_1.z.any().optional()
+}).passthrough();
+exports.CreateProformaInvoiceBodySchema = zod_1.z.object({
+    customerId: zod_1.z.any().optional(),
+    dueDate: zod_1.z.any().optional(),
+    discount: zod_1.z.any().optional(),
+    tax: zod_1.z.any().optional(),
+    subtotal: zod_1.z.any().optional(),
+    total: zod_1.z.any().optional(),
+    status: zod_1.z.any().optional(),
+    items: zod_1.z.any().optional()
+}).passthrough();
+exports.UpdateProformaInvoiceBodySchema = zod_1.z.object({
+    customerId: zod_1.z.any().optional(),
+    dueDate: zod_1.z.any().optional(),
+    discount: zod_1.z.any().optional(),
+    tax: zod_1.z.any().optional(),
+    subtotal: zod_1.z.any().optional(),
+    total: zod_1.z.any().optional(),
+    status: zod_1.z.any().optional(),
+    items: zod_1.z.any().optional()
+}).passthrough();
+exports.CreateSalesInvoiceBodySchema = zod_1.z.object({
+    customerId: zod_1.z.any().optional(),
+    dueDate: zod_1.z.any().optional(),
+    discount: zod_1.z.any().optional(),
+    tax: zod_1.z.any().optional(),
+    subtotal: zod_1.z.any().optional(),
+    total: zod_1.z.any().optional(),
+    status: zod_1.z.any().optional(),
+    items: zod_1.z.any().optional(),
+    billingAddress: zod_1.z.any().optional(),
+    shippingAddress: zod_1.z.any().optional(),
+    shippingState: zod_1.z.any().optional(),
+    shippingName: zod_1.z.any().optional(),
+    salesOrderId: zod_1.z.any().optional(),
+    salesOrderIds: zod_1.z.any().optional()
+}).passthrough();
+exports.UpdateSalesInvoiceBodySchema = zod_1.z.object({
+    customerId: zod_1.z.any().optional(),
+    dueDate: zod_1.z.any().optional(),
+    discount: zod_1.z.any().optional(),
+    tax: zod_1.z.any().optional(),
+    subtotal: zod_1.z.any().optional(),
+    total: zod_1.z.any().optional(),
+    status: zod_1.z.any().optional(),
+    items: zod_1.z.any().optional(),
+    billingAddress: zod_1.z.any().optional(),
+    shippingAddress: zod_1.z.any().optional(),
+    shippingState: zod_1.z.any().optional(),
+    shippingName: zod_1.z.any().optional(),
+    salesOrderId: zod_1.z.any().optional(),
+    salesOrderIds: zod_1.z.any().optional()
+}).passthrough();
+exports.CreateDeliveryChallanBodySchema = zod_1.z.object({
+    customerId: zod_1.z.any().optional(),
+    status: zod_1.z.any().optional(),
+    items: zod_1.z.any().optional(),
+    salesOrderId: zod_1.z.any().optional(),
+    salesOrderIds: zod_1.z.any().optional()
+}).passthrough();
+exports.UpdateDeliveryChallanBodySchema = zod_1.z.object({
+    customerId: zod_1.z.any().optional(),
+    status: zod_1.z.any().optional(),
+    items: zod_1.z.any().optional(),
+    salesOrderId: zod_1.z.any().optional(),
+    salesOrderIds: zod_1.z.any().optional()
+}).passthrough();
+exports.CreateDispatchBodySchema = zod_1.z.object({
+    orderId: zod_1.z.any().optional(),
+    carrier: zod_1.z.any().optional(),
+    trackingNo: zod_1.z.any().optional(),
+    vehicleNo: zod_1.z.any().optional(),
+    shippingCost: zod_1.z.any().optional(),
+    status: zod_1.z.any().optional(),
+    notes: zod_1.z.any().optional()
+}).passthrough();
+exports.UpdateDispatchBodySchema = zod_1.z.object({
+    orderId: zod_1.z.any().optional(),
+    carrier: zod_1.z.any().optional(),
+    trackingNo: zod_1.z.any().optional(),
+    vehicleNo: zod_1.z.any().optional(),
+    shippingCost: zod_1.z.any().optional(),
+    status: zod_1.z.any().optional(),
+    notes: zod_1.z.any().optional()
+}).passthrough();
+exports.CreateQuotationBodySchema = zod_1.z.object({
+    customerId: zod_1.z.any().optional(),
+    date: zod_1.z.any().optional(),
+    expiryDate: zod_1.z.any().optional(),
+    subtotal: zod_1.z.any().optional(),
+    discount: zod_1.z.any().optional(),
+    tax: zod_1.z.any().optional(),
+    total: zod_1.z.any().optional(),
+    status: zod_1.z.any().optional(),
+    items: zod_1.z.any().optional()
+}).passthrough();
+exports.UpdateQuotationStatusBodySchema = zod_1.z.object({
+    status: zod_1.z.any().optional()
+}).passthrough();
+exports.CreateServiceTicketBodySchema = zod_1.z.object({
+    customerId: zod_1.z.any().optional(),
+    productId: zod_1.z.any().optional(),
+    serialNumber: zod_1.z.any().optional(),
+    title: zod_1.z.any().optional(),
+    type: zod_1.z.any().optional(),
+    priority: zod_1.z.any().optional(),
+    status: zod_1.z.any().optional(),
+    scheduledDate: zod_1.z.any().optional(),
+    resolutionNotes: zod_1.z.any().optional()
+}).passthrough();
+exports.UpdateServiceTicketBodySchema = zod_1.z.object({
+    status: zod_1.z.any().optional(),
+    resolutionNotes: zod_1.z.any().optional(),
+    scheduledDate: zod_1.z.any().optional(),
+    priority: zod_1.z.any().optional()
+}).passthrough();
+exports.ListDocumentTemplatesQuerySchema = zod_1.z.object({
+    docType: zod_1.z.any().optional()
+}).passthrough();
+exports.CreateDocumentTemplateBodySchema = zod_1.z.object({
+    name: zod_1.z.any().optional(),
+    docType: zod_1.z.any().optional(),
+    title: zod_1.z.any().optional(),
+    isDefault: zod_1.z.any().optional(),
+    settings: zod_1.z.any().optional(),
+    terms: zod_1.z.any().optional()
+}).passthrough();
+exports.UpdateDocumentTemplateBodySchema = zod_1.z.object({
+    name: zod_1.z.any().optional(),
+    docType: zod_1.z.any().optional(),
+    title: zod_1.z.any().optional(),
+    isDefault: zod_1.z.any().optional(),
+    settings: zod_1.z.any().optional(),
+    terms: zod_1.z.any().optional()
+}).passthrough();
+exports.CreateTaxBodySchema = zod_1.z.object({
+    name: zod_1.z.any().optional(),
+    rate: zod_1.z.any().optional(),
+    type: zod_1.z.any().optional(),
+    isDefault: zod_1.z.any().optional()
+}).passthrough();
+exports.UpdateTaxBodySchema = zod_1.z.object({
+    name: zod_1.z.any().optional(),
+    rate: zod_1.z.any().optional(),
+    type: zod_1.z.any().optional(),
+    isDefault: zod_1.z.any().optional()
+}).passthrough();
+// Auto-generated fallback schemas
+exports.AdjustStockBodySchema = zod_1.z.any();
+exports.BankAccountSchema = zod_1.z.any();
+exports.CentralDevConfigSchema = zod_1.z.any();
+exports.CentralDiscoverySchema = zod_1.z.any();
+exports.CentralLicenseSchema = zod_1.z.any();
+exports.CentralUpdaterSchema = zod_1.z.any();
+exports.CompleteJobCardBodySchema = zod_1.z.any();
+exports.CreateBomBodySchema = zod_1.z.any();
+exports.CreateBrandBodySchema = zod_1.z.any();
+exports.CreateCategoryBodySchema = zod_1.z.any();
+exports.CreateChatGroupSchema = zod_1.z.any();
+exports.CreateCustomerBodySchema = zod_1.z.any();
+exports.CreateDepartmentSchema = zod_1.z.any();
+exports.CreateJobCardBodySchema = zod_1.z.any();
+exports.CreateLogBodySchema = zod_1.z.any();
+exports.CreatePlanBodySchema = zod_1.z.any();
+exports.CreateProductBodySchema = zod_1.z.any();
+exports.CreateQcRecordBodySchema = zod_1.z.any();
+exports.CreateRoutingBodySchema = zod_1.z.any();
+exports.CreateShiftBodySchema = zod_1.z.any();
+exports.CreateUserAdminSchema = zod_1.z.any();
+exports.CreateVendorBodySchema = zod_1.z.any();
+exports.CreateWorkCenterBodySchema = zod_1.z.any();
+exports.CreateWorkOrderBodySchema = zod_1.z.any();
+exports.DisbursePayrollSchema = zod_1.z.any();
+exports.DownloadBackupQuerySchema = zod_1.z.any();
+exports.ExpenseSchema = zod_1.z.any();
+exports.FollowUpSchema = zod_1.z.any();
+exports.GeneratePayrollSchema = zod_1.z.any();
+exports.GetChatGroupMessagesQuerySchema = zod_1.z.any();
+exports.IssueMaterialsToWorkOrderBodySchema = zod_1.z.any();
+exports.LeadSchema = zod_1.z.any();
+exports.LeaveRequestSchema = zod_1.z.any();
+exports.ListAttendanceQuerySchema = zod_1.z.any();
+exports.ListAuditLogsQuerySchema = zod_1.z.any();
+exports.ListCustomersQuerySchema = zod_1.z.any();
+exports.ListLeaveRequestsQuerySchema = zod_1.z.any();
+exports.ListPayrollQuerySchema = zod_1.z.any();
+exports.ListProductsQuerySchema = zod_1.z.any();
+exports.ListVendorsQuerySchema = zod_1.z.any();
+exports.ManageChatGroupMembersSchema = zod_1.z.any();
+exports.OpportunitySchema = zod_1.z.any();
+exports.PaymentSchema = zod_1.z.any();
+exports.ReceiptSchema = zod_1.z.any();
+exports.RestoreBackupSchema = zod_1.z.any();
+exports.SendChatMessageSchema = zod_1.z.any();
+exports.ShiftRosterSchema = zod_1.z.any();
+exports.UpdateBackupSettingsSchema = zod_1.z.any();
+exports.UpdateBomBodySchema = zod_1.z.any();
+exports.UpdateChatGroupSettingsSchema = zod_1.z.any();
+exports.UpdateCustomerBodySchema = zod_1.z.any();
+exports.UpdateDepartmentSchema = zod_1.z.any();
+exports.UpdateEmployeeSchema = zod_1.z.any();
+exports.UpdateJobCardBodySchema = zod_1.z.any();
+exports.UpdateLeaveStatusSchema = zod_1.z.any();
+exports.UpdatePlanBodySchema = zod_1.z.any();
+exports.UpdateProductBodySchema = zod_1.z.any();
+exports.UpdateQcRecordBodySchema = zod_1.z.any();
+exports.UpdateReworkCardBodySchema = zod_1.z.any();
+exports.UpdateRolePermissionsSchema = zod_1.z.any();
+exports.UpdateRoutingBodySchema = zod_1.z.any();
+exports.UpdateShiftBodySchema = zod_1.z.any();
+exports.UpdateUserAdminSchema = zod_1.z.any();
+exports.UpdateVendorBodySchema = zod_1.z.any();
+exports.UpdateWorkCenterBodySchema = zod_1.z.any();
+exports.UpdateWorkOrderBodySchema = zod_1.z.any();
 //# sourceMappingURL=index.js.map

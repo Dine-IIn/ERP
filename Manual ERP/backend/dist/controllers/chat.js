@@ -16,6 +16,7 @@ exports.deleteChatMessage = deleteChatMessage;
 const db_1 = __importDefault(require("../services/db"));
 const index_1 = require("./index");
 const firebase_1 = require("../services/firebase");
+const types_1 = require("../types");
 /**
  * 1. List all chat groups and individual DMs available to the user
  */
@@ -97,7 +98,10 @@ async function createChatGroup(req, res) {
         if (!user) {
             return res.status(401).json({ error: "Unauthorized access" });
         }
-        const { name, type, recipientId, settings } = req.body;
+        const parsed = types_1.CreateChatGroupSchema.safeParse(req.body);
+        if (!parsed.success)
+            return res.status(400).json({ error: parsed.error.errors });
+        const { name, type, recipientId, settings } = parsed.data;
         if (!type || !['GENERAL', 'EXPENSE', 'DIRECT'].includes(type)) {
             return res.status(400).json({ error: "Invalid group type" });
         }
@@ -174,8 +178,8 @@ async function createChatGroup(req, res) {
         }
         // Role verification (Unless Company Admin or Super Admin, require permissions)
         if (user.role !== 'Admin' && !user.isSuperAdmin) {
-            const dbUser = await db_1.default.user.findUnique({
-                where: { id: user.userId },
+            const dbUser = await db_1.default.user.findFirst({
+                where: { id: user.userId, companyId: user.companyId },
                 include: { role: true }
             });
             const permissions = JSON.parse(dbUser?.role?.permissions || '{}');
@@ -234,8 +238,10 @@ async function getChatGroupMessages(req, res) {
             return res.status(401).json({ error: "Unauthorized access" });
         }
         const { groupId } = req.params;
-        const cursor = req.query.cursor;
-        const limit = parseInt(req.query.limit) || 50;
+        const parsedQuery = types_1.GetChatGroupMessagesQuerySchema.safeParse(req.query);
+        if (!parsedQuery.success)
+            return res.status(400).json({ error: parsedQuery.error.errors });
+        const { cursor, limit } = parsedQuery.data;
         // Verify room exists in this company
         const group = await db_1.default.chatGroup.findFirst({
             where: { id: groupId, companyId: user.companyId }
@@ -265,8 +271,8 @@ async function getChatGroupMessages(req, res) {
             orderBy: { createdAt: 'desc' }
         };
         if (cursor) {
-            const cursorMessage = await db_1.default.chatMessage.findUnique({
-                where: { id: cursor }
+            const cursorMessage = await db_1.default.chatMessage.findFirst({
+                where: { id: cursor, groupId }
             });
             if (cursorMessage) {
                 queryOptions.where.createdAt = {
@@ -295,7 +301,10 @@ async function sendChatGroupMessage(req, res) {
             return res.status(401).json({ error: "Unauthorized access" });
         }
         const { groupId } = req.params;
-        const { message, type, expenseData } = req.body;
+        const parsed = types_1.SendChatMessageSchema.safeParse(req.body);
+        if (!parsed.success)
+            return res.status(400).json({ error: parsed.error.errors });
+        const { message, type, expenseData } = parsed.data;
         const group = await db_1.default.chatGroup.findFirst({
             where: { id: groupId, companyId: user.companyId }
         });
@@ -451,7 +460,10 @@ async function manageChatGroupMembers(req, res) {
             return res.status(401).json({ error: "Unauthorized access" });
         }
         const { groupId } = req.params;
-        const { targetUserId, action } = req.body; // action: "ADD" | "REMOVE"
+        const parsed = types_1.ManageChatGroupMembersSchema.safeParse(req.body);
+        if (!parsed.success)
+            return res.status(400).json({ error: parsed.error.errors });
+        const { targetUserId, action } = parsed.data;
         if (!targetUserId || !['ADD', 'REMOVE'].includes(action)) {
             return res.status(400).json({ error: "Invalid action parameters" });
         }
@@ -533,7 +545,10 @@ async function updateChatGroupSettings(req, res) {
             return res.status(401).json({ error: "Unauthorized" });
         }
         const { groupId } = req.params;
-        const { name, isPrivate, connectToCashbook } = req.body;
+        const parsed = types_1.UpdateChatGroupSettingsSchema.safeParse(req.body);
+        if (!parsed.success)
+            return res.status(400).json({ error: parsed.error.errors });
+        const { name, isPrivate, connectToCashbook } = parsed.data;
         const group = await db_1.default.chatGroup.findFirst({
             where: { id: groupId, companyId: user.companyId }
         });

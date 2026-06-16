@@ -20,6 +20,7 @@ import { AuthenticatedRequest } from '../middlewares/auth';
 import prisma from '../services/db';
 import { logAudit } from '../utils/audit';
 import { sendEmailNotification } from '../utils';
+import { markNeedsRefresh } from '../services/forecast';
 
 const isServiceItem = (product: any): boolean => {
   if (!product) return false;
@@ -288,6 +289,7 @@ export async function createSalesOrder(req: AuthenticatedRequest, res: Response)
       req.headers['user-agent']
     );
 
+    await markNeedsRefresh(companyId);
     return res.status(201).json({ message: `Sales Order ${orderNo} created successfully`, order: finalOrder });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
@@ -666,6 +668,7 @@ export async function createSalesInvoice(req: AuthenticatedRequest, res: Respons
       include: { customer: true, items: { include: { product: true } } }
     });
 
+    await markNeedsRefresh(companyId);
     return res.status(201).json({ message: `Sales Invoice ${invoiceNo} generated successfully`, invoice: finalInvoice });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
@@ -741,6 +744,7 @@ export async function updateSalesInvoice(req: AuthenticatedRequest, res: Respons
       include: { customer: true, items: { include: { product: true } } }
     });
 
+    await markNeedsRefresh(companyId);
     return res.json({ message: "Sales Invoice updated successfully", invoice: finalInvoice });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
@@ -762,6 +766,7 @@ export async function deleteSalesInvoice(req: AuthenticatedRequest, res: Respons
       }
       await tx.salesInvoice.delete({ where: { id } });
     });
+    await markNeedsRefresh(companyId);
     return res.json({ message: "Sales Invoice deleted successfully" });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });

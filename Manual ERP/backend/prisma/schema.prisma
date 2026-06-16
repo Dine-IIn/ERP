@@ -123,6 +123,13 @@ model Company {
   cashbookVouchers  CashbookVoucher[]
   bankAccounts      CompanyBankAccount[]
 
+  // AI Forecasting extensions
+  forecastConfigurations ForecastConfigurations?
+  forecastStatus         ForecastStatus?
+  forecastHistory        ForecastHistory[]
+  forecastPredictions    ForecastPrediction[]
+  forecastJobs           ForecastJob[]
+
   @@map("companies")
 }
 
@@ -463,6 +470,7 @@ model Product {
   reworkCards ReworkCard[]
   routing Routing?
   materialIssues MaterialIssue[]
+  forecastPredictions ForecastPrediction[]
 
   @@unique([companyId, name])
   @@index([categoryId])
@@ -1391,4 +1399,92 @@ model DocumentTemplate {
   @@unique([companyId, docType, name])
   @@map("document_templates")
 }
+
+model ForecastConfigurations {
+  id                            String   @id @default(uuid())
+  tenantId                      String   @unique
+  company                       Company  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  forecastEnabled               Boolean  @default(false)
+  forecastMode                  String   @default("AUTOMATIC") // AUTOMATIC, MANUAL, DISABLED
+  frequency                     String   @default("DAILY")     // DAILY, WEEKLY, MONTHLY, CUSTOM
+  cronExpression                String?  // custom cron
+  forecastTime                  String   @default("02:00")     // "HH:MM"
+  historicalDataMonths          Int      @default(12)
+  modelType                     String   @default("PROPHET")   // PROPHET, ARIMA, PROPHET_SEASONAL
+  enableSeasonality             Boolean  @default(false)
+  enablePurchaseRecommendations Boolean  @default(false)
+  enableDeadStockAnalysis       Boolean  @default(false)
+  enableSlowMovingAnalysis      Boolean  @default(false)
+  forecastRetentionPeriodDays   Int      @default(90)
+  lastRunAt                     DateTime?
+  nextRunAt                     DateTime?
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+
+  @@map("forecast_configurations")
+}
+
+model ForecastStatus {
+  tenantId           String   @id
+  company            Company  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  needsRefresh       Boolean  @default(false)
+  lastForecastRun    DateTime?
+  lastDataChange     DateTime?
+  nextScheduledRun   DateTime?
+  status             String   @default("PENDING") // Pending, Running, Completed, Failed
+
+  @@map("forecast_status")
+}
+
+model ForecastHistory {
+  id                String   @id @default(uuid())
+  tenantId          String
+  company           Company  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  forecastRunDate   DateTime @default(now())
+  productsProcessed Int
+  processingTime    Float    // elapsed seconds
+  modelVersion      String
+  forecastAccuracy  Float?
+  createdAt         DateTime @default(now())
+
+  @@index([tenantId])
+  @@map("forecast_history")
+}
+
+model ForecastPrediction {
+  id                  String   @id @default(uuid())
+  tenantId            String
+  company             Company  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  productId           String
+  product             Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  predictedDemand     Float
+  recommendedPurchase Float    @default(0.0)
+  isDeadStock         Boolean  @default(false)
+  isSlowMoving        Boolean  @default(false)
+  seasonalityIndex    Float    @default(1.0)
+  confidenceInterval  Float    @default(0.8)
+  forecastDate        DateTime @default(now())
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([productId])
+  @@map("forecast_predictions")
+}
+
+model ForecastJob {
+  id         String   @id @default(uuid())
+  tenantId   String
+  company    Company  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  status     String   @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
+  error      String?
+  runDate    DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("forecast_jobs")
+}
+
 

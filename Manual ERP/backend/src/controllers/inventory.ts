@@ -3,6 +3,7 @@ import { Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import prisma from '../services/db';
 import { logAudit } from '../utils/audit';
+import { markNeedsRefresh } from '../services/forecast';
 
 export async function listStockAdjustments(req: AuthenticatedRequest, res: Response) {
   try {
@@ -92,6 +93,9 @@ export async function adjustStock(req: AuthenticatedRequest, res: Response) {
     // Check if updated stock drops below safety limit
     const { checkAndNotifyLowStock } = require('../utils/lowStockAlert');
     await checkAndNotifyLowStock(productId, req.user?.userId);
+
+    // Flag company forecasting data for schedule refresh
+    await markNeedsRefresh(companyId);
 
     return res.status(201).json({ message: "Stock adjustment processed successfully", adjustment });
   } catch (error: any) {

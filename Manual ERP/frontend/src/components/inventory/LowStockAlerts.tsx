@@ -14,6 +14,7 @@ interface Product {
 interface LowStockAlertsProps {
   products?: Product[];
   onTriggerReorderRedirect?: () => void;
+  onTriggerAuditRedirect?: () => void;
 }
 
 export default function LowStockAlerts({
@@ -23,10 +24,12 @@ export default function LowStockAlerts({
 }: LowStockAlertsProps) {
   const [searchTerm, setSearchTerm] = useState('');
 
+  const activeProducts = products || [];
+
   // Filter products below minimum safety threshold and match search term
   const alertProducts = activeProducts
-    .filter(p => p.stock <= p.reorderLevel)
-    .filter(p => {
+    .filter((p: Product) => p.stock <= p.reorderLevel)
+    .filter((p: Product) => {
       const name = p?.name || '';
       const sku = p?.sku || '';
       const rack = p?.warehouseLoc || '';
@@ -78,7 +81,7 @@ export default function LowStockAlerts({
             <p className="text-slate-400 text-sm mt-1">All physical products levels are safely above reorder safety limits.</p>
           </div>
         ) : (
-          alertProducts.map((p) => {
+          alertProducts.map((p: Product) => {
             const percentage = p.reorderLevel > 0 ? (p.stock / p.reorderLevel) * 100 : 0;
             return (
               <div key={p.id} className="bg-slate-900/40 border border-slate-800/80 p-5 rounded-2xl backdrop-blur-xl flex flex-col justify-between hover:border-red-500/30 transition-all">

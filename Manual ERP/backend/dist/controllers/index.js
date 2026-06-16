@@ -72,6 +72,7 @@ exports.HIERARCHICAL_FEATURES = [
     { key: "SALES_DISPATCH", name: "Dispatch Management", description: "Coordinate shipments, carrier tracking and vehicles details" },
     { key: "SALES_QUOTATION", name: "Sales Quotations", description: "Generate, edit, and dispatch legal price quotations" },
     { key: "SALES_POST_SERVICE", name: "Post-Sales Service & Maintenance", description: "Coordinate warranty claims, maintenance logs, and service sheets" },
+    { key: "SALES_PDF_EDITOR", name: "PDF Print Studio", description: "Configure custom print layouts, logos, headers, colors, and terms for documents" },
     { key: "CRM_DATA", name: "CRM PORTAL", description: "Customer Relationship Management portal" },
     { key: "CRM_LEAD", name: "CRM Leads Hub", description: "Capture, log, track, and assign sales leads" },
     { key: "CRM_OPPORTUNITY", name: "CRM Opportunities Pipeline", description: "Administer potential deal pipelines and conversion projections" },
@@ -87,6 +88,7 @@ exports.HIERARCHICAL_FEATURES = [
     { key: "INVENTORY_PRODUCT", name: "Warehouse Stock Levels", description: "Conduct manual stock audits, warehouse taggings, and storage logs" },
     { key: "INVENTORY_STOCK_OVERVIEW", name: "Stock Ledger Overview", description: "View transaction ledgers tracking inward POs and outward SOs" },
     { key: "INVENTORY_LOW_ALERT", name: "Low Stock Alerts Console", description: "Monitor automatically flagged items dropping below minimum reorder thresholds" },
+    { key: "INVENTORY_FORECASTING", name: "AI Demand Forecasting", description: "Predict product demand, track replenishment times, and optimize levels" },
     // HRMS MODULE
     { key: "HRMS_DATA", name: "HRMS MODULE", description: "Human Resource Management System" },
     { key: "HRMS_EMPLOYEES", name: "Employees Directory", description: "Manage company employees directory, shifts, departments and structures" },

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Layers, Search, Calendar, Info, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
-import { formatNumber } from '../../utils/apiService';
+import { formatNumber, apiClient } from '../../utils/apiService';
+import { useQuery } from '@tanstack/react-query';
 
 interface StockAdjustment {
   id: string;
@@ -32,7 +33,7 @@ export default function StockOverview({
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('');
 
-  const filteredAdjustments = activeAdjustments.filter(adj => {
+  const filteredAdjustments = activeAdjustments.filter((adj: StockAdjustment) => {
     if (!adj) return false;
     const productName = adj.product?.name || '';
     const adjNo = adj.adjustmentNo || '';
@@ -132,7 +133,7 @@ export default function StockOverview({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 font-mono text-xs">
-                {filteredAdjustments.map((adj) => {
+                {filteredAdjustments.map((adj: StockAdjustment) => {
                   const isInward = adj.quantity > 0;
                   return (
                     <tr key={adj.id} className="hover:bg-slate-800/20 transition-colors">

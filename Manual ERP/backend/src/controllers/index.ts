@@ -71,6 +71,7 @@ export const HIERARCHICAL_FEATURES = [
   { key: "INVENTORY_PRODUCT", name: "Warehouse Stock Levels", description: "Conduct manual stock audits, warehouse taggings, and storage logs" },
   { key: "INVENTORY_STOCK_OVERVIEW", name: "Stock Ledger Overview", description: "View transaction ledgers tracking inward POs and outward SOs" },
   { key: "INVENTORY_LOW_ALERT", name: "Low Stock Alerts Console", description: "Monitor automatically flagged items dropping below minimum reorder thresholds" },
+  { key: "INVENTORY_FORECASTING", name: "AI Demand Forecasting", description: "Predict product demand, track replenishment times, and optimize levels" },
 
   // HRMS MODULE
   { key: "HRMS_DATA", name: "HRMS MODULE", description: "Human Resource Management System" },

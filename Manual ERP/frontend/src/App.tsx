@@ -136,7 +136,10 @@ import {
   BarChart4,
   CalendarRange,
   PlayCircle,
-  RotateCcw
+  RotateCcw,
+  BrainCircuit,
+  Loader2,
+  Play
 } from 'lucide-react';
 
 import { Capacitor } from '@capacitor/core';
@@ -328,6 +331,8 @@ const getFeatureIcon = (key: string) => {
       return <Layers className="w-4 h-4" style={{ flexShrink: 0 }} />;
     case 'INVENTORY_LOW_ALERT':
       return <ShieldAlert className="w-4 h-4" style={{ flexShrink: 0 }} />;
+    case 'INVENTORY_FORECASTING':
+      return <BrainCircuit className="w-4 h-4" style={{ flexShrink: 0 }} />;
     case 'MANUFACTURING':
       return <Factory className="w-4 h-4" style={{ flexShrink: 0 }} />;
     case 'MANUFACTURING_BOM':
@@ -753,6 +758,13 @@ export default function App() {
   const [licenses, setLicenses] = useState<any[]>([]); // Central Service licenses
   const [selectedCompany, setSelectedCompany] = useState<any | null>(null); // Super Admin focused tenant profile
   const [selectedCompanyUsers, setSelectedCompanyUsers] = useState<any[]>([]); // Super Admin focused tenant's users list
+  const [selectedCompanyForecastConfig, setSelectedCompanyForecastConfig] = useState<any | null>(null);
+  const [savingForecastConfig, setSavingForecastConfig] = useState(false);
+  const [tenantForecastStatus, setTenantForecastStatus] = useState<any | null>(null);
+  const [tenantForecastPredictions, setTenantForecastPredictions] = useState<any[]>([]);
+  const [tenantForecastHistory, setTenantForecastHistory] = useState<any[]>([]);
+  const [runningForecast, setRunningForecast] = useState(false);
+  const [forecastSearchQuery, setForecastSearchQuery] = useState('');
   const [editCompanyFeatures, setEditCompanyFeatures] = useState<string[]>([]);
   const [isEditingAccess, setIsEditingAccess] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
@@ -1056,37 +1068,44 @@ export default function App() {
   const filteredHierarchy = MASTER_FEATURES_HIERARCHY.map(cat => {
     const term = featureSearchTerm.toLowerCase();
     const matchCat = cat.name.toLowerCase().includes(term) || cat.desc.toLowerCase().includes(term);
-    const matchChildren = cat.children.filter(c => c.name.toLowerCase().includes(term) || c.desc.toLowerCase().includes(term));
+    const filteredChildren = cat.children.filter(c => c.key !== 'INVENTORY_COMPLETE_VIEW');
+    const matchChildren = filteredChildren.filter(c => c.name.toLowerCase().includes(term) || c.desc.toLowerCase().includes(term));
     if (term && (matchCat || matchChildren.length > 0)) {
-      return { ...cat, children: matchCat ? cat.children : matchChildren, isMatch: true };
+      return { ...cat, children: matchCat ? filteredChildren : matchChildren, isMatch: true };
     } else if (!term) {
-      return { ...cat, isMatch: false };
+      return { ...cat, children: filteredChildren, isMatch: false };
     }
     return null;
   }).filter(Boolean);
 
   const handleEnableAllNewCompany = () => {
-    const all = MASTER_FEATURES_HIERARCHY.flatMap(cat => [cat.key, ...cat.children.map(c => c.key)]);
+    const all = MASTER_FEATURES_HIERARCHY.flatMap(cat => [
+      cat.key,
+      ...cat.children.map(c => c.key).filter(k => k !== 'INVENTORY_COMPLETE_VIEW')
+    ]);
     setNewCompany({ ...newCompany, features: all });
   };
 
   const handleEnableCategoryAllNewCompany = (catKey: string) => {
     const cat = MASTER_FEATURES_HIERARCHY.find(c => c.key === catKey);
     if (!cat) return;
-    const toAdd = [cat.key, ...cat.children.map(c => c.key)];
+    const toAdd = [cat.key, ...cat.children.map(c => c.key).filter(k => k !== 'INVENTORY_COMPLETE_VIEW')];
     const updated = [...new Set([...newCompany.features, ...toAdd])];
     setNewCompany({ ...newCompany, features: updated });
   };
 
   const handleEnableAllCompany = () => {
-    const all = MASTER_FEATURES_HIERARCHY.flatMap(cat => [cat.key, ...cat.children.map(c => c.key)]);
+    const all = MASTER_FEATURES_HIERARCHY.flatMap(cat => [
+      cat.key,
+      ...cat.children.map(c => c.key).filter(k => k !== 'INVENTORY_COMPLETE_VIEW')
+    ]);
     setEditCompanyFeatures(all);
   };
 
   const handleEnableCategoryAllCompany = (catKey: string) => {
     const cat = MASTER_FEATURES_HIERARCHY.find(c => c.key === catKey);
     if (!cat) return;
-    const toAdd = [cat.key, ...cat.children.map(c => c.key)];
+    const toAdd = [cat.key, ...cat.children.map(c => c.key).filter(k => k !== 'INVENTORY_COMPLETE_VIEW')];
     setEditCompanyFeatures(prev => [...new Set([...prev, ...toAdd])]);
   };
 
@@ -2082,9 +2101,19 @@ export default function App() {
     } catch (e) {}
   };
 
+  const fetchCompanyForecastConfig = async (companyId: string) => {
+    try {
+      const data = await apiRequest(`/api/super/company/${companyId}/forecast-config`, 'GET');
+      setSelectedCompanyForecastConfig(data.config);
+    } catch (e) {
+      console.error("Failed to fetch forecast configuration:", e);
+    }
+  };
+
   const handleSelectCompanyProfile = (company: any) => {
     setSelectedCompany(company);
     fetchCompanyAdminsList(company.id);
+    fetchCompanyForecastConfig(company.id);
     setSuccessMsg(null);
     setErrorMsg(null);
   };
@@ -2235,6 +2264,62 @@ export default function App() {
   };
 
   // Note: User activation, suspension, credentials, and full admin edit operations are handled by handleEditUserSubmit and handleDeleteUser
+
+  const fetchTenantForecastData = async () => {
+    try {
+      const [statusData, predictionsData, historyData] = await Promise.all([
+        apiRequest('/api/forecast/status', 'GET'),
+        apiRequest('/api/forecast/predictions', 'GET'),
+        apiRequest('/api/forecast/history', 'GET')
+      ]);
+      setTenantForecastStatus(statusData.status);
+      setTenantForecastPredictions(predictionsData.predictions || []);
+      setTenantForecastHistory(historyData.history || []);
+    } catch (e) {
+      console.error("Failed to fetch tenant forecast data:", e);
+    }
+  };
+
+  const handleRunForecastNow = async () => {
+    setRunningForecast(true);
+    setSuccessMsg(null);
+    setErrorMsg(null);
+    try {
+      const data = await apiRequest('/api/forecast/run', 'POST');
+      setSuccessMsg(data.message);
+      
+      // Update status to pending/running locally
+      setTenantForecastStatus(prev => prev ? { ...prev, status: 'Running' } : null);
+      
+      // Start polling status
+      let pollCount = 0;
+      const interval = setInterval(async () => {
+        pollCount++;
+        try {
+          const statusRes = await apiRequest('/api/forecast/status', 'GET');
+          setTenantForecastStatus(statusRes.status);
+          if (statusRes.status.status === 'Completed' || statusRes.status.status === 'Failed' || pollCount > 20) {
+            clearInterval(interval);
+            setRunningForecast(false);
+            // Refresh predictions and history
+            const [predData, histData] = await Promise.all([
+              apiRequest('/api/forecast/predictions', 'GET'),
+              apiRequest('/api/forecast/history', 'GET')
+            ]);
+            setTenantForecastPredictions(predData.predictions || []);
+            setTenantForecastHistory(histData.history || []);
+          }
+        } catch (e) {
+          clearInterval(interval);
+          setRunningForecast(false);
+        }
+      }, 2000);
+
+    } catch (e: any) {
+      setErrorMsg(e.message || "Failed to trigger forecasting execution.");
+      setRunningForecast(false);
+    }
+  };
 
   // --- COMPANY ADMIN ACTIONS ---
   const fetchCompanyAdminData = async () => {
@@ -3156,6 +3241,9 @@ export default function App() {
     } else if (activeWorkspaceSubModule.startsWith('INVENTORY_')) {
       fetchInventoryData();
       fetchMasterData();
+      if (activeWorkspaceSubModule === 'INVENTORY_FORECASTING') {
+        fetchTenantForecastData();
+      }
     } else if (activeWorkspaceSubModule.startsWith('CRM_')) {
       fetchCrmData();
     } else if (activeWorkspaceSubModule.startsWith('SALES_')) {
@@ -4750,6 +4838,227 @@ export default function App() {
                       <CompleteInventoryView products={productsList} currencySymbol={currencySymbol} />
                     )}
 
+                    {activeWorkspaceSubModule === 'INVENTORY_FORECASTING' && (
+                      <div className="flex flex-col gap-6 animate-fade-in text-left">
+                        {/* Title Section */}
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[var(--border-color)] pb-4">
+                          <div>
+                            <h2 className="text-lg font-bold text-[var(--text-primary)] font-display flex items-center gap-2">
+                              <BrainCircuit className="w-5 h-5 text-indigo-400" />
+                              AI Demand Forecasting & Replenishment Analytics
+                            </h2>
+                            <p className="text-xs text-[var(--text-secondary)] mt-1">
+                              View predictive inventory demand, purchase recommendations, dead stock alerts, and seasonal trends.
+                            </p>
+                          </div>
+
+                          {/* Trigger Forecast Button (Super Admin only) */}
+                          {user?.isSuperAdmin && (
+                            <button
+                              onClick={handleRunForecastNow}
+                              disabled={runningForecast || tenantForecastStatus?.status === 'Running'}
+                              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2 rounded-lg text-xs transition-all flex items-center gap-1.5 shadow-lg active:scale-95 disabled:opacity-50 cursor-pointer border-0"
+                            >
+                              {runningForecast || tenantForecastStatus?.status === 'Running' ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                  Processing Forecast...
+                                </>
+                              ) : (
+                                <>
+                                  <Play className="w-4 h-4" />
+                                  Run Forecast Now
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Status Grid Cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                          <div className="bg-[var(--bg-primary)] border border-[var(--border-color)] p-4 rounded-xl flex flex-col gap-1 shadow-sm">
+                            <span className="text-[10px] text-[var(--text-muted)] font-bold tracking-wider uppercase">Pipeline Status</span>
+                            <div className="flex items-center gap-2 mt-1">
+                              {tenantForecastStatus?.status === 'Running' ? (
+                                <span className="flex items-center gap-1.5 text-xs font-bold text-indigo-400 bg-indigo-500/5 px-2.5 py-1 rounded-full border border-indigo-500/10">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-ping" />
+                                  Running Analysis
+                                </span>
+                              ) : tenantForecastStatus?.status === 'Pending' ? (
+                                <span className="flex items-center gap-1.5 text-xs font-bold text-amber-400 bg-amber-500/5 px-2.5 py-1 rounded-full border border-amber-500/10">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                                  Pending Queue
+                                </span>
+                              ) : tenantForecastStatus?.status === 'Completed' ? (
+                                <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 bg-emerald-500/5 px-2.5 py-1 rounded-full border border-emerald-500/10">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                                  Completed
+                                </span>
+                              ) : (
+                                <span className="flex items-center gap-1.5 text-xs font-bold text-[var(--text-secondary)] bg-[var(--bg-tertiary)] px-2.5 py-1 rounded-full border border-[var(--border-color)]">
+                                  Idle / Standby
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="bg-[var(--bg-primary)] border border-[var(--border-color)] p-4 rounded-xl flex flex-col gap-1 shadow-sm">
+                            <span className="text-[10px] text-[var(--text-muted)] font-bold tracking-wider uppercase">Ledger Sync</span>
+                            <div className="mt-1 flex items-center">
+                              {tenantForecastStatus?.needsRefresh ? (
+                                <span className="text-[11px] font-bold text-amber-500 bg-amber-500/5 px-2 py-0.5 rounded border border-amber-500/10">
+                                  ⚠️ Changes Pending Refresh
+                                </span>
+                              ) : (
+                                <span className="text-[11px] font-bold text-emerald-500 bg-emerald-500/5 px-2 py-0.5 rounded border border-emerald-500/10">
+                                  ✓ Predictions Synced
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="bg-[var(--bg-primary)] border border-[var(--border-color)] p-4 rounded-xl flex flex-col gap-1 shadow-sm">
+                            <span className="text-[10px] text-[var(--text-muted)] font-bold tracking-wider uppercase">Last Forecast Run</span>
+                            <span className="text-xs font-semibold text-[var(--text-primary)] mt-1 font-mono">
+                              {tenantForecastStatus?.lastForecastRun ? new Date(tenantForecastStatus.lastForecastRun).toLocaleString() : 'Never'}
+                            </span>
+                          </div>
+
+                          <div className="bg-[var(--bg-primary)] border border-[var(--border-color)] p-4 rounded-xl flex flex-col gap-1 shadow-sm">
+                            <span className="text-[10px] text-[var(--text-muted)] font-bold tracking-wider uppercase">Next Scheduled Run</span>
+                            <span className="text-xs font-semibold text-[var(--text-primary)] mt-1 font-mono">
+                              {tenantForecastStatus?.nextScheduledRun ? new Date(tenantForecastStatus.nextScheduledRun).toLocaleString() : 'Manual Only'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Search and Filters */}
+                        <div className="relative">
+                          <input
+                            type="text"
+                            placeholder="Filter predictions by product name..."
+                            value={forecastSearchQuery}
+                            onChange={(e) => setForecastSearchQuery(e.target.value)}
+                            className="w-full pl-3 pr-3 py-2 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg text-xs focus:outline-none focus:border-indigo-500/50 text-[var(--text-primary)] font-semibold"
+                          />
+                        </div>
+
+                        {/* Predictions Table */}
+                        <div className="bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-xl overflow-hidden shadow-sm">
+                          <div className="p-4 border-b border-[var(--border-color)] flex justify-between items-center">
+                            <h3 className="font-bold text-xs text-[var(--text-primary)] tracking-wider uppercase">AI Generated Product Predictions</h3>
+                            <span className="text-[10px] text-[var(--text-muted)] font-mono">Products analyzed: {tenantForecastPredictions.length}</span>
+                          </div>
+
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs border-collapse">
+                              <thead>
+                                <tr className="border-b border-[var(--border-color)] bg-[var(--bg-secondary)]/50 text-[var(--text-muted)] font-bold uppercase text-[9px] tracking-wider">
+                                  <th className="py-3 px-4">Product</th>
+                                  <th className="py-3 px-3">UOM</th>
+                                  <th className="py-3 px-3 text-center">Stock</th>
+                                  <th className="py-3 px-3 text-center">Reorder Threshold</th>
+                                  <th className="py-3 px-3 text-center bg-indigo-500/5 text-indigo-400 font-bold">Predicted Demand (Monthly)</th>
+                                  <th className="py-3 px-3 text-center bg-indigo-500/5 text-indigo-400 font-bold">Purchase Recommendation</th>
+                                  <th className="py-3 px-3 text-center">Stock Alerts</th>
+                                  <th className="py-3 px-3 text-center">Seasonality</th>
+                                  <th className="py-3 px-4 text-right">Confidence</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {tenantForecastPredictions.length === 0 ? (
+                                  <tr>
+                                    <td colSpan={9} className="text-center py-12 text-[var(--text-muted)]">
+                                      No forecast predictions found. Configure and run forecast analysis to generate results.
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  tenantForecastPredictions
+                                    .filter(pred => pred.product.name.toLowerCase().includes(forecastSearchQuery.toLowerCase()))
+                                    .map(pred => (
+                                      <tr key={pred.id} className="border-b border-[var(--border-color)] hover:bg-[var(--bg-secondary)]/30 transition-colors">
+                                        <td className="py-3.5 px-4 font-bold text-[var(--text-primary)]">{pred.product.name}</td>
+                                        <td className="py-3.5 px-3 text-[var(--text-secondary)] font-mono">{pred.product.uom}</td>
+                                        <td className="py-3.5 px-3 text-center font-mono font-semibold">{pred.product.stock}</td>
+                                        <td className="py-3.5 px-3 text-center font-mono text-[var(--text-muted)]">{pred.product.reorderLevel || 0}</td>
+                                        <td className="py-3.5 px-3 text-center font-mono font-bold text-indigo-400 bg-indigo-500/5">{pred.predictedDemand}</td>
+                                        <td className="py-3.5 px-3 text-center bg-indigo-500/5">
+                                          {pred.recommendedPurchase > 0 ? (
+                                            <span className="px-2 py-1 rounded bg-emerald-500/10 text-emerald-500 font-bold font-mono text-[10px]">
+                                              + {pred.recommendedPurchase}
+                                            </span>
+                                          ) : (
+                                            <span className="text-[var(--text-muted)] font-mono">-</span>
+                                          )}
+                                        </td>
+                                        <td className="py-3.5 px-3">
+                                          <div className="flex gap-1 justify-center">
+                                            {pred.isDeadStock && (
+                                              <span className="px-2 py-0.5 rounded text-[8px] font-extrabold bg-red-500/10 text-red-500 border border-red-500/20 uppercase shrink-0">
+                                                Dead Stock
+                                              </span>
+                                            )}
+                                            {pred.isSlowMoving && (
+                                              <span className="px-2 py-0.5 rounded text-[8px] font-extrabold bg-amber-500/10 text-amber-500 border border-amber-500/20 uppercase shrink-0">
+                                                Slow Moving
+                                              </span>
+                                            )}
+                                            {!pred.isDeadStock && !pred.isSlowMoving && (
+                                              <span className="text-[10px] text-emerald-500 bg-emerald-500/5 px-2 py-0.5 rounded-full border border-emerald-500/10 shrink-0 font-semibold text-[8px] uppercase">Healthy</span>
+                                            )}
+                                          </div>
+                                        </td>
+                                        <td className="py-3.5 px-3 text-center font-mono text-[var(--text-secondary)]">{pred.seasonalityIndex}x</td>
+                                        <td className="py-3.5 px-4 text-right font-mono font-bold text-indigo-400">
+                                          {Math.round(pred.confidenceInterval * 100)}%
+                                        </td>
+                                      </tr>
+                                    ))
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        {/* Forecasting History Logs */}
+                        <div className="bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-xl overflow-hidden shadow-sm text-left">
+                          <div className="p-4 border-b border-[var(--border-color)]">
+                            <h3 className="font-bold text-xs text-[var(--text-primary)] tracking-wider uppercase">Forecast Performance History</h3>
+                          </div>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs border-collapse">
+                              <thead>
+                                <tr className="border-b border-[var(--border-color)] bg-[var(--bg-secondary)]/50 text-[var(--text-muted)] font-bold uppercase text-[9px] tracking-wider">
+                                  <th className="py-3 px-4">Run Date</th>
+                                  <th className="py-3 px-3">Model Type</th>
+                                  <th className="py-3 px-3 text-center">Items Analyzed</th>
+                                  <th className="py-3 px-3 text-center">Time Spent (Seconds)</th>
+                                  <th className="py-3 px-4 text-right">Computed Accuracy</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {tenantForecastHistory.length === 0 ? (
+                                  <tr>
+                                    <td colSpan={5} className="text-center py-6 text-[var(--text-muted)]">No forecast history logs found.</td>
+                                  </tr>
+                                ) : (
+                                  tenantForecastHistory.map(hist => (
+                                    <tr key={hist.id} className="border-b border-[var(--border-color)] hover:bg-[var(--bg-secondary)]/20 transition-colors">
+                                      <td className="py-3 px-4 font-mono font-semibold">{new Date(hist.forecastRunDate).toLocaleString()}</td>
+                                      <td className="py-3 px-3 text-[var(--text-secondary)]">{hist.modelVersion}</td>
+                                      <td className="py-3 px-3 text-center font-mono">{hist.productsProcessed}</td>
+                                      <td className="py-3 px-3 text-center font-mono">{hist.processingTime.toFixed(2)}s</td>
+                                      <td className="py-3 px-4 text-right font-mono font-bold text-emerald-500">{hist.forecastAccuracy}%</td>
+                                    </tr>
+                                  ))
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                   </div>
                 </div>
               )}
@@ -5540,6 +5849,230 @@ export default function App() {
                       </form>
                     </div>
                   </div>
+
+                  {/* AI & Forecast Settings Card (Super Admin) */}
+                  {selectedCompanyForecastConfig && (
+                    <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] p-6 rounded-2xl flex flex-col gap-4 text-left">
+                      <h3 className="font-bold text-sm text-[var(--text-primary)] border-b border-[var(--border-color)] pb-2 font-display flex items-center gap-2">
+                        <Activity className="w-4 h-4 text-indigo-400" />
+                        AI & Forecast Settings
+                      </h3>
+                      <p className="text-[var(--text-secondary)] text-[10px] leading-relaxed">
+                        Configure AI model parameters, scheduler execution, data retention, and analytics capabilities for this corporate tenant.
+                      </p>
+
+                      <form onSubmit={async (e) => {
+                        e.preventDefault();
+                        setSavingForecastConfig(true);
+                        try {
+                          const data = await apiRequest(`/api/super/company/${selectedCompany.id}/forecast-config`, 'POST', selectedCompanyForecastConfig);
+                          setSuccessMsg(data.message);
+                          setSelectedCompanyForecastConfig(data.config);
+                        } catch (err: any) {
+                          setErrorMsg(err.message || "Failed to update forecast configuration.");
+                        } finally {
+                          setSavingForecastConfig(false);
+                        }
+                      }} className="flex flex-col gap-4 mt-2">
+                        
+                        <div className="flex items-center justify-between p-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-xl">
+                          <div>
+                            <span className="text-xs font-bold text-[var(--text-primary)] block">Enable AI Forecasting</span>
+                            <span className="text-[10px] text-[var(--text-secondary)]">Turn forecasting capabilities on or off for this company.</span>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer select-none">
+                            <input 
+                              type="checkbox" 
+                              checked={selectedCompanyForecastConfig.forecastEnabled}
+                              onChange={(e) => setSelectedCompanyForecastConfig({
+                                ...selectedCompanyForecastConfig,
+                                forecastEnabled: e.target.checked
+                              })}
+                              className="sr-only peer" 
+                            />
+                            <div className="w-9 h-5 bg-[var(--bg-tertiary)] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                          </label>
+                        </div>
+
+                        {selectedCompanyForecastConfig.forecastEnabled && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-[var(--bg-primary)] border border-[var(--border-color)] p-4 rounded-xl animate-fade-in">
+                            
+                            <div>
+                              <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Forecasting Trigger Mode</label>
+                              <select
+                                value={selectedCompanyForecastConfig.forecastMode}
+                                onChange={(e) => setSelectedCompanyForecastConfig({
+                                  ...selectedCompanyForecastConfig,
+                                  forecastMode: e.target.value
+                                })}
+                                className="w-full mt-1 bg-[var(--bg-secondary)] border border-[var(--border-color)] py-2 px-3 rounded-lg text-xs"
+                              >
+                                <option value="AUTOMATIC">Automatic Scheduled Forecasting</option>
+                                <option value="MANUAL">Manual Execution Only</option>
+                                <option value="DISABLED">Disabled (Execution Blocked)</option>
+                              </select>
+                            </div>
+
+                            {selectedCompanyForecastConfig.forecastMode === 'AUTOMATIC' && (
+                              <>
+                                <div>
+                                  <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Forecast Frequency</label>
+                                  <select
+                                    value={selectedCompanyForecastConfig.frequency}
+                                    onChange={(e) => setSelectedCompanyForecastConfig({
+                                      ...selectedCompanyForecastConfig,
+                                      frequency: e.target.value
+                                    })}
+                                    className="w-full mt-1 bg-[var(--bg-secondary)] border border-[var(--border-color)] py-2 px-3 rounded-lg text-xs"
+                                  >
+                                    <option value="DAILY">Daily</option>
+                                    <option value="WEEKLY">Weekly (Sundays)</option>
+                                    <option value="MONTHLY">Monthly (Day 1)</option>
+                                    <option value="CUSTOM">Custom Cron Expression</option>
+                                  </select>
+                                </div>
+
+                                {selectedCompanyForecastConfig.frequency === 'CUSTOM' && (
+                                  <div>
+                                    <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Cron Expression</label>
+                                    <input
+                                      type="text"
+                                      placeholder="e.g. 0 2 * * *"
+                                      value={selectedCompanyForecastConfig.cronExpression || ''}
+                                      onChange={(e) => setSelectedCompanyForecastConfig({
+                                        ...selectedCompanyForecastConfig,
+                                        cronExpression: e.target.value
+                                      })}
+                                      className="w-full mt-1 bg-[var(--bg-secondary)] border border-[var(--border-color)] py-2 px-3 rounded-lg text-xs"
+                                    />
+                                  </div>
+                                )}
+
+                                <div>
+                                  <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Scheduled Trigger Time (HH:MM)</label>
+                                  <input
+                                    type="time"
+                                    value={selectedCompanyForecastConfig.forecastTime}
+                                    onChange={(e) => setSelectedCompanyForecastConfig({
+                                      ...selectedCompanyForecastConfig,
+                                      forecastTime: e.target.value
+                                    })}
+                                    className="w-full mt-1 bg-[var(--bg-secondary)] border border-[var(--border-color)] py-2 px-3 rounded-lg text-xs"
+                                  />
+                                </div>
+                              </>
+                            )}
+
+                            <div>
+                              <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Model Algorithm</label>
+                              <select
+                                value={selectedCompanyForecastConfig.modelType}
+                                onChange={(e) => setSelectedCompanyForecastConfig({
+                                  ...selectedCompanyForecastConfig,
+                                  modelType: e.target.value
+                                })}
+                                className="w-full mt-1 bg-[var(--bg-secondary)] border border-[var(--border-color)] py-2 px-3 rounded-lg text-xs"
+                              >
+                                <option value="PROPHET">Prophet (Baseline ML)</option>
+                                <option value="ARIMA">ARIMA (Time Series)</option>
+                                <option value="DEEP_AR">DeepAR (Recurrent Neural Network)</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Max History Range (Months)</label>
+                              <input
+                                type="number"
+                                min={1}
+                                max={60}
+                                value={selectedCompanyForecastConfig.historicalDataMonths}
+                                onChange={(e) => setSelectedCompanyForecastConfig({
+                                  ...selectedCompanyForecastConfig,
+                                  historicalDataMonths: parseInt(e.target.value) || 12
+                                })}
+                                className="w-full mt-1 bg-[var(--bg-secondary)] border border-[var(--border-color)] py-2 px-3 rounded-lg text-xs font-mono"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Retention Period (Days)</label>
+                              <input
+                                type="number"
+                                min={7}
+                                max={365}
+                                value={selectedCompanyForecastConfig.forecastRetentionPeriodDays}
+                                onChange={(e) => setSelectedCompanyForecastConfig({
+                                  ...selectedCompanyForecastConfig,
+                                  forecastRetentionPeriodDays: parseInt(e.target.value) || 90
+                                })}
+                                className="w-full mt-1 bg-[var(--bg-secondary)] border border-[var(--border-color)] py-2 px-3 rounded-lg text-xs font-mono"
+                              />
+                            </div>
+
+                            <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-3 mt-2 pt-2 border-t border-[var(--border-color)]/50">
+                              <label className="flex items-center gap-2 p-2 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-color)] cursor-pointer text-xs">
+                                <input 
+                                  type="checkbox" 
+                                  checked={selectedCompanyForecastConfig.enableSeasonality}
+                                  onChange={(e) => setSelectedCompanyForecastConfig({
+                                    ...selectedCompanyForecastConfig,
+                                    enableSeasonality: e.target.checked
+                                  })}
+                                />
+                                <span>Enable Seasonality Analysis</span>
+                              </label>
+
+                              <label className="flex items-center gap-2 p-2 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-color)] cursor-pointer text-xs">
+                                <input 
+                                  type="checkbox" 
+                                  checked={selectedCompanyForecastConfig.enablePurchaseRecommendations}
+                                  onChange={(e) => setSelectedCompanyForecastConfig({
+                                    ...selectedCompanyForecastConfig,
+                                    enablePurchaseRecommendations: e.target.checked
+                                  })}
+                                />
+                                <span>Enable Purchase Recommendations</span>
+                              </label>
+
+                              <label className="flex items-center gap-2 p-2 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-color)] cursor-pointer text-xs">
+                                <input 
+                                  type="checkbox" 
+                                  checked={selectedCompanyForecastConfig.enableDeadStockAnalysis}
+                                  onChange={(e) => setSelectedCompanyForecastConfig({
+                                    ...selectedCompanyForecastConfig,
+                                    enableDeadStockAnalysis: e.target.checked
+                                  })}
+                                />
+                                <span>Enable Dead Stock Analysis</span>
+                              </label>
+
+                              <label className="flex items-center gap-2 p-2 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-color)] cursor-pointer text-xs">
+                                <input 
+                                  type="checkbox" 
+                                  checked={selectedCompanyForecastConfig.enableSlowMovingAnalysis}
+                                  onChange={(e) => setSelectedCompanyForecastConfig({
+                                    ...selectedCompanyForecastConfig,
+                                    enableSlowMovingAnalysis: e.target.checked
+                                  })}
+                                />
+                                <span>Enable Slow Moving Analysis</span>
+                              </label>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex justify-end mt-2">
+                          <button
+                            type="submit"
+                            disabled={savingForecastConfig}
+                            className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-md cursor-pointer disabled:opacity-50"
+                          >
+                            {savingForecastConfig ? "Saving Configuration..." : "Save Forecast Settings"}
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  )}
 
                   {/* Registered corporate admins overview list */}
                   <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] p-6 rounded-2xl">

@@ -15,6 +15,7 @@ exports.listBankAccounts = listBankAccounts;
 exports.createBankAccount = createBankAccount;
 const db_1 = __importDefault(require("../services/db"));
 const audit_1 = require("../utils/audit");
+const types_1 = require("../types");
 // Helper: Append a Cashbook voucher and compute running balances
 async function addCashbookVoucher(companyId, entryType, amount, description, referenceNo) {
     // Find last voucher to get running balance
@@ -74,14 +75,10 @@ async function createExpense(req, res) {
         const userId = req.user?.userId;
         if (!companyId)
             return res.status(401).json({ error: "Unauthorized" });
-        const { amount, description, category, date, syncToCashbook, referenceNo } = req.body;
-        if (!amount || !description || !category) {
-            return res.status(400).json({ error: "Amount, description, and category are required" });
-        }
-        const parsedAmount = parseFloat(amount);
-        if (isNaN(parsedAmount) || parsedAmount <= 0) {
-            return res.status(400).json({ error: "Amount must be a positive number" });
-        }
+        const parsed = types_1.ExpenseSchema.safeParse(req.body);
+        if (!parsed.success)
+            return res.status(400).json({ error: parsed.error.format() });
+        const { amount: parsedAmount, description, category, date, syncToCashbook, referenceNo } = parsed.data;
         // Create Expense Book entry
         const expense = await db_1.default.companyExpense.create({
             data: {
@@ -131,11 +128,10 @@ async function createPayment(req, res) {
         const companyId = req.user?.companyId;
         if (!companyId)
             return res.status(401).json({ error: "Unauthorized" });
-        const { vendorId, amount, paymentMethod, referenceNo, bankDetails, notes } = req.body;
-        if (!vendorId || !amount || !paymentMethod) {
-            return res.status(400).json({ error: "Vendor, amount, and payment method are required" });
-        }
-        const parsedAmount = parseFloat(amount);
+        const parsed = types_1.PaymentSchema.safeParse(req.body);
+        if (!parsed.success)
+            return res.status(400).json({ error: parsed.error.format() });
+        const { vendorId, amount: parsedAmount, paymentMethod, referenceNo, bankDetails, notes } = parsed.data;
         const count = await db_1.default.vendorPayment.count({ where: { companyId } });
         const paymentNo = `PAY-${new Date().getFullYear()}-${(count + 1).toString().padStart(5, '0')}`;
         const payment = await db_1.default.vendorPayment.create({
@@ -152,7 +148,7 @@ async function createPayment(req, res) {
             }
         });
         // Auto-record Outward payment inside cashbook voucher ledger
-        const vendor = await db_1.default.vendor.findUnique({ where: { id: vendorId }, select: { name: true } });
+        const vendor = await db_1.default.vendor.findFirst({ where: { id: vendorId, companyId }, select: { name: true } });
         await addCashbookVoucher(companyId, 'OUTWARD_PAYMENT', parsedAmount, `Vendor Payment: to ${vendor?.name || 'Vendor'} [No: ${paymentNo}]`, referenceNo || paymentNo);
         return res.status(201).json({ message: "Vendor payment finalized", payment });
     }
@@ -183,11 +179,10 @@ async function createReceipt(req, res) {
         const companyId = req.user?.companyId;
         if (!companyId)
             return res.status(401).json({ error: "Unauthorized" });
-        const { amount, payerName, category, paymentMethod, referenceNo, notes } = req.body;
-        if (!amount || !payerName || !category || !paymentMethod) {
-            return res.status(400).json({ error: "Amount, payer name, category, and payment method are required" });
-        }
-        const parsedAmount = parseFloat(amount);
+        const parsed = types_1.ReceiptSchema.safeParse(req.body);
+        if (!parsed.success)
+            return res.status(400).json({ error: parsed.error.format() });
+        const { amount: parsedAmount, payerName, category, paymentMethod, referenceNo, notes } = parsed.data;
         const receipt = await db_1.default.companyReceipt.create({
             data: {
                 companyId,
@@ -244,8 +239,7 @@ async function getGstWorksheet(req, res) {
         const companyId = req.user?.companyId;
         if (!companyId)
             return res.status(401).json({ error: "Unauthorized" });
-        // Fetch company GST details
-        const company = await db_1.default.company.findUnique({
+        const company = await db_1.default.company.findFirst({
             where: { id: companyId },
             select: { name: true, gstin: true, pan: true }
         });
@@ -299,11 +293,10 @@ async function createBankAccount(req, res) {
         const companyId = req.user?.companyId;
         if (!companyId)
             return res.status(401).json({ error: "Unauthorized" });
-        const { bankName, accountNo, branchName, ifscCode, accountType, balance } = req.body;
-        if (!bankName || !accountNo || !ifscCode || !accountType) {
-            return res.status(400).json({ error: "Bank name, Account Number, IFSC code, and Account Type are required" });
-        }
-        const parsedBalance = balance !== undefined ? parseFloat(balance) : 0.0;
+        const parsed = types_1.BankAccountSchema.safeParse(req.body);
+        if (!parsed.success)
+            return res.status(400).json({ error: parsed.error.format() });
+        const { bankName, accountNo, branchName, ifscCode, accountType, balance: parsedBalance = 0.0 } = parsed.data;
         // Check unique accountNo in company
         const existing = await db_1.default.companyBankAccount.findFirst({
             where: { companyId, accountNo }

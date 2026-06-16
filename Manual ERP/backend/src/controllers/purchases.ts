@@ -9,6 +9,7 @@ import { Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import prisma from '../services/db';
 import { logAudit } from '../utils/audit';
+import { markNeedsRefresh } from '../services/forecast';
 
 // Shared purchases financial helpers
 async function handleOutwardPayment(
@@ -297,6 +298,7 @@ export async function updatePurchaseOrderStatus(req: AuthenticatedRequest, res: 
       data: { status }
     });
 
+    await markNeedsRefresh(companyId);
     return res.json({ message: "Purchase Order status updated", purchaseOrder: po });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
@@ -822,6 +824,7 @@ export async function updatePurchaseOrder(req: AuthenticatedRequest, res: Respon
       req.headers['user-agent']
     );
 
+    await markNeedsRefresh(companyId);
     return res.json({ message: `Purchase Order updated successfully`, purchaseOrder: finalPo });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });

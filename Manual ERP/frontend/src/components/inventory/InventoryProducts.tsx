@@ -33,7 +33,7 @@ export default function InventoryProducts({
 
   const { data: fetchedProducts } = useQuery({
     queryKey: ['inventory-products'],
-    queryFn: () => apiClient.get<Product[]>('/api/inventory/products')
+    queryFn: () => apiClient.get<Product[]>('/api/master/products')
   });
 
   const adjustMutation = useMutation({
@@ -42,7 +42,7 @@ export default function InventoryProducts({
   });
 
   const updateProductMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: string, payload: any }) => apiClient.patch(`/api/inventory/products/${id}`, payload),
+    mutationFn: ({ id, payload }: { id: string, payload: any }) => apiClient.patch(`/api/master/products/${id}`, payload),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['inventory-products'] })
   });
 

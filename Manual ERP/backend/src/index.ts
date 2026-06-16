@@ -121,6 +121,18 @@ import {
 } from './controllers/inventory';
 
 import {
+  getSuperCompanyForecastConfig,
+  saveSuperCompanyForecastConfig,
+  getTenantForecastStatus,
+  runTenantForecast,
+  getTenantForecastPredictions,
+  getTenantForecastHistory
+} from './controllers/forecast';
+
+import { startForecastWorkerLoop } from './services/forecast';
+import { startForecastScheduler } from './services/forecastScheduler';
+
+import {
   listBoms, createBom, updateBom, deleteBom,
   listPlans, createPlan, updatePlan, deletePlan, releasePlan,
   listWorkOrders, createWorkOrder, updateWorkOrder, deleteWorkOrder, startWorkOrder,
@@ -690,6 +702,15 @@ app.delete('/api/purchase/payments/:id', authenticateToken, deleteVendorPayment)
 app.get('/api/inventory/adjustments', authenticateToken, listStockAdjustments);
 app.post('/api/inventory/adjust', authenticateToken, adjustStock);
 
+// AI Forecasting Routes
+app.get('/api/super/company/:id/forecast-config', authenticateToken, requireSuperAdmin, getSuperCompanyForecastConfig);
+app.post('/api/super/company/:id/forecast-config', authenticateToken, requireSuperAdmin, saveSuperCompanyForecastConfig);
+
+app.get('/api/forecast/status', authenticateToken, getTenantForecastStatus);
+app.post('/api/forecast/run', authenticateToken, runTenantForecast);
+app.get('/api/forecast/predictions', authenticateToken, getTenantForecastPredictions);
+app.get('/api/forecast/history', authenticateToken, getTenantForecastHistory);
+
 // 9.55 Manufacturing Operations Routes
 app.get('/api/manufacturing/boms', authenticateToken, listBoms);
 app.post('/api/manufacturing/boms', authenticateToken, createBom);
@@ -836,6 +857,7 @@ async function seedDatabase() {
             "INVENTORY_PRODUCT",
             "INVENTORY_STOCK_OVERVIEW",
             "INVENTORY_LOW_ALERT",
+            "INVENTORY_FORECASTING",
 
             // Phase 2 Modules
             "HRMS_DATA",
@@ -940,6 +962,7 @@ async function seedDatabase() {
         permissions.INVENTORY_PRODUCT = ["read", "write", "delete"];
         permissions.INVENTORY_STOCK_OVERVIEW = ["read", "write", "delete"];
         permissions.INVENTORY_LOW_ALERT = ["read", "write", "delete"];
+        permissions.INVENTORY_FORECASTING = ["read", "write", "delete"];
 
         // Phase 2 Modules
         permissions.HRMS_DATA = ["read", "write", "delete"];
@@ -995,5 +1018,14 @@ seedDatabase().then(() => {
     console.log(`   Realtime WebSockets ready for notifications.`);
     console.log(`   PostgreSQL database connection: ACTIVE.`);
     console.log(`========================================================\n`);
+
+    // Initialize forecasting scheduler and queue worker poll loop
+    try {
+      startForecastScheduler();
+      startForecastWorkerLoop();
+      console.log("📈 [AI Forecasting] Scheduler and queue worker started successfully.");
+    } catch (err) {
+      console.error("❌ [AI Forecasting] Failed to start scheduler/worker:", err);
+    }
   });
 });
