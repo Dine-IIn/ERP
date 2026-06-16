@@ -122,13 +122,11 @@ function getLatestUpdateInfo(req: express.Request, type: 'tauri' | 'backend'): U
       }
     }
 
-    if (tauriUpdateSignature && tauriUpdateSignature.startsWith('dW50cnVzdGVk')) {
-      try {
-        tauriUpdateSignature = Buffer.from(tauriUpdateSignature, 'base64').toString('utf-8').trim();
-        console.log(`🔍 [Updater API] [Diagnostic] Decoded base64 signature:\n${tauriUpdateSignature}`);
-      } catch (err) {
-        console.error(`Error decoding base64 signature:`, err);
-      }
+    // Tauri v2 updater expects the signature to be a base64-encoded string starting with 'dW50cnVzdGVk' (the base64 of 'untrusted')
+    // If the signature is in plain text (starts with 'untrusted'), encode it to base64.
+    if (tauriUpdateSignature && !tauriUpdateSignature.startsWith('dW50cnVzdGVk')) {
+      tauriUpdateSignature = Buffer.from(tauriUpdateSignature).toString('base64');
+      console.log(`🔍 [Updater API] [Diagnostic] Encoded plain text signature to base64`);
     }
 
     let releaseNotes = config.releaseNotes;

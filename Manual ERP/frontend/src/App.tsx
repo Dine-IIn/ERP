@@ -442,7 +442,8 @@ export default function App() {
       await invoke('restart_app');
     } catch (err: any) {
       console.error('Failed to install updates:', err);
-      setUpdateError(err.message || 'Failed during download/installation.');
+      const errorString = err && typeof err === 'object' ? (err.message || JSON.stringify(err)) : String(err);
+      setUpdateError(errorString || 'Failed during download/installation.');
     } finally {
       setUpdating(false);
     }
