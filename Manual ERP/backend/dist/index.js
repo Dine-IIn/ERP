@@ -413,6 +413,7 @@ app.post('/api/inventory/adjust', auth_1.authenticateToken, inventory_1.adjustSt
 // AI Forecasting Routes
 app.get('/api/super/company/:id/forecast-config', auth_1.authenticateToken, auth_1.requireSuperAdmin, forecast_1.getSuperCompanyForecastConfig);
 app.post('/api/super/company/:id/forecast-config', auth_1.authenticateToken, auth_1.requireSuperAdmin, forecast_1.saveSuperCompanyForecastConfig);
+app.post('/api/super/company/:id/forecast-trigger', auth_1.authenticateToken, auth_1.requireSuperAdmin, forecast_1.triggerSuperCompanyForecast);
 app.get('/api/forecast/status', auth_1.authenticateToken, forecast_1.getTenantForecastStatus);
 app.post('/api/forecast/run', auth_1.authenticateToken, forecast_1.runTenantForecast);
 app.get('/api/forecast/predictions', auth_1.authenticateToken, forecast_1.getTenantForecastPredictions);
