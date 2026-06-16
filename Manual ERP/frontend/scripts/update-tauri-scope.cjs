@@ -110,20 +110,66 @@ if (fs.existsSync(defaultJsonPath)) {
   console.error(`🔴 [Tauri Capability Builder] default.json not found at: ${defaultJsonPath}`);
 }
 
-// 2. Update Updater Endpoints (tauri.conf.json)
+// 2. Sync Version (package.json, tauri.conf.json, Cargo.toml) and Update Updater Endpoints
+if (env.VITE_APP_VERSION) {
+  const version = env.VITE_APP_VERSION;
+  
+  // 2a. Update package.json version
+  const packageJsonPath = path.resolve(__dirname, '../package.json');
+  if (fs.existsSync(packageJsonPath)) {
+    try {
+      const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+      if (packageJson.version !== version) {
+        packageJson.version = version;
+        fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n', 'utf8');
+        console.log(`📦 [Version Sync] Successfully updated package.json version to ${version}`);
+      }
+    } catch (err) {
+      console.error(`🔴 [Version Sync] Failed to update package.json version:`, err.message);
+    }
+  }
+
+  // 2b. Update Cargo.toml version
+  const cargoTomlPath = path.resolve(__dirname, '../src-tauri/Cargo.toml');
+  if (fs.existsSync(cargoTomlPath)) {
+    try {
+      const cargoContent = fs.readFileSync(cargoTomlPath, 'utf8');
+      const updatedCargo = cargoContent.replace(/^version\s*=\s*"[^"]*"/m, `version = "${version}"`);
+      if (cargoContent !== updatedCargo) {
+        fs.writeFileSync(cargoTomlPath, updatedCargo, 'utf8');
+        console.log(`🦀 [Version Sync] Successfully updated Cargo.toml version to ${version}`);
+      }
+    } catch (err) {
+      console.error(`🔴 [Version Sync] Failed to update Cargo.toml version:`, err.message);
+    }
+  }
+}
+
+// 2c. Update tauri.conf.json (version & updater endpoints)
 const tauriConfPath = path.resolve(__dirname, '../src-tauri/tauri.conf.json');
 if (fs.existsSync(tauriConfPath)) {
   try {
     const tauriConf = JSON.parse(fs.readFileSync(tauriConfPath, 'utf8'));
+    let changed = false;
+
+    if (env.VITE_APP_VERSION && tauriConf.version !== env.VITE_APP_VERSION) {
+      tauriConf.version = env.VITE_APP_VERSION;
+      changed = true;
+      console.log(`⚙️ [Version Sync] Set tauri.conf.json version to ${env.VITE_APP_VERSION}`);
+    }
     
     const finalEndpoints = [];
-    const centralUrl = env.VITE_CENTRAL_SERVICES_URL;
-    if (centralUrl && centralUrl.startsWith('http')) {
-      try {
-        const urlObj = new URL(centralUrl);
-        const updateEndpoint = `${urlObj.origin}/api/updater/{{target}}/{{current_version}}`;
-        finalEndpoints.push(updateEndpoint);
-      } catch (e) {}
+    if (env.TAURI_UPDATER_ENDPOINT) {
+      finalEndpoints.push(env.TAURI_UPDATER_ENDPOINT);
+    } else {
+      const centralUrl = env.VITE_CENTRAL_SERVICES_URL;
+      if (centralUrl && centralUrl.startsWith('http')) {
+        try {
+          const urlObj = new URL(centralUrl);
+          const updateEndpoint = `${urlObj.origin}/api/updater/{{target}}/{{current_version}}`;
+          finalEndpoints.push(updateEndpoint);
+        } catch (e) {}
+      }
     }
 
     if (finalEndpoints.length === 0) {
@@ -131,9 +177,17 @@ if (fs.existsSync(tauriConfPath)) {
     }
 
     if (tauriConf.plugins && tauriConf.plugins.updater) {
-      tauriConf.plugins.updater.endpoints = finalEndpoints;
+      const oldEndpoints = JSON.stringify(tauriConf.plugins.updater.endpoints);
+      const newEndpoints = JSON.stringify(finalEndpoints);
+      if (oldEndpoints !== newEndpoints || changed) {
+        tauriConf.plugins.updater.endpoints = finalEndpoints;
+        changed = true;
+      }
+    }
+
+    if (changed) {
       fs.writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2), 'utf8');
-      console.log(`🔄 [Tauri Config Builder] Successfully updated Updater Endpoints inside tauri.conf.json`);
+      console.log(`🔄 [Tauri Config Builder] Successfully updated tauri.conf.json`);
     }
   } catch (err) {
     console.error(`🔴 [Tauri Config Builder] Failed to update tauri.conf.json:`, err.message);

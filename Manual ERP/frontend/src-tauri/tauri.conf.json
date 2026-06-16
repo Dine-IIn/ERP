@@ -43,7 +43,7 @@
     "updater": {
       "active": true,
       "endpoints": [
-        "http://localhost:6500/api/updater/{{target}}/{{current_version}}"
+        "https://centeralservice.anbindustries.com/api/updater/{{target}}/{{current_version}}"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDI0Q0I5OUZDQjQ3MkMxRDkKUldUWndYSzAvSm5MSk9MYTIrS0gzQ05IZFpaeDhNQVlzRHFuaTBKSTNwcFZJMnZHM0lsc0p4V2IK",
       "dangerousInsecureTransportProtocol": true
