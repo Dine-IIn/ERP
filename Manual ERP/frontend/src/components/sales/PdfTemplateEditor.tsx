@@ -24,6 +24,22 @@ export interface PdfTemplateConfig {
   colDiscount: boolean;
   colTax: boolean;
   isDefault?: boolean;
+  showMetadata?: boolean;
+  showCustomerDetails?: boolean;
+  showInvoiceDate?: boolean;
+  showDueDate?: boolean;
+  showStatus?: boolean;
+  showCustomerName?: boolean;
+  showCustomerType?: boolean;
+  showCustomerCategory?: boolean;
+  showCustomerTel?: boolean;
+  showPaymentTerms?: boolean;
+  showCustomerBankDetails?: boolean;
+  showCustomerGSTNumber?: boolean;
+  showCustomerPANNumber?: boolean;
+  showAmountInWords?: boolean;
+  showTaxableAmount?: boolean;
+  showTaxBreakup?: boolean;
   // Advanced styling overrides:
   logoBase64?: string | null;
   headerAlign?: 'left' | 'center' | 'right';
@@ -37,6 +53,21 @@ export interface PdfTemplateConfig {
   headerPadding?: number;
   sectionSpacing?: number;
   logoSize?: number;
+  // Spacing & Width overrides
+  tablePadding?: number;
+  colWidthProduct?: number;
+  colWidthCode?: number;
+  colWidthQty?: number;
+  colWidthPrice?: number;
+  colWidthDiscount?: number;
+  colWidthSubtotal?: number;
+  // Signature block overrides
+  showSignature?: boolean;
+  signatureBase64?: string | null;
+  signatureLabel?: string;
+  signatureSize?: number;
+  borderWidth?: number;
+  footerPadding?: number;
 }
 
 export default function PdfTemplateEditor() {
@@ -62,6 +93,22 @@ export default function PdfTemplateEditor() {
   const [colDiscount, setColDiscount] = useState(true);
   const [colTax, setColTax] = useState(true);
   const [isDefault, setIsDefault] = useState(false);
+  const [showMetadata, setShowMetadata] = useState(true);
+  const [showCustomerDetails, setShowCustomerDetails] = useState(true);
+  const [showInvoiceDate, setShowInvoiceDate] = useState(true);
+  const [showDueDate, setShowDueDate] = useState(true);
+  const [showStatus, setShowStatus] = useState(true);
+  const [showCustomerName, setShowCustomerName] = useState(true);
+  const [showCustomerType, setShowCustomerType] = useState(true);
+  const [showCustomerCategory, setShowCustomerCategory] = useState(true);
+  const [showCustomerTel, setShowCustomerTel] = useState(true);
+  const [showPaymentTerms, setShowPaymentTerms] = useState(true);
+  const [showCustomerBankDetails, setShowCustomerBankDetails] = useState(true);
+  const [showCustomerGSTNumber, setShowCustomerGSTNumber] = useState(true);
+  const [showCustomerPANNumber, setShowCustomerPANNumber] = useState(true);
+  const [showAmountInWords, setShowAmountInWords] = useState(true);
+  const [showTaxableAmount, setShowTaxableAmount] = useState(true);
+  const [showTaxBreakup, setShowTaxBreakup] = useState(true);
 
   // New styling form states
   const [logoBase64, setLogoBase64] = useState<string | null>(null);
@@ -77,6 +124,24 @@ export default function PdfTemplateEditor() {
   const [sectionSpacing, setSectionSpacing] = useState<number>(24);
   const [logoSize, setLogoSize] = useState<number>(48);
 
+  // Spacing & Width overrides states
+  const [tablePadding, setTablePadding] = useState<number>(8);
+  const [colWidthProduct, setColWidthProduct] = useState<number>(40);
+  const [colWidthCode, setColWidthCode] = useState<number>(15);
+  const [colWidthQty, setColWidthQty] = useState<number>(10);
+  const [colWidthPrice, setColWidthPrice] = useState<number>(15);
+  const [colWidthDiscount, setColWidthDiscount] = useState<number>(10);
+  const [colWidthSubtotal, setColWidthSubtotal] = useState<number>(10);
+
+  // Signature block overrides states
+  const [showSignature, setShowSignature] = useState(true);
+  const [signatureBase64, setSignatureBase64] = useState<string | null>(null);
+  const [signatureLabel, setSignatureLabel] = useState('Authorized Signatory');
+  const [signatureSize, setSignatureSize] = useState<number>(45);
+  const [borderWidth, setBorderWidth] = useState<number>(1);
+  const [footerPadding, setFooterPadding] = useState<number>(16);
+
+  const [hasInitialLoaded, setHasInitialLoaded] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [localSuccess, setLocalSuccess] = useState<string | null>(null);
 
@@ -106,14 +171,15 @@ export default function PdfTemplateEditor() {
   }, [res]);
 
   useEffect(() => {
-    if (!loading) {
-      if (templates.length > 0 && !selectedId && !isEditing) {
+    if (!loading && !hasInitialLoaded) {
+      if (templates.length > 0) {
         loadTemplate(templates[0]);
-      } else if (templates.length === 0 && !isEditing) {
+      } else {
         handleCreateNew();
       }
+      setHasInitialLoaded(true);
     }
-  }, [templates, loading, selectedId, isEditing]);
+  }, [templates, loading, hasInitialLoaded]);
 
   const loadTemplate = (tpl: PdfTemplateConfig) => {
     setSelectedId(tpl.id);
@@ -135,6 +201,22 @@ export default function PdfTemplateEditor() {
     setColDiscount(tpl.colDiscount ?? true);
     setColTax(tpl.colTax ?? true);
     setIsDefault(tpl.isDefault ?? false);
+    setShowMetadata(tpl.showMetadata ?? true);
+    setShowCustomerDetails(tpl.showCustomerDetails ?? true);
+    setShowInvoiceDate(tpl.showInvoiceDate ?? true);
+    setShowDueDate(tpl.showDueDate ?? true);
+    setShowStatus(tpl.showStatus ?? true);
+    setShowCustomerName(tpl.showCustomerName ?? true);
+    setShowCustomerType(tpl.showCustomerType ?? true);
+    setShowCustomerCategory(tpl.showCustomerCategory ?? true);
+    setShowCustomerTel(tpl.showCustomerTel ?? true);
+    setShowPaymentTerms(tpl.showPaymentTerms ?? true);
+    setShowCustomerBankDetails(tpl.showCustomerBankDetails ?? true);
+    setShowCustomerGSTNumber(tpl.showCustomerGSTNumber ?? true);
+    setShowCustomerPANNumber(tpl.showCustomerPANNumber ?? true);
+    setShowAmountInWords(tpl.showAmountInWords ?? true);
+    setShowTaxableAmount(tpl.showTaxableAmount ?? true);
+    setShowTaxBreakup(tpl.showTaxBreakup ?? true);
     setIsEditing(true);
 
     // Load styling config fields
@@ -150,6 +232,23 @@ export default function PdfTemplateEditor() {
     setHeaderPadding(tpl.headerPadding || 16);
     setSectionSpacing(tpl.sectionSpacing || 24);
     setLogoSize(tpl.logoSize || 48);
+
+    // Load spacing & widths
+    setTablePadding(tpl.tablePadding ?? 8);
+    setColWidthProduct(tpl.colWidthProduct ?? 40);
+    setColWidthCode(tpl.colWidthCode ?? 15);
+    setColWidthQty(tpl.colWidthQty ?? 10);
+    setColWidthPrice(tpl.colWidthPrice ?? 15);
+    setColWidthDiscount(tpl.colWidthDiscount ?? 10);
+    setColWidthSubtotal(tpl.colWidthSubtotal ?? 10);
+
+    // Load signature
+    setShowSignature(tpl.showSignature ?? true);
+    setSignatureBase64(tpl.signatureBase64 || null);
+    setSignatureLabel(tpl.signatureLabel || 'Authorized Signatory');
+    setSignatureSize(tpl.signatureSize || 45);
+    setBorderWidth(tpl.borderWidth ?? 1);
+    setFooterPadding(tpl.footerPadding ?? 16);
   };
 
   const handleCreateNew = () => {
@@ -171,7 +270,22 @@ export default function PdfTemplateEditor() {
     setColUnitPrice(true);
     setColDiscount(true);
     setColTax(true);
-    setIsDefault(false);
+    setShowMetadata(true);
+    setShowCustomerDetails(true);
+    setShowInvoiceDate(true);
+    setShowDueDate(true);
+    setShowStatus(true);
+    setShowCustomerName(true);
+    setShowCustomerBankDetails(true);
+    setShowCustomerGSTNumber(true);
+    setShowCustomerPANNumber(true);
+    setShowAmountInWords(true);
+    setShowTaxableAmount(true);
+    setShowTaxBreakup(true);
+    setShowCustomerType(true);
+    setShowCustomerCategory(true);
+    setShowCustomerTel(true);
+    setShowPaymentTerms(true);
     setIsEditing(false);
 
     // Reset layout fields to default values
@@ -187,6 +301,23 @@ export default function PdfTemplateEditor() {
     setHeaderPadding(16);
     setSectionSpacing(24);
     setLogoSize(48);
+
+    // Reset spacing & widths
+    setTablePadding(8);
+    setColWidthProduct(40);
+    setColWidthCode(15);
+    setColWidthQty(10);
+    setColWidthPrice(15);
+    setColWidthDiscount(10);
+    setColWidthSubtotal(10);
+
+    // Reset signature
+    setShowSignature(true);
+    setSignatureBase64(null);
+    setSignatureLabel('Authorized Signatory');
+    setSignatureSize(45);
+    setBorderWidth(1);
+    setFooterPadding(16);
   };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -201,6 +332,22 @@ export default function PdfTemplateEditor() {
     const reader = new FileReader();
     reader.onloadend = () => {
       setLogoBase64(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSignatureUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 150 * 1024) {
+      alert("Signature image is too large! Please upload a file smaller than 150 KB.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setSignatureBase64(reader.result as string);
     };
     reader.readAsDataURL(file);
   };
@@ -229,6 +376,7 @@ export default function PdfTemplateEditor() {
     mutationFn: (id: string) => apiClient.delete(`/api/sales/templates/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['templates'] });
+      setHasInitialLoaded(false);
       setSelectedId('');
       setIsEditing(false);
     }
@@ -252,6 +400,22 @@ export default function PdfTemplateEditor() {
       colUnitPrice,
       colDiscount,
       colTax,
+      showMetadata,
+      showCustomerDetails,
+      showInvoiceDate,
+      showDueDate,
+      showStatus,
+      showCustomerName,
+      showCustomerType,
+      showCustomerCategory,
+      showCustomerTel,
+      showPaymentTerms,
+      showCustomerBankDetails,
+      showCustomerGSTNumber,
+      showCustomerPANNumber,
+      showAmountInWords,
+      showTaxableAmount,
+      showTaxBreakup,
       // Advanced styling parameters
       logoBase64,
       headerAlign,
@@ -264,7 +428,22 @@ export default function PdfTemplateEditor() {
       bodyFontSize,
       headerPadding,
       sectionSpacing,
-      logoSize
+      logoSize,
+      // Spacing & width overrides
+      tablePadding,
+      colWidthProduct,
+      colWidthCode,
+      colWidthQty,
+      colWidthPrice,
+      colWidthDiscount,
+      colWidthSubtotal,
+      // Signature overrides
+      showSignature,
+      signatureBase64,
+      signatureLabel,
+      signatureSize,
+      borderWidth,
+      footerPadding,
     };
 
     const payload = {
@@ -523,6 +702,84 @@ export default function PdfTemplateEditor() {
                       <input type="checkbox" checked={showTerms} onChange={e => setShowTerms(e.target.checked)} className="accent-indigo-500" />
                       Terms block
                     </label>
+                    <label className="flex items-center gap-2 text-slate-350 cursor-pointer select-none">
+                      <input type="checkbox" checked={showMetadata} onChange={e => setShowMetadata(e.target.checked)} className="accent-indigo-500" />
+                      Document Metadata
+                    </label>
+                    <label className="flex items-center gap-2 text-slate-350 cursor-pointer select-none">
+                      <input type="checkbox" checked={showCustomerDetails} onChange={e => setShowCustomerDetails(e.target.checked)} className="accent-indigo-500" />
+                      Customer Details
+                    </label>
+                  </div>
+                </div>
+
+                {/* Metadata Fields Checklist */}
+                <div className="space-y-2 border-t border-slate-850 pt-3">
+                  <span className="text-[9px] font-bold text-slate-450 uppercase block tracking-wider">Metadata Fields Visibility</span>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <label className="flex items-center gap-2 text-slate-350 cursor-pointer select-none">
+                      <input type="checkbox" checked={showInvoiceDate} onChange={e => setShowInvoiceDate(e.target.checked)} className="accent-indigo-500" />
+                      Invoice/Issue Date
+                    </label>
+                    <label className="flex items-center gap-2 text-slate-350 cursor-pointer select-none">
+                      <input type="checkbox" checked={showDueDate} onChange={e => setShowDueDate(e.target.checked)} className="accent-indigo-500" />
+                      Due/Expiry Date
+                    </label>
+                    <label className="flex items-center gap-2 text-slate-350 cursor-pointer select-none">
+                      <input type="checkbox" checked={showStatus} onChange={e => setShowStatus(e.target.checked)} className="accent-indigo-500" />
+                      Status
+                    </label>
+                    <label className="flex items-center gap-2 text-slate-350 cursor-pointer select-none">
+                      <input type="checkbox" checked={showCustomerName} onChange={e => setShowCustomerName(e.target.checked)} className="accent-indigo-500" />
+                      Customer (Name)
+                    </label>
+                    <label className="flex items-center gap-2 text-slate-350 cursor-pointer select-none">
+                      <input type="checkbox" checked={showCustomerType} onChange={e => setShowCustomerType(e.target.checked)} className="accent-indigo-500" />
+                      Customer Type
+                    </label>
+                    <label className="flex items-center gap-2 text-slate-350 cursor-pointer select-none">
+                      <input type="checkbox" checked={showCustomerCategory} onChange={e => setShowCustomerCategory(e.target.checked)} className="accent-indigo-500" />
+                      Customer Category
+                    </label>
+                    <label className="flex items-center gap-2 text-slate-350 cursor-pointer select-none">
+                      <input type="checkbox" checked={showCustomerTel} onChange={e => setShowCustomerTel(e.target.checked)} className="accent-indigo-500" />
+                      Customer Tel
+                    </label>
+                    <label className="flex items-center gap-2 text-slate-350 cursor-pointer select-none">
+                      <input type="checkbox" checked={showPaymentTerms} onChange={e => setShowPaymentTerms(e.target.checked)} className="accent-indigo-500" />
+                      Payment Terms
+                    </label>
+                  </div>
+                </div>
+
+                {/* Tax & Bank Details Checklist */}
+                <div className="space-y-2 border-t border-slate-850 pt-3">
+                  <span className="text-[9px] font-bold text-slate-450 uppercase block tracking-wider">Tax & Customer Details Toggles</span>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <label className="flex items-center gap-2 text-slate-350 cursor-pointer select-none">
+                      <input type="checkbox" checked={showCustomerBankDetails} onChange={e => setShowCustomerBankDetails(e.target.checked)} className="accent-indigo-500" />
+                      Cust Bank Info
+                    </label>
+                    <label className="flex items-center gap-2 text-slate-350 cursor-pointer select-none">
+                      <input type="checkbox" checked={showCustomerGSTNumber} onChange={e => setShowCustomerGSTNumber(e.target.checked)} className="accent-indigo-500" />
+                      Cust GSTIN
+                    </label>
+                    <label className="flex items-center gap-2 text-slate-350 cursor-pointer select-none">
+                      <input type="checkbox" checked={showCustomerPANNumber} onChange={e => setShowCustomerPANNumber(e.target.checked)} className="accent-indigo-500" />
+                      Cust PAN
+                    </label>
+                    <label className="flex items-center gap-2 text-slate-350 cursor-pointer select-none">
+                      <input type="checkbox" checked={showAmountInWords} onChange={e => setShowAmountInWords(e.target.checked)} className="accent-indigo-500" />
+                      Amt In Words
+                    </label>
+                    <label className="flex items-center gap-2 text-slate-350 cursor-pointer select-none">
+                      <input type="checkbox" checked={showTaxableAmount} onChange={e => setShowTaxableAmount(e.target.checked)} className="accent-indigo-500" />
+                      Taxable Amount
+                    </label>
+                    <label className="flex items-center gap-2 text-slate-350 cursor-pointer select-none">
+                      <input type="checkbox" checked={showTaxBreakup} onChange={e => setShowTaxBreakup(e.target.checked)} className="accent-indigo-500" />
+                      GST Tax Breakup
+                    </label>
                   </div>
                 </div>
 
@@ -762,6 +1019,218 @@ export default function PdfTemplateEditor() {
                   </div>
                 </div>
 
+                {/* Table Spacing & Column Widths */}
+                <div className="space-y-3 border-t border-slate-850 pt-3">
+                  <span className="text-[9px] font-bold text-indigo-400 uppercase block tracking-wider">Table Spacing & Columns (%)</span>
+                  <div className="grid grid-cols-2 gap-3 text-[10px]">
+                    <div className="space-y-1 col-span-2">
+                      <div className="flex justify-between text-slate-500 font-bold uppercase">
+                        <span>Table Cell Padding</span>
+                        <span className="font-mono text-indigo-400">{tablePadding}px</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="2"
+                        max="20"
+                        value={tablePadding}
+                        onChange={e => setTablePadding(Number(e.target.value))}
+                        className="w-full accent-indigo-500 cursor-pointer"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-slate-500 font-bold uppercase">
+                        <span>Product Name Width</span>
+                        <span className="font-mono text-indigo-400">{colWidthProduct}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="5"
+                        max="80"
+                        value={colWidthProduct}
+                        onChange={e => setColWidthProduct(Number(e.target.value))}
+                        className="w-full accent-indigo-500 cursor-pointer"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-slate-500 font-bold uppercase">
+                        <span>SKU/Code Width</span>
+                        <span className="font-mono text-indigo-400">{colWidthCode}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="5"
+                        max="50"
+                        value={colWidthCode}
+                        onChange={e => setColWidthCode(Number(e.target.value))}
+                        className="w-full accent-indigo-500 cursor-pointer"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-slate-500 font-bold uppercase">
+                        <span>Qty Width</span>
+                        <span className="font-mono text-indigo-400">{colWidthQty}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="5"
+                        max="40"
+                        value={colWidthQty}
+                        onChange={e => setColWidthQty(Number(e.target.value))}
+                        className="w-full accent-indigo-500 cursor-pointer"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-slate-500 font-bold uppercase">
+                        <span>UnitPrice Width</span>
+                        <span className="font-mono text-indigo-400">{colWidthPrice}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="5"
+                        max="40"
+                        value={colWidthPrice}
+                        onChange={e => setColWidthPrice(Number(e.target.value))}
+                        className="w-full accent-indigo-500 cursor-pointer"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-slate-500 font-bold uppercase">
+                        <span>Discount Width</span>
+                        <span className="font-mono text-indigo-400">{colWidthDiscount}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="5"
+                        max="40"
+                        value={colWidthDiscount}
+                        onChange={e => setColWidthDiscount(Number(e.target.value))}
+                        className="w-full accent-indigo-500 cursor-pointer"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-slate-500 font-bold uppercase">
+                        <span>Subtotal Width</span>
+                        <span className="font-mono text-indigo-400">{colWidthSubtotal}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="5"
+                        max="40"
+                        value={colWidthSubtotal}
+                        onChange={e => setColWidthSubtotal(Number(e.target.value))}
+                        className="w-full accent-indigo-500 cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer & Signature Customizer */}
+                <div className="space-y-3 border-t border-slate-850 pt-3">
+                  <span className="text-[9px] font-bold text-indigo-400 uppercase block tracking-wider">Footer & Signature Sign-off</span>
+                  
+                  <div className="flex items-center gap-2 py-1">
+                    <input
+                      type="checkbox"
+                      id="showSignature"
+                      checked={showSignature}
+                      onChange={e => setShowSignature(e.target.checked)}
+                      className="accent-indigo-500 w-4 h-4 cursor-pointer"
+                    />
+                    <label htmlFor="showSignature" className="text-xs text-slate-350 cursor-pointer select-none">
+                      Show Signature sign-off block
+                    </label>
+                  </div>
+
+                  {showSignature && (
+                    <div className="space-y-3 pl-2 border-l border-slate-800">
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-slate-455 uppercase tracking-wider">Signature Block Title</label>
+                        <input
+                          type="text"
+                          value={signatureLabel}
+                          onChange={e => setSignatureLabel(e.target.value)}
+                          className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 focus:border-indigo-500/60 rounded-xl text-white outline-none text-xs"
+                          placeholder="e.g. Authorized Signatory"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 text-[10px]">
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-slate-500 font-bold uppercase">
+                            <span>Signature Size</span>
+                            <span className="font-mono text-indigo-400">{signatureSize}px</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="20"
+                            max="120"
+                            value={signatureSize}
+                            onChange={e => setSignatureSize(Number(e.target.value))}
+                            className="w-full accent-indigo-500 cursor-pointer"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-slate-500 font-bold uppercase">
+                            <span>Footer Padding</span>
+                            <span className="font-mono text-indigo-400">{footerPadding}px</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="4"
+                            max="40"
+                            value={footerPadding}
+                            onChange={e => setFooterPadding(Number(e.target.value))}
+                            className="w-full accent-indigo-500 cursor-pointer"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-slate-500 font-bold uppercase">
+                            <span>Border Width</span>
+                            <span className="font-mono text-indigo-400">{borderWidth}px</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0"
+                            max="6"
+                            value={borderWidth}
+                            onChange={e => setBorderWidth(Number(e.target.value))}
+                            className="w-full accent-indigo-500 cursor-pointer"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-[9px] font-bold text-slate-455 uppercase tracking-wider block">Signature Image Override</label>
+                        <div className="flex items-center gap-3">
+                          {signatureBase64 ? (
+                            <div className="relative group border border-slate-800 rounded-xl overflow-hidden bg-slate-950 p-2 flex items-center justify-center h-16 w-24">
+                              <img src={signatureBase64} alt="Signature Preview" className="max-h-full max-w-full object-contain" />
+                              <button
+                                type="button"
+                                onClick={() => setSignatureBase64(null)}
+                                className="absolute inset-0 bg-rose-950/80 text-rose-200 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all font-bold text-[10px] cursor-pointer border-0"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          ) : (
+                            <label className="border border-dashed border-slate-800 hover:border-indigo-500/50 rounded-xl px-4 py-3 text-center cursor-pointer block w-full bg-slate-950 transition-all">
+                              <span className="text-[10px] text-slate-400 block font-semibold">Click to upload signature</span>
+                              <span className="text-[8px] text-slate-600 block mt-0.5">PNG or JPG up to 150KB</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handleSignatureUpload}
+                                className="hidden"
+                              />
+                            </label>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* Terms and Conditions */}
                 <div className="space-y-1 border-t border-slate-850 pt-3">
                   <label className="text-[9px] font-bold text-slate-455 uppercase tracking-wider block">Standard Terms & Conditions</label>
@@ -844,11 +1313,34 @@ export default function PdfTemplateEditor() {
                     <h4 className="font-black tracking-wider" style={{ color: currentThemeHex, fontSize: `${titleFontSize}px` }}>{title || 'TAX INVOICE'}</h4>
                     <span className="text-[9px] font-mono text-slate-600 block mt-0.5">Reference No: SI-2026-80942</span>
                   </div>
-                  <div className={`text-[9px] text-slate-600 space-y-0.25 ${titleAlign === 'left' ? 'text-right' : 'text-left'}`}>
-                    <div>Date: {new Date().toLocaleDateString()}</div>
-                    <div>Payment terms: Net 30 days</div>
+                  <div className={`text-[9px] text-slate-650 space-y-0.25 ${titleAlign === 'left' ? 'text-right' : 'text-left'}`}>
+                    {showInvoiceDate && <div>Date: {new Date().toLocaleDateString()}</div>}
+                    {showPaymentTerms && <div>Payment terms: Net 30 days</div>}
                   </div>
                 </div>
+
+                {/* Meta Columns */}
+                {(showMetadata || showCustomerDetails) && (
+                  <div className="grid grid-cols-2 gap-6 text-[10px] text-slate-650 border-t border-slate-100 pt-3" style={{ marginBottom: `${sectionSpacing}px` }}>
+                    {showMetadata ? (
+                      <div className="space-y-1">
+                        <div className="text-[9px] uppercase font-bold text-slate-450">Invoice Metadata</div>
+                        {showInvoiceDate && <div>Invoice Date: <span className="font-semibold text-slate-900">{new Date().toLocaleDateString()}</span></div>}
+                        {showDueDate && <div>Due Date: <span className="font-semibold text-slate-900">{new Date().toLocaleDateString()}</span></div>}
+                        {showStatus && <div>Status: <span className="font-semibold text-slate-900">UNPAID</span></div>}
+                      </div>
+                    ) : <div />}
+                    {showCustomerDetails ? (
+                      <div className="space-y-1 text-right">
+                        <div className="text-[9px] uppercase font-bold text-slate-450">Customer Classification</div>
+                        {showCustomerName && <div className="font-semibold text-slate-900">Acme Heavy Materials Pvt Ltd</div>}
+                        {showCustomerType && <div>Type: COMPANY</div>}
+                        {showCustomerCategory && <div>Category: wholesaler</div>}
+                        {showCustomerTel && <div>Tel: 8460603033</div>}
+                      </div>
+                    ) : <div />}
+                  </div>
+                )}
 
                 {/* Customer / Company Address grid */}
                 {(showBillingAddress || showShippingAddress) && (
@@ -863,9 +1355,17 @@ export default function PdfTemplateEditor() {
                       <div className="leading-relaxed text-slate-700" style={{ fontSize: `${bodyFontSize}px` }}>
                         <span className="font-extrabold uppercase block tracking-wider mb-1" style={{ color: currentThemeHex, fontSize: `${bodyFontSize * 0.85}px` }}>Bill To Consignee</span>
                         <strong>Acme Heavy Materials Pvt Ltd</strong><br/>
-                        GSTIN: 24AAACA1294F1Z0<br/>
+                        {showCustomerGSTNumber && <span>GSTIN: 24AAACA1294F1Z0<br/></span>}
+                        {showCustomerPANNumber && <span>PAN: AAACA1294F<br/></span>}
                         Billing State: Gujarat (CGST + SGST apply)<br/>
                         Address: Plot No 12-A, GIDC Industrial Zone, Vadodara, Gujarat - 390010
+                        {showCustomerBankDetails && (
+                          <div className="text-[9px] mt-2 pt-1 border-t border-slate-100 text-slate-500 leading-normal">
+                            <strong>Customer Bank Details:</strong><br/>
+                            Bank: State Bank of India | Holder: Acme Heavy Materials<br/>
+                            A/C No: 40921005671094 | IFSC Code: SBIN0001094
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -881,33 +1381,42 @@ export default function PdfTemplateEditor() {
                 )}
 
                 {/* Table items layout */}
-                <table className="w-full border-collapse mb-6" style={{ fontSize: `${bodyFontSize}px`, marginBottom: `${sectionSpacing}px` }}>
+                <table 
+                  className="w-full border-collapse" 
+                  style={{ 
+                    fontSize: `${bodyFontSize}px`, 
+                    marginBottom: `${sectionSpacing}px`,
+                    borderWidth: borderWidth > 0 ? `${borderWidth}px` : '0px',
+                    borderStyle: 'solid',
+                    borderColor: (currentThemeHex as string) === '#000000' ? '#ddd' : currentThemeHex
+                  }}
+                >
                   <thead>
-                    <tr className="bg-slate-50 border-b-2" style={{ borderBottomColor: currentThemeHex }}>
-                      <th className="py-2 px-1 text-left font-bold text-slate-700">Stock Item Description</th>
-                      {colProductCode && <th className="py-2 px-1 text-left font-bold text-slate-700">SKU / Code</th>}
-                      <th className="py-2 px-1 text-right font-bold text-slate-700">Qty</th>
-                      {colUnitPrice && <th className="py-2 px-1 text-right font-bold text-slate-700">Price</th>}
-                      {colDiscount && <th className="py-2 px-1 text-right font-bold text-slate-700">Discount</th>}
-                      <th className="py-2 px-1 text-right font-bold text-slate-700">Subtotal</th>
+                    <tr className="bg-slate-50 border-b-2" style={{ borderBottomColor: currentThemeHex, borderBottomWidth: `${borderWidth}px` }}>
+                      <th style={{ padding: `${tablePadding}px`, width: `${colWidthProduct}%` }} className="text-left font-bold text-slate-700">Stock Item Description</th>
+                      {colProductCode && <th style={{ padding: `${tablePadding}px`, width: `${colWidthCode}%` }} className="text-left font-bold text-slate-700">SKU / Code</th>}
+                      <th style={{ padding: `${tablePadding}px`, width: `${colWidthQty}%` }} className="text-right font-bold text-slate-700">Qty</th>
+                      {colUnitPrice && <th style={{ padding: `${tablePadding}px`, width: `${colWidthPrice}%` }} className="text-right font-bold text-slate-700">Price</th>}
+                      {colDiscount && <th style={{ padding: `${tablePadding}px`, width: `${colWidthDiscount}%` }} className="text-right font-bold text-slate-700">Discount</th>}
+                      <th style={{ padding: `${tablePadding}px`, width: `${colWidthSubtotal}%` }} className="text-right font-bold text-slate-700">Subtotal</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     <tr>
-                      <td className="py-2 px-1 font-bold text-slate-800">ANB copper armored Cable 4 Core</td>
-                      {colProductCode && <td className="py-2 px-1 text-slate-500 font-mono">COP-ARM-4C</td>}
-                      <td className="py-2 px-1 text-right font-mono">100 meters</td>
-                      {colUnitPrice && <td className="py-2 px-1 text-right font-mono">$25.00</td>}
-                      {colDiscount && <td className="py-2 px-1 text-right font-mono">5.0%</td>}
-                      <td className="py-2 px-1 text-right font-bold font-mono">$2,375.00</td>
+                      <td style={{ padding: `${tablePadding}px` }} className="font-bold text-slate-800">ANB copper armored Cable 4 Core</td>
+                      {colProductCode && <td style={{ padding: `${tablePadding}px` }} className="text-slate-500 font-mono">COP-ARM-4C</td>}
+                      <td style={{ padding: `${tablePadding}px` }} className="text-right font-mono">100 meters</td>
+                      {colUnitPrice && <td style={{ padding: `${tablePadding}px` }} className="text-right font-mono">$25.00</td>}
+                      {colDiscount && <td style={{ padding: `${tablePadding}px` }} className="text-right font-mono">5.0%</td>}
+                      <td style={{ padding: `${tablePadding}px` }} className="text-right font-bold font-mono">$2,375.00</td>
                     </tr>
                     <tr>
-                      <td className="py-2 px-1 font-bold text-slate-800">Standard Brass Connectors 12mm</td>
-                      {colProductCode && <td className="py-2 px-1 text-slate-500 font-mono">BR-CONN-12</td>}
-                      <td className="py-2 px-1 text-right font-mono">40 units</td>
-                      {colUnitPrice && <td className="py-2 px-1 text-right font-mono">$8.00</td>}
-                      {colDiscount && <td className="py-2 px-1 text-right font-mono">0.0%</td>}
-                      <td className="py-2 px-1 text-right font-bold font-mono">$320.00</td>
+                      <td style={{ padding: `${tablePadding}px` }} className="font-bold text-slate-800">Standard Brass Connectors 12mm</td>
+                      {colProductCode && <td style={{ padding: `${tablePadding}px` }} className="text-slate-500 font-mono">BR-CONN-12</td>}
+                      <td style={{ padding: `${tablePadding}px` }} className="text-right font-mono">40 units</td>
+                      {colUnitPrice && <td style={{ padding: `${tablePadding}px` }} className="text-right font-mono">$8.00</td>}
+                      {colDiscount && <td style={{ padding: `${tablePadding}px` }} className="text-right font-mono">0.0%</td>}
+                      <td style={{ padding: `${tablePadding}px` }} className="text-right font-bold font-mono">$320.00</td>
                     </tr>
                   </tbody>
                 </table>
@@ -938,17 +1447,19 @@ export default function PdfTemplateEditor() {
                   {/* Right totals */}
                   <table className="text-slate-650 space-y-1.5 w-60" style={{ fontSize: `${bodyFontSize}px`, textAlign: totalsAlign }}>
                     <tbody>
-                      <tr className="flex justify-between py-0.5">
-                        <td>Subtotal Billed Value:</td>
-                        <td className="font-bold text-slate-800">$2,695.00</td>
-                      </tr>
+                      {showTaxableAmount && (
+                        <tr className="flex justify-between py-0.5">
+                          <td>Taxable Amount:</td>
+                          <td className="font-bold text-slate-800">$2,695.00</td>
+                        </tr>
+                      )}
                       {colDiscount && (
                         <tr className="flex justify-between py-0.5 text-rose-500">
                           <td>Overall Discount (0%):</td>
                           <td className="font-bold font-mono">-$0.00</td>
                         </tr>
                       )}
-                      {colTax ? (
+                      {showTaxBreakup ? (
                         <>
                           <tr className="flex justify-between py-0.5 text-emerald-600">
                             <td>CGST (9.0%):</td>
@@ -959,35 +1470,66 @@ export default function PdfTemplateEditor() {
                             <td className="font-bold font-mono">+$242.55</td>
                           </tr>
                         </>
-                      ) : (
+                      ) : colTax ? (
                         <tr className="flex justify-between py-0.5">
                           <td>Sales Tax (18%):</td>
                           <td className="font-bold font-mono">+$485.10</td>
                         </tr>
-                      )}
+                      ) : null}
                       <tr className="flex justify-between font-black border-t pt-2 text-[11px]" style={{ color: currentThemeHex, borderTopColor: currentThemeHex }}>
                         <td>Grand Total Due:</td>
                         <td className="font-mono">$3,180.10</td>
                       </tr>
+                      {showAmountInWords && (
+                        <tr className="flex flex-col border-t border-dashed mt-2 pt-2 text-[9px] text-slate-500 leading-normal text-left font-sans">
+                          <td className="font-bold uppercase text-[8px] tracking-wide">Amount in words:</td>
+                          <td className="italic">Indian Rupees Three Thousand One Hundred Eighty And Ten Paisa Only</td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
               </div>
 
-              {/* Terms Footer */}
-              {showTerms && terms && (
-                <div 
-                  className="border-t pt-3 leading-relaxed text-slate-400"
-                  style={{ 
-                    marginTop: `${sectionSpacing}px`, 
-                    textAlign: termsAlign,
-                    fontSize: `${bodyFontSize * 0.8}px`
+              {/* 6. Footer (Terms Left, Signature Right) */}
+              {(showSignature || (showTerms && terms)) && (
+                <div
+                  className="flex justify-between items-end mt-6 gap-6 pt-3 border-t"
+                  style={{
+                    borderTopWidth: `${borderWidth}px`,
+                    borderColor: themeColor === '#000000' ? '#ddd' : `${themeColor}40`,
+                    paddingBottom: `${footerPadding}px`,
+                    marginTop: `${sectionSpacing}px`
                   }}
                 >
-                  <strong className="block uppercase text-[8.5px] text-slate-500 font-bold mb-1" style={{ fontSize: `${bodyFontSize * 0.85}px` }}>Declarations, Terms & Sign-off Details</strong>
-                  {terms.split('\n').map((line, idx) => (
-                    <div key={idx}>{line}</div>
-                  ))}
+                  {/* Terms & Declarations on the Left */}
+                  {showTerms && terms ? (
+                    <div
+                      className="text-left leading-relaxed text-slate-400 flex-1 max-w-[65%]"
+                      style={{
+                        fontSize: `${bodyFontSize * 0.8}px`
+                      }}
+                    >
+                      <strong className="block uppercase text-[8px] text-slate-500 font-bold mb-1" style={{ fontSize: `${bodyFontSize * 0.85}px` }}>Terms & Declarations</strong>
+                      {terms.split('\n').map((line, idx) => (
+                        <div key={idx}>{line}</div>
+                      ))}
+                    </div>
+                  ) : <div />}
+
+                  {/* Signature Signoff Block on the Right */}
+                  {showSignature ? (
+                    <div className="text-center w-40 flex flex-col items-center shrink-0">
+                      {signatureBase64 ? (
+                        <div className="h-10 flex items-center justify-center p-0.5 mb-1 bg-slate-50/50 rounded max-w-full">
+                          <img src={signatureBase64} alt="Signature" style={{ maxHeight: `${signatureSize}px`, objectFit: 'contain' }} />
+                        </div>
+                      ) : (
+                        <div className="h-10 w-full border-b border-slate-300 border-dashed mb-1" />
+                      )}
+                      <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wide block">{signatureLabel}</span>
+                    </div>
+                  ) : <div />}
                 </div>
               )}
             </div>

@@ -55,7 +55,20 @@ export default function DeliveryChallan({
     queryKey: ['templates', 'CHALLAN'],
     queryFn: () => apiClient.get<{ templates: any[] }>('/api/sales/templates?docType=CHALLAN')
   });
-  const templates = templatesRes?.templates || [];
+  const templates = React.useMemo(() => {
+    return (templatesRes?.templates || []).map((t: any) => {
+      let settingsParsed: any = {};
+      try {
+        settingsParsed = typeof t.settings === 'string' ? JSON.parse(t.settings) : t.settings;
+      } catch (e) {
+        console.error("Failed to parse settings JSON", e);
+      }
+      return {
+        ...t,
+        ...settingsParsed
+      };
+    });
+  }, [templatesRes]);
 
   // Print Preview States
   const [customizingInvoice, setCustomizingInvoice] = useState<any>(null);
@@ -85,6 +98,33 @@ export default function DeliveryChallan({
     headerPadding: 16,
     sectionSpacing: 24,
     logoSize: 48,
+    // Spacing & Width overrides
+    tablePadding: 8,
+    colWidthProduct: 40,
+    colWidthCode: 15,
+    colWidthQty: 10,
+    colWidthPrice: 15,
+    colWidthDiscount: 10,
+    colWidthSubtotal: 10,
+    // Signature block overrides
+    showSignature: true,
+    signatureBase64: null as string | null,
+    signatureLabel: 'Authorized Signatory',
+    signatureSize: 45,
+    borderWidth: 1,
+    footerPadding: 16,
+    headerName: '',
+    headerSubtitle: '',
+    showMetadata: true,
+    showCustomerDetails: true,
+    showInvoiceDate: true,
+    showDueDate: true,
+    showStatus: true,
+    showCustomerName: true,
+    showCustomerType: true,
+    showCustomerCategory: true,
+    showCustomerTel: true,
+    showPaymentTerms: true,
   });
 
   const getThemeHex = (colorName: string) => {
@@ -97,8 +137,6 @@ export default function DeliveryChallan({
     }
   };
   const currentThemeHex = getThemeHex(themeColor);
-
-
 
   const applyTemplateSettings = (tpl: any) => {
     setCustomTitle(tpl.title || 'DELIVERY CHALLAN');
@@ -126,6 +164,31 @@ export default function DeliveryChallan({
       headerPadding: tpl.headerPadding || 16,
       sectionSpacing: tpl.sectionSpacing || 24,
       logoSize: tpl.logoSize || 48,
+      tablePadding: tpl.tablePadding ?? 8,
+      colWidthProduct: tpl.colWidthProduct ?? 40,
+      colWidthCode: tpl.colWidthCode ?? 15,
+      colWidthQty: tpl.colWidthQty ?? 10,
+      colWidthPrice: tpl.colWidthPrice ?? 15,
+      colWidthDiscount: tpl.colWidthDiscount ?? 10,
+      colWidthSubtotal: tpl.colWidthSubtotal ?? 10,
+      showSignature: tpl.showSignature ?? true,
+      signatureBase64: tpl.signatureBase64 || null,
+      signatureLabel: tpl.signatureLabel || 'Authorized Signatory',
+      signatureSize: tpl.signatureSize || 45,
+      borderWidth: tpl.borderWidth ?? 1,
+      footerPadding: tpl.footerPadding ?? 16,
+      headerName: tpl.headerName || '',
+      headerSubtitle: tpl.headerSubtitle || '',
+      showMetadata: tpl.showMetadata ?? true,
+      showCustomerDetails: tpl.showCustomerDetails ?? true,
+      showInvoiceDate: tpl.showInvoiceDate ?? true,
+      showDueDate: tpl.showDueDate ?? true,
+      showStatus: tpl.showStatus ?? true,
+      showCustomerName: tpl.showCustomerName ?? true,
+      showCustomerType: tpl.showCustomerType ?? true,
+      showCustomerCategory: tpl.showCustomerCategory ?? true,
+      showCustomerTel: tpl.showCustomerTel ?? true,
+      showPaymentTerms: tpl.showPaymentTerms ?? true,
     });
   };
 
@@ -154,15 +217,11 @@ export default function DeliveryChallan({
   const [customerId, setCustomerId] = useState('');
   const [status, setStatus] = useState('ISSUED');
 
-  // Partial Transit state
-  const [transitMode, setTransitMode] = useState<'FULL' | 'PARTIAL' | 'CUSTOM'>('FULL');
-  const [transitFactor, setTransitFactor] = useState('50.00'); // % of volume to dispatch
-
   React.useEffect(() => {
     setSelectedOrderIds([]);
   }, [customerId]);
 
-  const applySalesOrderTransit = (orderIds: string[], style: 'FULL' | 'PARTIAL' | 'CUSTOM', factor: number) => {
+  const applySalesOrderTransit = (orderIds: string[]) => {
     const selectedOrders = salesOrders.filter(so => orderIds.includes(so.id));
     const mergedItems: Record<string, { productId: string; quantity: number; price: number }> = {};
 
@@ -172,9 +231,6 @@ export default function DeliveryChallan({
         if (remaining <= 0) continue;
 
         let qtyToShip = remaining;
-        if (style === 'PARTIAL') {
-          qtyToShip = remaining * (factor / 100);
-        }
 
         if (mergedItems[item.productId]) {
           mergedItems[item.productId].quantity += qtyToShip;
@@ -197,25 +253,19 @@ export default function DeliveryChallan({
     setItems(newItemsList.length > 0 ? newItemsList : [{ productId: products[0]?.id || '', quantity: '1', price: String(products[0]?.pricing || 0) }]);
   };
 
-  const prevTransitModeRef = React.useRef(transitMode);
-  const prevTransitFactorRef = React.useRef(transitFactor);
   const prevSelectedOrderIdsRef = React.useRef(selectedOrderIds);
 
   React.useEffect(() => {
-    const modeChanged = prevTransitModeRef.current !== transitMode;
-    const factorChanged = prevTransitFactorRef.current !== transitFactor;
     const ordersChanged = JSON.stringify(prevSelectedOrderIdsRef.current) !== JSON.stringify(selectedOrderIds);
 
-    if (ordersChanged || (modeChanged && transitMode !== 'CUSTOM') || (factorChanged && transitMode === 'PARTIAL')) {
+    if (ordersChanged) {
       if (selectedOrderIds.length > 0) {
-        applySalesOrderTransit(selectedOrderIds, transitMode, parseFloat(transitFactor) || 100);
+        applySalesOrderTransit(selectedOrderIds);
       }
     }
 
-    prevTransitModeRef.current = transitMode;
-    prevTransitFactorRef.current = transitFactor;
     prevSelectedOrderIdsRef.current = selectedOrderIds;
-  }, [transitMode, transitFactor, selectedOrderIds]);
+  }, [selectedOrderIds]);
 
   const handleToggleSalesOrder = (soId: string) => {
     let updatedIds = [...selectedOrderIds];
@@ -236,8 +286,6 @@ export default function DeliveryChallan({
   const openAddModal = () => {
     setCustomerId(customers[0]?.id || '');
     setStatus('ISSUED');
-    setTransitMode('FULL');
-    setTransitFactor('50.00');
     setSelectedOrderIds([]);
     setItems([{ productId: products[0]?.id || '', quantity: '1', price: String(products[0]?.pricing || 0) }]);
     setIsEditing(false);
@@ -250,8 +298,6 @@ export default function DeliveryChallan({
   const openEditModal = (dc: any) => {
     setCustomerId(dc.customerId);
     setStatus(dc.status || 'ISSUED');
-    setTransitMode('CUSTOM');
-    setTransitFactor('100.00');
 
     let resolvedOrderIds: string[] = [];
     if (dc.salesOrderId) {
@@ -628,36 +674,7 @@ export default function DeliveryChallan({
                 </div>
               )}
 
-              {/* Transit Arrangement Mode */}
-              <div>
-                <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Transit Arrangement *</label>
-                <select
-                  value={transitMode}
-                  onChange={e => setTransitMode(e.target.value as 'FULL' | 'PARTIAL' | 'CUSTOM')}
-                  className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none cursor-pointer"
-                >
-                  <option value="FULL">FULL TRANSIT (100% Volume)</option>
-                  <option value="PARTIAL">PARTIAL TRANSIT (Split Volumes / Partial Dispatch)</option>
-                  <option value="CUSTOM">CUSTOM TRANSIT (Manual/Freeform)</option>
-                </select>
-              </div>
 
-              {/* Transit Percentage */}
-              {transitMode === 'PARTIAL' && (
-                <div>
-                  <label className="text-[9px] font-bold text-indigo-400 tracking-wider uppercase block mb-1">Transit Factor Percentage (%) *</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="1"
-                    max="100"
-                    required
-                    value={transitFactor}
-                    onChange={e => setTransitFactor(e.target.value)}
-                    className="w-full bg-[var(--bg-primary)] border border-indigo-500/30 focus:border-indigo-500 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none font-mono"
-                  />
-                </div>
-              )}
 
               {/* Items grid */}
               <div className="md:col-span-2 border-t border-[var(--border-color)] pt-4 mt-2">
@@ -882,39 +899,55 @@ export default function DeliveryChallan({
                           <div className="font-mono text-[10px] text-slate-650 mt-1">Challan No: {dc.challanNo}</div>
                         </div>
 
-                        {pdfCustomizer.showCompanyDetails && companyProfile && (
+                        {pdfCustomizer.showCompanyDetails && (pdfCustomizer.headerName || companyProfile) && (
                           <div
                             style={{
                               textAlign: pdfCustomizer.headerAlign === 'center' ? 'center' : pdfCustomizer.headerAlign === 'right' ? 'left' : 'right',
-                              fontSize: `${pdfCustomizer.headerFontSize}px`
                             }}
-                            className="text-slate-700 leading-normal max-w-xs"
+                            className="text-slate-700 leading-normal max-w-xs whitespace-pre-line"
                           >
-                            <strong className="text-slate-900 text-[11px]">{companyProfile.name}</strong><br/>
-                            {companyProfile.addressLine1 && `${companyProfile.addressLine1}, `}
-                            {companyProfile.addressLine2 && `${companyProfile.addressLine2}, `}<br/>
-                            {companyProfile.city && `${companyProfile.city}, `}
-                            {companyProfile.state && `${companyProfile.state} - `}
-                            {companyProfile.pincode && companyProfile.pincode}<br/>
-                            {companyProfile.gstNumber && <strong>GSTIN: {companyProfile.gstNumber}</strong>}
+                            {pdfCustomizer.headerName ? (
+                              <>
+                                <div className="font-extrabold text-slate-900" style={{ fontSize: `${pdfCustomizer.headerFontSize}px` }}>{pdfCustomizer.headerName}</div>
+                                <div className="text-slate-500 font-medium mt-0.5" style={{ fontSize: `${pdfCustomizer.headerFontSize * 0.7}px` }}>{pdfCustomizer.headerSubtitle}</div>
+                              </>
+                            ) : companyProfile ? (
+                              <>
+                                <div className="font-extrabold text-slate-900" style={{ fontSize: `${pdfCustomizer.headerFontSize}px` }}>{companyProfile.name}</div>
+                                <div className="text-slate-500 font-medium mt-0.5" style={{ fontSize: `${pdfCustomizer.headerFontSize * 0.7}px` }}>
+                                  {companyProfile.addressLine1 && `${companyProfile.addressLine1}, `}
+                                  {companyProfile.addressLine2 && `${companyProfile.addressLine2}, `}<br/>
+                                  {companyProfile.city && `${companyProfile.city}, `}
+                                  {companyProfile.state && `${companyProfile.state} - `}
+                                  {companyProfile.pincode && companyProfile.pincode}<br/>
+                                  {companyProfile.gstNumber && <strong>GSTIN: {companyProfile.gstNumber}</strong>}
+                                </div>
+                              </>
+                            ) : null}
                           </div>
                         )}
                       </div>
 
                       {/* Meta Columns */}
-                      <div className="grid grid-cols-2 gap-6 text-[10px] text-slate-700">
-                        <div className="space-y-1">
-                          <div className="text-[9px] uppercase font-bold text-slate-450">Document Metadata</div>
-                          <div>Issue Date: <span className="font-semibold text-slate-900">{new Date(dc.date).toLocaleDateString()}</span></div>
-                          <div>Status: <span className="font-semibold text-slate-900">{dc.status}</span></div>
+                      {(pdfCustomizer.showMetadata || pdfCustomizer.showCustomerDetails) && (
+                        <div className="grid grid-cols-2 gap-6 text-[10px] text-slate-700">
+                          {pdfCustomizer.showMetadata ? (
+                            <div className="space-y-1">
+                              <div className="text-[9px] uppercase font-bold text-slate-450">Document Metadata</div>
+                              {pdfCustomizer.showInvoiceDate && <div>Issue Date: <span className="font-semibold text-slate-900">{new Date(dc.date).toLocaleDateString()}</span></div>}
+                              {pdfCustomizer.showStatus && <div>Status: <span className="font-semibold text-slate-900">{dc.status}</span></div>}
+                            </div>
+                          ) : <div />}
+                          {pdfCustomizer.showCustomerDetails ? (
+                            <div className="space-y-1 text-right">
+                              <div className="text-[9px] uppercase font-bold text-slate-450">Recipient Details</div>
+                              {pdfCustomizer.showCustomerName && <div className="font-semibold text-slate-900">{cust?.name || 'Client Name'}</div>}
+                              {pdfCustomizer.showCustomerType && <div>Type: {cust?.customerType || 'INDIVIDUAL'}</div>}
+                              {pdfCustomizer.showCustomerTel && cust?.contactNo && <div>Tel: {cust.contactNo}</div>}
+                            </div>
+                          ) : <div />}
                         </div>
-                        <div className="space-y-1 text-right">
-                          <div className="text-[9px] uppercase font-bold text-slate-450">Recipient Details</div>
-                          <div className="font-semibold text-slate-900">{cust?.name || 'Client Name'}</div>
-                          <div>Type: {cust?.customerType || 'INDIVIDUAL'}</div>
-                          {cust?.contactNo && <div>Tel: {cust.contactNo}</div>}
-                        </div>
-                      </div>
+                      )}
 
                       {/* Addresses Row */}
                       <div className="grid grid-cols-2 gap-6 border-t border-slate-200 pt-4" style={{ textAlign: pdfCustomizer.addressAlign }}>
@@ -942,11 +975,11 @@ export default function DeliveryChallan({
                         <table className="w-full text-left border-collapse" style={{ fontSize: `${pdfCustomizer.bodyFontSize}px` }}>
                           <thead>
                             <tr className="border-b-2 font-bold bg-slate-50" style={{ borderBottomColor: currentThemeHex }}>
-                              <th className="py-2.5 px-2 text-slate-800">Description</th>
-                              {pdfCustomizer.colProductCode && <th className="py-2.5 px-2">SKU / Code</th>}
-                              <th className="py-2.5 px-2 text-right">Quantity</th>
-                              {pdfCustomizer.colUnitPrice && <th className="py-2.5 px-2 text-right">Unit Value</th>}
-                              <th className="py-2.5 px-2 text-right">Total Valuation</th>
+                              <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthProduct}%` }} className="text-slate-800">Description</th>
+                              {pdfCustomizer.colProductCode && <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthCode}%` }}>SKU / Code</th>}
+                              <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthQty}%` }} className="text-right">Quantity</th>
+                              {pdfCustomizer.colUnitPrice && <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthPrice}%` }} className="text-right">Unit Value</th>}
+                              <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthSubtotal}%` }} className="text-right">Total Valuation</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -955,18 +988,18 @@ export default function DeliveryChallan({
                               const itemSub = it.quantity * (it.price || 0);
                               return (
                                 <tr key={it.id || it.productId} className="border-b border-slate-100">
-                                  <td className="py-2.5 px-2 font-medium text-slate-900">
+                                  <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="font-medium text-slate-900">
                                     {prod?.name || 'Unknown Product'}
                                     {prod?.description && <span className="block text-[8px] text-slate-500 font-normal mt-0.5">{prod.description}</span>}
                                   </td>
                                   {pdfCustomizer.colProductCode && (
-                                    <td className="py-2.5 px-2 font-mono text-slate-650">{prod?.sku || 'N/A'}</td>
+                                    <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="font-mono text-slate-650">{prod?.sku || 'N/A'}</td>
                                   )}
-                                  <td className="py-2.5 px-2 text-right font-mono">{it.quantity} {prod?.uom || 'PCS'}</td>
+                                  <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="text-right font-mono">{it.quantity} {prod?.uom || 'PCS'}</td>
                                   {pdfCustomizer.colUnitPrice && (
-                                    <td className="py-2.5 px-2 text-right font-mono">{currencySymbol}{(it.price || 0).toFixed(2)}</td>
+                                    <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="text-right font-mono">{currencySymbol}{(it.price || 0).toFixed(2)}</td>
                                   )}
-                                  <td className="py-2.5 px-2 text-right font-mono font-semibold text-slate-900">{currencySymbol}{itemSub.toFixed(2)}</td>
+                                  <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="text-right font-mono font-semibold text-slate-900">{currencySymbol}{itemSub.toFixed(2)}</td>
                                 </tr>
                               );
                             })}
@@ -989,16 +1022,39 @@ export default function DeliveryChallan({
                       </div>
                     </div>
 
-                    {/* Footer */}
-                    {pdfCustomizer.showTerms && (
+                    {/* Footer: Terms Left, Signature Right */}
+                    {(pdfCustomizer.showSignature || (pdfCustomizer.showTerms && customNotes)) && (
                       <div
-                        className="border-t border-slate-200 pt-4 mt-12 text-slate-550 leading-normal"
+                        className="border-t border-slate-200 pt-4 mt-6 flex justify-between items-start gap-8"
                         style={{
-                          textAlign: pdfCustomizer.termsAlign,
-                          fontSize: `${pdfCustomizer.bodyFontSize - 1}px`
+                          borderTopWidth: pdfCustomizer.borderWidth > 0 ? `${pdfCustomizer.borderWidth}px` : '0px',
+                          borderColor: (themeColor as string) === '#000000' ? '#ddd' : `${currentThemeHex}40`,
+                          paddingBottom: `${pdfCustomizer.footerPadding}px`
                         }}
                       >
-                        {customNotes}
+                        {/* Left block: Terms & Conditions */}
+                        <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+                          {pdfCustomizer.showTerms && customNotes && (
+                            <div className="text-slate-500 leading-normal" style={{ fontSize: `${pdfCustomizer.bodyFontSize - 1}px` }}>
+                              <strong className="block uppercase text-[8.5px] text-slate-700 font-bold mb-1">Terms & Conditions</strong>
+                              <div className="whitespace-pre-wrap">{customNotes}</div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Right block: Signature Signoff */}
+                        {pdfCustomizer.showSignature && (
+                          <div className="shrink-0 text-center w-40 flex flex-col items-center">
+                            {pdfCustomizer.signatureBase64 ? (
+                              <div className="h-12 flex items-center justify-center p-0.5 mb-1 bg-slate-50/50 rounded max-w-full">
+                                <img src={pdfCustomizer.signatureBase64} alt="Signature" style={{ maxHeight: `${pdfCustomizer.signatureSize}px`, objectFit: 'contain' }} />
+                              </div>
+                            ) : (
+                              <div className="h-12 w-full border-b border-slate-300 border-dashed mb-1" />
+                            )}
+                            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wide block">{pdfCustomizer.signatureLabel}</span>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1094,39 +1150,55 @@ export default function DeliveryChallan({
                   <div className="font-mono text-[10px] text-slate-650 mt-1">Challan No: {dc.challanNo}</div>
                 </div>
 
-                {pdfCustomizer.showCompanyDetails && companyProfile && (
+                {pdfCustomizer.showCompanyDetails && (pdfCustomizer.headerName || companyProfile) && (
                   <div
                     style={{
                       textAlign: pdfCustomizer.headerAlign === 'center' ? 'center' : pdfCustomizer.headerAlign === 'right' ? 'left' : 'right',
-                      fontSize: `${pdfCustomizer.headerFontSize}px`
                     }}
-                    className="text-slate-700 leading-normal max-w-xs"
+                    className="text-slate-700 leading-normal max-w-xs whitespace-pre-line"
                   >
-                    <strong className="text-slate-900 text-[11px]">{companyProfile.name}</strong><br/>
-                    {companyProfile.addressLine1 && `${companyProfile.addressLine1}, `}
-                    {companyProfile.addressLine2 && `${companyProfile.addressLine2}, `}<br/>
-                    {companyProfile.city && `${companyProfile.city}, `}
-                    {companyProfile.state && `${companyProfile.state} - `}
-                    {companyProfile.pincode && companyProfile.pincode}<br/>
-                    {companyProfile.gstNumber && <strong>GSTIN: {companyProfile.gstNumber}</strong>}
+                    {pdfCustomizer.headerName ? (
+                      <>
+                        <div className="font-extrabold text-slate-900" style={{ fontSize: `${pdfCustomizer.headerFontSize}px` }}>{pdfCustomizer.headerName}</div>
+                        <div className="text-slate-500 font-medium mt-0.5" style={{ fontSize: `${pdfCustomizer.headerFontSize * 0.7}px` }}>{pdfCustomizer.headerSubtitle}</div>
+                      </>
+                    ) : companyProfile ? (
+                      <>
+                        <div className="font-extrabold text-slate-900" style={{ fontSize: `${pdfCustomizer.headerFontSize}px` }}>{companyProfile.name}</div>
+                        <div className="text-slate-500 font-medium mt-0.5" style={{ fontSize: `${pdfCustomizer.headerFontSize * 0.7}px` }}>
+                          {companyProfile.addressLine1 && `${companyProfile.addressLine1}, `}
+                          {companyProfile.addressLine2 && `${companyProfile.addressLine2}, `}<br/>
+                          {companyProfile.city && `${companyProfile.city}, `}
+                          {companyProfile.state && `${companyProfile.state} - `}
+                          {companyProfile.pincode && companyProfile.pincode}<br/>
+                          {companyProfile.gstNumber && <strong>GSTIN: {companyProfile.gstNumber}</strong>}
+                        </div>
+                      </>
+                    ) : null}
                   </div>
                 )}
               </div>
 
               {/* Meta */}
-              <div className="grid grid-cols-2 gap-6 text-[10px] text-slate-700">
-                <div className="space-y-1">
-                  <div className="text-[9px] uppercase font-bold text-slate-455">Document Metadata</div>
-                  <div>Issue Date: <span className="font-semibold text-slate-900">{new Date(dc.date).toLocaleDateString()}</span></div>
-                  <div>Status: <span className="font-semibold text-slate-900">{dc.status}</span></div>
+              {(pdfCustomizer.showMetadata || pdfCustomizer.showCustomerDetails) && (
+                <div className="grid grid-cols-2 gap-6 text-[10px] text-slate-700">
+                  {pdfCustomizer.showMetadata ? (
+                    <div className="space-y-1">
+                      <div className="text-[9px] uppercase font-bold text-slate-455">Document Metadata</div>
+                      {pdfCustomizer.showInvoiceDate && <div>Issue Date: <span className="font-semibold text-slate-900">{new Date(dc.date).toLocaleDateString()}</span></div>}
+                      {pdfCustomizer.showStatus && <div>Status: <span className="font-semibold text-slate-900">{dc.status}</span></div>}
+                    </div>
+                  ) : <div />}
+                  {pdfCustomizer.showCustomerDetails ? (
+                    <div className="space-y-1 text-right">
+                      <div className="text-[9px] uppercase font-bold text-slate-455">Recipient Details</div>
+                      {pdfCustomizer.showCustomerName && <div className="font-semibold text-slate-900">{cust?.name || 'Client Name'}</div>}
+                      {pdfCustomizer.showCustomerType && <div>Type: {cust?.customerType || 'INDIVIDUAL'}</div>}
+                      {pdfCustomizer.showCustomerTel && cust?.contactNo && <div>Tel: {cust.contactNo}</div>}
+                    </div>
+                  ) : <div />}
                 </div>
-                <div className="space-y-1 text-right">
-                  <div className="text-[9px] uppercase font-bold text-slate-455">Recipient Details</div>
-                  <div className="font-semibold text-slate-900">{cust?.name || 'Client Name'}</div>
-                  <div>Type: {cust?.customerType || 'INDIVIDUAL'}</div>
-                  {cust?.contactNo && <div>Tel: {cust.contactNo}</div>}
-                </div>
-              </div>
+              )}
 
               {/* Addresses Row */}
               <div className="grid grid-cols-2 gap-6 border-t border-slate-200 pt-4" style={{ textAlign: pdfCustomizer.addressAlign }}>
@@ -1146,17 +1218,16 @@ export default function DeliveryChallan({
                   </div>
                 )}
               </div>
-
-              {/* Items Table */}
+              {/* Items Table */}
               <div className="pt-2">
                 <table className="w-full text-left border-collapse" style={{ fontSize: `${pdfCustomizer.bodyFontSize}px` }}>
                   <thead>
                     <tr className="border-b-2 font-bold bg-slate-50" style={{ borderBottomColor: currentThemeHex }}>
-                      <th className="py-2.5 px-2 text-slate-800">Description</th>
-                      {pdfCustomizer.colProductCode && <th className="py-2.5 px-2">SKU / Code</th>}
-                      <th className="py-2.5 px-2 text-right">Quantity</th>
-                      {pdfCustomizer.colUnitPrice && <th className="py-2.5 px-2 text-right">Unit Value</th>}
-                      <th className="py-2.5 px-2 text-right">Total Valuation</th>
+                      <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthProduct}%` }} className="text-slate-800">Description</th>
+                      {pdfCustomizer.colProductCode && <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthCode}%` }}>SKU / Code</th>}
+                      <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthQty}%` }} className="text-right">Quantity</th>
+                      {pdfCustomizer.colUnitPrice && <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthPrice}%` }} className="text-right">Unit Value</th>}
+                      <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthSubtotal}%` }} className="text-right">Total Valuation</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1165,18 +1236,18 @@ export default function DeliveryChallan({
                       const itemSub = it.quantity * (it.price || 0);
                       return (
                         <tr key={it.id || it.productId} className="border-b border-slate-100">
-                          <td className="py-2.5 px-2 font-medium text-slate-900">
+                          <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="font-medium text-slate-900">
                             {prod?.name || 'Unknown Product'}
                             {prod?.description && <span className="block text-[8px] text-slate-500 font-normal mt-0.5">{prod.description}</span>}
                           </td>
                           {pdfCustomizer.colProductCode && (
-                            <td className="py-2.5 px-2 font-mono text-slate-650">{prod?.sku || 'N/A'}</td>
+                            <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="font-mono text-slate-650">{prod?.sku || 'N/A'}</td>
                           )}
-                          <td className="py-2.5 px-2 text-right font-mono">{it.quantity} {prod?.uom || 'PCS'}</td>
+                          <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="text-right font-mono">{it.quantity} {prod?.uom || 'PCS'}</td>
                           {pdfCustomizer.colUnitPrice && (
-                            <td className="py-2.5 px-2 text-right font-mono">{currencySymbol}{(it.price || 0).toFixed(2)}</td>
+                            <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="text-right font-mono">{currencySymbol}{(it.price || 0).toFixed(2)}</td>
                           )}
-                          <td className="py-2.5 px-2 text-right font-mono font-semibold text-slate-900">{currencySymbol}{itemSub.toFixed(2)}</td>
+                          <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="text-right font-mono font-semibold text-slate-900">{currencySymbol}{itemSub.toFixed(2)}</td>
                         </tr>
                       );
                     })}
@@ -1199,15 +1270,39 @@ export default function DeliveryChallan({
               </div>
             </div>
 
-            {pdfCustomizer.showTerms && (
+            {/* Footer: Terms Left, Signature Right */}
+            {(pdfCustomizer.showSignature || (pdfCustomizer.showTerms && customNotes)) && (
               <div
-                className="border-t border-slate-200 pt-4 mt-12 text-slate-550 text-center leading-normal"
+                className="border-t border-slate-200 pt-4 mt-6 flex justify-between items-start gap-8"
                 style={{
-                  textAlign: pdfCustomizer.termsAlign,
-                  fontSize: `${pdfCustomizer.bodyFontSize - 1}px`
+                  borderTopWidth: pdfCustomizer.borderWidth > 0 ? `${pdfCustomizer.borderWidth}px` : '0px',
+                  borderColor: (themeColor as string) === '#000000' ? '#ddd' : `${currentThemeHex}40`,
+                  paddingBottom: `${pdfCustomizer.footerPadding}px`
                 }}
               >
-                {customNotes}
+                {/* Left block: Terms & Conditions */}
+                <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+                  {pdfCustomizer.showTerms && customNotes && (
+                    <div className="text-slate-550 leading-normal" style={{ fontSize: `${pdfCustomizer.bodyFontSize - 1}px` }}>
+                      <strong className="block uppercase text-[8.5px] text-slate-700 font-bold mb-1">Terms & Conditions</strong>
+                      <div className="whitespace-pre-wrap">{customNotes}</div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Right block: Signature Signoff */}
+                {pdfCustomizer.showSignature && (
+                  <div className="shrink-0 text-center w-40 flex flex-col items-center">
+                    {pdfCustomizer.signatureBase64 ? (
+                      <div className="h-12 flex items-center justify-center p-0.5 mb-1 bg-slate-50/50 rounded max-w-full">
+                        <img src={pdfCustomizer.signatureBase64} alt="Signature" style={{ maxHeight: `${pdfCustomizer.signatureSize}px`, objectFit: 'contain' }} />
+                      </div>
+                    ) : (
+                      <div className="h-12 w-full border-b border-slate-300 border-dashed mb-1" />
+                    )}
+                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wide block">{pdfCustomizer.signatureLabel}</span>
+                  </div>
+                )}
               </div>
             )}
           </div>

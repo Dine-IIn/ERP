@@ -27,7 +27,9 @@ export default function VendorMaster({
     contactNo: '',
     email: '',
     paymentTerms: 'IMMEDIATE',
-    gstDetails: ''
+    gstDetails: '',
+    gstNumber: '',
+    panNumber: ''
   });
 
   const [bankDetailsForm, setBankDetailsForm] = useState({
@@ -48,7 +50,9 @@ export default function VendorMaster({
       contactNo: '',
       email: '',
       paymentTerms: 'IMMEDIATE',
-      gstDetails: ''
+      gstDetails: '',
+      gstNumber: '',
+      panNumber: ''
     });
     setBankDetailsForm({
       bankName: '',
@@ -70,7 +74,9 @@ export default function VendorMaster({
       contactNo: vend.contactNo,
       email: vend.email || '',
       paymentTerms: vend.paymentTerms || 'IMMEDIATE',
-      gstDetails: vend.gstDetails || ''
+      gstDetails: vend.gstDetails || '',
+      gstNumber: vend.gstNumber || vend.gstDetails || '',
+      panNumber: vend.panNumber || ''
     });
 
     let parsedBank = { bankName: '', accountHolder: '', accountNumber: '', ifscCode: '' };
@@ -78,14 +84,24 @@ export default function VendorMaster({
       try {
         const parsed = JSON.parse(vend.bankDetails);
         parsedBank = {
-          bankName: parsed.bankName || '',
-          accountHolder: parsed.accountHolder || '',
-          accountNumber: parsed.accountNumber || '',
-          ifscCode: parsed.ifscCode || ''
+          bankName: vend.bankName || parsed.bankName || '',
+          accountHolder: vend.accountHolderName || parsed.accountHolder || '',
+          accountNumber: vend.accountNumber || parsed.accountNumber || '',
+          ifscCode: vend.ifscCode || parsed.ifscCode || ''
         };
       } catch {
-        parsedBank.bankName = vend.bankDetails;
+        parsedBank.bankName = vend.bankName || vend.bankDetails || '';
+        parsedBank.accountHolder = vend.accountHolderName || '';
+        parsedBank.accountNumber = vend.accountNumber || '';
+        parsedBank.ifscCode = vend.ifscCode || '';
       }
+    } else {
+      parsedBank = {
+        bankName: vend.bankName || '',
+        accountHolder: vend.accountHolderName || '',
+        accountNumber: vend.accountNumber || '',
+        ifscCode: vend.ifscCode || ''
+      };
     }
     setBankDetailsForm(parsedBank);
 
@@ -109,9 +125,21 @@ export default function VendorMaster({
 
     const payload = {
       ...form,
-      bankDetails: JSON.stringify(bankDetailsForm),
-      creditTime: 0 // Removed from UI, default to 0
-      };
+      bankDetails: JSON.stringify({
+        bankName: bankDetailsForm.bankName,
+        accountHolder: bankDetailsForm.accountHolder,
+        accountNumber: bankDetailsForm.accountNumber,
+        ifscCode: bankDetailsForm.ifscCode
+      }),
+      creditTime: 0,
+      bankName: bankDetailsForm.bankName,
+      accountHolderName: bankDetailsForm.accountHolder,
+      accountNumber: bankDetailsForm.accountNumber,
+      ifscCode: bankDetailsForm.ifscCode,
+      gstDetails: form.gstNumber,
+      gstNumber: form.gstNumber,
+      panNumber: form.panNumber
+    };
 
       const parsed = VendorSchema.safeParse(payload);
       if (!parsed.success) {
@@ -227,7 +255,7 @@ export default function VendorMaster({
                 <td className="p-3 shrink-0">
                   <span className="font-bold text-[var(--text-primary)] block">{v.name}</span>
                   <span className="text-[10px] text-[var(--text-muted)] block mt-0.5 truncate max-w-xs">
-                    {v.bankDetails ? (() => {
+                    {v.bankName ? `Bank: ${v.bankName}, A/C: ${v.accountNumber || 'N/A'}` : v.bankDetails ? (() => {
                       try {
                         const b = JSON.parse(v.bankDetails);
                         if (!b.bankName && !b.accountNumber) return 'No bank details registered';
@@ -251,8 +279,13 @@ export default function VendorMaster({
                 </td>
                 <td className="p-3 shrink-0">
                   <span className="text-[var(--text-primary)] font-bold font-mono block">
-                    GSTIN: {v.gstDetails || 'UNREGISTERED'}
+                    GSTIN: {v.gstNumber || v.gstDetails || 'UNREGISTERED'}
                   </span>
+                  {v.panNumber && (
+                    <span className="text-[10px] text-indigo-400 font-mono block mt-0.5">
+                      PAN: {v.panNumber}
+                    </span>
+                  )}
                   <span className="text-[10px] text-[var(--text-secondary)] block mt-0.5 font-mono uppercase">
                     Terms: {v.paymentTerms ? v.paymentTerms.replace('_', ' ') : 'IMMEDIATE'}
                   </span>
@@ -385,10 +418,22 @@ export default function VendorMaster({
                 <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">GSTIN Number (GST Details)</label>
                 <input
                   type="text"
-                  value={form.gstDetails}
-                  onChange={e => setForm({ ...form, gstDetails: e.target.value })}
+                  value={form.gstNumber}
+                  onChange={e => setForm({ ...form, gstNumber: e.target.value })}
                   className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none font-mono uppercase"
                   placeholder="e.g. 24AAAAA1111A1Z1"
+                />
+              </div>
+
+              {/* PAN Number */}
+              <div>
+                <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">PAN Number (Optional)</label>
+                <input
+                  type="text"
+                  value={form.panNumber}
+                  onChange={e => setForm({ ...form, panNumber: e.target.value })}
+                  className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none font-mono uppercase"
+                  placeholder="e.g. ABCDE1234F"
                 />
               </div>
 

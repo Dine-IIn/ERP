@@ -44,7 +44,7 @@ export async function createCustomer(req: AuthenticatedRequest, res: Response) {
 
     const parsedBody = CreateCustomerBodySchema.safeParse(req.body);
     if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
-    const { name, customerType, customerGroup, contactPerson, contactNo, email, billingAddress, shippingAddress, creditLimit, creditTime, state, clientClassification } = parsedBody.data;
+    const { name, customerType, customerGroup, contactPerson, contactNo, email, billingAddress, shippingAddress, creditLimit, creditTime, state, clientClassification, currencySymbol, bankName, accountHolderName, accountNumber, ifscCode, gstNumber, panNumber } = parsedBody.data;
 
     if (!name || !customerType || !contactNo || !state) {
       return res.status(400).json({ error: "Name, customerType, contactNo, and state are required fields" });
@@ -72,7 +72,14 @@ export async function createCustomer(req: AuthenticatedRequest, res: Response) {
         creditLimit: creditLimit ? parseFloat(creditLimit) : 0.0,
         creditTime: creditTime ? parseInt(creditTime) : 0,
         state: state,
-        clientClassification: clientClassification || "NATIONAL"
+        clientClassification: clientClassification || "NATIONAL",
+        currencySymbol: currencySymbol || "$",
+        bankName: bankName || null,
+        accountHolderName: accountHolderName || null,
+        accountNumber: accountNumber || null,
+        ifscCode: ifscCode || null,
+        gstNumber: gstNumber || null,
+        panNumber: panNumber || null
       }
     });
 
@@ -102,7 +109,7 @@ export async function updateCustomer(req: AuthenticatedRequest, res: Response) {
     const { id } = req.params;
     const parsedBody = UpdateCustomerBodySchema.safeParse(req.body);
     if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
-    const { name, customerType, customerGroup, contactPerson, contactNo, email, billingAddress, shippingAddress, creditLimit, creditTime, state, clientClassification } = parsedBody.data;
+    const { name, customerType, customerGroup, contactPerson, contactNo, email, billingAddress, shippingAddress, creditLimit, creditTime, state, clientClassification, currencySymbol, bankName, accountHolderName, accountNumber, ifscCode, gstNumber, panNumber } = parsedBody.data;
 
     const customerToUpdate = await prisma.customer.findFirst({
       where: { id, companyId }
@@ -132,7 +139,14 @@ export async function updateCustomer(req: AuthenticatedRequest, res: Response) {
         ...(creditLimit !== undefined && { creditLimit: parseFloat(creditLimit) || 0.0 }),
         ...(creditTime !== undefined && { creditTime: parseInt(creditTime) || 0 }),
         ...(state !== undefined && { state }),
-        ...(clientClassification !== undefined && { clientClassification })
+        ...(clientClassification !== undefined && { clientClassification }),
+        ...(currencySymbol !== undefined && { currencySymbol }),
+        ...(bankName !== undefined && { bankName: bankName || null }),
+        ...(accountHolderName !== undefined && { accountHolderName: accountHolderName || null }),
+        ...(accountNumber !== undefined && { accountNumber: accountNumber || null }),
+        ...(ifscCode !== undefined && { ifscCode: ifscCode || null }),
+        ...(gstNumber !== undefined && { gstNumber: gstNumber || null }),
+        ...(panNumber !== undefined && { panNumber: panNumber || null })
       }
     });
 
@@ -230,7 +244,7 @@ export async function createVendor(req: AuthenticatedRequest, res: Response) {
 
     const parsedBody = CreateVendorBodySchema.safeParse(req.body);
     if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
-    const { name, isVendor, contactNo, email, bankDetails, paymentTerms, gstDetails, creditTime } = parsedBody.data;
+    const { name, isVendor, contactNo, email, bankDetails, paymentTerms, gstDetails, creditTime, bankName, accountHolderName, accountNumber, ifscCode, gstNumber, panNumber } = parsedBody.data;
 
     if (!name || !contactNo) {
       return res.status(400).json({ error: "Name and contactNo are required fields" });
@@ -253,7 +267,13 @@ export async function createVendor(req: AuthenticatedRequest, res: Response) {
         bankDetails: bankDetails || null,
         paymentTerms: paymentTerms || null,
         gstDetails: gstDetails || null,
-        creditTime: creditTime ? parseInt(creditTime) : 0
+        creditTime: creditTime ? parseInt(creditTime) : 0,
+        bankName: bankName || null,
+        accountHolderName: accountHolderName || null,
+        accountNumber: accountNumber || null,
+        ifscCode: ifscCode || null,
+        gstNumber: gstNumber || null,
+        panNumber: panNumber || null
       }
     });
 
@@ -283,7 +303,7 @@ export async function updateVendor(req: AuthenticatedRequest, res: Response) {
     const { id } = req.params;
     const parsedBody = UpdateVendorBodySchema.safeParse(req.body);
     if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
-    const { name, isVendor, contactNo, email, bankDetails, paymentTerms, gstDetails, creditTime } = parsedBody.data;
+    const { name, isVendor, contactNo, email, bankDetails, paymentTerms, gstDetails, creditTime, bankName, accountHolderName, accountNumber, ifscCode, gstNumber, panNumber } = parsedBody.data;
 
     const vendorToUpdate = await prisma.vendor.findFirst({
       where: { id, companyId }
@@ -309,7 +329,13 @@ export async function updateVendor(req: AuthenticatedRequest, res: Response) {
         ...(bankDetails !== undefined && { bankDetails: bankDetails || null }),
         ...(paymentTerms !== undefined && { paymentTerms: paymentTerms || null }),
         ...(gstDetails !== undefined && { gstDetails: gstDetails || null }),
-        ...(creditTime !== undefined && { creditTime: parseInt(creditTime) || 0 })
+        ...(creditTime !== undefined && { creditTime: parseInt(creditTime) || 0 }),
+        ...(bankName !== undefined && { bankName: bankName || null }),
+        ...(accountHolderName !== undefined && { accountHolderName: accountHolderName || null }),
+        ...(accountNumber !== undefined && { accountNumber: accountNumber || null }),
+        ...(ifscCode !== undefined && { ifscCode: ifscCode || null }),
+        ...(gstNumber !== undefined && { gstNumber: gstNumber || null }),
+        ...(panNumber !== undefined && { panNumber: panNumber || null })
       }
     });
 

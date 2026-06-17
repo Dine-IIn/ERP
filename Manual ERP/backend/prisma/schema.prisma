@@ -1,5 +1,5 @@
 datasource db {
-  provider = "postgres"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -365,8 +365,15 @@ model Customer {
   creditTime      Int      @default(0)
   clientClassification String?  @default("NATIONAL") // "NATIONAL" or "INTERNATIONAL"
   state           String   @default("Gujarat")
+  currencySymbol  String   @default("$")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+  bankName             String?
+  accountHolderName    String?
+  accountNumber        String?
+  ifscCode             String?
+  gstNumber            String?
+  panNumber            String?
   salesOrders     SalesOrder[]
   proformaInvoices ProformaInvoice[]
   salesInvoices   SalesInvoice[]
@@ -392,6 +399,12 @@ model Vendor {
   creditTime   Int      @default(0)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  bankName             String?
+  accountHolderName    String?
+  accountNumber        String?
+  ifscCode             String?
+  gstNumber            String?
+  panNumber            String?
   vendorQuotations VendorQuotation[]
   purchaseOrders   PurchaseOrder[]
   vendorPayments   VendorPayment[]
@@ -503,6 +516,20 @@ model SalesOrder {
   status       String           @default("PENDING") // PENDING, DISPATCHED, COMPLETED, CANCELLED
   items        SalesOrderItem[]
   dispatches   Dispatch[]
+  billingAddress            String?
+  shippingAddress           String?
+  shippingState             String?
+  shippingName              String?
+  customerName              String?
+  customerContactNo         String?
+  customerEmail             String?
+  customerBankName          String?
+  customerAccountHolderName String?
+  customerAccountNumber     String?
+  customerIfscCode          String?
+  customerGstNumber         String?
+  customerPanNumber         String?
+  templateSettings          String?
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
 
@@ -543,6 +570,20 @@ model ProformaInvoice {
   total      Float
   status     String               @default("DRAFT") // DRAFT, SENT, PAID, CANCELLED
   items      ProformaInvoiceItem[]
+  billingAddress            String?
+  shippingAddress           String?
+  shippingState             String?
+  shippingName              String?
+  customerName              String?
+  customerContactNo         String?
+  customerEmail             String?
+  customerBankName          String?
+  customerAccountHolderName String?
+  customerAccountNumber     String?
+  customerIfscCode          String?
+  customerGstNumber         String?
+  customerPanNumber         String?
+  templateSettings          String?
   createdAt  DateTime             @default(now())
   updatedAt  DateTime             @updatedAt
 
@@ -584,6 +625,16 @@ model SalesInvoice {
   shippingName    String?
   salesOrderId    String?
   salesOrderIds   String?            // JSON string for merged Sales Orders
+  customerName              String?
+  customerContactNo         String?
+  customerEmail             String?
+  customerBankName          String?
+  customerAccountHolderName String?
+  customerAccountNumber     String?
+  customerIfscCode          String?
+  customerGstNumber         String?
+  customerPanNumber         String?
+  templateSettings          String?
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
 

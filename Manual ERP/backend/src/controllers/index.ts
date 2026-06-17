@@ -359,13 +359,15 @@ export async function login(req: AuthenticatedRequest, res: Response) {
     });
 
     if (activeSessions.length > 0 && force !== true) {
-      const otherDeviceModel = activeSessions[0].deviceModel || "Unknown Device";
-      return res.status(409).json({
-        error: `Active session already exists on another ${finalDeviceType.toLowerCase()} device (${otherDeviceModel}).`,
-        sessionConflict: true,
-        deviceType: finalDeviceType,
-        deviceModel: otherDeviceModel
-      });
+      // DEV BYPASS: Allow multiple sessions for easy testing without blocking login
+      // const otherDeviceModel = activeSessions[0].deviceModel || "Unknown Device";
+      // return res.status(409).json({
+      //   error: `Active session already exists on another ${finalDeviceType.toLowerCase()} device (${otherDeviceModel}).`,
+      //   sessionConflict: true,
+      //   deviceType: finalDeviceType,
+      //   deviceModel: otherDeviceModel
+      // });
+      console.log('Bypassing session conflict error for dev testing');
     }
 
     // If force is true or no active sessions exist, terminate previous sessions of this device type

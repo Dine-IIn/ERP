@@ -463,7 +463,27 @@ export const CreateBomBodySchema = z.any();
 export const CreateBrandBodySchema = z.any();
 export const CreateCategoryBodySchema = z.any();
 export const CreateChatGroupSchema = z.any();
-export const CreateCustomerBodySchema = z.any();
+export const CreateCustomerBodySchema = z.object({
+  name: z.string(),
+  customerType: z.string(),
+  customerGroup: z.string().optional().nullable(),
+  contactPerson: z.string().optional().nullable(),
+  contactNo: z.string(),
+  email: z.string().optional().nullable(),
+  billingAddress: z.string().optional().nullable(),
+  shippingAddress: z.string().optional().nullable(),
+  creditLimit: z.any().optional(),
+  creditTime: z.any().optional(),
+  state: z.string().optional(),
+  clientClassification: z.string().optional(),
+  currencySymbol: z.string().optional(),
+  bankName: z.string().optional().nullable(),
+  accountHolderName: z.string().optional().nullable(),
+  accountNumber: z.string().optional().nullable(),
+  ifscCode: z.string().optional().nullable(),
+  gstNumber: z.string().optional().nullable(),
+  panNumber: z.string().optional().nullable(),
+}).passthrough();
 export const CreateDepartmentSchema = z.any();
 export const CreateJobCardBodySchema = z.any();
 export const CreateLogBodySchema = z.any();
@@ -473,7 +493,22 @@ export const CreateQcRecordBodySchema = z.any();
 export const CreateRoutingBodySchema = z.any();
 export const CreateShiftBodySchema = z.any();
 export const CreateUserAdminSchema = z.any();
-export const CreateVendorBodySchema = z.any();
+export const CreateVendorBodySchema = z.object({
+  name: z.string(),
+  isVendor: z.boolean().optional(),
+  contactNo: z.string(),
+  email: z.string().optional().nullable(),
+  bankDetails: z.string().optional().nullable(),
+  paymentTerms: z.string().optional().nullable(),
+  gstDetails: z.string().optional().nullable(),
+  creditTime: z.any().optional(),
+  bankName: z.string().optional().nullable(),
+  accountHolderName: z.string().optional().nullable(),
+  accountNumber: z.string().optional().nullable(),
+  ifscCode: z.string().optional().nullable(),
+  gstNumber: z.string().optional().nullable(),
+  panNumber: z.string().optional().nullable(),
+}).passthrough();
 export const CreateWorkCenterBodySchema = z.any();
 export const CreateWorkOrderBodySchema = z.any();
 export const DisbursePayrollSchema = z.any();
@@ -487,11 +522,16 @@ export const LeadSchema = z.any();
 export const LeaveRequestSchema = z.any();
 export const ListAttendanceQuerySchema = z.any();
 export const ListAuditLogsQuerySchema = z.any();
-export const ListCustomersQuerySchema = z.any();
+export const ListCustomersQuerySchema = z.object({
+  search: z.string().optional(),
+  group: z.string().optional(),
+}).passthrough();
 export const ListLeaveRequestsQuerySchema = z.any();
 export const ListPayrollQuerySchema = z.any();
 export const ListProductsQuerySchema = z.any();
-export const ListVendorsQuerySchema = z.any();
+export const ListVendorsQuerySchema = z.object({
+  search: z.string().optional(),
+}).passthrough();
 export const ManageChatGroupMembersSchema = z.any();
 export const OpportunitySchema = z.any();
 export const PaymentSchema = z.any();
@@ -502,7 +542,27 @@ export const ShiftRosterSchema = z.any();
 export const UpdateBackupSettingsSchema = z.any();
 export const UpdateBomBodySchema = z.any();
 export const UpdateChatGroupSettingsSchema = z.any();
-export const UpdateCustomerBodySchema = z.any();
+export const UpdateCustomerBodySchema = z.object({
+  name: z.string().optional(),
+  customerType: z.string().optional(),
+  customerGroup: z.string().optional().nullable(),
+  contactPerson: z.string().optional().nullable(),
+  contactNo: z.string().optional(),
+  email: z.string().optional().nullable(),
+  billingAddress: z.string().optional().nullable(),
+  shippingAddress: z.string().optional().nullable(),
+  creditLimit: z.any().optional(),
+  creditTime: z.any().optional(),
+  state: z.string().optional(),
+  clientClassification: z.string().optional(),
+  currencySymbol: z.string().optional(),
+  bankName: z.string().optional().nullable(),
+  accountHolderName: z.string().optional().nullable(),
+  accountNumber: z.string().optional().nullable(),
+  ifscCode: z.string().optional().nullable(),
+  gstNumber: z.string().optional().nullable(),
+  panNumber: z.string().optional().nullable(),
+}).passthrough();
 export const UpdateDepartmentSchema = z.any();
 export const UpdateEmployeeSchema = z.any();
 export const UpdateJobCardBodySchema = z.any();
@@ -515,6 +575,21 @@ export const UpdateRolePermissionsSchema = z.any();
 export const UpdateRoutingBodySchema = z.any();
 export const UpdateShiftBodySchema = z.any();
 export const UpdateUserAdminSchema = z.any();
-export const UpdateVendorBodySchema = z.any();
+export const UpdateVendorBodySchema = z.object({
+  name: z.string().optional(),
+  isVendor: z.boolean().optional(),
+  contactNo: z.string().optional(),
+  email: z.string().optional().nullable(),
+  bankDetails: z.string().optional().nullable(),
+  paymentTerms: z.string().optional().nullable(),
+  gstDetails: z.string().optional().nullable(),
+  creditTime: z.any().optional(),
+  bankName: z.string().optional().nullable(),
+  accountHolderName: z.string().optional().nullable(),
+  accountNumber: z.string().optional().nullable(),
+  ifscCode: z.string().optional().nullable(),
+  gstNumber: z.string().optional().nullable(),
+  panNumber: z.string().optional().nullable(),
+}).passthrough();
 export const UpdateWorkCenterBodySchema = z.any();
 export const UpdateWorkOrderBodySchema = z.any();

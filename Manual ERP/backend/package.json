@@ -9,6 +9,7 @@
     "build": "prisma generate && tsc",
     "start": "node dist/index.js",
     "prisma:generate": "prisma generate",
+    "prisma:push": "prisma db push",
     "prisma:migrate": "prisma migrate dev",
     "package": "npm run build && powershell -Command \"New-Item -ItemType Directory -Force -Path build; Copy-Item -Path prisma/schema.prisma -Destination build/schema.prisma\" && pkg . --output build/ERPServer.exe"
   },

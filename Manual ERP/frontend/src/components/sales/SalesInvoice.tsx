@@ -15,6 +15,31 @@ const INDIAN_STATES = [
   "Delhi", "Jammu and Kashmir", "Ladakh", "Lakshadweep", "Puducherry"
 ];
 
+const convertNumberToWords = (amount: number): string => {
+  if (amount === 0) return "Indian Rupees Zero Only";
+  const isNegative = amount < 0;
+  const absoluteAmount = Math.abs(amount);
+  const rupees = Math.floor(absoluteAmount);
+  const paise = Math.round((absoluteAmount - rupees) * 100);
+  const convert = (n: number): string => {
+    const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+    const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+    if (n < 20) return ones[n];
+    if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 !== 0 ? " " + ones[n % 10] : "");
+    if (n < 1000) return ones[Math.floor(n / 100)] + " Hundred" + (n % 100 !== 0 ? " " + convert(n % 100) : "");
+    if (n < 100000) return convert(Math.floor(n / 1000)) + " Thousand" + (n % 1000 !== 0 ? " " + convert(n % 1000) : "");
+    if (n < 10000000) return convert(Math.floor(n / 100000)) + " Lakh" + (n % 100000 !== 0 ? " " + convert(n % 100000) : "");
+    return convert(Math.floor(n / 10000000)) + " Crore" + (n % 10000000 !== 0 ? " " + convert(n % 10000000) : "");
+  };
+  let result = "Indian Rupees ";
+  if (isNegative) result += "Negative ";
+  if (rupees > 0) result += convert(rupees);
+  else result += "Zero";
+  if (paise > 0) result += " And " + convert(paise) + " Paisa";
+  result += " Only";
+  return result.replace(/\s+/g, ' ').trim();
+};
+
 interface SalesInvoiceProps {
   invoices: any[];
   customers: any[];
@@ -54,9 +79,7 @@ export default function SalesInvoice({
   const [tax, setTax] = useState('18.00'); // Default tax (e.g. 18% GST)
   const [status, setStatus] = useState('UNPAID');
 
-  // Partial Billing state
-  const [billingMode, setBillingMode] = useState<'FULL' | 'PARTIAL' | 'CUSTOM'>('FULL');
-  const [billingFactor, setBillingFactor] = useState('100.00'); // percentage of volume to bill
+  // Removed billingMode and billingFactor states
 
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
 
@@ -79,7 +102,20 @@ export default function SalesInvoice({
   const salesOrders = ordersData?.orders || [];
 
   const { data: templatesData } = useQuery({ queryKey: ['templates', 'INVOICE'], queryFn: () => apiClient.get<{ templates: any[] }>('/api/sales/templates?docType=INVOICE') });
-  const templates = templatesData?.templates || [];
+  const templates = React.useMemo(() => {
+    return (templatesData?.templates || []).map((t: any) => {
+      let settingsParsed: any = {};
+      try {
+        settingsParsed = typeof t.settings === 'string' ? JSON.parse(t.settings) : t.settings;
+      } catch (e) {
+        console.error("Failed to parse settings JSON", e);
+      }
+      return {
+        ...t,
+        ...settingsParsed
+      };
+    });
+  }, [templatesData]);
   
   const [billingAddress, setBillingAddress] = useState('');
   const [shippingAddress, setShippingAddress] = useState('');
@@ -103,6 +139,12 @@ export default function SalesInvoice({
     colUnitPrice: true,
     colDiscount: true,
     colTax: true,
+    showCustomerBankDetails: true,
+    showCustomerGSTNumber: true,
+    showCustomerPANNumber: true,
+    showAmountInWords: true,
+    showTaxableAmount: true,
+    showTaxBreakup: true,
     logoBase64: null as string | null,
     headerAlign: 'left' as 'left' | 'center' | 'right',
     titleAlign: 'left' as 'left' | 'center' | 'right',
@@ -115,6 +157,33 @@ export default function SalesInvoice({
     headerPadding: 16,
     sectionSpacing: 24,
     logoSize: 48,
+    // Spacing & Width overrides
+    tablePadding: 8,
+    colWidthProduct: 40,
+    colWidthCode: 15,
+    colWidthQty: 10,
+    colWidthPrice: 15,
+    colWidthDiscount: 10,
+    colWidthSubtotal: 10,
+    // Signature block overrides
+    showSignature: true,
+    signatureBase64: null as string | null,
+    signatureLabel: 'Authorized Signatory',
+    signatureSize: 45,
+    borderWidth: 1,
+    footerPadding: 16,
+    headerName: '',
+    headerSubtitle: '',
+    showMetadata: true,
+    showCustomerDetails: true,
+    showInvoiceDate: true,
+    showDueDate: true,
+    showStatus: true,
+    showCustomerName: true,
+    showCustomerType: true,
+    showCustomerCategory: true,
+    showCustomerTel: true,
+    showPaymentTerms: true,
   });
 
   const [themeColor, setThemeColor] = useState('indigo');
@@ -139,8 +208,6 @@ export default function SalesInvoice({
     }
   }, [activePrintInvoice]);
 
-
-
   const applyTemplateSettings = (tpl: any) => {
     setCustomTitle(tpl.title || 'Tax Invoice');
     setCustomNotes(tpl.terms || '');
@@ -156,6 +223,12 @@ export default function SalesInvoice({
       colUnitPrice: tpl.colUnitPrice ?? true,
       colDiscount: tpl.colDiscount ?? true,
       colTax: tpl.colTax ?? true,
+      showCustomerBankDetails: tpl.showCustomerBankDetails ?? true,
+      showCustomerGSTNumber: tpl.showCustomerGSTNumber ?? true,
+      showCustomerPANNumber: tpl.showCustomerPANNumber ?? true,
+      showAmountInWords: tpl.showAmountInWords ?? true,
+      showTaxableAmount: tpl.showTaxableAmount ?? true,
+      showTaxBreakup: tpl.showTaxBreakup ?? true,
       logoBase64: tpl.logoBase64 || null,
       headerAlign: tpl.headerAlign || 'left',
       titleAlign: tpl.titleAlign || 'left',
@@ -168,17 +241,57 @@ export default function SalesInvoice({
       headerPadding: tpl.headerPadding || 16,
       sectionSpacing: tpl.sectionSpacing || 24,
       logoSize: tpl.logoSize || 48,
+      tablePadding: tpl.tablePadding ?? 8,
+      colWidthProduct: tpl.colWidthProduct ?? 40,
+      colWidthCode: tpl.colWidthCode ?? 15,
+      colWidthQty: tpl.colWidthQty ?? 10,
+      colWidthPrice: tpl.colWidthPrice ?? 15,
+      colWidthDiscount: tpl.colWidthDiscount ?? 10,
+      colWidthSubtotal: tpl.colWidthSubtotal ?? 10,
+      showSignature: tpl.showSignature ?? true,
+      signatureBase64: tpl.signatureBase64 || null,
+      signatureLabel: tpl.signatureLabel || 'Authorized Signatory',
+      signatureSize: tpl.signatureSize || 45,
+      borderWidth: tpl.borderWidth ?? 1,
+      footerPadding: tpl.footerPadding ?? 16,
+      headerName: tpl.headerName || '',
+      headerSubtitle: tpl.headerSubtitle || '',
+      showMetadata: tpl.showMetadata ?? true,
+      showCustomerDetails: tpl.showCustomerDetails ?? true,
+      showInvoiceDate: tpl.showInvoiceDate ?? true,
+      showDueDate: tpl.showDueDate ?? true,
+      showStatus: tpl.showStatus ?? true,
+      showCustomerName: tpl.showCustomerName ?? true,
+      showCustomerType: tpl.showCustomerType ?? true,
+      showCustomerCategory: tpl.showCustomerCategory ?? true,
+      showCustomerTel: tpl.showCustomerTel ?? true,
+      showPaymentTerms: tpl.showPaymentTerms ?? true,
     });
   };
 
   React.useEffect(() => {
-    if (customizingInvoice && templates.length > 0) {
-      const defaultTpl = templates.find(t => t.isDefault);
-      if (defaultTpl) {
-        setSelectedTemplateId(defaultTpl.id);
-        applyTemplateSettings(defaultTpl);
-      } else {
-        setSelectedTemplateId('');
+    if (customizingInvoice) {
+      if (customizingInvoice.templateSettings) {
+        try {
+          const tpl = JSON.parse(customizingInvoice.templateSettings);
+          setCustomTitle(tpl.title || 'Tax Invoice');
+          setCustomNotes(tpl.terms || '');
+          setThemeColor(tpl.themeColor || 'indigo');
+          setPdfCustomizer(tpl.customizer || tpl);
+          setSelectedTemplateId('');
+          return;
+        } catch (e) {
+          console.error("Failed to parse invoice's templateSettings:", e);
+        }
+      }
+      if (templates.length > 0) {
+        const defaultTpl = templates.find(t => t.isDefault);
+        if (defaultTpl) {
+          setSelectedTemplateId(defaultTpl.id);
+          applyTemplateSettings(defaultTpl);
+        } else {
+          setSelectedTemplateId('');
+        }
       }
     }
   }, [customizingInvoice, templates]);
@@ -212,7 +325,7 @@ export default function SalesInvoice({
     setSelectedOrderIds([]);
   }, [customerId]);
 
-  const applySalesOrderBilling = (orderIds: string[], style: 'FULL' | 'PARTIAL' | 'CUSTOM', factor: number) => {
+  const applySalesOrderBilling = (orderIds: string[]) => {
     const selectedOrders = salesOrders.filter(so => orderIds.includes(so.id));
     const mergedItems: Record<string, { productId: string; quantity: number; price: number; discount: number }> = {};
 
@@ -222,9 +335,6 @@ export default function SalesInvoice({
         if (remaining <= 0) continue;
 
         let qtyToBill = remaining;
-        if (style === 'PARTIAL') {
-          qtyToBill = remaining * (factor / 100);
-        }
 
         if (mergedItems[item.productId]) {
           mergedItems[item.productId].quantity += qtyToBill;
@@ -249,25 +359,19 @@ export default function SalesInvoice({
     setItems(newItemsList.length > 0 ? newItemsList : [{ productId: products[0]?.id || '', quantity: '1', price: String(products[0]?.pricing || 0), discount: '0.00' }]);
   };
 
-  const prevBillingModeRef = React.useRef(billingMode);
-  const prevBillingFactorRef = React.useRef(billingFactor);
   const prevSelectedOrderIdsRef = React.useRef(selectedOrderIds);
 
   React.useEffect(() => {
-    const modeChanged = prevBillingModeRef.current !== billingMode;
-    const factorChanged = prevBillingFactorRef.current !== billingFactor;
     const ordersChanged = JSON.stringify(prevSelectedOrderIdsRef.current) !== JSON.stringify(selectedOrderIds);
 
-    if (ordersChanged || (modeChanged && billingMode !== 'CUSTOM') || (factorChanged && billingMode === 'PARTIAL')) {
+    if (ordersChanged) {
       if (selectedOrderIds.length > 0) {
-        applySalesOrderBilling(selectedOrderIds, billingMode, parseFloat(billingFactor) || 100);
+        applySalesOrderBilling(selectedOrderIds);
       }
     }
 
-    prevBillingModeRef.current = billingMode;
-    prevBillingFactorRef.current = billingFactor;
     prevSelectedOrderIdsRef.current = selectedOrderIds;
-  }, [billingMode, billingFactor, selectedOrderIds]);
+  }, [selectedOrderIds]);
 
   // Toggle order in list
   const handleToggleSalesOrder = (soId: string) => {
@@ -286,8 +390,6 @@ export default function SalesInvoice({
     setDiscount('0.00');
     setTax('18.00');
     setStatus('UNPAID');
-    setBillingMode('FULL');
-    setBillingFactor('100.00');
     setItems([{ productId: products[0]?.id || '', quantity: '1', price: String(products[0]?.pricing || 0), discount: '0.00' }]);
     setIsEditing(false);
     setEditingId(null);
@@ -315,8 +417,6 @@ export default function SalesInvoice({
     const estTaxPct = ((taxVal / sub) * 100).toFixed(1);
     setTax(estTaxPct);
     setStatus(inv.status || 'UNPAID');
-    setBillingMode('CUSTOM');
-    setBillingFactor('100.00');
 
     // Load new states
     setBillingAddress(inv.billingAddress || '');
@@ -1026,6 +1126,8 @@ export default function SalesInvoice({
         const cust = customers.find(c => c.id === inv.customerId);
         
         const discountVal = inv.subtotal * ((inv.discount || 0) / 100);
+        const taxableAmount = inv.subtotal - discountVal;
+        const taxRate = taxableAmount > 0 ? (inv.tax / taxableAmount) * 100 : 0.0;
         const isInternational = cust?.clientClassification === 'INTERNATIONAL';
         const isSameState = companyProfile && cust?.state === companyProfile.state;
         
@@ -1127,41 +1229,57 @@ export default function SalesInvoice({
                           <div className="font-mono text-[10px] text-slate-650 mt-1">Invoice No: {inv.invoiceNo}</div>
                         </div>
 
-                        {pdfCustomizer.showCompanyDetails && companyProfile && (
+                        {pdfCustomizer.showCompanyDetails && (pdfCustomizer.headerName || companyProfile) && (
                           <div
                             style={{
                               textAlign: pdfCustomizer.headerAlign === 'center' ? 'center' : pdfCustomizer.headerAlign === 'right' ? 'left' : 'right',
-                              fontSize: `${pdfCustomizer.headerFontSize}px`
                             }}
-                            className="text-slate-700 leading-normal max-w-xs"
+                            className="text-slate-700 leading-normal max-w-xs whitespace-pre-line"
                           >
-                            <strong className="text-slate-900 text-[11px]">{companyProfile.name}</strong><br/>
-                            {companyProfile.addressLine1 && `${companyProfile.addressLine1}, `}
-                            {companyProfile.addressLine2 && `${companyProfile.addressLine2}, `}<br/>
-                            {companyProfile.city && `${companyProfile.city}, `}
-                            {companyProfile.state && `${companyProfile.state} - `}
-                            {companyProfile.pincode && companyProfile.pincode}<br/>
-                            {companyProfile.gstNumber && <strong>GSTIN: {companyProfile.gstNumber}</strong>}
+                            {pdfCustomizer.headerName ? (
+                              <>
+                                <div className="font-extrabold text-slate-900" style={{ fontSize: `${pdfCustomizer.headerFontSize}px` }}>{pdfCustomizer.headerName}</div>
+                                <div className="text-slate-500 font-medium mt-0.5" style={{ fontSize: `${pdfCustomizer.headerFontSize * 0.7}px` }}>{pdfCustomizer.headerSubtitle}</div>
+                              </>
+                            ) : companyProfile ? (
+                              <>
+                                <div className="font-extrabold text-slate-900" style={{ fontSize: `${pdfCustomizer.headerFontSize}px` }}>{companyProfile.name}</div>
+                                <div className="text-slate-500 font-medium mt-0.5" style={{ fontSize: `${pdfCustomizer.headerFontSize * 0.7}px` }}>
+                                  {companyProfile.addressLine1 && `${companyProfile.addressLine1}, `}
+                                  {companyProfile.addressLine2 && `${companyProfile.addressLine2}, `}<br/>
+                                  {companyProfile.city && `${companyProfile.city}, `}
+                                  {companyProfile.state && `${companyProfile.state} - `}
+                                  {companyProfile.pincode && companyProfile.pincode}<br/>
+                                  {companyProfile.gstNumber && <strong>GSTIN: {companyProfile.gstNumber}</strong>}
+                                </div>
+                              </>
+                            ) : null}
                           </div>
                         )}
                       </div>
 
                       {/* Meta Columns */}
-                      <div className="grid grid-cols-2 gap-6 text-[10px] text-slate-700">
-                        <div className="space-y-1">
-                          <div className="text-[9px] uppercase font-bold text-slate-450">Invoice Metadata</div>
-                          <div>Invoice Date: <span className="font-semibold text-slate-900">{new Date(inv.date).toLocaleDateString()}</span></div>
-                          <div>Due Date: <span className="font-semibold text-slate-900">{inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : 'Immediate'}</span></div>
-                          <div>Status: <span className="font-semibold text-slate-900">{inv.status}</span></div>
+                      {(pdfCustomizer.showMetadata || pdfCustomizer.showCustomerDetails) && (
+                        <div className="grid grid-cols-2 gap-6 text-[10px] text-slate-700">
+                          {pdfCustomizer.showMetadata ? (
+                            <div className="space-y-1">
+                              <div className="text-[9px] uppercase font-bold text-slate-450">Invoice Metadata</div>
+                              {pdfCustomizer.showInvoiceDate && <div>Invoice Date: <span className="font-semibold text-slate-900">{new Date(inv.date).toLocaleDateString()}</span></div>}
+                              {pdfCustomizer.showDueDate && <div>Due Date: <span className="font-semibold text-slate-900">{inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : 'Immediate'}</span></div>}
+                              {pdfCustomizer.showStatus && <div>Status: <span className="font-semibold text-slate-900">{inv.status}</span></div>}
+                            </div>
+                          ) : <div />}
+                          {pdfCustomizer.showCustomerDetails ? (
+                            <div className="space-y-1 text-right">
+                              <div className="text-[9px] uppercase font-bold text-slate-450">Customer Classification</div>
+                              {pdfCustomizer.showCustomerName && <div className="font-semibold text-slate-900">{inv.customerName || cust?.name || 'Client Name'}</div>}
+                              {pdfCustomizer.showCustomerType && <div>Type: {cust?.customerType || 'INDIVIDUAL'}</div>}
+                              {pdfCustomizer.showCustomerCategory && <div>Category: {cust?.customerGroup || 'Standard Group'}</div>}
+                              {pdfCustomizer.showCustomerTel && (inv.customerContactNo || cust?.contactNo) && <div>Tel: {inv.customerContactNo || cust?.contactNo}</div>}
+                            </div>
+                          ) : <div />}
                         </div>
-                        <div className="space-y-1 text-right">
-                          <div className="text-[9px] uppercase font-bold text-slate-450">Customer Classification</div>
-                          <div className="font-semibold text-slate-900">{cust?.name || 'Client Name'}</div>
-                          <div>Type: {cust?.customerType || 'INDIVIDUAL'}</div>
-                          <div>Category: {cust?.customerGroup || 'Standard Group'}</div>
-                          {cust?.contactNo && <div>Tel: {cust.contactNo}</div>}
-                        </div>
-                      </div>
+                      )}
 
                       {/* Addresses Row */}
                       <div className="grid grid-cols-2 gap-6 border-t border-slate-200 pt-4" style={{ textAlign: pdfCustomizer.addressAlign }}>
@@ -1169,8 +1287,23 @@ export default function SalesInvoice({
                         {pdfCustomizer.showBillingAddress && (
                           <div className="text-slate-700 leading-relaxed" style={{ textAlign: pdfCustomizer.addressAlign }}>
                             <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Billing Destination (Bill To)</span>
-                            <strong className="text-slate-900">{cust?.name}</strong><br/>
+                            <strong className="text-slate-900">{inv.customerName || cust?.name || 'Client Name'}</strong><br/>
                             {inv.billingAddress || cust?.billingAddress || 'Billing address pending'}
+                            {pdfCustomizer.showCustomerGSTNumber && (inv.customerGstNumber || cust?.gstNumber) && (
+                              <span><br/><strong>GSTIN:</strong> {inv.customerGstNumber || cust?.gstNumber}</span>
+                            )}
+                            {pdfCustomizer.showCustomerPANNumber && (inv.customerPanNumber || cust?.panNumber) && (
+                              <span><br/><strong>PAN:</strong> {inv.customerPanNumber || cust?.panNumber}</span>
+                            )}
+                            {pdfCustomizer.showCustomerBankDetails && (inv.customerBankName || cust?.bankName || inv.customerAccountNumber || cust?.accountNumber) && (
+                              <div className="text-[9px] mt-2 pt-1 border-t border-slate-100 text-slate-550 leading-normal text-left">
+                                <strong>Customer Bank Details:</strong><br/>
+                                {(inv.customerBankName || cust?.bankName) && <span>Bank: {inv.customerBankName || cust?.bankName}<br/></span>}
+                                {(inv.customerAccountHolderName || cust?.accountHolderName) && <span>Holder: {inv.customerAccountHolderName || cust?.accountHolderName}<br/></span>}
+                                {(inv.customerAccountNumber || cust?.accountNumber) && <span>A/C No: {inv.customerAccountNumber || cust?.accountNumber}<br/></span>}
+                                {(inv.customerIfscCode || cust?.ifscCode) && <span>IFSC Code: {inv.customerIfscCode || cust?.ifscCode}</span>}
+                              </div>
+                            )}
                           </div>
                         )}
                         
@@ -1187,15 +1320,23 @@ export default function SalesInvoice({
 
                       {/* Items Table */}
                       <div className="pt-2">
-                        <table className="w-full text-left border-collapse" style={{ fontSize: `${pdfCustomizer.bodyFontSize}px` }}>
+                        <table 
+                          className="w-full text-left border-collapse" 
+                          style={{ 
+                            fontSize: `${pdfCustomizer.bodyFontSize}px`,
+                            borderWidth: pdfCustomizer.borderWidth > 0 ? `${pdfCustomizer.borderWidth}px` : '0px',
+                            borderStyle: 'solid',
+                            borderColor: (currentThemeHex as string) === '#000000' ? '#ddd' : (currentThemeHex as string)
+                          }}
+                        >
                           <thead>
-                            <tr className="border-b-2 font-bold bg-slate-50" style={{ borderBottomColor: currentThemeHex }}>
-                              <th className="py-2.5 px-2 text-slate-800">Description</th>
-                              {pdfCustomizer.colProductCode && <th className="py-2.5 px-2">SKU / Code</th>}
-                              <th className="py-2.5 px-2 text-right">Qty</th>
-                              {pdfCustomizer.colUnitPrice && <th className="py-2.5 px-2 text-right">Price</th>}
-                              {pdfCustomizer.colDiscount && <th className="py-2.5 px-2 text-right">Discount</th>}
-                              <th className="py-2.5 px-2 text-right">Subtotal</th>
+                            <tr className="border-b-2 font-bold bg-slate-50" style={{ borderBottomColor: currentThemeHex as string, borderBottomWidth: `${pdfCustomizer.borderWidth}px` }}>
+                              <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthProduct}%` }} className="text-slate-800">Description</th>
+                              {pdfCustomizer.colProductCode && <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthCode}%` }}>SKU / Code</th>}
+                              <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthQty}%` }} className="text-right">Qty</th>
+                              {pdfCustomizer.colUnitPrice && <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthPrice}%` }} className="text-right">Price</th>}
+                              {pdfCustomizer.colDiscount && <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthDiscount}%` }} className="text-right">Discount</th>}
+                              <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthSubtotal}%` }} className="text-right">Subtotal</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1205,21 +1346,21 @@ export default function SalesInvoice({
                               const itemDisc = itemSub * ((it.discount || 0) / 100);
                               return (
                                 <tr key={it.id || it.productId} className="border-b border-slate-100">
-                                  <td className="py-2.5 px-2 font-medium text-slate-900">
+                                  <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="font-medium text-slate-900">
                                     {prod?.name || 'Unknown Product'}
                                     {prod?.description && <span className="block text-[8px] text-slate-500 font-normal mt-0.5">{prod.description}</span>}
                                   </td>
                                   {pdfCustomizer.colProductCode && (
-                                    <td className="py-2.5 px-2 font-mono text-slate-650">{prod?.sku || 'N/A'}</td>
+                                    <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="font-mono text-slate-650">{prod?.sku || 'N/A'}</td>
                                   )}
-                                  <td className="py-2.5 px-2 text-right font-mono">{it.quantity} {prod?.uom || 'PCS'}</td>
+                                  <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="text-right font-mono">{it.quantity} {prod?.uom || 'PCS'}</td>
                                   {pdfCustomizer.colUnitPrice && (
-                                    <td className="py-2.5 px-2 text-right font-mono">{currencySymbol}{it.price.toFixed(2)}</td>
+                                    <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="text-right font-mono">{currencySymbol}{it.price.toFixed(2)}</td>
                                   )}
                                   {pdfCustomizer.colDiscount && (
-                                    <td className="py-2.5 px-2 text-right font-mono">{it.discount || 0}%</td>
+                                    <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="text-right font-mono">{it.discount || 0}%</td>
                                   )}
-                                  <td className="py-2.5 px-2 text-right font-mono font-semibold text-slate-900">{currencySymbol}{(itemSub - itemDisc).toFixed(2)}</td>
+                                  <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="text-right font-mono font-semibold text-slate-900">{currencySymbol}{(itemSub - itemDisc).toFixed(2)}</td>
                                 </tr>
                               );
                             })}
@@ -1235,15 +1376,21 @@ export default function SalesInvoice({
                               <td className="py-1.5 text-left">Subtotal:</td>
                               <td className="py-1.5 text-right font-mono text-slate-900">{currencySymbol}{inv.subtotal.toFixed(2)}</td>
                             </tr>
+                            {pdfCustomizer.showTaxableAmount && (
+                              <tr className="border-b border-slate-100">
+                                <td className="py-1.5 text-left">Taxable Amount:</td>
+                                <td className="py-1.5 text-right font-mono text-slate-900">{currencySymbol}{taxableAmount.toFixed(2)}</td>
+                              </tr>
+                            )}
                             {inv.discount > 0 && (
                               <tr className="border-b border-slate-100">
                                 <td className="py-1.5 text-left text-red-500">Discount ({inv.discount}%):</td>
-                                <td className="py-1.5 text-right font-mono text-red-500">-{currencySymbol}{discountVal.toFixed(2)}</td>
+                                <td className="py-1.5 text-right font-mono text-red-550 font-bold">-{currencySymbol}{discountVal.toFixed(2)}</td>
                               </tr>
                             )}
 
                             {/* Tax split layout */}
-                            {pdfCustomizer.colTax && (
+                            {pdfCustomizer.showTaxBreakup ? (
                               <>
                                 {isInternational ? (
                                   <tr className="border-b border-slate-100">
@@ -1253,34 +1400,40 @@ export default function SalesInvoice({
                                 ) : isSameState ? (
                                   <>
                                     <tr className="border-b border-slate-100">
-                                      <td className="py-1.5 text-left">CGST (9.0%):</td>
+                                      <td className="py-1.5 text-left">CGST ({(taxRate / 2).toFixed(1)}%):</td>
                                       <td className="py-1.5 text-right font-mono text-slate-900">{currencySymbol}{(inv.tax / 2).toFixed(2)}</td>
                                     </tr>
                                     <tr className="border-b border-slate-100">
-                                      <td className="py-1.5 text-left">SGST (9.0%):</td>
+                                      <td className="py-1.5 text-left">SGST ({(taxRate / 2).toFixed(1)}%):</td>
                                       <td className="py-1.5 text-right font-mono text-slate-900">{currencySymbol}{(inv.tax / 2).toFixed(2)}</td>
                                     </tr>
                                   </>
                                 ) : (
                                   <tr className="border-b border-slate-100">
-                                    <td className="py-1.5 text-left">IGST (18.0%):</td>
+                                    <td className="py-1.5 text-left">IGST ({taxRate.toFixed(1)}%):</td>
                                     <td className="py-1.5 text-right font-mono text-slate-900">{currencySymbol}{inv.tax.toFixed(2)}</td>
                                   </tr>
                                 )}
                               </>
-                            )}
-
-                            {!pdfCustomizer.colTax && (
+                            ) : pdfCustomizer.colTax ? (
                               <tr className="border-b border-slate-100">
                                 <td className="py-1.5 text-left">Sales Tax / GST:</td>
                                 <td className="py-1.5 text-right font-mono text-slate-900">{currencySymbol}{inv.tax.toFixed(2)}</td>
                               </tr>
-                            )}
+                            ) : null}
 
                             <tr className="border-t-2 font-extrabold text-[12px]" style={{ color: currentThemeHex, borderTopColor: currentThemeHex }}>
                               <td className="py-2.5 text-left">Grand Total:</td>
                               <td className="py-2.5 text-right font-mono">{currencySymbol}{inv.total.toFixed(2)}</td>
                             </tr>
+                            {pdfCustomizer.showAmountInWords && (
+                              <tr className="border-t border-dashed">
+                                <td colSpan={2} className="py-2 text-[9px] text-slate-500 text-left leading-normal font-sans">
+                                  <span className="font-bold uppercase block text-[8px] tracking-wide">Amount In Words:</span>
+                                  <span className="italic">{convertNumberToWords(inv.total)}</span>
+                                </td>
+                              </tr>
+                            )}
                           </tbody>
                         </table>
                       </div>
@@ -1298,16 +1451,39 @@ export default function SalesInvoice({
                       )}
                     </div>
 
-                    {/* Footer */}
-                    {pdfCustomizer.showTerms && (
+                    {/* Footer: Terms Left, Signature Right */}
+                    {(pdfCustomizer.showSignature || (pdfCustomizer.showTerms && customNotes)) && (
                       <div
-                        className="border-t border-slate-200 pt-4 mt-12 text-slate-550 leading-normal"
+                        className="border-t border-slate-200 pt-4 mt-6 flex justify-between items-start gap-8"
                         style={{
-                          textAlign: pdfCustomizer.termsAlign,
-                          fontSize: `${pdfCustomizer.bodyFontSize - 1}px`
+                          borderTopWidth: pdfCustomizer.borderWidth > 0 ? `${pdfCustomizer.borderWidth}px` : '0px',
+                          borderColor: themeColor === '#000000' ? '#ddd' : `${themeColor}40`,
+                          paddingBottom: `${pdfCustomizer.footerPadding}px`
                         }}
                       >
-                        {customNotes}
+                        {/* Left block: Terms & Conditions */}
+                        <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+                          {pdfCustomizer.showTerms && customNotes && (
+                            <div className="text-slate-500 leading-normal" style={{ fontSize: `${pdfCustomizer.bodyFontSize - 1}px` }}>
+                              <strong className="block uppercase text-[8.5px] text-slate-700 font-bold mb-1">Terms & Conditions</strong>
+                              <div className="whitespace-pre-wrap">{customNotes}</div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Right block: Signature Signoff */}
+                        {pdfCustomizer.showSignature && (
+                          <div className="shrink-0 text-center w-40 flex flex-col items-center">
+                            {pdfCustomizer.signatureBase64 ? (
+                              <div className="h-12 flex items-center justify-center p-0.5 mb-1 bg-slate-50/50 rounded max-w-full">
+                                <img src={pdfCustomizer.signatureBase64} alt="Signature" style={{ maxHeight: `${pdfCustomizer.signatureSize}px`, objectFit: 'contain' }} />
+                              </div>
+                            ) : (
+                              <div className="h-12 w-full border-b border-slate-300 border-dashed mb-1" />
+                            )}
+                            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wide block">{pdfCustomizer.signatureLabel}</span>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1323,7 +1499,21 @@ export default function SalesInvoice({
                   Cancel
                 </button>
                 <button
-                  onClick={() => {
+                  onClick={async () => {
+                    const settingsToSave = {
+                      title: customTitle,
+                      terms: customNotes,
+                      themeColor: themeColor,
+                      ...pdfCustomizer
+                    };
+                    try {
+                      await onUpdateInvoice(inv.id, {
+                        templateSettings: JSON.stringify(settingsToSave)
+                      });
+                      inv.templateSettings = JSON.stringify(settingsToSave);
+                    } catch (e) {
+                      console.error("Failed to save template settings to invoice:", e);
+                    }
                     setActivePrintInvoice(inv);
                   }}
                   className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl border-0 cursor-pointer transition-all shadow-lg shadow-emerald-600/10"
@@ -1343,6 +1533,8 @@ export default function SalesInvoice({
         const inv = activePrintInvoice;
         const cust = customers.find(c => c.id === inv.customerId);
         const discountVal = inv.subtotal * ((inv.discount || 0) / 100);
+        const taxableAmount = inv.subtotal - discountVal;
+        const taxRate = taxableAmount > 0 ? (inv.tax / taxableAmount) * 100 : 0.0;
         const isInternational = cust?.clientClassification === 'INTERNATIONAL';
         const isSameState = companyProfile && cust?.state === companyProfile.state;
         const logoSrc = pdfCustomizer.logoBase64 || companyProfile?.logoUrl;
@@ -1406,49 +1598,80 @@ export default function SalesInvoice({
                   <div className="font-mono text-[10px] text-slate-650 mt-1">Invoice No: {inv.invoiceNo}</div>
                 </div>
 
-                {pdfCustomizer.showCompanyDetails && companyProfile && (
+                {pdfCustomizer.showCompanyDetails && (pdfCustomizer.headerName || companyProfile) && (
                   <div
                     style={{
                       textAlign: pdfCustomizer.headerAlign === 'center' ? 'center' : pdfCustomizer.headerAlign === 'right' ? 'left' : 'right',
-                      fontSize: `${pdfCustomizer.headerFontSize}px`
                     }}
-                    className="text-slate-700 leading-normal max-w-xs"
+                    className="text-slate-700 leading-normal max-w-xs whitespace-pre-line"
                   >
-                    <strong className="text-slate-900 text-[11px]">{companyProfile.name}</strong><br/>
-                    {companyProfile.addressLine1 && `${companyProfile.addressLine1}, `}
-                    {companyProfile.addressLine2 && `${companyProfile.addressLine2}, `}<br/>
-                    {companyProfile.city && `${companyProfile.city}, `}
-                    {companyProfile.state && `${companyProfile.state} - `}
-                    {companyProfile.pincode && companyProfile.pincode}<br/>
-                    {companyProfile.gstNumber && <strong>GSTIN: {companyProfile.gstNumber}</strong>}
+                    {pdfCustomizer.headerName ? (
+                      <>
+                        <div className="font-extrabold text-slate-900" style={{ fontSize: `${pdfCustomizer.headerFontSize}px` }}>{pdfCustomizer.headerName}</div>
+                        <div className="text-slate-500 font-medium mt-0.5" style={{ fontSize: `${pdfCustomizer.headerFontSize * 0.7}px` }}>{pdfCustomizer.headerSubtitle}</div>
+                      </>
+                    ) : companyProfile ? (
+                      <>
+                        <div className="font-extrabold text-slate-900" style={{ fontSize: `${pdfCustomizer.headerFontSize}px` }}>{companyProfile.name}</div>
+                        <div className="text-slate-500 font-medium mt-0.5" style={{ fontSize: `${pdfCustomizer.headerFontSize * 0.7}px` }}>
+                          {companyProfile.addressLine1 && `${companyProfile.addressLine1}, `}
+                          {companyProfile.addressLine2 && `${companyProfile.addressLine2}, `}<br/>
+                          {companyProfile.city && `${companyProfile.city}, `}
+                          {companyProfile.state && `${companyProfile.state} - `}
+                          {companyProfile.pincode && companyProfile.pincode}<br/>
+                          {companyProfile.gstNumber && <strong>GSTIN: {companyProfile.gstNumber}</strong>}
+                        </div>
+                      </>
+                    ) : null}
                   </div>
                 )}
               </div>
 
               {/* Meta */}
-              <div className="grid grid-cols-2 gap-6 text-[10px] text-slate-700">
-                <div className="space-y-1">
-                  <div className="text-[9px] uppercase font-bold text-slate-455">Invoice Metadata</div>
-                  <div>Invoice Date: <span className="font-semibold text-slate-900">{new Date(inv.date).toLocaleDateString()}</span></div>
-                  <div>Due Date: <span className="font-semibold text-slate-900">{inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : 'Immediate'}</span></div>
-                  <div>Status: <span className="font-semibold text-slate-900">{inv.status}</span></div>
+              {(pdfCustomizer.showMetadata || pdfCustomizer.showCustomerDetails) && (
+                <div className="grid grid-cols-2 gap-6 text-[10px] text-slate-700">
+                  {pdfCustomizer.showMetadata ? (
+                    <div className="space-y-1">
+                      <div className="text-[9px] uppercase font-bold text-slate-455">Invoice Metadata</div>
+                      {pdfCustomizer.showInvoiceDate && <div>Invoice Date: <span className="font-semibold text-slate-900">{new Date(inv.date).toLocaleDateString()}</span></div>}
+                      {pdfCustomizer.showDueDate && <div>Due Date: <span className="font-semibold text-slate-900">{inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : 'Immediate'}</span></div>}
+                      {pdfCustomizer.showStatus && <div>Status: <span className="font-semibold text-slate-900">{inv.status}</span></div>}
+                    </div>
+                  ) : <div />}
+                  {pdfCustomizer.showCustomerDetails ? (
+                    <div className="space-y-1 text-right">
+                      <div className="text-[9px] uppercase font-bold text-slate-455">Customer Classification</div>
+                      {pdfCustomizer.showCustomerName && <div className="font-semibold text-slate-900">{inv.customerName || cust?.name || 'Client Name'}</div>}
+                      {pdfCustomizer.showCustomerType && <div>Type: {cust?.customerType || 'INDIVIDUAL'}</div>}
+                      {pdfCustomizer.showCustomerCategory && <div>Category: {cust?.customerGroup || 'Standard Group'}</div>}
+                      {pdfCustomizer.showCustomerTel && (inv.customerContactNo || cust?.contactNo) && <div>Tel: {inv.customerContactNo || cust?.contactNo}</div>}
+                    </div>
+                  ) : <div />}
                 </div>
-                <div className="space-y-1 text-right">
-                  <div className="text-[9px] uppercase font-bold text-slate-455">Customer Classification</div>
-                  <div className="font-semibold text-slate-900">{cust?.name || 'Client Name'}</div>
-                  <div>Type: {cust?.customerType || 'INDIVIDUAL'}</div>
-                  <div>Category: {cust?.customerGroup || 'Standard Group'}</div>
-                  {cust?.contactNo && <div>Tel: {cust.contactNo}</div>}
-                </div>
-              </div>
+              )}
 
               {/* Addresses Row */}
               <div className="grid grid-cols-2 gap-6 border-t border-slate-200 pt-4" style={{ textAlign: pdfCustomizer.addressAlign }}>
                 {pdfCustomizer.showBillingAddress && (
                   <div className="text-slate-700 leading-relaxed" style={{ textAlign: pdfCustomizer.addressAlign }}>
                     <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Billing Destination (Bill To)</span>
-                    <strong className="text-slate-900">{cust?.name}</strong><br/>
+                    <strong className="text-slate-900">{inv.customerName || cust?.name || 'Client Name'}</strong><br/>
                     {inv.billingAddress || cust?.billingAddress || 'Billing address pending'}
+                    {pdfCustomizer.showCustomerGSTNumber && (inv.customerGstNumber || cust?.gstNumber) && (
+                      <span><br/><strong>GSTIN:</strong> {inv.customerGstNumber || cust?.gstNumber}</span>
+                    )}
+                    {pdfCustomizer.showCustomerPANNumber && (inv.customerPanNumber || cust?.panNumber) && (
+                      <span><br/><strong>PAN:</strong> {inv.customerPanNumber || cust?.panNumber}</span>
+                    )}
+                    {pdfCustomizer.showCustomerBankDetails && (inv.customerBankName || cust?.bankName || inv.customerAccountNumber || cust?.accountNumber) && (
+                      <div className="text-[9px] mt-2 pt-1 border-t border-slate-100 text-slate-550 leading-normal text-left">
+                        <strong>Customer Bank Details:</strong><br/>
+                        {(inv.customerBankName || cust?.bankName) && <span>Bank: {inv.customerBankName || cust?.bankName}<br/></span>}
+                        {(inv.customerAccountHolderName || cust?.accountHolderName) && <span>Holder: {inv.customerAccountHolderName || cust?.accountHolderName}<br/></span>}
+                        {(inv.customerAccountNumber || cust?.accountNumber) && <span>A/C No: {inv.customerAccountNumber || cust?.accountNumber}<br/></span>}
+                        {(inv.customerIfscCode || cust?.ifscCode) && <span>IFSC Code: {inv.customerIfscCode || cust?.ifscCode}</span>}
+                      </div>
+                    )}
                   </div>
                 )}
                 
@@ -1461,18 +1684,25 @@ export default function SalesInvoice({
                   </div>
                 )}
               </div>
-
-              {/* Items Table */}
+              {/* Items Table */}
               <div className="pt-2">
-                <table className="w-full text-left border-collapse" style={{ fontSize: `${pdfCustomizer.bodyFontSize}px` }}>
+                <table 
+                  className="w-full text-left border-collapse" 
+                  style={{ 
+                    fontSize: `${pdfCustomizer.bodyFontSize}px`,
+                    borderWidth: pdfCustomizer.borderWidth > 0 ? `${pdfCustomizer.borderWidth}px` : '0px',
+                    borderStyle: 'solid',
+                    borderColor: (currentThemeHex as string) === '#000000' ? '#ddd' : currentThemeHex
+                  }}
+                >
                   <thead>
-                    <tr className="border-b-2 font-bold bg-slate-50" style={{ borderBottomColor: currentThemeHex }}>
-                      <th className="py-2.5 px-2 text-slate-800">Description</th>
-                      {pdfCustomizer.colProductCode && <th className="py-2.5 px-2">SKU / Code</th>}
-                      <th className="py-2.5 px-2 text-right">Qty</th>
-                      {pdfCustomizer.colUnitPrice && <th className="py-2.5 px-2 text-right">Price</th>}
-                      {pdfCustomizer.colDiscount && <th className="py-2.5 px-2 text-right">Discount</th>}
-                      <th className="py-2.5 px-2 text-right">Subtotal</th>
+                    <tr className="border-b-2 font-bold bg-slate-50" style={{ borderBottomColor: currentThemeHex, borderBottomWidth: `${pdfCustomizer.borderWidth}px` }}>
+                      <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthProduct}%` }} className="text-slate-800">Description</th>
+                      {pdfCustomizer.colProductCode && <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthCode}%` }}>SKU / Code</th>}
+                      <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthQty}%` }} className="text-right">Qty</th>
+                      {pdfCustomizer.colUnitPrice && <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthPrice}%` }} className="text-right">Price</th>}
+                      {pdfCustomizer.colDiscount && <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthDiscount}%` }} className="text-right">Discount</th>}
+                      <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthSubtotal}%` }} className="text-right">Subtotal</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1482,21 +1712,21 @@ export default function SalesInvoice({
                       const itemDisc = itemSub * ((it.discount || 0) / 100);
                       return (
                         <tr key={it.id || it.productId} className="border-b border-slate-100">
-                          <td className="py-2.5 px-2 font-medium text-slate-900">
+                          <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="font-medium text-slate-900">
                             {prod?.name || 'Unknown Product'}
                             {prod?.description && <span className="block text-[8px] text-slate-500 font-normal mt-0.5">{prod.description}</span>}
                           </td>
                           {pdfCustomizer.colProductCode && (
-                            <td className="py-2.5 px-2 font-mono text-slate-650">{prod?.sku || 'N/A'}</td>
+                            <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="font-mono text-slate-650">{prod?.sku || 'N/A'}</td>
                           )}
-                          <td className="py-2.5 px-2 text-right font-mono">{it.quantity} {prod?.uom || 'PCS'}</td>
+                          <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="text-right font-mono">{it.quantity} {prod?.uom || 'PCS'}</td>
                           {pdfCustomizer.colUnitPrice && (
-                            <td className="py-2.5 px-2 text-right font-mono">{currencySymbol}{it.price.toFixed(2)}</td>
+                            <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="text-right font-mono">{currencySymbol}{it.price.toFixed(2)}</td>
                           )}
                           {pdfCustomizer.colDiscount && (
-                            <td className="py-2.5 px-2 text-right font-mono">{it.discount || 0}%</td>
+                            <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="text-right font-mono">{it.discount || 0}%</td>
                           )}
-                          <td className="py-2.5 px-2 text-right font-mono font-semibold text-slate-900">{currencySymbol}{(itemSub - itemDisc).toFixed(2)}</td>
+                          <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="text-right font-mono font-semibold text-slate-900">{currencySymbol}{(itemSub - itemDisc).toFixed(2)}</td>
                         </tr>
                       );
                     })}
@@ -1512,6 +1742,12 @@ export default function SalesInvoice({
                       <td className="py-1.5 text-left">Subtotal:</td>
                       <td className="py-1.5 text-right font-mono text-slate-900">{currencySymbol}{inv.subtotal.toFixed(2)}</td>
                     </tr>
+                    {pdfCustomizer.showTaxableAmount && (
+                      <tr className="border-b border-slate-100">
+                        <td className="py-1.5 text-left">Taxable Amount:</td>
+                        <td className="py-1.5 text-right font-mono text-slate-900">{currencySymbol}{taxableAmount.toFixed(2)}</td>
+                      </tr>
+                    )}
                     {inv.discount > 0 && (
                       <tr className="border-b border-slate-100">
                         <td className="py-1.5 text-left text-red-500">Discount ({inv.discount}%):</td>
@@ -1519,7 +1755,7 @@ export default function SalesInvoice({
                       </tr>
                     )}
 
-                    {pdfCustomizer.colTax && (
+                    {pdfCustomizer.showTaxBreakup ? (
                       <>
                         {isInternational ? (
                           <tr className="border-b border-slate-100">
@@ -1529,34 +1765,40 @@ export default function SalesInvoice({
                         ) : isSameState ? (
                           <>
                             <tr className="border-b border-slate-100">
-                              <td className="py-1.5 text-left">CGST (9.0%):</td>
+                              <td className="py-1.5 text-left">CGST ({(taxRate / 2).toFixed(1)}%):</td>
                               <td className="py-1.5 text-right font-mono text-slate-900">{currencySymbol}{(inv.tax / 2).toFixed(2)}</td>
                             </tr>
                             <tr className="border-b border-slate-100">
-                              <td className="py-1.5 text-left">SGST (9.0%):</td>
+                              <td className="py-1.5 text-left">SGST ({(taxRate / 2).toFixed(1)}%):</td>
                               <td className="py-1.5 text-right font-mono text-slate-900">{currencySymbol}{(inv.tax / 2).toFixed(2)}</td>
                             </tr>
                           </>
                         ) : (
                           <tr className="border-b border-slate-100">
-                            <td className="py-1.5 text-left">IGST (18.0%):</td>
+                            <td className="py-1.5 text-left">IGST ({taxRate.toFixed(1)}%):</td>
                             <td className="py-1.5 text-right font-mono text-slate-900">{currencySymbol}{inv.tax.toFixed(2)}</td>
                           </tr>
                         )}
                       </>
-                    )}
-
-                    {!pdfCustomizer.colTax && (
+                    ) : pdfCustomizer.colTax ? (
                       <tr className="border-b border-slate-100">
                         <td className="py-1.5 text-left">Sales Tax / GST:</td>
                         <td className="py-1.5 text-right font-mono text-slate-900">{currencySymbol}{inv.tax.toFixed(2)}</td>
                       </tr>
-                    )}
+                    ) : null}
 
                     <tr className="border-t-2 font-extrabold text-[12px]" style={{ color: currentThemeHex, borderTopColor: currentThemeHex }}>
                       <td className="py-2.5 text-left">Grand Total:</td>
                       <td className="py-2.5 text-right font-mono">{currencySymbol}{inv.total.toFixed(2)}</td>
                     </tr>
+                    {pdfCustomizer.showAmountInWords && (
+                      <tr className="border-t border-dashed">
+                        <td colSpan={2} className="py-2 text-[9px] text-slate-500 text-left leading-normal font-sans">
+                          <span className="font-bold uppercase block text-[8px] tracking-wide">Amount In Words:</span>
+                          <span className="italic">{convertNumberToWords(inv.total)}</span>
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -1574,15 +1816,39 @@ export default function SalesInvoice({
               )}
             </div>
 
-            {pdfCustomizer.showTerms && (
+            {/* Footer: Terms Left, Signature Right */}
+            {(pdfCustomizer.showSignature || (pdfCustomizer.showTerms && customNotes)) && (
               <div
-                className="border-t border-slate-200 pt-4 mt-12 text-slate-550 text-center leading-normal"
+                className="border-t border-slate-200 pt-4 mt-6 flex justify-between items-start gap-8"
                 style={{
-                  textAlign: pdfCustomizer.termsAlign,
-                  fontSize: `${pdfCustomizer.bodyFontSize - 1}px`
+                  borderTopWidth: pdfCustomizer.borderWidth > 0 ? `${pdfCustomizer.borderWidth}px` : '0px',
+                  borderColor: themeColor === '#000000' ? '#ddd' : `${themeColor}40`,
+                  paddingBottom: `${pdfCustomizer.footerPadding}px`
                 }}
               >
-                {customNotes}
+                {/* Left block: Terms & Conditions */}
+                <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+                  {pdfCustomizer.showTerms && customNotes && (
+                    <div className="text-slate-550 leading-normal" style={{ fontSize: `${pdfCustomizer.bodyFontSize - 1}px` }}>
+                      <strong className="block uppercase text-[8.5px] text-slate-700 font-bold mb-1">Terms & Conditions</strong>
+                      <div className="whitespace-pre-wrap">{customNotes}</div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Right block: Signature Signoff */}
+                {pdfCustomizer.showSignature && (
+                  <div className="shrink-0 text-center w-40 flex flex-col items-center">
+                    {pdfCustomizer.signatureBase64 ? (
+                      <div className="h-12 flex items-center justify-center p-0.5 mb-1 bg-slate-50/50 rounded max-w-full">
+                        <img src={pdfCustomizer.signatureBase64} alt="Signature" style={{ maxHeight: `${pdfCustomizer.signatureSize}px`, objectFit: 'contain' }} />
+                      </div>
+                    ) : (
+                      <div className="h-12 w-full border-b border-slate-300 border-dashed mb-1" />
+                    )}
+                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wide block">{pdfCustomizer.signatureLabel}</span>
+                  </div>
+                )}
               </div>
             )}
           </div>

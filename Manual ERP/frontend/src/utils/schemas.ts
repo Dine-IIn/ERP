@@ -552,7 +552,27 @@ export const GstSettingSchema = z.object({
 
 // Fallbacks for imports
 export const CashTransactionSchema = z.any();
-export const CustomerSchema = z.any();
+export const CustomerSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters"),
+  customerType: z.enum(["INDIVIDUAL", "COMPANY"]),
+  customerGroup: z.string().optional().nullable(),
+  contactPerson: z.string().optional().nullable(),
+  contactNo: z.string().min(8, "Contact number must be at least 8 digits"),
+  email: z.string().email().optional().or(z.literal("")).nullable(),
+  billingAddress: z.string().optional().nullable(),
+  shippingAddress: z.string().optional().nullable(),
+  creditLimit: z.any().optional(),
+  creditTime: z.any().optional(),
+  state: z.string().default("Gujarat"),
+  clientClassification: z.enum(["NATIONAL", "INTERNATIONAL"]).default("NATIONAL"),
+  currencySymbol: z.string().default("$"),
+  bankName: z.string().optional().nullable(),
+  accountHolderName: z.string().optional().nullable(),
+  accountNumber: z.string().optional().nullable(),
+  ifscCode: z.string().optional().nullable(),
+  gstNumber: z.string().optional().nullable(),
+  panNumber: z.string().optional().nullable(),
+});
 export const EmployeeSchema = z.any();
 export const ExpenseSchema = z.any();
 export const FollowUpSchema = z.any();
@@ -581,4 +601,19 @@ export const UpdateChatGroupSettingsSchema = z.any();
 export const UpdateCustomerBodySchema = z.any();
 export const UpdateDepartmentSchema = z.any();
 export const UpdateEmployeeSchema = z.any();
-export const VendorSchema = z.any();
+export const VendorSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters"),
+  isVendor: z.boolean().default(true),
+  contactNo: z.string().min(8, "Contact number must be at least 8 digits"),
+  email: z.string().email().optional().or(z.literal("")).nullable(),
+  bankDetails: z.string().optional().nullable(),
+  paymentTerms: z.string().optional().nullable(),
+  gstDetails: z.string().optional().nullable(),
+  creditTime: z.any().optional(),
+  bankName: z.string().optional().nullable(),
+  accountHolderName: z.string().optional().nullable(),
+  accountNumber: z.string().optional().nullable(),
+  ifscCode: z.string().optional().nullable(),
+  gstNumber: z.string().optional().nullable(),
+  panNumber: z.string().optional().nullable(),
+});

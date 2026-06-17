@@ -107,13 +107,28 @@ export default function SalesOrder({
   };
 
   React.useEffect(() => {
-    if (customizingOrder && templates.length > 0) {
-      const defaultTpl = templates.find(t => t.isDefault);
-      if (defaultTpl) {
-        setSelectedTemplateId(defaultTpl.id);
-        applyTemplateSettings(defaultTpl);
-      } else {
-        setSelectedTemplateId('');
+    if (customizingOrder) {
+      if (customizingOrder.templateSettings) {
+        try {
+          const tpl = JSON.parse(customizingOrder.templateSettings);
+          setCustomTitle(tpl.title || 'Sales Order');
+          setCustomNotes(tpl.terms || '');
+          setThemeColor(tpl.themeColor || 'indigo');
+          setPdfCustomizer(tpl.customizer || tpl);
+          setSelectedTemplateId('');
+          return;
+        } catch (e) {
+          console.error("Failed to parse sales order's templateSettings:", e);
+        }
+      }
+      if (templates.length > 0) {
+        const defaultTpl = templates.find(t => t.isDefault);
+        if (defaultTpl) {
+          setSelectedTemplateId(defaultTpl.id);
+          applyTemplateSettings(defaultTpl);
+        } else {
+          setSelectedTemplateId('');
+        }
       }
     }
   }, [customizingOrder, templates]);
@@ -723,10 +738,10 @@ export default function SalesOrder({
                         </div>
                         <div className="space-y-1 text-right">
                           <div className="text-[9px] uppercase font-bold text-slate-450">Customer Classification</div>
-                          <div className="font-semibold text-slate-900">{cust?.name || 'Client Name'}</div>
+                          <div className="font-semibold text-slate-900">{order.customerName || cust?.name || 'Client Name'}</div>
                           <div>Type: {cust?.customerType || 'INDIVIDUAL'}</div>
                           <div>Category: {cust?.customerGroup || 'Standard Group'}</div>
-                          {cust?.contactNo && <div>Tel: {cust.contactNo}</div>}
+                          {(order.customerContactNo || cust?.contactNo) && <div>Tel: {order.customerContactNo || cust?.contactNo}</div>}
                         </div>
                       </div>
 
@@ -736,8 +751,8 @@ export default function SalesOrder({
                         {pdfCustomizer.showBillingAddress && (
                           <div className="text-[10px] text-slate-700 leading-relaxed">
                             <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Billing Address</span>
-                            <strong className="text-slate-900">{cust?.name}</strong><br/>
-                            {cust?.billingAddress || 'Billing address pending'}
+                            <strong className="text-slate-900">{order.customerName || cust?.name || 'Client Name'}</strong><br/>
+                            {order.billingAddress || cust?.billingAddress || 'Billing address pending'}
                           </div>
                         )}
                         
@@ -745,8 +760,8 @@ export default function SalesOrder({
                         {pdfCustomizer.showShippingAddress && (
                           <div className="text-[10px] text-slate-700 leading-relaxed text-right">
                             <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Shipping Address</span>
-                            <strong className="text-slate-900">{cust?.name}</strong><br/>
-                            {cust?.shippingAddress || cust?.billingAddress || 'Shipping address pending'}
+                            <strong className="text-slate-900">{order.shippingName || order.customerName || cust?.name || 'Client Name'}</strong><br/>
+                            {order.shippingAddress || cust?.shippingAddress || order.billingAddress || cust?.billingAddress || 'Shipping address pending'}
                           </div>
                         )}
                       </div>
@@ -883,7 +898,21 @@ export default function SalesOrder({
                   Cancel
                 </button>
                 <button
-                  onClick={() => {
+                  onClick={async () => {
+                    const settingsToSave = {
+                      title: customTitle,
+                      terms: customNotes,
+                      themeColor: themeColor,
+                      ...pdfCustomizer
+                    };
+                    try {
+                      await onUpdateOrder(order.id, {
+                        templateSettings: JSON.stringify(settingsToSave)
+                      });
+                      order.templateSettings = JSON.stringify(settingsToSave);
+                    } catch (e) {
+                      console.error("Failed to save template settings to sales order:", e);
+                    }
                     setActivePrintOrder(order);
                   }}
                   className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl border-0 cursor-pointer transition-all shadow-lg shadow-emerald-600/10"
@@ -970,10 +999,10 @@ export default function SalesOrder({
                 </div>
                 <div className="space-y-1 text-right">
                   <div className="text-[9px] uppercase font-bold text-slate-455">Customer Classification</div>
-                  <div className="font-semibold text-slate-900">{cust?.name || 'Client Name'}</div>
+                  <div className="font-semibold text-slate-900">{order.customerName || cust?.name || 'Client Name'}</div>
                   <div>Type: {cust?.customerType || 'INDIVIDUAL'}</div>
                   <div>Category: {cust?.customerGroup || 'Standard Group'}</div>
-                  {cust?.contactNo && <div>Tel: {cust.contactNo}</div>}
+                  {(order.customerContactNo || cust?.contactNo) && <div>Tel: {order.customerContactNo || cust?.contactNo}</div>}
                 </div>
               </div>
 
@@ -982,16 +1011,16 @@ export default function SalesOrder({
                 {pdfCustomizer.showBillingAddress && (
                   <div className="text-[10px] text-slate-700 leading-relaxed">
                     <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Billing Address</span>
-                    <strong className="text-slate-900">{cust?.name}</strong><br/>
-                    {cust?.billingAddress || 'Billing address pending'}
+                    <strong className="text-slate-900">{order.customerName || cust?.name || 'Client Name'}</strong><br/>
+                    {order.billingAddress || cust?.billingAddress || 'Billing address pending'}
                   </div>
                 )}
                 
                 {pdfCustomizer.showShippingAddress && (
                   <div className="text-[10px] text-slate-700 leading-relaxed text-right">
                     <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Shipping Address</span>
-                    <strong className="text-slate-900">{cust?.name}</strong><br/>
-                    {cust?.shippingAddress || cust?.billingAddress || 'Shipping address pending'}
+                    <strong className="text-slate-900">{order.shippingName || order.customerName || cust?.name || 'Client Name'}</strong><br/>
+                    {order.shippingAddress || cust?.shippingAddress || order.billingAddress || cust?.billingAddress || 'Shipping address pending'}
                   </div>
                 )}
               </div>

@@ -22,6 +22,67 @@ import { logAudit } from '../utils/audit';
 import { sendEmailNotification } from '../utils';
 import { markNeedsRefresh } from '../services/forecast';
 
+export async function validateInvoiceTaxAndTotal(
+  companyId: string,
+  customerId: string,
+  items: any[],
+  discountPct: number,
+  clientTax: number,
+  clientTotal: number,
+  shippingState: string | null
+) {
+  // 1. Fetch customer
+  const customer = await prisma.customer.findFirst({
+    where: { id: customerId, companyId }
+  });
+  if (!customer) {
+    throw new Error("Customer profile not found");
+  }
+
+  // 2. Fetch company to get state
+  const companyProfile = await prisma.company.findUnique({
+    where: { id: companyId }
+  });
+  if (!companyProfile) {
+    throw new Error("Company profile not found");
+  }
+
+  // 3. Calculate subtotal
+  let calculatedSubtotal = 0.0;
+  for (const item of items) {
+    const qty = parseFloat(item.quantity) || 0.0;
+    const price = parseFloat(item.price) || 0.0;
+    const itemDiscPercent = parseFloat(item.discount) || 0.0;
+    const itemSub = qty * price;
+    const itemDiscVal = itemSub * (itemDiscPercent / 100);
+    calculatedSubtotal += (itemSub - itemDiscVal);
+  }
+
+  // 4. Calculate taxable amount
+  const discVal = calculatedSubtotal * ((discountPct || 0.0) / 100);
+  const taxableAmount = Math.max(0, calculatedSubtotal - discVal);
+
+  // 5. Determine tax rate
+  const isInternational = customer.clientClassification === 'INTERNATIONAL';
+  const targetState = shippingState || customer.state || 'Gujarat';
+
+  let taxRate = 18.0;
+  if (isInternational) {
+    taxRate = 0.0;
+  }
+
+  const expectedTax = taxableAmount * (taxRate / 100);
+  const expectedTotal = taxableAmount + expectedTax;
+
+  if (Math.abs(clientTax - expectedTax) > 0.05) {
+    throw new Error(`Tax validation failed. Expected: ${expectedTax.toFixed(2)}, Received: ${clientTax.toFixed(2)} (Calculated at Rate: ${taxRate}%)`);
+  }
+
+  if (Math.abs(clientTotal - expectedTotal) > 0.05) {
+    throw new Error(`Grand total validation failed. Expected: ${expectedTotal.toFixed(2)}, Received: ${clientTotal.toFixed(2)}`);
+  }
+}
+
 const isServiceItem = (product: any): boolean => {
   if (!product) return false;
   const uomLower = (product.uom || "").toLowerCase();
@@ -242,6 +303,11 @@ export async function createSalesOrder(req: AuthenticatedRequest, res: Response)
       return res.status(400).json({ error: "Customer and at least one product order item are required." });
     }
 
+    const customer = await prisma.customer.findFirst({
+      where: { id: customerId, companyId }
+    });
+    if (!customer) return res.status(404).json({ error: "Customer not found" });
+
     const orderNo = await generateDocNo(companyId, 'SO', 'salesOrder');
 
     // Run in Prisma Transaction
@@ -253,7 +319,21 @@ export async function createSalesOrder(req: AuthenticatedRequest, res: Response)
           orderNo,
           deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
           discount: parseFloat(discount) || 0.0,
-          status: 'PENDING'
+          status: 'PENDING',
+          billingAddress: req.body.billingAddress || customer.billingAddress || null,
+          shippingAddress: req.body.shippingAddress || customer.shippingAddress || customer.billingAddress || null,
+          shippingState: req.body.shippingState || customer.state || null,
+          shippingName: req.body.shippingName || customer.name || null,
+          customerName: customer.name,
+          customerContactNo: customer.contactNo,
+          customerEmail: customer.email || null,
+          customerBankName: customer.bankName || null,
+          customerAccountHolderName: customer.accountHolderName || null,
+          customerAccountNumber: customer.accountNumber || null,
+          customerIfscCode: customer.ifscCode || null,
+          customerGstNumber: customer.gstNumber || null,
+          customerPanNumber: customer.panNumber || null,
+          templateSettings: req.body.templateSettings || null
         }
       });
 
@@ -315,6 +395,46 @@ export async function updateSalesOrder(req: AuthenticatedRequest, res: Response)
       return res.status(404).json({ error: "Sales Order not found" });
     }
 
+    let customerData = {};
+    if (customerId && customerId !== orderToUpdate.customerId) {
+      const customer = await prisma.customer.findFirst({
+        where: { id: customerId, companyId }
+      });
+      if (customer) {
+        customerData = {
+          billingAddress: req.body.billingAddress || customer.billingAddress || null,
+          shippingAddress: req.body.shippingAddress || customer.shippingAddress || customer.billingAddress || null,
+          shippingState: req.body.shippingState || customer.state || null,
+          shippingName: req.body.shippingName || customer.name || null,
+          customerName: customer.name,
+          customerContactNo: customer.contactNo,
+          customerEmail: customer.email || null,
+          customerBankName: customer.bankName || null,
+          customerAccountHolderName: customer.accountHolderName || null,
+          customerAccountNumber: customer.accountNumber || null,
+          customerIfscCode: customer.ifscCode || null,
+          customerGstNumber: customer.gstNumber || null,
+          customerPanNumber: customer.panNumber || null
+        };
+      }
+    } else {
+      customerData = {
+        ...(req.body.billingAddress !== undefined && { billingAddress: req.body.billingAddress || null }),
+        ...(req.body.shippingAddress !== undefined && { shippingAddress: req.body.shippingAddress || null }),
+        ...(req.body.shippingState !== undefined && { shippingState: req.body.shippingState || null }),
+        ...(req.body.shippingName !== undefined && { shippingName: req.body.shippingName || null }),
+        ...(req.body.customerName !== undefined && { customerName: req.body.customerName || null }),
+        ...(req.body.customerContactNo !== undefined && { customerContactNo: req.body.customerContactNo || null }),
+        ...(req.body.customerEmail !== undefined && { customerEmail: req.body.customerEmail || null }),
+        ...(req.body.customerBankName !== undefined && { customerBankName: req.body.customerBankName || null }),
+        ...(req.body.customerAccountHolderName !== undefined && { customerAccountHolderName: req.body.customerAccountHolderName || null }),
+        ...(req.body.customerAccountNumber !== undefined && { customerAccountNumber: req.body.customerAccountNumber || null }),
+        ...(req.body.customerIfscCode !== undefined && { customerIfscCode: req.body.customerIfscCode || null }),
+        ...(req.body.customerGstNumber !== undefined && { customerGstNumber: req.body.customerGstNumber || null }),
+        ...(req.body.customerPanNumber !== undefined && { customerPanNumber: req.body.customerPanNumber || null })
+      };
+    }
+
     await prisma.$transaction(async (tx) => {
       await tx.salesOrder.update({
         where: { id },
@@ -322,7 +442,9 @@ export async function updateSalesOrder(req: AuthenticatedRequest, res: Response)
           ...(customerId && { customerId }),
           ...(deliveryDate !== undefined && { deliveryDate: deliveryDate ? new Date(deliveryDate) : null }),
           ...(discount !== undefined && { discount: parseFloat(discount) || 0.0 }),
-          ...(status && { status })
+          ...(status && { status }),
+          ...(req.body.templateSettings !== undefined && { templateSettings: req.body.templateSettings || null }),
+          ...customerData
         }
       });
 
@@ -440,6 +562,25 @@ export async function createProformaInvoice(req: AuthenticatedRequest, res: Resp
       return res.status(400).json({ error: "Customer and at least one item are required." });
     }
 
+    try {
+      await validateInvoiceTaxAndTotal(
+        companyId,
+        customerId,
+        items,
+        parseFloat(discount) || 0.0,
+        parseFloat(tax) || 0.0,
+        parseFloat(total) || 0.0,
+        null
+      );
+    } catch (valError: any) {
+      return res.status(400).json({ error: valError.message });
+    }
+
+    const customer = await prisma.customer.findFirst({
+      where: { id: customerId, companyId }
+    });
+    if (!customer) return res.status(404).json({ error: "Customer not found" });
+
     const invoiceNo = await generateDocNo(companyId, 'PI', 'proformaInvoice');
 
     const invoice = await prisma.$transaction(async (tx) => {
@@ -453,7 +594,21 @@ export async function createProformaInvoice(req: AuthenticatedRequest, res: Resp
           discount: parseFloat(discount) || 0.0,
           tax: parseFloat(tax) || 0.0,
           total: parseFloat(total) || 0.0,
-          status: status || 'DRAFT'
+          status: status || 'DRAFT',
+          billingAddress: req.body.billingAddress || customer.billingAddress || null,
+          shippingAddress: req.body.shippingAddress || customer.shippingAddress || customer.billingAddress || null,
+          shippingState: req.body.shippingState || customer.state || null,
+          shippingName: req.body.shippingName || customer.name || null,
+          customerName: customer.name,
+          customerContactNo: customer.contactNo,
+          customerEmail: customer.email || null,
+          customerBankName: customer.bankName || null,
+          customerAccountHolderName: customer.accountHolderName || null,
+          customerAccountNumber: customer.accountNumber || null,
+          customerIfscCode: customer.ifscCode || null,
+          customerGstNumber: customer.gstNumber || null,
+          customerPanNumber: customer.panNumber || null,
+          templateSettings: req.body.templateSettings || null
         }
       });
 
@@ -494,8 +649,79 @@ export async function updateProformaInvoice(req: AuthenticatedRequest, res: Resp
     const {  customerId, dueDate, discount, tax, subtotal, total, status, items  } = parsedBody.data;
 
 
-    const invoice = await prisma.proformaInvoice.findFirst({ where: { id, companyId } });
-    if (!invoice) return res.status(404).json({ error: "Proforma Invoice not found" });
+    const existingInvoice = await prisma.proformaInvoice.findFirst({
+      where: { id, companyId },
+      include: { items: true }
+    });
+    if (!existingInvoice) {
+      return res.status(404).json({ error: "Proforma Invoice not found" });
+    }
+    const invoice = existingInvoice;
+
+    const finalCustomerId = customerId || existingInvoice.customerId;
+    const finalItems = items !== undefined ? items : existingInvoice.items.map(it => ({
+      productId: it.productId,
+      quantity: it.quantity,
+      price: it.price,
+      discount: it.discount
+    }));
+    const finalDiscount = discount !== undefined ? parseFloat(discount) : existingInvoice.discount;
+    const finalTax = tax !== undefined ? parseFloat(tax) : existingInvoice.tax;
+    const finalTotal = total !== undefined ? parseFloat(total) : existingInvoice.total;
+
+    try {
+      await validateInvoiceTaxAndTotal(
+        companyId,
+        finalCustomerId,
+        finalItems,
+        finalDiscount,
+        finalTax,
+        finalTotal,
+        null
+      );
+    } catch (valError: any) {
+      return res.status(400).json({ error: valError.message });
+    }
+
+    let customerData = {};
+    if (customerId && customerId !== existingInvoice.customerId) {
+      const customer = await prisma.customer.findFirst({
+        where: { id: customerId, companyId }
+      });
+      if (customer) {
+        customerData = {
+          billingAddress: req.body.billingAddress || customer.billingAddress || null,
+          shippingAddress: req.body.shippingAddress || customer.shippingAddress || customer.billingAddress || null,
+          shippingState: req.body.shippingState || customer.state || null,
+          shippingName: req.body.shippingName || customer.name || null,
+          customerName: customer.name,
+          customerContactNo: customer.contactNo,
+          customerEmail: customer.email || null,
+          customerBankName: customer.bankName || null,
+          customerAccountHolderName: customer.accountHolderName || null,
+          customerAccountNumber: customer.accountNumber || null,
+          customerIfscCode: customer.ifscCode || null,
+          customerGstNumber: customer.gstNumber || null,
+          customerPanNumber: customer.panNumber || null
+        };
+      }
+    } else {
+      customerData = {
+        ...(req.body.billingAddress !== undefined && { billingAddress: req.body.billingAddress || null }),
+        ...(req.body.shippingAddress !== undefined && { shippingAddress: req.body.shippingAddress || null }),
+        ...(req.body.shippingState !== undefined && { shippingState: req.body.shippingState || null }),
+        ...(req.body.shippingName !== undefined && { shippingName: req.body.shippingName || null }),
+        ...(req.body.customerName !== undefined && { customerName: req.body.customerName || null }),
+        ...(req.body.customerContactNo !== undefined && { customerContactNo: req.body.customerContactNo || null }),
+        ...(req.body.customerEmail !== undefined && { customerEmail: req.body.customerEmail || null }),
+        ...(req.body.customerBankName !== undefined && { customerBankName: req.body.customerBankName || null }),
+        ...(req.body.customerAccountHolderName !== undefined && { customerAccountHolderName: req.body.customerAccountHolderName || null }),
+        ...(req.body.customerAccountNumber !== undefined && { customerAccountNumber: req.body.customerAccountNumber || null }),
+        ...(req.body.customerIfscCode !== undefined && { customerIfscCode: req.body.customerIfscCode || null }),
+        ...(req.body.customerGstNumber !== undefined && { customerGstNumber: req.body.customerGstNumber || null }),
+        ...(req.body.customerPanNumber !== undefined && { customerPanNumber: req.body.customerPanNumber || null })
+      };
+    }
 
     await prisma.$transaction(async (tx) => {
       await tx.proformaInvoice.update({
@@ -507,7 +733,9 @@ export async function updateProformaInvoice(req: AuthenticatedRequest, res: Resp
           ...(discount !== undefined && { discount: parseFloat(discount) || 0.0 }),
           ...(tax !== undefined && { tax: parseFloat(tax) || 0.0 }),
           ...(total !== undefined && { total: parseFloat(total) || 0.0 }),
-          ...(status && { status })
+          ...(status && { status }),
+          ...(req.body.templateSettings !== undefined && { templateSettings: req.body.templateSettings || null }),
+          ...customerData
         }
       });
 
@@ -622,6 +850,25 @@ export async function createSalesInvoice(req: AuthenticatedRequest, res: Respons
       return res.status(400).json({ error: "Customer and at least one item are required." });
     }
 
+    try {
+      await validateInvoiceTaxAndTotal(
+        companyId,
+        customerId,
+        items,
+        parseFloat(discount) || 0.0,
+        parseFloat(tax) || 0.0,
+        parseFloat(total) || 0.0,
+        shippingState || null
+      );
+    } catch (valError: any) {
+      return res.status(400).json({ error: valError.message });
+    }
+
+    const customer = await prisma.customer.findFirst({
+      where: { id: customerId, companyId }
+    });
+    if (!customer) return res.status(404).json({ error: "Customer not found" });
+
     const invoiceNo = await generateDocNo(companyId, 'SI', 'salesInvoice');
 
     const invoice = await prisma.$transaction(async (tx) => {
@@ -636,12 +883,22 @@ export async function createSalesInvoice(req: AuthenticatedRequest, res: Respons
           tax: parseFloat(tax) || 0.0,
           total: parseFloat(total) || 0.0,
           status: status || 'UNPAID',
-          billingAddress: billingAddress || null,
-          shippingAddress: shippingAddress || null,
-          shippingState: shippingState || null,
-          shippingName: shippingName || null,
+          billingAddress: billingAddress || customer.billingAddress || null,
+          shippingAddress: shippingAddress || customer.shippingAddress || customer.billingAddress || null,
+          shippingState: shippingState || customer.state || null,
+          shippingName: shippingName || customer.name || null,
           salesOrderId: salesOrderId || null,
-          salesOrderIds: salesOrderIds || null
+          salesOrderIds: salesOrderIds || null,
+          customerName: customer.name,
+          customerContactNo: customer.contactNo,
+          customerEmail: customer.email || null,
+          customerBankName: customer.bankName || null,
+          customerAccountHolderName: customer.accountHolderName || null,
+          customerAccountNumber: customer.accountNumber || null,
+          customerIfscCode: customer.ifscCode || null,
+          customerGstNumber: customer.gstNumber || null,
+          customerPanNumber: customer.panNumber || null,
+          templateSettings: req.body.templateSettings || null
         }
       });
 
@@ -687,10 +944,82 @@ export async function updateSalesInvoice(req: AuthenticatedRequest, res: Respons
     const {  customerId, dueDate, discount, tax, subtotal, total, status, items, billingAddress, shippingAddress, shippingState, shippingName, salesOrderId, salesOrderIds  } = parsedBody.data;
 
 
-    const invoice = await prisma.salesInvoice.findFirst({ where: { id, companyId } });
-    if (!invoice) return res.status(404).json({ error: "Sales Invoice not found" });
-    const oldStatus = invoice.status;
-    const oldTotal = invoice.total;
+    const existingInvoice = await prisma.salesInvoice.findFirst({
+      where: { id, companyId },
+      include: { items: true }
+    });
+    if (!existingInvoice) {
+      return res.status(404).json({ error: "Sales Invoice not found" });
+    }
+    const invoice = existingInvoice;
+    const oldStatus = existingInvoice.status;
+    const oldTotal = existingInvoice.total;
+
+    const finalCustomerId = customerId || existingInvoice.customerId;
+    const finalItems = items !== undefined ? items : existingInvoice.items.map(it => ({
+      productId: it.productId,
+      quantity: it.quantity,
+      price: it.price,
+      discount: it.discount
+    }));
+    const finalDiscount = discount !== undefined ? parseFloat(discount) : existingInvoice.discount;
+    const finalTax = tax !== undefined ? parseFloat(tax) : existingInvoice.tax;
+    const finalTotal = total !== undefined ? parseFloat(total) : existingInvoice.total;
+    const finalShippingState = shippingState !== undefined ? shippingState : existingInvoice.shippingState;
+
+    try {
+      await validateInvoiceTaxAndTotal(
+        companyId,
+        finalCustomerId,
+        finalItems,
+        finalDiscount,
+        finalTax,
+        finalTotal,
+        finalShippingState
+      );
+    } catch (valError: any) {
+      return res.status(400).json({ error: valError.message });
+    }
+
+    let customerData = {};
+    if (customerId && customerId !== existingInvoice.customerId) {
+      const customer = await prisma.customer.findFirst({
+        where: { id: customerId, companyId }
+      });
+      if (customer) {
+        customerData = {
+          billingAddress: req.body.billingAddress || customer.billingAddress || null,
+          shippingAddress: req.body.shippingAddress || customer.shippingAddress || customer.billingAddress || null,
+          shippingState: req.body.shippingState || customer.state || null,
+          shippingName: req.body.shippingName || customer.name || null,
+          customerName: customer.name,
+          customerContactNo: customer.contactNo,
+          customerEmail: customer.email || null,
+          customerBankName: customer.bankName || null,
+          customerAccountHolderName: customer.accountHolderName || null,
+          customerAccountNumber: customer.accountNumber || null,
+          customerIfscCode: customer.ifscCode || null,
+          customerGstNumber: customer.gstNumber || null,
+          customerPanNumber: customer.panNumber || null
+        };
+      }
+    } else {
+      customerData = {
+        ...(req.body.billingAddress !== undefined && { billingAddress: req.body.billingAddress || null }),
+        ...(req.body.shippingAddress !== undefined && { shippingAddress: req.body.shippingAddress || null }),
+        ...(req.body.shippingState !== undefined && { shippingState: req.body.shippingState || null }),
+        ...(req.body.shippingName !== undefined && { shippingName: req.body.shippingName || null }),
+        ...(req.body.customerName !== undefined && { customerName: req.body.customerName || null }),
+        ...(req.body.customerContactNo !== undefined && { customerContactNo: req.body.customerContactNo || null }),
+        ...(req.body.customerEmail !== undefined && { customerEmail: req.body.customerEmail || null }),
+        ...(req.body.customerBankName !== undefined && { customerBankName: req.body.customerBankName || null }),
+        ...(req.body.customerAccountHolderName !== undefined && { customerAccountHolderName: req.body.customerAccountHolderName || null }),
+        ...(req.body.customerAccountNumber !== undefined && { customerAccountNumber: req.body.customerAccountNumber || null }),
+        ...(req.body.customerIfscCode !== undefined && { customerIfscCode: req.body.customerIfscCode || null }),
+        ...(req.body.customerGstNumber !== undefined && { customerGstNumber: req.body.customerGstNumber || null }),
+        ...(req.body.customerPanNumber !== undefined && { customerPanNumber: req.body.customerPanNumber || null })
+      };
+    }
 
     await prisma.$transaction(async (tx) => {
       await tx.salesInvoice.update({
@@ -708,7 +1037,9 @@ export async function updateSalesInvoice(req: AuthenticatedRequest, res: Respons
           ...(shippingState !== undefined && { shippingState: shippingState || null }),
           ...(shippingName !== undefined && { shippingName: shippingName || null }),
           ...(salesOrderId !== undefined && { salesOrderId: salesOrderId || null }),
-          ...(salesOrderIds !== undefined && { salesOrderIds: salesOrderIds || null })
+          ...(salesOrderIds !== undefined && { salesOrderIds: salesOrderIds || null }),
+          ...(req.body.templateSettings !== undefined && { templateSettings: req.body.templateSettings || null }),
+          ...customerData
         }
       });
 
