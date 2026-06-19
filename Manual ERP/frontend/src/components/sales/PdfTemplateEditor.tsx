@@ -458,7 +458,7 @@ export default function PdfTemplateEditor() {
     const schema = selectedId ? UpdateDocumentTemplateBodySchema : CreateDocumentTemplateBodySchema;
     const parsed = schema.safeParse(payload);
     if (!parsed.success) {
-      alert("Validation error: " + parsed.error.errors[0].message);
+      alert("Validation error: " + parsed.error.issues[0].message);
       return;
     }
 

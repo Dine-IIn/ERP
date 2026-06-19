@@ -132,29 +132,55 @@ export default function CompanyProfile({
           </div>
         </div>
         
-        <div className="border-t border-[var(--border-color)] pt-4 mt-2">
-          <span className="text-[10px] font-bold text-indigo-400 tracking-wider uppercase block mb-3">SMTP Mail Integration (Simulated Gate)</span>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="col-span-2">
-              <label className="text-[8px] font-bold text-[var(--text-secondary)] tracking-wider block">SMTP Relaying Host</label>
+        <div className="border-t border-[var(--border-color)]/50 pt-3 mt-1">
+          <span className="text-[10px] font-bold text-indigo-400 tracking-wider uppercase block mb-3">Corporate Address Details</span>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div className="md:col-span-2">
+              <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Address Line 1</label>
               <input
                 type="text"
-                placeholder="smtp.example.com"
-                value={adminProfileForm.smtpHost}
-                onChange={e => setAdminProfileForm({ ...adminProfileForm, smtpHost: e.target.value })}
-                className="w-full mt-1 bg-[var(--bg-primary)] border border-[var(--border-color)] py-2 px-3 rounded-lg text-[10px]"
+                placeholder="Address Line 1"
+                value={adminProfileForm.addressLine1 || ''}
+                onChange={e => setAdminProfileForm({ ...adminProfileForm, addressLine1: e.target.value })}
+                className="w-full mt-1 bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2.5 px-3 rounded-lg text-xs"
               />
             </div>
             <div>
-              <label className="text-[8px] font-bold text-[var(--text-secondary)] tracking-wider block">SMTP Port</label>
+              <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">City</label>
               <input
                 type="text"
-                placeholder="587"
-                value={adminProfileForm.smtpPort}
-                onChange={e => setAdminProfileForm({ ...adminProfileForm, smtpPort: e.target.value })}
-                className="w-full mt-1 bg-[var(--bg-primary)] border border-[var(--border-color)] py-2 px-3 rounded-lg text-[10px]"
+                placeholder="City"
+                value={adminProfileForm.city || ''}
+                onChange={e => setAdminProfileForm({ ...adminProfileForm, city: e.target.value })}
+                className="w-full mt-1 bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2.5 px-3 rounded-lg text-xs"
               />
             </div>
+            <div>
+              <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">State</label>
+              <input
+                type="text"
+                placeholder="State (e.g. Gujarat)"
+                value={adminProfileForm.state || ''}
+                onChange={e => setAdminProfileForm({ ...adminProfileForm, state: e.target.value })}
+                className="w-full mt-1 bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2.5 px-3 rounded-lg text-xs"
+              />
+            </div>
+            <div>
+              <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Country</label>
+              <input
+                type="text"
+                placeholder="Country (e.g. India)"
+                value={adminProfileForm.country || ''}
+                onChange={e => setAdminProfileForm({ ...adminProfileForm, country: e.target.value })}
+                className="w-full mt-1 bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2.5 px-3 rounded-lg text-xs"
+              />
+            </div>
+          </div>
+        </div>
+        
+        <div className="border-t border-[var(--border-color)] pt-4 mt-2">
+          <span className="text-[10px] font-bold text-indigo-400 tracking-wider uppercase block mb-3">SMTP Mail Integration (Simulated Gate)</span>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="col-span-2">
               <label className="text-[8px] font-bold text-[var(--text-secondary)] tracking-wider block">SMTP Authentication User</label>
               <input

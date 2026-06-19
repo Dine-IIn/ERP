@@ -66,7 +66,7 @@ export default function Expenses() {
         syncToCashbook,
         referenceNo: referenceNo.trim() || null
       });
-      if (!parsed.success) throw new Error(parsed.error.errors[0].message);
+      if (!parsed.success) throw new Error(parsed.error.issues[0].message);
       await createMutation.mutateAsync(parsed.data);
       setLocalSuccess("Expense successfully recorded!");
       setTimeout(() => {

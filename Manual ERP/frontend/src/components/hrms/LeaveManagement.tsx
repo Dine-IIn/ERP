@@ -103,7 +103,7 @@ export default function LeaveManagement({
     const payload = { type, startDate, endDate, reason: reason.trim() };
     const parseResult = LeaveRequestSchema.safeParse(payload);
     if (!parseResult.success) {
-      setLocalErr(parseResult.error.errors[0].message);
+      setLocalErr(parseResult.error.issues[0].message);
       setLoading(false);
       return;
     }

@@ -350,12 +350,18 @@ export default function WorkOrders({ employees = [], currencySymbol = '$' }: Wor
   const [jobCycleTime, setJobCycleTime] = useState(30);
   const [jobQtyTarget, setJobQtyTarget] = useState(10);
 
+  const availablePlans = activeReleasedPlans.filter(p => !workOrdersList.some(wo => wo.planId === p.id && wo.status !== 'COMPLETED'));
+
   // Set default dropdown selections when list loads
   useEffect(() => {
-    if (activeReleasedPlans.length > 0 && !selectedPlanId) {
-      setSelectedPlanId(activeReleasedPlans[0].id);
+    if (availablePlans.length > 0) {
+      if (!selectedPlanId || !availablePlans.some(p => p.id === selectedPlanId)) {
+        setSelectedPlanId(availablePlans[0].id);
+      }
+    } else {
+      setSelectedPlanId('');
     }
-  }, [activeReleasedPlans, selectedPlanId]);
+  }, [availablePlans, selectedPlanId]);
 
   useEffect(() => {
     if (workOrdersList.length > 0 && !selectedWoId) {
@@ -780,15 +786,21 @@ export default function WorkOrders({ employees = [], currencySymbol = '$' }: Wor
               {!isEditing && (
                 <div>
                   <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">Select Scheduled Production Plan</label>
-                  <select
-                    value={selectedPlanId}
-                    onChange={e => setSelectedPlanId(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-850 p-2.5 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
-                  >
-                    {activeReleasedPlans.map(p => (
-                      <option key={p.id} value={p.id}>{p.finishedProductName} (Plan Target: {p.qtyToProduce} units)</option>
-                    ))}
-                  </select>
+                  {availablePlans.length === 0 ? (
+                    <p className="text-[10px] text-amber-400 italic bg-amber-950/20 border border-amber-900/35 p-3 rounded-xl">
+                      All released plans already have active Work Orders. Please release a new Production Plan first.
+                    </p>
+                  ) : (
+                    <select
+                      value={selectedPlanId}
+                      onChange={e => setSelectedPlanId(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-850 p-2.5 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
+                    >
+                      {availablePlans.map(p => (
+                        <option key={p.id} value={p.id}>{p.finishedProductName} (Plan Target: {p.qtyToProduce} units)</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               )}
 
@@ -815,7 +827,8 @@ export default function WorkOrders({ employees = [], currencySymbol = '$' }: Wor
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl border-0 cursor-pointer transition-all shadow-lg"
+                  disabled={!isEditing && availablePlans.length === 0}
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl border-0 cursor-pointer transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isEditing ? 'Save Changes' : 'Dispatch to Floor'}
                 </button>

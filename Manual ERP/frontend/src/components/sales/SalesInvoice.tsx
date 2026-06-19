@@ -3,6 +3,14 @@ import { Receipt, Search, Plus, Edit, Trash2, X, AlertCircle, Calendar, CheckCir
 import { apiClient } from '../../utils/apiService';
 import { useQuery } from '@tanstack/react-query';
 import { CreateSalesInvoiceBodySchema } from '../../utils/schemas';
+import CustomerTaxBankPdfSection from './CustomerTaxBankPdfSection';
+import {
+  mergePdfCustomizerFromTemplate,
+  parseTemplatesFromApi,
+  pickDefaultTemplate,
+  resolveCustomerForPdf,
+  resolveCustomerTaxBank,
+} from '../../utils/pdfDocumentUtils';
 
 const INDIAN_STATES = [
   "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
@@ -49,6 +57,8 @@ interface SalesInvoiceProps {
   onDeleteInvoice: (id: string) => Promise<void>;
   onEmailInvoice: (id: string) => Promise<void>;
   currencySymbol?: string;
+  exchangeRates?: Record<string, number>;
+  companyCurrencyId?: string;
 }
 
 interface InvoiceItemInput {
@@ -66,7 +76,9 @@ export default function SalesInvoice({
   onUpdateInvoice,
   onDeleteInvoice,
   onEmailInvoice,
-  currencySymbol = '$'
+  currencySymbol: currencySymbolProp = '$',
+  exchangeRates = {},
+  companyCurrencyId = 'USD'
 }: SalesInvoiceProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -74,8 +86,28 @@ export default function SalesInvoice({
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const [customerId, setCustomerId] = useState('');
+
+  const getCurrencyCodeFromSymbol = (symbol: string): string => {
+    if (symbol === "₹") return "INR";
+    if (symbol === "€") return "EUR";
+    if (symbol === "£") return "GBP";
+    return "USD";
+  };
+
+  const convertAmount = (amount: number, from: string, to: string) => {
+    const cleanFrom = (from || 'USD').toUpperCase().trim();
+    const cleanTo = (to || 'USD').toUpperCase().trim();
+    if (cleanFrom === cleanTo) return amount;
+    const rateFrom = exchangeRates?.[cleanFrom] || (cleanFrom === 'INR' ? 83.5 : cleanFrom === 'EUR' ? 0.92 : cleanFrom === 'GBP' ? 0.80 : 1.0);
+    const rateTo = exchangeRates?.[cleanTo] || (cleanTo === 'INR' ? 83.5 : cleanTo === 'EUR' ? 0.92 : cleanTo === 'GBP' ? 0.80 : 1.0);
+    return (amount / rateFrom) * rateTo;
+  };
+
+  const cust = customers.find(c => c.id === customerId);
+  const currencySymbol = cust?.currencySymbol || currencySymbolProp;
   const [dueDate, setDueDate] = useState('');
   const [discount, setDiscount] = useState('0.00'); // Treated as %
+  const [discountType, setDiscountType] = useState<'PERCENTAGE' | 'AMOUNT'>('PERCENTAGE');
   const [tax, setTax] = useState('18.00'); // Default tax (e.g. 18% GST)
   const [status, setStatus] = useState('UNPAID');
 
@@ -102,20 +134,10 @@ export default function SalesInvoice({
   const salesOrders = ordersData?.orders || [];
 
   const { data: templatesData } = useQuery({ queryKey: ['templates', 'INVOICE'], queryFn: () => apiClient.get<{ templates: any[] }>('/api/sales/templates?docType=INVOICE') });
-  const templates = React.useMemo(() => {
-    return (templatesData?.templates || []).map((t: any) => {
-      let settingsParsed: any = {};
-      try {
-        settingsParsed = typeof t.settings === 'string' ? JSON.parse(t.settings) : t.settings;
-      } catch (e) {
-        console.error("Failed to parse settings JSON", e);
-      }
-      return {
-        ...t,
-        ...settingsParsed
-      };
-    });
-  }, [templatesData]);
+  const templates = React.useMemo(
+    () => parseTemplatesFromApi(templatesData?.templates || []),
+    [templatesData]
+  );
   
   const [billingAddress, setBillingAddress] = useState('');
   const [shippingAddress, setShippingAddress] = useState('');
@@ -212,87 +234,15 @@ export default function SalesInvoice({
     setCustomTitle(tpl.title || 'Tax Invoice');
     setCustomNotes(tpl.terms || '');
     setThemeColor(tpl.themeColor || 'indigo');
-    setPdfCustomizer({
-      showLogo: tpl.showLogo ?? true,
-      showCompanyDetails: tpl.showCompanyDetails ?? true,
-      showBillingAddress: tpl.showBillingAddress ?? true,
-      showShippingAddress: tpl.showShippingAddress ?? true,
-      showBankDetails: tpl.showBankDetails ?? true,
-      showTerms: tpl.showTerms ?? true,
-      colProductCode: tpl.colProductCode ?? true,
-      colUnitPrice: tpl.colUnitPrice ?? true,
-      colDiscount: tpl.colDiscount ?? true,
-      colTax: tpl.colTax ?? true,
-      showCustomerBankDetails: tpl.showCustomerBankDetails ?? true,
-      showCustomerGSTNumber: tpl.showCustomerGSTNumber ?? true,
-      showCustomerPANNumber: tpl.showCustomerPANNumber ?? true,
-      showAmountInWords: tpl.showAmountInWords ?? true,
-      showTaxableAmount: tpl.showTaxableAmount ?? true,
-      showTaxBreakup: tpl.showTaxBreakup ?? true,
-      logoBase64: tpl.logoBase64 || null,
-      headerAlign: tpl.headerAlign || 'left',
-      titleAlign: tpl.titleAlign || 'left',
-      addressAlign: tpl.addressAlign || 'left',
-      totalsAlign: tpl.totalsAlign || 'right',
-      termsAlign: tpl.termsAlign || 'center',
-      headerFontSize: tpl.headerFontSize || 14,
-      titleFontSize: tpl.titleFontSize || 16,
-      bodyFontSize: tpl.bodyFontSize || 10,
-      headerPadding: tpl.headerPadding || 16,
-      sectionSpacing: tpl.sectionSpacing || 24,
-      logoSize: tpl.logoSize || 48,
-      tablePadding: tpl.tablePadding ?? 8,
-      colWidthProduct: tpl.colWidthProduct ?? 40,
-      colWidthCode: tpl.colWidthCode ?? 15,
-      colWidthQty: tpl.colWidthQty ?? 10,
-      colWidthPrice: tpl.colWidthPrice ?? 15,
-      colWidthDiscount: tpl.colWidthDiscount ?? 10,
-      colWidthSubtotal: tpl.colWidthSubtotal ?? 10,
-      showSignature: tpl.showSignature ?? true,
-      signatureBase64: tpl.signatureBase64 || null,
-      signatureLabel: tpl.signatureLabel || 'Authorized Signatory',
-      signatureSize: tpl.signatureSize || 45,
-      borderWidth: tpl.borderWidth ?? 1,
-      footerPadding: tpl.footerPadding ?? 16,
-      headerName: tpl.headerName || '',
-      headerSubtitle: tpl.headerSubtitle || '',
-      showMetadata: tpl.showMetadata ?? true,
-      showCustomerDetails: tpl.showCustomerDetails ?? true,
-      showInvoiceDate: tpl.showInvoiceDate ?? true,
-      showDueDate: tpl.showDueDate ?? true,
-      showStatus: tpl.showStatus ?? true,
-      showCustomerName: tpl.showCustomerName ?? true,
-      showCustomerType: tpl.showCustomerType ?? true,
-      showCustomerCategory: tpl.showCustomerCategory ?? true,
-      showCustomerTel: tpl.showCustomerTel ?? true,
-      showPaymentTerms: tpl.showPaymentTerms ?? true,
-    });
+    setPdfCustomizer(mergePdfCustomizerFromTemplate(tpl));
   };
 
   React.useEffect(() => {
-    if (customizingInvoice) {
-      if (customizingInvoice.templateSettings) {
-        try {
-          const tpl = JSON.parse(customizingInvoice.templateSettings);
-          setCustomTitle(tpl.title || 'Tax Invoice');
-          setCustomNotes(tpl.terms || '');
-          setThemeColor(tpl.themeColor || 'indigo');
-          setPdfCustomizer(tpl.customizer || tpl);
-          setSelectedTemplateId('');
-          return;
-        } catch (e) {
-          console.error("Failed to parse invoice's templateSettings:", e);
-        }
-      }
-      if (templates.length > 0) {
-        const defaultTpl = templates.find(t => t.isDefault);
-        if (defaultTpl) {
-          setSelectedTemplateId(defaultTpl.id);
-          applyTemplateSettings(defaultTpl);
-        } else {
-          setSelectedTemplateId('');
-        }
-      }
+    if (!customizingInvoice || templates.length === 0) return;
+    const defaultTpl = pickDefaultTemplate(templates);
+    if (defaultTpl) {
+      setSelectedTemplateId(defaultTpl.id);
+      applyTemplateSettings(defaultTpl);
     }
   }, [customizingInvoice, templates]);
 
@@ -356,7 +306,11 @@ export default function SalesInvoice({
       discount: String(item.discount)
     }));
 
-    setItems(newItemsList.length > 0 ? newItemsList : [{ productId: products[0]?.id || '', quantity: '1', price: String(products[0]?.pricing || 0), discount: '0.00' }]);
+    const targetCurrency = getCurrencyCodeFromSymbol(currencySymbol);
+    const basePrice = products[0]?.pricing || 0;
+    const converted = convertAmount(basePrice, companyCurrencyId, targetCurrency);
+
+    setItems(newItemsList.length > 0 ? newItemsList : [{ productId: products[0]?.id || '', quantity: '1', price: String(Number(converted.toFixed(2))), discount: '0.00' }]);
   };
 
   const prevSelectedOrderIdsRef = React.useRef(selectedOrderIds);
@@ -385,12 +339,20 @@ export default function SalesInvoice({
   };
 
   const openAddModal = () => {
-    setCustomerId(customers[0]?.id || '');
+    const defaultCustId = customers[0]?.id || '';
+    setCustomerId(defaultCustId);
     setDueDate('');
     setDiscount('0.00');
+    setDiscountType('PERCENTAGE');
     setTax('18.00');
     setStatus('UNPAID');
-    setItems([{ productId: products[0]?.id || '', quantity: '1', price: String(products[0]?.pricing || 0), discount: '0.00' }]);
+
+    const defaultCust = customers.find(c => c.id === defaultCustId);
+    const targetCurrency = getCurrencyCodeFromSymbol(defaultCust?.currencySymbol || '$');
+    const basePrice = products[0]?.pricing || 0;
+    const converted = convertAmount(basePrice, companyCurrencyId, targetCurrency);
+
+    setItems([{ productId: products[0]?.id || '', quantity: '1', price: String(Number(converted.toFixed(2))), discount: '0.00' }]);
     setIsEditing(false);
     setEditingId(null);
     setLocalErr(null);
@@ -411,6 +373,7 @@ export default function SalesInvoice({
     setCustomerId(inv.customerId);
     setDueDate(inv.dueDate ? inv.dueDate.substring(0, 10) : '');
     setDiscount(String(inv.discount || 0));
+    setDiscountType((inv.discountType as any) || 'PERCENTAGE');
     // Estimate original tax percentage
     const taxVal = inv.tax || 0;
     const sub = inv.subtotal || 1;
@@ -448,7 +411,11 @@ export default function SalesInvoice({
       discount: String(item.discount || 0)
     }));
 
-    setItems(mappedItems.length > 0 ? mappedItems : [{ productId: products[0]?.id || '', quantity: '1', price: String(products[0]?.pricing || 0), discount: '0.00' }]);
+    const targetCurrency = getCurrencyCodeFromSymbol(currencySymbol);
+    const basePrice = products[0]?.pricing || 0;
+    const converted = convertAmount(basePrice, companyCurrencyId, targetCurrency);
+
+    setItems(mappedItems.length > 0 ? mappedItems : [{ productId: products[0]?.id || '', quantity: '1', price: String(Number(converted.toFixed(2))), discount: '0.00' }]);
     setIsEditing(true);
     setEditingId(inv.id);
     setLocalErr(null);
@@ -457,7 +424,10 @@ export default function SalesInvoice({
   };
 
   const addItemRow = () => {
-    setItems([...items, { productId: products[0]?.id || '', quantity: '1', price: String(products[0]?.pricing || 0), discount: '0.00' }]);
+    const basePrice = products[0]?.pricing || 0;
+    const targetCurrency = getCurrencyCodeFromSymbol(currencySymbol);
+    const converted = convertAmount(basePrice, companyCurrencyId, targetCurrency);
+    setItems([...items, { productId: products[0]?.id || '', quantity: '1', price: String(Number(converted.toFixed(2))), discount: '0.00' }]);
   };
 
   const removeItemRow = (index: number) => {
@@ -471,7 +441,10 @@ export default function SalesInvoice({
     if (field === 'productId') {
       const selectedProd = products.find(p => p.id === value);
       if (selectedProd) {
-        updated[index].price = String(selectedProd.pricing || 0);
+        const basePrice = selectedProd.pricing || 0;
+        const targetCurrency = getCurrencyCodeFromSymbol(currencySymbol);
+        const converted = convertAmount(basePrice, companyCurrencyId, targetCurrency);
+        updated[index].price = String(Number(converted.toFixed(2)));
       }
     }
     setItems(updated);
@@ -488,7 +461,7 @@ export default function SalesInvoice({
   }, 0);
 
   const discPct = parseFloat(discount) || 0;
-  const discVal = subtotal * (discPct / 100); // overall discount absolute computed value
+  const discVal = discountType === 'AMOUNT' ? (parseFloat(discount) || 0) : subtotal * (discPct / 100); // overall discount absolute computed value
   
   const taxPct = parseFloat(tax) || 0;
   const taxVal = Math.max(0, subtotal - discVal) * (taxPct / 100);
@@ -531,7 +504,8 @@ export default function SalesInvoice({
     const payload = {
       customerId,
       dueDate: dueDate || null,
-      discount: discPct, // Treat discount as percentage
+      discount: discountType === 'AMOUNT' ? (parseFloat(discount) || 0) : discPct, // Treat discount as percentage or amount
+      discountType,
       tax: taxVal,
       subtotal,
       total: totalVal,
@@ -552,7 +526,7 @@ export default function SalesInvoice({
 
     const parsed = CreateSalesInvoiceBodySchema.safeParse(payload);
     if (!parsed.success) {
-      setLocalErr("Validation error: " + parsed.error.errors[0].message);
+      setLocalErr("Validation error: " + parsed.error.issues[0].message);
       setLoading(false);
       return;
     }
@@ -677,10 +651,10 @@ export default function SalesInvoice({
                 </td>
                 <td className="p-3 shrink-0 font-bold font-mono text-[var(--text-primary)]">
                   <span className="flex items-center gap-0.5 text-xs text-emerald-400">
-                    <span className="font-bold mr-0.5">{currencySymbol}</span> {inv.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    <span className="font-bold mr-0.5">{inv.customer?.currencySymbol || currencySymbolProp}</span> {inv.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </span>
-                  <span className="text-[9px] text-[var(--text-secondary)] block mt-0.5">Sub: {currencySymbol}{inv.subtotal}</span>
-                  <span className="text-[9px] text-emerald-500/80 block">Tax: {currencySymbol}{inv.tax}</span>
+                  <span className="text-[9px] text-[var(--text-secondary)] block mt-0.5">Sub: {inv.customer?.currencySymbol || currencySymbolProp}{inv.subtotal}</span>
+                  <span className="text-[9px] text-emerald-500/80 block">Tax: {inv.customer?.currencySymbol || currencySymbolProp}{inv.tax}</span>
                 </td>
                 <td className="p-3 shrink-0">
                   <span className={`px-2 py-0.5 rounded text-[8px] font-bold tracking-wider inline-block uppercase ${
@@ -784,7 +758,22 @@ export default function SalesInvoice({
                 <select
                   value={customerId}
                   required
-                  onChange={e => setCustomerId(e.target.value)}
+                  onChange={e => {
+                    const newCustId = e.target.value;
+                    const prevCust = customers.find(c => c.id === customerId);
+                    const oldCurrency = getCurrencyCodeFromSymbol(prevCust?.currencySymbol || '$');
+                    setCustomerId(newCustId);
+                    const newCust = customers.find(c => c.id === newCustId);
+                    const targetCurrency = getCurrencyCodeFromSymbol(newCust?.currencySymbol || '$');
+                    setItems(prev => prev.map(item => {
+                      const currentPrice = parseFloat(item.price) || 0;
+                      const converted = convertAmount(currentPrice, oldCurrency, targetCurrency);
+                      return {
+                        ...item,
+                        price: String(Number(converted.toFixed(2)))
+                      };
+                    }));
+                  }}
                   className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-emerald-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none cursor-pointer"
                 >
                   <option value="">-- Choose Customer --</option>
@@ -901,9 +890,15 @@ export default function SalesInvoice({
                 </div>
               )}
 
-              {/* Overall Discount (%) */}
+              {/* Overall Discount */}
               <div>
-                <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Overall Discount (%) (Optional)</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase">Overall Discount ({discountType === 'PERCENTAGE' ? '%' : currencySymbol})</label>
+                  <div className="flex rounded-lg overflow-hidden border border-[var(--border-primary)]">
+                    <button type="button" onClick={() => setDiscountType('PERCENTAGE')} className={`px-2 py-0.5 text-[8px] font-bold border-0 cursor-pointer transition-all ${discountType === 'PERCENTAGE' ? 'bg-indigo-600 text-white' : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)]'}`}>%</button>
+                    <button type="button" onClick={() => setDiscountType('AMOUNT')} className={`px-2 py-0.5 text-[8px] font-bold border-0 cursor-pointer transition-all ${discountType === 'AMOUNT' ? 'bg-indigo-600 text-white' : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)]'}`}>{currencySymbol}</button>
+                  </div>
+                </div>
                 <input
                   type="number"
                   step="0.01"
@@ -948,11 +943,11 @@ export default function SalesInvoice({
               {/* Total Card */}
               <div className="bg-[var(--bg-tertiary)]/30 border border-[var(--border-color)]/60 rounded-xl p-3 flex flex-col justify-center text-xs font-mono text-[var(--text-secondary)] gap-1">
                 <span className="flex justify-between"><span>Subtotal:</span> <span>{currencySymbol}{subtotal.toFixed(2)}</span></span>
-                <span className="flex justify-between text-rose-400"><span>Discount ({discPct}%):</span> <span>-{currencySymbol}{discVal.toFixed(2)}</span></span>
+                <span className="flex justify-between text-rose-400"><span>Discount ({discountType === 'PERCENTAGE' ? `${discPct}%` : currencySymbol}):</span> <span>-{currencySymbol}{discVal.toFixed(2)}</span></span>
                 {(() => {
                   const cust = customers.find(c => c.id === customerId);
                   const isInternational = cust?.clientClassification === 'INTERNATIONAL';
-                  const isSameState = companyProfile && cust?.state === companyProfile.state;
+                  const isSameState = companyProfile && (shippingState || cust?.state || 'Gujarat').trim().toLowerCase() === (companyProfile.state || 'Gujarat').trim().toLowerCase();
                   if (isInternational) {
                     return (
                       <span className="flex justify-between text-emerald-400 italic">
@@ -1123,13 +1118,14 @@ export default function SalesInvoice({
           ========================================== */}
       {customizingInvoice && (() => {
         const inv = customizingInvoice;
-        const cust = customers.find(c => c.id === inv.customerId);
+        const cust = resolveCustomerForPdf(customers, inv.customerId, inv);
+        const taxBank = resolveCustomerTaxBank(cust, inv);
         
-        const discountVal = inv.subtotal * ((inv.discount || 0) / 100);
+        const discountVal = inv.discountType === 'AMOUNT' ? (inv.discount || 0) : inv.subtotal * ((inv.discount || 0) / 100);
         const taxableAmount = inv.subtotal - discountVal;
         const taxRate = taxableAmount > 0 ? (inv.tax / taxableAmount) * 100 : 0.0;
         const isInternational = cust?.clientClassification === 'INTERNATIONAL';
-        const isSameState = companyProfile && cust?.state === companyProfile.state;
+        const isSameState = companyProfile && (inv.shippingState || cust?.state || 'Gujarat').trim().toLowerCase() === (companyProfile.state || 'Gujarat').trim().toLowerCase();
         
         return (
           <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in text-left">
@@ -1289,21 +1285,7 @@ export default function SalesInvoice({
                             <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Billing Destination (Bill To)</span>
                             <strong className="text-slate-900">{inv.customerName || cust?.name || 'Client Name'}</strong><br/>
                             {inv.billingAddress || cust?.billingAddress || 'Billing address pending'}
-                            {pdfCustomizer.showCustomerGSTNumber && (inv.customerGstNumber || cust?.gstNumber) && (
-                              <span><br/><strong>GSTIN:</strong> {inv.customerGstNumber || cust?.gstNumber}</span>
-                            )}
-                            {pdfCustomizer.showCustomerPANNumber && (inv.customerPanNumber || cust?.panNumber) && (
-                              <span><br/><strong>PAN:</strong> {inv.customerPanNumber || cust?.panNumber}</span>
-                            )}
-                            {pdfCustomizer.showCustomerBankDetails && (inv.customerBankName || cust?.bankName || inv.customerAccountNumber || cust?.accountNumber) && (
-                              <div className="text-[9px] mt-2 pt-1 border-t border-slate-100 text-slate-550 leading-normal text-left">
-                                <strong>Customer Bank Details:</strong><br/>
-                                {(inv.customerBankName || cust?.bankName) && <span>Bank: {inv.customerBankName || cust?.bankName}<br/></span>}
-                                {(inv.customerAccountHolderName || cust?.accountHolderName) && <span>Holder: {inv.customerAccountHolderName || cust?.accountHolderName}<br/></span>}
-                                {(inv.customerAccountNumber || cust?.accountNumber) && <span>A/C No: {inv.customerAccountNumber || cust?.accountNumber}<br/></span>}
-                                {(inv.customerIfscCode || cust?.ifscCode) && <span>IFSC Code: {inv.customerIfscCode || cust?.ifscCode}</span>}
-                              </div>
-                            )}
+                            <CustomerTaxBankPdfSection pdfCustomizer={pdfCustomizer} taxBank={taxBank} />
                           </div>
                         )}
                         
@@ -1384,7 +1366,7 @@ export default function SalesInvoice({
                             )}
                             {inv.discount > 0 && (
                               <tr className="border-b border-slate-100">
-                                <td className="py-1.5 text-left text-red-500">Discount ({inv.discount}%):</td>
+                                <td className="py-1.5 text-left text-red-500">Discount ({inv.discountType === 'AMOUNT' ? currencySymbol : `${inv.discount}%`}):</td>
                                 <td className="py-1.5 text-right font-mono text-red-550 font-bold">-{currencySymbol}{discountVal.toFixed(2)}</td>
                               </tr>
                             )}
@@ -1531,12 +1513,13 @@ export default function SalesInvoice({
           ========================================== */}
       {activePrintInvoice && (() => {
         const inv = activePrintInvoice;
-        const cust = customers.find(c => c.id === inv.customerId);
-        const discountVal = inv.subtotal * ((inv.discount || 0) / 100);
+        const cust = resolveCustomerForPdf(customers, inv.customerId, inv);
+        const taxBank = resolveCustomerTaxBank(cust, inv);
+        const discountVal = inv.discountType === 'AMOUNT' ? (inv.discount || 0) : inv.subtotal * ((inv.discount || 0) / 100);
         const taxableAmount = inv.subtotal - discountVal;
         const taxRate = taxableAmount > 0 ? (inv.tax / taxableAmount) * 100 : 0.0;
         const isInternational = cust?.clientClassification === 'INTERNATIONAL';
-        const isSameState = companyProfile && cust?.state === companyProfile.state;
+        const isSameState = companyProfile && (inv.shippingState || cust?.state || 'Gujarat').trim().toLowerCase() === (companyProfile.state || 'Gujarat').trim().toLowerCase();
         const logoSrc = pdfCustomizer.logoBase64 || companyProfile?.logoUrl;
 
         return (
@@ -1657,21 +1640,7 @@ export default function SalesInvoice({
                     <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Billing Destination (Bill To)</span>
                     <strong className="text-slate-900">{inv.customerName || cust?.name || 'Client Name'}</strong><br/>
                     {inv.billingAddress || cust?.billingAddress || 'Billing address pending'}
-                    {pdfCustomizer.showCustomerGSTNumber && (inv.customerGstNumber || cust?.gstNumber) && (
-                      <span><br/><strong>GSTIN:</strong> {inv.customerGstNumber || cust?.gstNumber}</span>
-                    )}
-                    {pdfCustomizer.showCustomerPANNumber && (inv.customerPanNumber || cust?.panNumber) && (
-                      <span><br/><strong>PAN:</strong> {inv.customerPanNumber || cust?.panNumber}</span>
-                    )}
-                    {pdfCustomizer.showCustomerBankDetails && (inv.customerBankName || cust?.bankName || inv.customerAccountNumber || cust?.accountNumber) && (
-                      <div className="text-[9px] mt-2 pt-1 border-t border-slate-100 text-slate-550 leading-normal text-left">
-                        <strong>Customer Bank Details:</strong><br/>
-                        {(inv.customerBankName || cust?.bankName) && <span>Bank: {inv.customerBankName || cust?.bankName}<br/></span>}
-                        {(inv.customerAccountHolderName || cust?.accountHolderName) && <span>Holder: {inv.customerAccountHolderName || cust?.accountHolderName}<br/></span>}
-                        {(inv.customerAccountNumber || cust?.accountNumber) && <span>A/C No: {inv.customerAccountNumber || cust?.accountNumber}<br/></span>}
-                        {(inv.customerIfscCode || cust?.ifscCode) && <span>IFSC Code: {inv.customerIfscCode || cust?.ifscCode}</span>}
-                      </div>
-                    )}
+                    <CustomerTaxBankPdfSection pdfCustomizer={pdfCustomizer} taxBank={taxBank} />
                   </div>
                 )}
                 
@@ -1684,7 +1653,8 @@ export default function SalesInvoice({
                   </div>
                 )}
               </div>
-              {/* Items Table */}
+
+              {/* Items Table */}
               <div className="pt-2">
                 <table 
                   className="w-full text-left border-collapse" 
@@ -1750,7 +1720,7 @@ export default function SalesInvoice({
                     )}
                     {inv.discount > 0 && (
                       <tr className="border-b border-slate-100">
-                        <td className="py-1.5 text-left text-red-500">Discount ({inv.discount}%):</td>
+                        <td className="py-1.5 text-left text-red-500">Discount ({inv.discountType === 'AMOUNT' ? currencySymbol : `${inv.discount}%`}):</td>
                         <td className="py-1.5 text-right font-mono text-red-550">-{currencySymbol}{discountVal.toFixed(2)}</td>
                       </tr>
                     )}

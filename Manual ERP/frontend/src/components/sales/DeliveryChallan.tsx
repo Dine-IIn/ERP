@@ -3,6 +3,15 @@ import { Truck, Search, Plus, Edit, Trash2, X, AlertCircle, Calendar, CheckCircl
 import { apiClient } from '../../utils/apiService';
 import { useQuery } from '@tanstack/react-query';
 import { CreateDeliveryChallanBodySchema } from '../../utils/schemas';
+import CustomerTaxBankPdfSection from './CustomerTaxBankPdfSection';
+import {
+  DEFAULT_PDF_CUSTOMIZER,
+  mergePdfCustomizerFromTemplate,
+  parseTemplatesFromApi,
+  pickDefaultTemplate,
+  resolveCustomerForPdf,
+  resolveCustomerTaxBank,
+} from '../../utils/pdfDocumentUtils';
 
 interface DeliveryChallanProps {
   challans: any[];
@@ -55,20 +64,10 @@ export default function DeliveryChallan({
     queryKey: ['templates', 'CHALLAN'],
     queryFn: () => apiClient.get<{ templates: any[] }>('/api/sales/templates?docType=CHALLAN')
   });
-  const templates = React.useMemo(() => {
-    return (templatesRes?.templates || []).map((t: any) => {
-      let settingsParsed: any = {};
-      try {
-        settingsParsed = typeof t.settings === 'string' ? JSON.parse(t.settings) : t.settings;
-      } catch (e) {
-        console.error("Failed to parse settings JSON", e);
-      }
-      return {
-        ...t,
-        ...settingsParsed
-      };
-    });
-  }, [templatesRes]);
+  const templates = React.useMemo(
+    () => parseTemplatesFromApi(templatesRes?.templates || []),
+    [templatesRes]
+  );
 
   // Print Preview States
   const [customizingInvoice, setCustomizingInvoice] = useState<any>(null);
@@ -76,56 +75,7 @@ export default function DeliveryChallan({
   const [customTitle, setCustomTitle] = useState('DELIVERY CHALLAN');
   const [customNotes, setCustomNotes] = useState('1. Please receive the goods in sound physical condition.\n2. Return duplicate copy duly signed and stamped.');
   const [themeColor, setThemeColor] = useState('emerald');
-  const [pdfCustomizer, setPdfCustomizer] = useState({
-    showLogo: true,
-    showCompanyDetails: true,
-    showBillingAddress: true,
-    showShippingAddress: true,
-    showTerms: true,
-    colProductCode: true,
-    colUnitPrice: true,
-    colDiscount: false,
-    colTax: false,
-    logoBase64: null as string | null,
-    headerAlign: 'left' as 'left' | 'center' | 'right',
-    titleAlign: 'left' as 'left' | 'center' | 'right',
-    addressAlign: 'left' as 'left' | 'center' | 'right',
-    totalsAlign: 'right' as 'left' | 'center' | 'right',
-    termsAlign: 'center' as 'left' | 'center' | 'right',
-    headerFontSize: 14,
-    titleFontSize: 16,
-    bodyFontSize: 10,
-    headerPadding: 16,
-    sectionSpacing: 24,
-    logoSize: 48,
-    // Spacing & Width overrides
-    tablePadding: 8,
-    colWidthProduct: 40,
-    colWidthCode: 15,
-    colWidthQty: 10,
-    colWidthPrice: 15,
-    colWidthDiscount: 10,
-    colWidthSubtotal: 10,
-    // Signature block overrides
-    showSignature: true,
-    signatureBase64: null as string | null,
-    signatureLabel: 'Authorized Signatory',
-    signatureSize: 45,
-    borderWidth: 1,
-    footerPadding: 16,
-    headerName: '',
-    headerSubtitle: '',
-    showMetadata: true,
-    showCustomerDetails: true,
-    showInvoiceDate: true,
-    showDueDate: true,
-    showStatus: true,
-    showCustomerName: true,
-    showCustomerType: true,
-    showCustomerCategory: true,
-    showCustomerTel: true,
-    showPaymentTerms: true,
-  });
+  const [pdfCustomizer, setPdfCustomizer] = useState({ ...DEFAULT_PDF_CUSTOMIZER, colDiscount: false, colTax: false });
 
   const getThemeHex = (colorName: string) => {
     switch (colorName) {
@@ -143,64 +93,18 @@ export default function DeliveryChallan({
     setCustomNotes(tpl.terms || '');
     setThemeColor(tpl.themeColor || 'emerald');
     setPdfCustomizer({
-      showLogo: tpl.showLogo ?? true,
-      showCompanyDetails: tpl.showCompanyDetails ?? true,
-      showBillingAddress: tpl.showBillingAddress ?? true,
-      showShippingAddress: tpl.showShippingAddress ?? true,
-      showTerms: tpl.showTerms ?? true,
-      colProductCode: tpl.colProductCode ?? true,
-      colUnitPrice: tpl.colUnitPrice ?? true,
+      ...mergePdfCustomizerFromTemplate(tpl),
       colDiscount: tpl.colDiscount ?? false,
       colTax: tpl.colTax ?? false,
-      logoBase64: tpl.logoBase64 || null,
-      headerAlign: tpl.headerAlign || 'left',
-      titleAlign: tpl.titleAlign || 'left',
-      addressAlign: tpl.addressAlign || 'left',
-      totalsAlign: tpl.totalsAlign || 'right',
-      termsAlign: tpl.termsAlign || 'center',
-      headerFontSize: tpl.headerFontSize || 14,
-      titleFontSize: tpl.titleFontSize || 16,
-      bodyFontSize: tpl.bodyFontSize || 10,
-      headerPadding: tpl.headerPadding || 16,
-      sectionSpacing: tpl.sectionSpacing || 24,
-      logoSize: tpl.logoSize || 48,
-      tablePadding: tpl.tablePadding ?? 8,
-      colWidthProduct: tpl.colWidthProduct ?? 40,
-      colWidthCode: tpl.colWidthCode ?? 15,
-      colWidthQty: tpl.colWidthQty ?? 10,
-      colWidthPrice: tpl.colWidthPrice ?? 15,
-      colWidthDiscount: tpl.colWidthDiscount ?? 10,
-      colWidthSubtotal: tpl.colWidthSubtotal ?? 10,
-      showSignature: tpl.showSignature ?? true,
-      signatureBase64: tpl.signatureBase64 || null,
-      signatureLabel: tpl.signatureLabel || 'Authorized Signatory',
-      signatureSize: tpl.signatureSize || 45,
-      borderWidth: tpl.borderWidth ?? 1,
-      footerPadding: tpl.footerPadding ?? 16,
-      headerName: tpl.headerName || '',
-      headerSubtitle: tpl.headerSubtitle || '',
-      showMetadata: tpl.showMetadata ?? true,
-      showCustomerDetails: tpl.showCustomerDetails ?? true,
-      showInvoiceDate: tpl.showInvoiceDate ?? true,
-      showDueDate: tpl.showDueDate ?? true,
-      showStatus: tpl.showStatus ?? true,
-      showCustomerName: tpl.showCustomerName ?? true,
-      showCustomerType: tpl.showCustomerType ?? true,
-      showCustomerCategory: tpl.showCustomerCategory ?? true,
-      showCustomerTel: tpl.showCustomerTel ?? true,
-      showPaymentTerms: tpl.showPaymentTerms ?? true,
     });
   };
 
   React.useEffect(() => {
-    if (customizingInvoice && templates.length > 0) {
-      const defaultTpl = templates.find(t => t.isDefault);
-      if (defaultTpl) {
-        setSelectedTemplateId(defaultTpl.id);
-        applyTemplateSettings(defaultTpl);
-      } else {
-        setSelectedTemplateId('');
-      }
+    if (!customizingInvoice || templates.length === 0) return;
+    const defaultTpl = pickDefaultTemplate(templates);
+    if (defaultTpl) {
+      setSelectedTemplateId(defaultTpl.id);
+      applyTemplateSettings(defaultTpl);
     }
   }, [customizingInvoice, templates]);
 
@@ -397,7 +301,7 @@ export default function DeliveryChallan({
 
     const parsed = CreateDeliveryChallanBodySchema.safeParse(payload);
     if (!parsed.success) {
-      setLocalErr("Validation error: " + parsed.error.errors[0].message);
+      setLocalErr("Validation error: " + parsed.error.issues[0].message);
       setLoading(false);
       return;
     }
@@ -799,7 +703,8 @@ export default function DeliveryChallan({
           ========================================== */}
       {customizingInvoice && (() => {
         const dc = customizingInvoice;
-        const cust = customers.find(c => c.id === dc.customerId);
+        const cust = resolveCustomerForPdf(customers, dc.customerId, dc);
+        const taxBank = resolveCustomerTaxBank(cust);
         
         return (
           <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in text-left">
@@ -957,6 +862,7 @@ export default function DeliveryChallan({
                             <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Billing Address</span>
                             <strong className="text-slate-900">{cust?.name}</strong><br/>
                             {cust?.billingAddress || 'Billing address pending'}
+                            <CustomerTaxBankPdfSection pdfCustomizer={pdfCustomizer} taxBank={taxBank} />
                           </div>
                         )}
                         
@@ -1088,7 +994,8 @@ export default function DeliveryChallan({
           ========================================== */}
       {activePrintInvoice && (() => {
         const dc = activePrintInvoice;
-        const cust = customers.find(c => c.id === dc.customerId);
+        const cust = resolveCustomerForPdf(customers, dc.customerId, dc);
+        const taxBank = resolveCustomerTaxBank(cust);
         const logoSrc = pdfCustomizer.logoBase64 || companyProfile?.logoUrl;
 
         return (
@@ -1207,6 +1114,7 @@ export default function DeliveryChallan({
                     <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Billing Address</span>
                     <strong className="text-slate-900">{cust?.name}</strong><br/>
                     {cust?.billingAddress || 'Billing address pending'}
+                    <CustomerTaxBankPdfSection pdfCustomizer={pdfCustomizer} taxBank={taxBank} />
                   </div>
                 )}
                 
@@ -1218,7 +1126,8 @@ export default function DeliveryChallan({
                   </div>
                 )}
               </div>
-              {/* Items Table */}
+
+              {/* Items Table */}
               <div className="pt-2">
                 <table className="w-full text-left border-collapse" style={{ fontSize: `${pdfCustomizer.bodyFontSize}px` }}>
                   <thead>

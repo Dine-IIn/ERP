@@ -655,7 +655,7 @@ export default function BomManagement({ products = [], currencySymbol = '$' }: B
                       return (
                         <div className="text-left border-t border-slate-850/65 pt-3.5">
                           <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest block mb-2">Process Routing Sequence</span>
-                          <div className="relative border-l border-indigo-500/20 pl-4 ml-2.5 space-y-2">
+                          <div className="relative border-l border-indigo-500/20 pl-4 ml-2.5 space-y-2 max-h-[200px] overflow-y-auto pr-1">
                             {r.operations.map((op: any, index: number) => {
                               const isOutsource = op.operationType === 'OUTSOURCED';
                               return (
@@ -820,8 +820,8 @@ export default function BomManagement({ products = [], currencySymbol = '$' }: B
       {/* Add/Edit BOM Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-          <div className="w-full max-w-xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden animate-scale-up">
-            <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-950/20 text-left">
+          <div className="w-full max-w-xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden animate-scale-up max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-950/20 text-left shrink-0">
               <h3 className="text-sm font-bold text-white flex items-center gap-1.5 uppercase">
                 <Layers className="w-4 h-4 text-indigo-400" />
                 {isEditing ? 'Modify Bill of Materials (BOM) Formula' : 'Configure Bill of Materials (BOM) Formula'}
@@ -834,7 +834,8 @@ export default function BomManagement({ products = [], currencySymbol = '$' }: B
               </button>
             </div>
 
-            <form onSubmit={handleCreateBOMSubmit} className="p-6 space-y-4 text-left">
+            <form onSubmit={handleCreateBOMSubmit} className="flex flex-col flex-1 overflow-hidden">
+              <div className="p-6 space-y-4 overflow-y-auto flex-1 text-left">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block mb-1">BOM Name</label>
@@ -1407,7 +1408,8 @@ export default function BomManagement({ products = [], currencySymbol = '$' }: B
                 </div>
               )}
 
-              <div className="flex gap-3 justify-end pt-3">
+              </div>
+              <div className="flex gap-3 justify-end p-5 border-t border-slate-800 bg-slate-950/20 shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}

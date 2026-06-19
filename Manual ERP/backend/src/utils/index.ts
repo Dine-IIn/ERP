@@ -4,8 +4,51 @@ import dotenv from 'dotenv';
 import prisma from '../services/db';
 import tls from 'tls';
 import net from 'net';
+import crypto from 'crypto';
 
 dotenv.config();
+
+// ==========================================
+// AES-256-CBC ENCRYPTION FOR SMTP PASSWORDS
+// ==========================================
+const SMTP_ENCRYPTION_KEY = process.env.SMTP_ENCRYPTION_KEY || 'erp-smtp-secret-key-32bytes!!!!'; // Must be exactly 32 chars
+const SMTP_IV_LENGTH = 16;
+
+/**
+ * Encrypt an SMTP password for secure storage using AES-256-CBC.
+ * Returns a string in format: iv_hex:encrypted_hex
+ */
+export function encryptSmtp(plainText: string): string {
+  if (!plainText) return '';
+  const iv = crypto.randomBytes(SMTP_IV_LENGTH);
+  const key = Buffer.from(SMTP_ENCRYPTION_KEY.padEnd(32, '0').slice(0, 32), 'utf-8');
+  const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+  let encrypted = cipher.update(plainText, 'utf-8', 'hex');
+  encrypted += cipher.final('hex');
+  return iv.toString('hex') + ':' + encrypted;
+}
+
+/**
+ * Decrypt an AES-256-CBC encrypted SMTP password.
+ * Expects input in format: iv_hex:encrypted_hex
+ * Falls back to returning the raw value if decryption fails (for unencrypted legacy values).
+ */
+export function decryptSmtp(encryptedText: string): string {
+  if (!encryptedText) return '';
+  try {
+    const parts = encryptedText.split(':');
+    if (parts.length !== 2) return encryptedText; // Legacy unencrypted value
+    const iv = Buffer.from(parts[0], 'hex');
+    if (iv.length !== SMTP_IV_LENGTH) return encryptedText; // Not encrypted format
+    const key = Buffer.from(SMTP_ENCRYPTION_KEY.padEnd(32, '0').slice(0, 32), 'utf-8');
+    const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+    let decrypted = decipher.update(parts[1], 'hex', 'utf-8');
+    decrypted += decipher.final('utf-8');
+    return decrypted;
+  } catch {
+    return encryptedText; // Fallback for legacy unencrypted passwords
+  }
+}
 
 const JWT_SECRET = process.env.JWT_SECRET || "fallback-secret-erp-key-12345-enterprise-ready";
 
@@ -46,6 +89,11 @@ function extractRawEmail(emailStr: string): string {
 // ==========================================
 // PURE NATIVE SMTP EMAIL CLIENT (RFC 5321 COMPLIANT)
 // ==========================================
+interface SmtpAttachment {
+  filename: string;
+  content: Buffer;
+}
+
 interface SmtpOptions {
   host: string;
   port: number;
@@ -56,6 +104,7 @@ interface SmtpOptions {
   to: string;
   subject: string;
   text: string;
+  attachments?: SmtpAttachment[];
 }
 
 export function sendSmtpEmail(opts: SmtpOptions): Promise<void> {
@@ -111,16 +160,51 @@ export function sendSmtpEmail(opts: SmtpOptions): Promise<void> {
           step = 7;
           break;
         case 7: // DATA challenge (354) received, send headers + email body ending with "."
-          const headers = [
-            `From: ${opts.from}`,
-            `To: ${opts.to}`,
-            `Subject: ${opts.subject}`,
-            'MIME-Version: 1.0',
-            'Content-Type: text/plain; charset=utf-8',
-            '',
-            opts.text,
-            '.'
-          ].join('\r\n');
+          const boundary = `----=_Part_${Math.random().toString(36).substring(2)}_${Date.now()}`;
+          let headers = '';
+          if (opts.attachments && opts.attachments.length > 0) {
+            const emailParts = [
+              `From: ${opts.from}`,
+              `To: ${opts.to}`,
+              `Subject: ${opts.subject}`,
+              'MIME-Version: 1.0',
+              `Content-Type: multipart/mixed; boundary="${boundary}"`,
+              '',
+              `--${boundary}`,
+              'Content-Type: text/plain; charset=utf-8',
+              'Content-Transfer-Encoding: 7bit',
+              '',
+              opts.text,
+              ''
+            ];
+
+            for (const att of opts.attachments) {
+              const base64Content = att.content.toString('base64');
+              const wrappedContent = base64Content.replace(/(.{76})/g, '$1\r\n');
+              emailParts.push(
+                `--${boundary}`,
+                `Content-Type: application/octet-stream; name="${att.filename}"`,
+                'Content-Transfer-Encoding: base64',
+                `Content-Disposition: attachment; filename="${att.filename}"`,
+                '',
+                wrappedContent,
+                ''
+              );
+            }
+            emailParts.push(`--${boundary}--`, '.');
+            headers = emailParts.join('\r\n');
+          } else {
+            headers = [
+              `From: ${opts.from}`,
+              `To: ${opts.to}`,
+              `Subject: ${opts.subject}`,
+              'MIME-Version: 1.0',
+              'Content-Type: text/plain; charset=utf-8',
+              '',
+              opts.text,
+              '.'
+            ].join('\r\n');
+          }
           send(headers);
           step = 8;
           break;
@@ -215,16 +299,15 @@ export async function sendSimulatedOTP(target: string, companyCode?: string): Pr
   const isEmail = target.includes('@');
 
   if (isEmail) {
-    // 1. Check Global Env first
-    let host = process.env.SMTP_HOST;
-    let port = Number(process.env.SMTP_PORT) || 465;
-    let secure = process.env.SMTP_SECURE === 'true' || port === 465;
-    let user = process.env.SMTP_USER;
-    let pass = process.env.SMTP_PASS;
-    let sender = process.env.SMTP_SENDER || user || "noreply@erp.anbindustries.com";
+    // 1. Check Company SMTP FIRST if companyCode is provided (Priority: Company > Env)
+    let host: string | undefined;
+    let port = 465;
+    let secure = true;
+    let user: string | undefined;
+    let pass: string | undefined;
+    let sender = "noreply@erp.anbindustries.com";
 
-    // 2. Check Company SMTP fallback if companyCode is provided
-    if (!host && companyCode) {
+    if (companyCode) {
       const company = await prisma.company.findUnique({
         where: { companyCode: companyCode.toUpperCase() }
       });
@@ -233,9 +316,21 @@ export async function sendSimulatedOTP(target: string, companyCode?: string): Pr
         port = company.smtpPort || 465;
         secure = company.smtpSecure || port === 465;
         user = company.smtpUser || undefined;
-        pass = company.smtpPassword || undefined;
+        pass = company.smtpPassword ? decryptSmtp(company.smtpPassword) : undefined;
         sender = company.smtpSender || user || `noreply@${company.companyCode.toLowerCase()}.com`;
+        console.log(`📧 [SMTP] Using Company SMTP for ${companyCode}`);
       }
+    }
+
+    // 2. Fallback to Global Env vars if Company SMTP not configured
+    if (!host && process.env.SMTP_HOST) {
+      host = process.env.SMTP_HOST;
+      port = Number(process.env.SMTP_PORT) || 465;
+      secure = process.env.SMTP_SECURE === 'true' || port === 465;
+      user = process.env.SMTP_USER;
+      pass = process.env.SMTP_PASS;
+      sender = process.env.SMTP_SENDER || user || "noreply@erp.anbindustries.com";
+      console.log(`📧 [SMTP] Using env var fallback for OTP email`);
     }
 
     if (!host) {
@@ -329,15 +424,22 @@ export async function verifySimulatedOTP(target: string, otpCode: string): Promi
   return true;
 }
 
-export async function sendEmailNotification(to: string, subject: string, text: string, companyCode?: string): Promise<void> {
-  let host = process.env.SMTP_HOST;
-  let port = Number(process.env.SMTP_PORT) || 465;
-  let secure = process.env.SMTP_SECURE === 'true' || port === 465;
-  let user = process.env.SMTP_USER;
-  let pass = process.env.SMTP_PASS;
-  let sender = process.env.SMTP_SENDER || user || "noreply@erp.anbindustries.com";
+export async function sendEmailNotification(
+  to: string,
+  subject: string,
+  text: string,
+  companyCode?: string,
+  attachments?: { filename: string; content: Buffer }[]
+): Promise<void> {
+  // 1. Check Company SMTP FIRST if companyCode is provided (Priority: Company > Env)
+  let host: string | undefined;
+  let port = 465;
+  let secure = true;
+  let user: string | undefined;
+  let pass: string | undefined;
+  let sender = "noreply@erp.anbindustries.com";
 
-  if (!host && companyCode) {
+  if (companyCode) {
     const company = await prisma.company.findUnique({
       where: { companyCode: companyCode.toUpperCase() }
     });
@@ -346,9 +448,21 @@ export async function sendEmailNotification(to: string, subject: string, text: s
       port = company.smtpPort || 465;
       secure = company.smtpSecure || port === 465;
       user = company.smtpUser || undefined;
-      pass = company.smtpPassword || undefined;
+      pass = company.smtpPassword ? decryptSmtp(company.smtpPassword) : undefined;
       sender = company.smtpSender || user || `noreply@${company.companyCode.toLowerCase()}.com`;
+      console.log(`📧 [SMTP] Using Company SMTP for ${companyCode}`);
     }
+  }
+
+  // 2. Fallback to Global Env vars if Company SMTP not configured
+  if (!host && process.env.SMTP_HOST) {
+    host = process.env.SMTP_HOST;
+    port = Number(process.env.SMTP_PORT) || 465;
+    secure = process.env.SMTP_SECURE === 'true' || port === 465;
+    user = process.env.SMTP_USER;
+    pass = process.env.SMTP_PASS;
+    sender = process.env.SMTP_SENDER || user || "noreply@erp.anbindustries.com";
+    console.log(`📧 [SMTP] Using env var fallback for email to ${to}`);
   }
 
   if (!host) {
@@ -368,7 +482,8 @@ export async function sendEmailNotification(to: string, subject: string, text: s
     from: sender,
     to,
     subject,
-    text
+    text,
+    attachments
   });
 }
 

@@ -117,7 +117,7 @@ export default function Opportunities({
 
     const parsed = OpportunitySchema.safeParse(payload);
     if (!parsed.success) {
-      setLocalErr(parsed.error.errors[0].message);
+      setLocalErr(parsed.error.issues[0].message);
       return;
     }
 

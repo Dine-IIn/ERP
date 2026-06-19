@@ -72,7 +72,7 @@ export default function Shifts({
     const payload = { name: name.trim(), startTime, endTime, gracePeriod: Number(gracePeriod) };
     const parseResult = ShiftRosterSchema.safeParse(payload);
     if (!parseResult.success) {
-      setLocalErr(parseResult.error.errors[0].message);
+      setLocalErr(parseResult.error.issues[0].message);
       setLoading(false);
       return;
     }

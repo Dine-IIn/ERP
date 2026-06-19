@@ -114,24 +114,24 @@ async function runTests() {
     // Expected tax = 1450.00 * 0.18 = 261.00
     // Expected total = 1450.00 + 261.00 = 1711.00
     console.log("Verifying Domestic Same-State Customer (Gujarat)...");
-    await validateInvoiceTaxAndTotal(company.id, domesticSameStateCust.id, items, 0, 261.00, 1711.00, null);
+    await validateInvoiceTaxAndTotal(company.id, domesticSameStateCust.id, items, 0, 'PERCENTAGE', 261.00, 1711.00, null);
     console.log("PASS: Domestic Same-State invoice validation succeeded.");
 
     console.log("Verifying Domestic Other-State Customer (Maharashtra)...");
-    await validateInvoiceTaxAndTotal(company.id, domesticOtherStateCust.id, items, 0, 261.00, 1711.00, null);
+    await validateInvoiceTaxAndTotal(company.id, domesticOtherStateCust.id, items, 0, 'PERCENTAGE', 261.00, 1711.00, null);
     console.log("PASS: Domestic Other-State invoice validation succeeded.");
 
     // Test International Customer (0% tax):
     // Expected tax = 0.00
     // Expected total = 1450.00
     console.log("Verifying International Customer...");
-    await validateInvoiceTaxAndTotal(company.id, internationalCust.id, items, 0, 0.00, 1450.00, null);
+    await validateInvoiceTaxAndTotal(company.id, internationalCust.id, items, 0, 'PERCENTAGE', 0.00, 1450.00, null);
     console.log("PASS: International invoice validation succeeded.");
 
     // Test Failure case: incorrect tax
     console.log("Verifying validation failure with incorrect tax...");
     try {
-      await validateInvoiceTaxAndTotal(company.id, domesticSameStateCust.id, items, 0, 200.00, 1711.00, null);
+      await validateInvoiceTaxAndTotal(company.id, domesticSameStateCust.id, items, 0, 'PERCENTAGE', 200.00, 1711.00, null);
       console.error("FAIL: Expected validation error for incorrect tax, but it succeeded.");
     } catch (e: any) {
       console.log(`PASS: Correctly rejected incorrect tax: "${e.message}"`);
@@ -140,7 +140,7 @@ async function runTests() {
     // Test Failure case: incorrect total
     console.log("Verifying validation failure with incorrect total...");
     try {
-      await validateInvoiceTaxAndTotal(company.id, domesticSameStateCust.id, items, 0, 261.00, 1800.00, null);
+      await validateInvoiceTaxAndTotal(company.id, domesticSameStateCust.id, items, 0, 'PERCENTAGE', 261.00, 1800.00, null);
       console.error("FAIL: Expected validation error for incorrect total, but it succeeded.");
     } catch (e: any) {
       console.log(`PASS: Correctly rejected incorrect total: "${e.message}"`);

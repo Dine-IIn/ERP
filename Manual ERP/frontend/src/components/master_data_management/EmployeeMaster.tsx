@@ -153,7 +153,7 @@ const EmployeeMaster = React.memo(function EmployeeMaster({
 
       const parsed = EmployeeSchema.safeParse(adminUserForm);
       if (!parsed.success) {
-        setLocalErr(parsed.error.errors[0].message);
+        setLocalErr(parsed.error.issues[0].message);
         return;
       }
 

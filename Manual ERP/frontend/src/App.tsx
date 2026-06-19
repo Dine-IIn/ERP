@@ -816,6 +816,7 @@ export default function App() {
   const [salesOrdersList, setSalesOrdersList] = useState<any[]>([]);
   const [proformaInvoicesList, setProformaInvoicesList] = useState<any[]>([]);
   const [salesInvoicesList, setSalesInvoicesList] = useState<any[]>([]);
+  const [exchangeRates, setExchangeRates] = useState<any>({});
   const [deliveryChallansList, setDeliveryChallansList] = useState<any[]>([]);
   const [dispatchesList, setDispatchesList] = useState<any[]>([]);
 
@@ -1934,7 +1935,7 @@ export default function App() {
     e.preventDefault();
     const parsed = SignupSchema.safeParse(signupForm);
     if (!parsed.success) {
-      setErrorMsg(parsed.error.errors[0].message);
+      setErrorMsg(parsed.error.issues[0].message);
       return;
     }
     try {
@@ -1955,7 +1956,7 @@ export default function App() {
 
     const parsed = LoginSchema.safeParse(loginForm);
     if (!parsed.success) {
-      setErrorMsg(parsed.error.errors[0].message);
+      setErrorMsg(parsed.error.issues[0].message);
       return;
     }
 
@@ -2497,6 +2498,9 @@ export default function App() {
 
       const dispatchesRes = await apiRequest('/api/sales/dispatches', 'GET');
       setDispatchesList(dispatchesRes.dispatches || []);
+
+      const ratesRes = await apiRequest('/api/sales/exchange-rates', 'GET');
+      setExchangeRates(ratesRes.rates || {});
     } catch (e) {
       console.error("Error fetching sales data:", e);
     }
@@ -4656,6 +4660,8 @@ export default function App() {
                         onUpdateOrder={handleUpdateSalesOrder}
                         onDeleteOrder={handleDeleteSalesOrder}
                         currencySymbol={currencySymbol}
+                        exchangeRates={exchangeRates}
+                        companyCurrencyId={user?.currencyId || adminProfileForm?.currencyId || 'USD'}
                       />
                     )}
 
@@ -4669,6 +4675,8 @@ export default function App() {
                         onDeleteInvoice={handleDeleteProformaInvoice}
                         onEmailInvoice={handleEmailProformaInvoice}
                         currencySymbol={currencySymbol}
+                        exchangeRates={exchangeRates}
+                        companyCurrencyId={user?.currencyId || adminProfileForm?.currencyId || 'USD'}
                       />
                     )}
 
@@ -4682,6 +4690,8 @@ export default function App() {
                         onDeleteInvoice={handleDeleteSalesInvoice}
                         onEmailInvoice={handleEmailSalesInvoice}
                         currencySymbol={currencySymbol}
+                        exchangeRates={exchangeRates}
+                        companyCurrencyId={user?.currencyId || adminProfileForm?.currencyId || 'USD'}
                       />
                     )}
 
@@ -4718,6 +4728,8 @@ export default function App() {
                         onUpdateQuotationStatus={handleUpdateQuotationStatus}
                         onDeleteQuotation={handleDeleteQuotation}
                         currencySymbol={currencySymbol}
+                        exchangeRates={exchangeRates}
+                        companyCurrencyId={user?.currencyId || adminProfileForm?.currencyId || 'USD'}
                       />
                     )}
 

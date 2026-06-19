@@ -106,7 +106,7 @@ export default function ProductionExecution({ products = [] }: ProductionExecuti
 
     const parsed = LogSchema.safeParse(payload);
     if (!parsed.success) {
-      alert(parsed.error.errors[0].message);
+      alert(parsed.error.issues[0].message);
       return;
     }
 

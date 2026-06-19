@@ -365,6 +365,7 @@ model Customer {
   creditTime      Int      @default(0)
   clientClassification String?  @default("NATIONAL") // "NATIONAL" or "INTERNATIONAL"
   state           String   @default("Gujarat")
+  country         String   @default("India")
   currencySymbol  String   @default("$")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -405,6 +406,8 @@ model Vendor {
   ifscCode             String?
   gstNumber            String?
   panNumber            String?
+  currencySymbol       String   @default("$")
+  currencyId           String   @default("USD")
   vendorQuotations VendorQuotation[]
   purchaseOrders   PurchaseOrder[]
   vendorPayments   VendorPayment[]
@@ -513,6 +516,7 @@ model SalesOrder {
   orderDate    DateTime         @default(now())
   deliveryDate DateTime?
   discount     Float            @default(0.0)
+  discountType String           @default("PERCENTAGE") // "PERCENTAGE" or "AMOUNT"
   status       String           @default("PENDING") // PENDING, DISPATCHED, COMPLETED, CANCELLED
   items        SalesOrderItem[]
   dispatches   Dispatch[]
@@ -551,6 +555,7 @@ model SalesOrderItem {
   price        Float
   deliveryDate DateTime?
   discount     Float      @default(0.0)
+  billedQty    Float      @default(0.0)
 
   @@map("sales_order_items")
 }
@@ -566,6 +571,7 @@ model ProformaInvoice {
   dueDate    DateTime?
   subtotal   Float
   discount   Float                @default(0.0)
+  discountType String             @default("PERCENTAGE") // "PERCENTAGE" or "AMOUNT"
   tax        Float                @default(0.0)
   total      Float
   status     String               @default("DRAFT") // DRAFT, SENT, PAID, CANCELLED
@@ -615,6 +621,7 @@ model SalesInvoice {
   dueDate         DateTime?
   subtotal        Float
   discount        Float              @default(0.0)
+  discountType    String             @default("PERCENTAGE") // "PERCENTAGE" or "AMOUNT"
   tax             Float              @default(0.0)
   total           Float
   status          String             @default("UNPAID") // UNPAID, PARTIAL, PAID, OVERDUE, CANCELLED
@@ -643,14 +650,15 @@ model SalesInvoice {
 }
 
 model SalesInvoiceItem {
-  id        String       @id @default(uuid())
-  invoiceId String
-  invoice   SalesInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  productId String
-  product   Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
-  quantity  Float
-  price     Float
-  discount  Float        @default(0.0)
+  id               String       @id @default(uuid())
+  invoiceId        String
+  invoice          SalesInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  productId        String
+  product          Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity         Float
+  price            Float
+  discount         Float        @default(0.0)
+  salesOrderItemId String?      // Links to which SalesOrderItem this line item bills
 
   @@map("sales_invoice_items")
 }
@@ -1536,6 +1544,17 @@ model ForecastJob {
   @@index([tenantId])
   @@index([status])
   @@map("forecast_jobs")
+}
+
+model ExchangeRate {
+  id         String   @id @default(uuid())
+  baseCode   String   // e.g., "USD"
+  targetCode String   // e.g., "INR"
+  rate       Float
+  updatedAt  DateTime @updatedAt
+
+  @@unique([baseCode, targetCode])
+  @@map("exchange_rates")
 }
 
 

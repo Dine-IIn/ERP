@@ -263,7 +263,7 @@ export default function PurchaseOrders({
 
     const parsed = CreatePurchaseOrderBodySchema.safeParse(payload);
     if (!parsed.success) {
-      setLocalErr("Validation error: " + parsed.error.errors[0].message);
+      setLocalErr("Validation error: " + parsed.error.issues[0].message);
       setLoading(false);
       return;
     }

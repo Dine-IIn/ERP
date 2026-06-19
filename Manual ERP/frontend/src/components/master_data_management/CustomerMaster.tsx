@@ -47,6 +47,7 @@ export default function CustomerMaster({
     creditTime: '0',
     clientClassification: 'NATIONAL',
     state: 'Gujarat',
+    country: 'India',
     currencySymbol: '$',
     bankName: '',
     accountHolderName: '',
@@ -74,6 +75,7 @@ export default function CustomerMaster({
       creditTime: '0',
       clientClassification: 'NATIONAL',
       state: 'Gujarat',
+      country: 'India',
       currencySymbol: '$',
       bankName: '',
       accountHolderName: '',
@@ -103,6 +105,7 @@ export default function CustomerMaster({
       creditTime: String(cust.creditTime || 0),
       clientClassification: cust.clientClassification || 'NATIONAL',
       state: cust.state || 'Gujarat',
+      country: cust.country || 'India',
       currencySymbol: cust.currencySymbol || '$',
       bankName: cust.bankName || '',
       accountHolderName: cust.accountHolderName || '',
@@ -131,7 +134,7 @@ export default function CustomerMaster({
 
       const parsed = CustomerSchema.safeParse(form);
       if (!parsed.success) {
-        setLocalErr(parsed.error.errors[0].message);
+        setLocalErr(parsed.error.issues[0].message);
         setLoading(false);
         return;
       }
@@ -244,7 +247,7 @@ export default function CustomerMaster({
             {filtered.map(cust => (
               <tr key={cust.id} className="border-b border-[var(--border-color)]/40 hover:bg-[var(--bg-tertiary)]/20 transition-colors last:border-b-0 text-left">
                 <td className="p-3 shrink-0">
-                  <span className="font-bold text-[var(--text-primary)] block">{cust.name} <span className="text-[10px] font-normal text-indigo-400">({cust.state || 'Gujarat'})</span></span>
+                  <span className="font-bold text-[var(--text-primary)] block">{cust.name} <span className="text-[10px] font-normal text-indigo-400">({cust.clientClassification === 'INTERNATIONAL' ? `${cust.country || ''}, ${cust.state || ''}` : cust.state || 'Gujarat'})</span></span>
                   <span className="text-[10px] text-[var(--text-muted)] mt-0.5">{cust.contactPerson ? `Contact Person: ${cust.contactPerson}` : 'No contact person'}</span>
                   {(cust.gstNumber || cust.panNumber) && (
                     <span className="text-[9px] text-emerald-400 block mt-0.5">
@@ -417,20 +420,49 @@ export default function CustomerMaster({
                 </select>
               </div>
 
-              {/* State dropdown */}
-              <div>
-                <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Billing / Shipping State (Compulsory)</label>
-                <select
-                  required
-                  value={form.state}
-                  onChange={e => setForm({ ...form, state: e.target.value })}
-                  className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none cursor-pointer"
-                >
-                  {INDIAN_STATES.map(st => (
-                    <option key={st} value={st}>{st}</option>
-                  ))}
-                </select>
-              </div>
+              {/* Country & State */}
+              {form.clientClassification === 'INTERNATIONAL' ? (
+                <>
+                  <div>
+                    <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Country (Required)</label>
+                    <input
+                      type="text"
+                      value={form.country}
+                      onChange={e => setForm({ ...form, country: e.target.value })}
+                      placeholder="e.g. United States, Germany"
+                      className="w-full bg-[var(--bg-secondary)] border border-[var(--border-primary)] p-2 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none focus:border-indigo-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">State / Province</label>
+                    <input
+                      type="text"
+                      value={form.state}
+                      onChange={e => setForm({ ...form, state: e.target.value })}
+                      placeholder="e.g. California, Bavaria"
+                      className="w-full bg-[var(--bg-secondary)] border border-[var(--border-primary)] p-2 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* State dropdown for National */}
+                  <div>
+                    <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Billing / Shipping State (Compulsory)</label>
+                    <select
+                      className="w-full bg-[var(--bg-secondary)] border border-[var(--border-primary)] p-2 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none focus:border-indigo-500"
+                      value={form.state}
+                      onChange={e => setForm({ ...form, state: e.target.value })}
+                      required
+                    >
+                      {INDIAN_STATES.map(st => (
+                        <option key={st} value={st}>{st}</option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
 
               {/* Contact Person */}
               <div>

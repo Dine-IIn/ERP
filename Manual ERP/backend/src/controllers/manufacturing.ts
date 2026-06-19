@@ -544,6 +544,14 @@ export async function createWorkOrder(req: AuthenticatedRequest, res: Response) 
       return res.status(409).json({ error: `Work Order number '${woNo}' is already taken.` });
     }
 
+    // Check if an active Work Order already exists for this Production Plan
+    const existingPlanWO = await prisma.workOrder.findFirst({
+      where: { planId, companyId, status: { notIn: ['CANCELLED', 'COMPLETED'] } }
+    });
+    if (existingPlanWO) {
+      return res.status(409).json({ error: `An active Work Order (${existingPlanWO.woNo}) already exists for this Production Plan. Complete or cancel it before dispatching a new one.` });
+    }
+
     const workOrder = await prisma.$transaction(async (tx) => {
       const plan = await tx.productionPlan.findFirst({
         where: { id: planId, companyId },

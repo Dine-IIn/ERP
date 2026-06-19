@@ -132,6 +132,7 @@ import {
 
 import { startForecastWorkerLoop } from './services/forecast';
 import { startForecastScheduler } from './services/forecastScheduler';
+import { startCurrencySyncLoop } from './services/currency';
 
 import {
   listBoms, createBom, updateBom, deleteBom,
@@ -157,7 +158,8 @@ import {
   listServiceTickets,
   createServiceTicket,
   updateServiceTicket,
-  deleteServiceTicket
+  deleteServiceTicket,
+  getExchangeRates
 } from './controllers/sales';
 
 import {
@@ -607,6 +609,7 @@ app.patch('/api/master/products/:id', authenticateToken, updateProduct);
 app.delete('/api/master/products/:id', authenticateToken, deleteProduct);
 
 // 9. Sales Module Scoped Consolidated APIs
+app.get('/api/sales/exchange-rates', authenticateToken, getExchangeRates);
 app.get('/api/sales/orders', authenticateToken, listSalesOrders);
 app.post('/api/sales/orders', authenticateToken, createSalesOrder);
 app.patch('/api/sales/orders/:id', authenticateToken, updateSalesOrder);
@@ -1028,6 +1031,14 @@ seedDatabase().then(() => {
       console.log("📈 [AI Forecasting] Scheduler and queue worker started successfully.");
     } catch (err) {
       console.error("❌ [AI Forecasting] Failed to start scheduler/worker:", err);
+    }
+
+    // Initialize daily currency sync loop
+    try {
+      startCurrencySyncLoop();
+      console.log("🌐 [Currency Service] Daily currency sync loop started successfully.");
+    } catch (err) {
+      console.error("❌ [Currency Service] Failed to start currency sync loop:", err);
     }
   });
 });

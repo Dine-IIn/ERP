@@ -244,7 +244,7 @@ export async function createVendor(req: AuthenticatedRequest, res: Response) {
 
     const parsedBody = CreateVendorBodySchema.safeParse(req.body);
     if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
-    const { name, isVendor, contactNo, email, bankDetails, paymentTerms, gstDetails, creditTime, bankName, accountHolderName, accountNumber, ifscCode, gstNumber, panNumber } = parsedBody.data;
+    const { name, isVendor, contactNo, email, bankDetails, paymentTerms, gstDetails, creditTime, bankName, accountHolderName, accountNumber, ifscCode, gstNumber, panNumber, currencySymbol, currencyId } = parsedBody.data;
 
     if (!name || !contactNo) {
       return res.status(400).json({ error: "Name and contactNo are required fields" });
@@ -273,7 +273,9 @@ export async function createVendor(req: AuthenticatedRequest, res: Response) {
         accountNumber: accountNumber || null,
         ifscCode: ifscCode || null,
         gstNumber: gstNumber || null,
-        panNumber: panNumber || null
+        panNumber: panNumber || null,
+        currencySymbol: currencySymbol || "$",
+        currencyId: currencyId || "USD"
       }
     });
 
@@ -303,7 +305,7 @@ export async function updateVendor(req: AuthenticatedRequest, res: Response) {
     const { id } = req.params;
     const parsedBody = UpdateVendorBodySchema.safeParse(req.body);
     if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
-    const { name, isVendor, contactNo, email, bankDetails, paymentTerms, gstDetails, creditTime, bankName, accountHolderName, accountNumber, ifscCode, gstNumber, panNumber } = parsedBody.data;
+    const { name, isVendor, contactNo, email, bankDetails, paymentTerms, gstDetails, creditTime, bankName, accountHolderName, accountNumber, ifscCode, gstNumber, panNumber, currencySymbol, currencyId } = parsedBody.data;
 
     const vendorToUpdate = await prisma.vendor.findFirst({
       where: { id, companyId }
@@ -335,7 +337,9 @@ export async function updateVendor(req: AuthenticatedRequest, res: Response) {
         ...(accountNumber !== undefined && { accountNumber: accountNumber || null }),
         ...(ifscCode !== undefined && { ifscCode: ifscCode || null }),
         ...(gstNumber !== undefined && { gstNumber: gstNumber || null }),
-        ...(panNumber !== undefined && { panNumber: panNumber || null })
+        ...(panNumber !== undefined && { panNumber: panNumber || null }),
+        ...(currencySymbol !== undefined && { currencySymbol }),
+        ...(currencyId !== undefined && { currencyId })
       }
     });
 

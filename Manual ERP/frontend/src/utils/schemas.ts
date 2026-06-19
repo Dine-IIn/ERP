@@ -62,7 +62,7 @@ export const ApproveUserSchema = z.object({
 
 export const CreateRoleSchema = z.object({
   name: z.string().min(2).max(30),
-  permissions: z.record(z.array(z.string())), // e.g. { "CRM": ["read", "write"] }
+  permissions: z.record(z.string(), z.array(z.string())), // e.g. { "CRM": ["read", "write"] }
 });
 
 // --- NEW GENERAL ADMINISTRATION ZOD SCHEMAS ---
@@ -616,4 +616,6 @@ export const VendorSchema = z.object({
   ifscCode: z.string().optional().nullable(),
   gstNumber: z.string().optional().nullable(),
   panNumber: z.string().optional().nullable(),
+  currencySymbol: z.string().optional().default("$"),
+  currencyId: z.string().optional().default("USD"),
 });

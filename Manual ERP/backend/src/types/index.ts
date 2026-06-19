@@ -276,6 +276,7 @@ export const CreateSalesOrderBodySchema = z.object({
   customerId: z.any().optional(),
   deliveryDate: z.any().optional(),
   discount: z.any().optional(),
+  discountType: z.enum(['PERCENTAGE', 'AMOUNT']).optional().default('PERCENTAGE'),
   items: z.any().optional()
 }).passthrough();
 
@@ -283,6 +284,7 @@ export const UpdateSalesOrderBodySchema = z.object({
   customerId: z.any().optional(),
   deliveryDate: z.any().optional(),
   discount: z.any().optional(),
+  discountType: z.enum(['PERCENTAGE', 'AMOUNT']).optional(),
   status: z.any().optional(),
   items: z.any().optional()
 }).passthrough();
@@ -291,6 +293,7 @@ export const CreateProformaInvoiceBodySchema = z.object({
   customerId: z.any().optional(),
   dueDate: z.any().optional(),
   discount: z.any().optional(),
+  discountType: z.enum(['PERCENTAGE', 'AMOUNT']).optional().default('PERCENTAGE'),
   tax: z.any().optional(),
   subtotal: z.any().optional(),
   total: z.any().optional(),
@@ -302,6 +305,7 @@ export const UpdateProformaInvoiceBodySchema = z.object({
   customerId: z.any().optional(),
   dueDate: z.any().optional(),
   discount: z.any().optional(),
+  discountType: z.enum(['PERCENTAGE', 'AMOUNT']).optional(),
   tax: z.any().optional(),
   subtotal: z.any().optional(),
   total: z.any().optional(),
@@ -313,6 +317,7 @@ export const CreateSalesInvoiceBodySchema = z.object({
   customerId: z.any().optional(),
   dueDate: z.any().optional(),
   discount: z.any().optional(),
+  discountType: z.enum(['PERCENTAGE', 'AMOUNT']).optional().default('PERCENTAGE'),
   tax: z.any().optional(),
   subtotal: z.any().optional(),
   total: z.any().optional(),
@@ -330,6 +335,7 @@ export const UpdateSalesInvoiceBodySchema = z.object({
   customerId: z.any().optional(),
   dueDate: z.any().optional(),
   discount: z.any().optional(),
+  discountType: z.enum(['PERCENTAGE', 'AMOUNT']).optional(),
   tax: z.any().optional(),
   subtotal: z.any().optional(),
   total: z.any().optional(),
@@ -475,6 +481,7 @@ export const CreateCustomerBodySchema = z.object({
   creditLimit: z.any().optional(),
   creditTime: z.any().optional(),
   state: z.string().optional(),
+  country: z.string().optional().default('India'),
   clientClassification: z.string().optional(),
   currencySymbol: z.string().optional(),
   bankName: z.string().optional().nullable(),
@@ -508,6 +515,8 @@ export const CreateVendorBodySchema = z.object({
   ifscCode: z.string().optional().nullable(),
   gstNumber: z.string().optional().nullable(),
   panNumber: z.string().optional().nullable(),
+  currencySymbol: z.string().optional(),
+  currencyId: z.string().optional(),
 }).passthrough();
 export const CreateWorkCenterBodySchema = z.any();
 export const CreateWorkOrderBodySchema = z.any();
@@ -554,6 +563,7 @@ export const UpdateCustomerBodySchema = z.object({
   creditLimit: z.any().optional(),
   creditTime: z.any().optional(),
   state: z.string().optional(),
+  country: z.string().optional(),
   clientClassification: z.string().optional(),
   currencySymbol: z.string().optional(),
   bankName: z.string().optional().nullable(),
@@ -590,6 +600,8 @@ export const UpdateVendorBodySchema = z.object({
   ifscCode: z.string().optional().nullable(),
   gstNumber: z.string().optional().nullable(),
   panNumber: z.string().optional().nullable(),
+  currencySymbol: z.string().optional(),
+  currencyId: z.string().optional(),
 }).passthrough();
 export const UpdateWorkCenterBodySchema = z.any();
 export const UpdateWorkOrderBodySchema = z.any();

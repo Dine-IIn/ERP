@@ -34,6 +34,8 @@ interface QuotationsProps {
   onUpdateQuotationStatus: (id: string, payload: { status: string }) => Promise<void>;
   onDeleteQuotation: (id: string) => Promise<void>;
   currencySymbol?: string;
+  exchangeRates?: Record<string, number>;
+  companyCurrencyId?: string;
 }
 
 interface ItemInput {
@@ -50,7 +52,9 @@ export default function Quotations({
   onCreateQuotation,
   onUpdateQuotationStatus,
   onDeleteQuotation,
-  currencySymbol = '$'
+  currencySymbol: currencySymbolProp = '$',
+  exchangeRates = {},
+  companyCurrencyId = 'USD'
 }: QuotationsProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -58,6 +62,25 @@ export default function Quotations({
   const [previewQuote, setPreviewQuote] = useState<Quotation | null>(null);
 
   const [customerId, setCustomerId] = useState('');
+
+  const getCurrencyCodeFromSymbol = (symbol: string): string => {
+    if (symbol === "₹") return "INR";
+    if (symbol === "€") return "EUR";
+    if (symbol === "£") return "GBP";
+    return "USD";
+  };
+
+  const convertAmount = (amount: number, from: string, to: string) => {
+    const cleanFrom = (from || 'USD').toUpperCase().trim();
+    const cleanTo = (to || 'USD').toUpperCase().trim();
+    if (cleanFrom === cleanTo) return amount;
+    const rateFrom = exchangeRates?.[cleanFrom] || (cleanFrom === 'INR' ? 83.5 : cleanFrom === 'EUR' ? 0.92 : cleanFrom === 'GBP' ? 0.80 : 1.0);
+    const rateTo = exchangeRates?.[cleanTo] || (cleanTo === 'INR' ? 83.5 : cleanTo === 'EUR' ? 0.92 : cleanTo === 'GBP' ? 0.80 : 1.0);
+    return (amount / rateFrom) * rateTo;
+  };
+
+  const cust = customers.find(c => c.id === customerId);
+  const currencySymbol = cust?.currencySymbol || currencySymbolProp;
   const [date, setDate] = useState('');
   const [expiryDate, setExpiryDate] = useState('');
   const [discountPercent, setDiscountPercent] = useState('0.00'); // global discount in %
@@ -70,20 +93,30 @@ export default function Quotations({
   const [loading, setLoading] = useState(false);
 
   const openAddModal = () => {
-    setCustomerId(customers[0]?.id || '');
+    const defaultCustId = customers[0]?.id || '';
+    setCustomerId(defaultCustId);
     setDate(new Date().toISOString().substring(0, 10));
     setExpiryDate('');
     setDiscountPercent('0.00');
     setTaxPercent('18.00');
     setStatus('DRAFT');
-    setItems([{ productId: products[0]?.id || '', quantity: '1', price: String(products[0]?.pricing || 0), discount: '0.00' }]);
+
+    const defaultCust = customers.find(c => c.id === defaultCustId);
+    const targetCurrency = getCurrencyCodeFromSymbol(defaultCust?.currencySymbol || '$');
+    const basePrice = products[0]?.pricing || 0;
+    const converted = convertAmount(basePrice, companyCurrencyId, targetCurrency);
+
+    setItems([{ productId: products[0]?.id || '', quantity: '1', price: String(Number(converted.toFixed(2))), discount: '0.00' }]);
     setLocalErr(null);
     setLocalSuccess(null);
     setShowAddModal(true);
   };
 
   const addItemRow = () => {
-    setItems([...items, { productId: products[0]?.id || '', quantity: '1', price: String(products[0]?.pricing || 0), discount: '0.00' }]);
+    const basePrice = products[0]?.pricing || 0;
+    const targetCurrency = getCurrencyCodeFromSymbol(currencySymbol);
+    const converted = convertAmount(basePrice, companyCurrencyId, targetCurrency);
+    setItems([...items, { productId: products[0]?.id || '', quantity: '1', price: String(Number(converted.toFixed(2))), discount: '0.00' }]);
   };
 
   const removeItemRow = (index: number) => {
@@ -97,7 +130,10 @@ export default function Quotations({
     if (field === 'productId') {
       const prod = products.find(p => p.id === value);
       if (prod) {
-        updated[index].price = String(prod.pricing || 0);
+        const basePrice = prod.pricing || 0;
+        const targetCurrency = getCurrencyCodeFromSymbol(currencySymbol);
+        const converted = convertAmount(basePrice, companyCurrencyId, targetCurrency);
+        updated[index].price = String(Number(converted.toFixed(2)));
       }
     }
     setItems(updated);
@@ -259,43 +295,47 @@ export default function Quotations({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
-                {filteredQuotes.map((q) => (
-                  <tr key={q.id} className="hover:bg-slate-800/20 transition-colors">
-                    <td className="py-4 px-6 font-bold text-white font-mono">{q.quoteNo}</td>
-                    <td className="py-4 px-6 font-semibold text-slate-200">{q.customer.name}</td>
-                    <td className="py-4 px-6 font-mono text-slate-350">{new Date(q.date).toLocaleDateString()}</td>
-                    <td className="py-4 px-6 font-mono text-slate-400">
-                      {q.expiryDate ? new Date(q.expiryDate).toLocaleDateString() : 'N/A'}
-                    </td>
-                    <td className="py-4 px-6 font-mono text-emerald-400 text-base font-bold">
-                      {currencySymbol}{q.total.toLocaleString()}
-                    </td>
-                    <td className="py-4 px-6">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 text-xs font-semibold rounded-full border ${getStatusColor(q.status)}`}>
-                        {q.status}
-                      </span>
-                    </td>
-                    <td className="py-4 px-6 text-right space-x-2">
-                      <button
-                        onClick={() => {
-                          setPreviewQuote(q);
-                          setShowPreviewModal(true);
-                        }}
-                        className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-blue-450 transition-colors rounded-lg"
-                        title="View preview & print"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(q.id, q.quoteNo)}
-                        className="p-1.5 hover:bg-slate-850 text-slate-550 hover:text-red-400 transition-colors rounded-lg"
-                        title="Permanently remove"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {filteredQuotes.map((q) => {
+                  const quoteCustomer = customers.find(c => c.id === q.customerId);
+                  const quoteCurrencySymbol = quoteCustomer?.currencySymbol || currencySymbolProp;
+                  return (
+                    <tr key={q.id} className="hover:bg-slate-800/20 transition-colors">
+                      <td className="py-4 px-6 font-bold text-white font-mono">{q.quoteNo}</td>
+                      <td className="py-4 px-6 font-semibold text-slate-200">{q.customer.name}</td>
+                      <td className="py-4 px-6 font-mono text-slate-350">{new Date(q.date).toLocaleDateString()}</td>
+                      <td className="py-4 px-6 font-mono text-slate-400">
+                        {q.expiryDate ? new Date(q.expiryDate).toLocaleDateString() : 'N/A'}
+                      </td>
+                      <td className="py-4 px-6 font-mono text-emerald-400 text-base font-bold">
+                        {quoteCurrencySymbol}{q.total.toLocaleString()}
+                      </td>
+                      <td className="py-4 px-6">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 text-xs font-semibold rounded-full border ${getStatusColor(q.status)}`}>
+                          {q.status}
+                        </span>
+                      </td>
+                      <td className="py-4 px-6 text-right space-x-2">
+                        <button
+                          onClick={() => {
+                            setPreviewQuote(q);
+                            setShowPreviewModal(true);
+                          }}
+                          className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-blue-450 transition-colors rounded-lg"
+                          title="View preview & print"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(q.id, q.quoteNo)}
+                          className="p-1.5 hover:bg-slate-850 text-slate-550 hover:text-red-400 transition-colors rounded-lg"
+                          title="Permanently remove"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -339,7 +379,22 @@ export default function Quotations({
                   <label className="text-slate-450 text-xs font-semibold uppercase tracking-wider">Customer Client</label>
                   <select
                     value={customerId}
-                    onChange={(e) => setCustomerId(e.target.value)}
+                    onChange={(e) => {
+                      const newCustId = e.target.value;
+                      const prevCust = customers.find(c => c.id === customerId);
+                      const oldCurrency = getCurrencyCodeFromSymbol(prevCust?.currencySymbol || '$');
+                      setCustomerId(newCustId);
+                      const newCust = customers.find(c => c.id === newCustId);
+                      const targetCurrency = getCurrencyCodeFromSymbol(newCust?.currencySymbol || '$');
+                      setItems(prev => prev.map(item => {
+                        const currentPrice = parseFloat(item.price) || 0;
+                        const converted = convertAmount(currentPrice, oldCurrency, targetCurrency);
+                        return {
+                          ...item,
+                          price: String(Number(converted.toFixed(2)))
+                        };
+                      }));
+                    }}
                     className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white outline-none focus:border-blue-500 transition-all text-sm"
                     required
                   >
@@ -536,8 +591,11 @@ export default function Quotations({
       )}
 
       {/* Preview and Print Modal */}
-      {showPreviewModal && previewQuote && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md">
+      {showPreviewModal && previewQuote && (() => {
+        const quoteCustomer = customers.find(c => c.id === previewQuote.customerId);
+        const currencySymbol = quoteCustomer?.currencySymbol || currencySymbolProp;
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md">
           <div className="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden transform transition-all max-h-[95vh] flex flex-col">
             {/* Header */}
             <div className="flex items-center justify-between p-6 border-b border-slate-800 bg-slate-950/20">
@@ -694,7 +752,8 @@ export default function Quotations({
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

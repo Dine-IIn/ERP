@@ -66,7 +66,7 @@ export default function Receipts() {
         referenceNo: referenceNo.trim() || null,
         notes: notes.trim() || null
       });
-      if (!parsed.success) throw new Error(parsed.error.errors[0].message);
+      if (!parsed.success) throw new Error(parsed.error.issues[0].message);
       await createMutation.mutateAsync(parsed.data);
       setLocalSuccess("Receipt recorded successfully!");
       setTimeout(() => {

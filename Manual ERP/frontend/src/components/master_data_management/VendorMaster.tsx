@@ -29,7 +29,9 @@ export default function VendorMaster({
     paymentTerms: 'IMMEDIATE',
     gstDetails: '',
     gstNumber: '',
-    panNumber: ''
+    panNumber: '',
+    currencySymbol: '$',
+    currencyId: 'USD'
   });
 
   const [bankDetailsForm, setBankDetailsForm] = useState({
@@ -52,7 +54,9 @@ export default function VendorMaster({
       paymentTerms: 'IMMEDIATE',
       gstDetails: '',
       gstNumber: '',
-      panNumber: ''
+      panNumber: '',
+      currencySymbol: '$',
+      currencyId: 'USD'
     });
     setBankDetailsForm({
       bankName: '',
@@ -76,7 +80,9 @@ export default function VendorMaster({
       paymentTerms: vend.paymentTerms || 'IMMEDIATE',
       gstDetails: vend.gstDetails || '',
       gstNumber: vend.gstNumber || vend.gstDetails || '',
-      panNumber: vend.panNumber || ''
+      panNumber: vend.panNumber || '',
+      currencySymbol: vend.currencySymbol || '$',
+      currencyId: vend.currencyId || 'USD'
     });
 
     let parsedBank = { bankName: '', accountHolder: '', accountNumber: '', ifscCode: '' };
@@ -143,7 +149,7 @@ export default function VendorMaster({
 
       const parsed = VendorSchema.safeParse(payload);
       if (!parsed.success) {
-        setLocalErr(parsed.error.errors[0].message);
+        setLocalErr(parsed.error.issues[0].message);
         setLoading(false);
         return;
       }
@@ -287,7 +293,7 @@ export default function VendorMaster({
                     </span>
                   )}
                   <span className="text-[10px] text-[var(--text-secondary)] block mt-0.5 font-mono uppercase">
-                    Terms: {v.paymentTerms ? v.paymentTerms.replace('_', ' ') : 'IMMEDIATE'}
+                    Terms: {v.paymentTerms ? v.paymentTerms.replace('_', ' ') : 'IMMEDIATE'} | Currency: {v.currencyId || 'USD'} ({v.currencySymbol || '$'})
                   </span>
                 </td>
                 <td className="p-3 text-right">
@@ -449,6 +455,24 @@ export default function VendorMaster({
                   <option value="NET_15">NET 15 (Due within 15 days)</option>
                   <option value="NET_30">NET 30 (Due within 30 days)</option>
                   <option value="NET_60">NET 60 (Due within 60 days)</option>
+                </select>
+              </div>
+
+              {/* Preferred Currency Select */}
+              <div>
+                <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Preferred Currency</label>
+                <select
+                  value={`${form.currencyId}:${form.currencySymbol}`}
+                  onChange={e => {
+                    const [id, symbol] = e.target.value.split(':');
+                    setForm({ ...form, currencyId: id, currencySymbol: symbol });
+                  }}
+                  className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none cursor-pointer"
+                >
+                  <option value="USD:$">USD ($)</option>
+                  <option value="INR:₹">INR (₹)</option>
+                  <option value="EUR:€">EUR (€)</option>
+                  <option value="GBP:£">GBP (£)</option>
                 </select>
               </div>
 

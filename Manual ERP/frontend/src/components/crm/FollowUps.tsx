@@ -89,7 +89,7 @@ export default function FollowUps({
 
     const parsed = FollowUpSchema.safeParse(payload);
     if (!parsed.success) {
-      setLocalErr(parsed.error.errors[0].message);
+      setLocalErr(parsed.error.issues[0].message);
       return;
     }
 

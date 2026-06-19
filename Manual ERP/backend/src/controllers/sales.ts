@@ -20,13 +20,15 @@ import { AuthenticatedRequest } from '../middlewares/auth';
 import prisma from '../services/db';
 import { logAudit } from '../utils/audit';
 import { sendEmailNotification } from '../utils';
+import { generateInvoicePdf } from '../utils/pdf';
 import { markNeedsRefresh } from '../services/forecast';
 
 export async function validateInvoiceTaxAndTotal(
   companyId: string,
   customerId: string,
   items: any[],
-  discountPct: number,
+  discountValOrPct: number,
+  discountType: string,
   clientTax: number,
   clientTotal: number,
   shippingState: string | null
@@ -59,12 +61,18 @@ export async function validateInvoiceTaxAndTotal(
   }
 
   // 4. Calculate taxable amount
-  const discVal = calculatedSubtotal * ((discountPct || 0.0) / 100);
+  let discVal = 0.0;
+  if (discountType === 'AMOUNT') {
+    discVal = discountValOrPct || 0.0;
+  } else {
+    discVal = calculatedSubtotal * ((discountValOrPct || 0.0) / 100);
+  }
   const taxableAmount = Math.max(0, calculatedSubtotal - discVal);
 
-  // 5. Determine tax rate
+  // 5. Determine tax rate based on state/classification
   const isInternational = customer.clientClassification === 'INTERNATIONAL';
-  const targetState = shippingState || customer.state || 'Gujarat';
+  const targetState = (shippingState || customer.state || 'Gujarat').trim().toLowerCase();
+  const companyState = (companyProfile.state || 'Gujarat').trim().toLowerCase();
 
   let taxRate = 18.0;
   if (isInternational) {
@@ -555,7 +563,7 @@ export async function createProformaInvoice(req: AuthenticatedRequest, res: Resp
     
     const parsedBody = CreateProformaInvoiceBodySchema.safeParse(req.body);
     if (!parsedBody.success) return res.status(400).json({ error: "Bad Request", details: parsedBody.error });
-    const {  customerId, dueDate, discount, tax, subtotal, total, status, items  } = parsedBody.data;
+    const {  customerId, dueDate, discount, discountType, tax, subtotal, total, status, items  } = parsedBody.data;
 
 
     if (!customerId || !items || !Array.isArray(items) || items.length === 0) {
@@ -568,6 +576,7 @@ export async function createProformaInvoice(req: AuthenticatedRequest, res: Resp
         customerId,
         items,
         parseFloat(discount) || 0.0,
+        discountType || 'PERCENTAGE',
         parseFloat(tax) || 0.0,
         parseFloat(total) || 0.0,
         null
@@ -646,7 +655,7 @@ export async function updateProformaInvoice(req: AuthenticatedRequest, res: Resp
     
     const parsedBody = UpdateProformaInvoiceBodySchema.safeParse(req.body);
     if (!parsedBody.success) return res.status(400).json({ error: "Bad Request", details: parsedBody.error });
-    const {  customerId, dueDate, discount, tax, subtotal, total, status, items  } = parsedBody.data;
+    const {  customerId, dueDate, discount, discountType, tax, subtotal, total, status, items  } = parsedBody.data;
 
 
     const existingInvoice = await prisma.proformaInvoice.findFirst({
@@ -666,6 +675,7 @@ export async function updateProformaInvoice(req: AuthenticatedRequest, res: Resp
       discount: it.discount
     }));
     const finalDiscount = discount !== undefined ? parseFloat(discount) : existingInvoice.discount;
+    const finalDiscountType = discountType !== undefined ? discountType : existingInvoice.discountType;
     const finalTax = tax !== undefined ? parseFloat(tax) : existingInvoice.tax;
     const finalTotal = total !== undefined ? parseFloat(total) : existingInvoice.total;
 
@@ -675,6 +685,7 @@ export async function updateProformaInvoice(req: AuthenticatedRequest, res: Resp
         finalCustomerId,
         finalItems,
         finalDiscount,
+        finalDiscountType,
         finalTax,
         finalTotal,
         null
@@ -731,6 +742,7 @@ export async function updateProformaInvoice(req: AuthenticatedRequest, res: Resp
           ...(dueDate !== undefined && { dueDate: dueDate ? new Date(dueDate) : null }),
           ...(subtotal !== undefined && { subtotal: parseFloat(subtotal) || 0.0 }),
           ...(discount !== undefined && { discount: parseFloat(discount) || 0.0 }),
+          ...(discountType !== undefined && { discountType }),
           ...(tax !== undefined && { tax: parseFloat(tax) || 0.0 }),
           ...(total !== undefined && { total: parseFloat(total) || 0.0 }),
           ...(status && { status }),
@@ -794,13 +806,30 @@ export async function sendProformaInvoiceEmail(req: AuthenticatedRequest, res: R
     if (!invoice) return res.status(404).json({ error: "Proforma Invoice not found" });
     if (!invoice.customer.email) return res.status(400).json({ error: "Selected Customer has no registered email ID." });
 
-    const emailBody = `Dear ${invoice.customer.name},\r\n\r\nPlease find details for Proforma Invoice ${invoice.invoiceNo}.\r\n\r\nInvoice Date: ${invoice.date.toLocaleDateString()}\r\nTotal Amount Due: $${invoice.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}\r\n\r\nThank you for doing business with us!`;
+    const symbol = invoice.customer.currencySymbol || "$";
+    const emailBody = `Dear ${invoice.customer.name},\r\n\r\nPlease find details for Proforma Invoice ${invoice.invoiceNo}.\r\n\r\nInvoice Date: ${invoice.date.toLocaleDateString()}\r\nTotal Amount Due: ${symbol}${invoice.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}\r\n\r\nThank you for doing business with us!`;
+
+    // Fetch company name for PDF
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+      select: { name: true }
+    });
+    const companyName = company?.name || "ERP Workspace";
+
+    // Generate PDF attachment
+    const pdfData = {
+      ...invoice,
+      companyName,
+      currencySymbol: symbol
+    };
+    const pdfBuffer = generateInvoicePdf("proforma", pdfData);
 
     await sendEmailNotification(
       invoice.customer.email,
       `Proforma Invoice ${invoice.invoiceNo} from ERP Console`,
       emailBody,
-      req.user?.companyCode
+      req.user?.companyCode,
+      [{ filename: `Proforma_${invoice.invoiceNo}.pdf`, content: pdfBuffer }]
     );
 
     return res.json({ message: `Proforma Invoice ${invoice.invoiceNo} emailed successfully to ${invoice.customer.email}` });
@@ -843,7 +872,7 @@ export async function createSalesInvoice(req: AuthenticatedRequest, res: Respons
     
     const parsedBody = CreateSalesInvoiceBodySchema.safeParse(req.body);
     if (!parsedBody.success) return res.status(400).json({ error: "Bad Request", details: parsedBody.error });
-    const {  customerId, dueDate, discount, tax, subtotal, total, status, items, billingAddress, shippingAddress, shippingState, shippingName, salesOrderId, salesOrderIds  } = parsedBody.data;
+    const {  customerId, dueDate, discount, discountType, tax, subtotal, total, status, items, billingAddress, shippingAddress, shippingState, shippingName, salesOrderId, salesOrderIds  } = parsedBody.data;
 
 
     if (!customerId || !items || !Array.isArray(items) || items.length === 0) {
@@ -856,12 +885,45 @@ export async function createSalesInvoice(req: AuthenticatedRequest, res: Respons
         customerId,
         items,
         parseFloat(discount) || 0.0,
+        discountType || 'PERCENTAGE',
         parseFloat(tax) || 0.0,
         parseFloat(total) || 0.0,
         shippingState || null
       );
     } catch (valError: any) {
       return res.status(400).json({ error: valError.message });
+    }
+
+    // === P6: Server-side billing quantity validation ===
+    if (salesOrderId || salesOrderIds) {
+      const soIds: string[] = [];
+      if (salesOrderId) soIds.push(salesOrderId);
+      if (salesOrderIds) {
+        try { soIds.push(...JSON.parse(salesOrderIds)); } catch (e) { /* ignore parse errors */ }
+      }
+
+      // Fetch all SO items for linked orders
+      const soItems = await prisma.salesOrderItem.findMany({
+        where: { orderId: { in: soIds } },
+        include: { product: true }
+      });
+
+      // Validate each invoice item against SO remaining qty
+      for (const invItem of items) {
+        const matchingSoItems = soItems.filter((si: any) => si.productId === invItem.productId);
+        if (matchingSoItems.length > 0) {
+          const totalOrdered = matchingSoItems.reduce((sum: number, si: any) => sum + si.quantity, 0);
+          const totalBilled = matchingSoItems.reduce((sum: number, si: any) => sum + (si.billedQty || 0), 0);
+          const remaining = totalOrdered - totalBilled;
+          const requestedQty = parseFloat(invItem.quantity) || 0;
+          if (requestedQty > remaining + 0.001) {
+            const productName = matchingSoItems[0]?.product?.name || invItem.productId;
+            return res.status(400).json({
+              error: `Quantity ${requestedQty} for "${productName}" exceeds remaining billable quantity of ${remaining.toFixed(2)} from the linked Sales Order(s).`
+            });
+          }
+        }
+      }
     }
 
     const customer = await prisma.customer.findFirst({
@@ -880,6 +942,7 @@ export async function createSalesInvoice(req: AuthenticatedRequest, res: Respons
           dueDate: dueDate ? new Date(dueDate) : null,
           subtotal: parseFloat(subtotal) || 0.0,
           discount: parseFloat(discount) || 0.0,
+          discountType: parsedBody.data.discountType || 'PERCENTAGE',
           tax: parseFloat(tax) || 0.0,
           total: parseFloat(total) || 0.0,
           status: status || 'UNPAID',
@@ -913,6 +976,33 @@ export async function createSalesInvoice(req: AuthenticatedRequest, res: Respons
         await tx.salesInvoiceItem.createMany({ data: validItems });
       }
 
+      // === P6: Update billedQty on linked SalesOrderItems ===
+      if (salesOrderId || salesOrderIds) {
+        const soIds: string[] = [];
+        if (salesOrderId) soIds.push(salesOrderId);
+        if (salesOrderIds) {
+          try { soIds.push(...JSON.parse(salesOrderIds)); } catch (e) { /* ignore */ }
+        }
+        for (const invItem of items) {
+          const soItems = await tx.salesOrderItem.findMany({
+            where: { orderId: { in: soIds }, productId: invItem.productId }
+          });
+          let qtyToAllocate = parseFloat(invItem.quantity) || 0;
+          for (const soItem of soItems) {
+            if (qtyToAllocate <= 0) break;
+            const available = soItem.quantity - (soItem.billedQty || 0);
+            const allocate = Math.min(qtyToAllocate, available);
+            if (allocate > 0) {
+              await tx.salesOrderItem.update({
+                where: { id: soItem.id },
+                data: { billedQty: (soItem.billedQty || 0) + allocate }
+              });
+              qtyToAllocate -= allocate;
+            }
+          }
+        }
+      }
+
       if ((status || 'UNPAID') === 'PAID') {
         await handleInwardReceipt(tx, companyId, parseFloat(total) || 0.0, customerId, invoiceNo, `Invoice Payment ${invoiceNo}`);
       }
@@ -941,7 +1031,7 @@ export async function updateSalesInvoice(req: AuthenticatedRequest, res: Respons
     
     const parsedBody = UpdateSalesInvoiceBodySchema.safeParse(req.body);
     if (!parsedBody.success) return res.status(400).json({ error: "Bad Request", details: parsedBody.error });
-    const {  customerId, dueDate, discount, tax, subtotal, total, status, items, billingAddress, shippingAddress, shippingState, shippingName, salesOrderId, salesOrderIds  } = parsedBody.data;
+    const {  customerId, dueDate, discount, discountType, tax, subtotal, total, status, items, billingAddress, shippingAddress, shippingState, shippingName, salesOrderId, salesOrderIds  } = parsedBody.data;
 
 
     const existingInvoice = await prisma.salesInvoice.findFirst({
@@ -963,6 +1053,7 @@ export async function updateSalesInvoice(req: AuthenticatedRequest, res: Respons
       discount: it.discount
     }));
     const finalDiscount = discount !== undefined ? parseFloat(discount) : existingInvoice.discount;
+    const finalDiscountType = discountType !== undefined ? discountType : existingInvoice.discountType;
     const finalTax = tax !== undefined ? parseFloat(tax) : existingInvoice.tax;
     const finalTotal = total !== undefined ? parseFloat(total) : existingInvoice.total;
     const finalShippingState = shippingState !== undefined ? shippingState : existingInvoice.shippingState;
@@ -973,6 +1064,7 @@ export async function updateSalesInvoice(req: AuthenticatedRequest, res: Respons
         finalCustomerId,
         finalItems,
         finalDiscount,
+        finalDiscountType,
         finalTax,
         finalTotal,
         finalShippingState
@@ -1029,6 +1121,7 @@ export async function updateSalesInvoice(req: AuthenticatedRequest, res: Respons
           ...(dueDate !== undefined && { dueDate: dueDate ? new Date(dueDate) : null }),
           ...(subtotal !== undefined && { subtotal: parseFloat(subtotal) || 0.0 }),
           ...(discount !== undefined && { discount: parseFloat(discount) || 0.0 }),
+          ...(discountType !== undefined && { discountType }),
           ...(tax !== undefined && { tax: parseFloat(tax) || 0.0 }),
           ...(total !== undefined && { total: parseFloat(total) || 0.0 }),
           ...(status && { status }),
@@ -1091,6 +1184,36 @@ export async function deleteSalesInvoice(req: AuthenticatedRequest, res: Respons
     const invoice = await prisma.salesInvoice.findFirst({ where: { id, companyId } });
     if (!invoice) return res.status(404).json({ error: "Sales Invoice not found" });
 
+    // === P6: Reverse billedQty on linked SalesOrderItems ===
+    const invoiceToDelete = await prisma.salesInvoice.findFirst({
+      where: { id, companyId },
+      include: { items: true }
+    });
+    if (invoiceToDelete && (invoiceToDelete.salesOrderId || invoiceToDelete.salesOrderIds)) {
+      const soIds: string[] = [];
+      if (invoiceToDelete.salesOrderId) soIds.push(invoiceToDelete.salesOrderId);
+      if (invoiceToDelete.salesOrderIds) {
+        try { soIds.push(...JSON.parse(invoiceToDelete.salesOrderIds)); } catch (e) { /* ignore */ }
+      }
+      for (const invItem of invoiceToDelete.items) {
+        const soItems = await prisma.salesOrderItem.findMany({
+          where: { orderId: { in: soIds }, productId: invItem.productId }
+        });
+        let qtyToReverse = invItem.quantity;
+        for (const soItem of soItems) {
+          if (qtyToReverse <= 0) break;
+          const reversal = Math.min(qtyToReverse, soItem.billedQty || 0);
+          if (reversal > 0) {
+            await prisma.salesOrderItem.update({
+              where: { id: soItem.id },
+              data: { billedQty: Math.max(0, (soItem.billedQty || 0) - reversal) }
+            });
+            qtyToReverse -= reversal;
+          }
+        }
+      }
+    }
+
     await prisma.$transaction(async (tx) => {
       if (invoice.status === 'PAID') {
         await handleVoidInwardReceipt(tx, companyId, invoice.total, invoice.invoiceNo);
@@ -1118,13 +1241,30 @@ export async function sendSalesInvoiceEmail(req: AuthenticatedRequest, res: Resp
     if (!invoice) return res.status(404).json({ error: "Sales Invoice not found" });
     if (!invoice.customer.email) return res.status(400).json({ error: "Selected Customer has no registered email ID." });
 
-    const emailBody = `Dear ${invoice.customer.name},\r\n\r\nPlease find details for Sales Invoice ${invoice.invoiceNo}.\r\n\r\nInvoice Date: ${invoice.date.toLocaleDateString()}\r\nTotal Amount Due: $${invoice.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}\r\nPayment Status: ${invoice.status}\r\n\r\nThank you for your valuable corporate business!`;
+    const symbol = invoice.customer.currencySymbol || "$";
+    const emailBody = `Dear ${invoice.customer.name},\r\n\r\nPlease find details for Sales Invoice ${invoice.invoiceNo}.\r\n\r\nInvoice Date: ${invoice.date.toLocaleDateString()}\r\nTotal Amount Due: ${symbol}${invoice.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}\r\nPayment Status: ${invoice.status}\r\n\r\nThank you for your valuable corporate business!`;
+
+    // Fetch company name for PDF
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+      select: { name: true }
+    });
+    const companyName = company?.name || "ERP Workspace";
+
+    // Generate PDF attachment
+    const pdfData = {
+      ...invoice,
+      companyName,
+      currencySymbol: symbol
+    };
+    const pdfBuffer = generateInvoicePdf("invoice", pdfData);
 
     await sendEmailNotification(
       invoice.customer.email,
       `Sales Invoice ${invoice.invoiceNo} from ERP Console`,
       emailBody,
-      req.user?.companyCode
+      req.user?.companyCode,
+      [{ filename: `Invoice_${invoice.invoiceNo}.pdf`, content: pdfBuffer }]
     );
 
     return res.json({ message: `Sales Invoice ${invoice.invoiceNo} emailed successfully to ${invoice.customer.email}` });
@@ -1294,11 +1434,33 @@ export async function sendDeliveryChallanEmail(req: AuthenticatedRequest, res: R
 
     const emailBody = `Dear ${challan.customer.name},\r\n\r\nPlease find details for Delivery Challan ${challan.challanNo}.\r\n\r\nChallan Date: ${challan.date.toLocaleDateString()}\r\nChallan Transit Status: ${challan.status}\r\n\r\nThank you!`;
 
+    // Fetch company name for PDF
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+      select: { name: true }
+    });
+    const companyName = company?.name || "ERP Workspace";
+
+    const symbol = challan.customer.currencySymbol || "$";
+    const subtotal = challan.items.reduce((acc, item) => acc + (item.quantity * item.price), 0);
+    const pdfData = {
+      ...challan,
+      companyName,
+      currencySymbol: symbol,
+      subtotal,
+      discount: 0,
+      discountType: "PERCENTAGE",
+      tax: 0,
+      total: subtotal
+    };
+    const pdfBuffer = generateInvoicePdf("challan", pdfData);
+
     await sendEmailNotification(
       challan.customer.email,
       `Delivery Challan ${challan.challanNo} from ERP Console`,
       emailBody,
-      req.user?.companyCode
+      req.user?.companyCode,
+      [{ filename: `Challan_${challan.challanNo}.pdf`, content: pdfBuffer }]
     );
 
     return res.json({ message: `Delivery Challan ${challan.challanNo} emailed successfully to ${challan.customer.email}` });
@@ -1919,6 +2081,19 @@ export async function deleteDocumentTemplate(req: AuthenticatedRequest, res: Res
 
     await prisma.documentTemplate.delete({ where: { id } });
     return res.json({ message: "Document template deleted successfully" });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function getExchangeRates(req: AuthenticatedRequest, res: Response) {
+  try {
+    const rates = await prisma.exchangeRate.findMany();
+    const rateMap: Record<string, number> = {};
+    for (const r of rates) {
+      rateMap[r.targetCode] = r.rate;
+    }
+    return res.json({ base: 'USD', rates: rateMap });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }

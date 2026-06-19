@@ -124,7 +124,7 @@ export default React.memo(function Leads() {
 
     const parsed = LeadSchema.safeParse(payload);
     if (!parsed.success) {
-      setLocalErr(parsed.error.errors[0].message);
+      setLocalErr(parsed.error.issues[0].message);
       return;
     }
 

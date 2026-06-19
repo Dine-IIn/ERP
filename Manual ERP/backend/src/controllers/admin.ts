@@ -3,6 +3,7 @@ import { AuthenticatedRequest } from '../middlewares/auth';
 import prisma from '../services/db';
 import { CompanyProfileSchema } from '../types';
 import { logAudit } from '../utils/audit';
+import { encryptSmtp } from '../utils';
 
 // ==========================================
 // 1. COMPANY PROFILE MANAGEMENT
@@ -22,7 +23,16 @@ export async function getCompanyProfile(req: AuthenticatedRequest, res: Response
       return res.status(404).json({ error: 'Company not found' });
     }
 
-    return res.json({ company });
+    // Mask SMTP password for frontend display (never send raw/encrypted password)
+    // Omit smtpHost and smtpPort so the frontend never sees them
+    const safeCompany = {
+      ...company,
+      smtpPassword: company.smtpPassword ? '••••••••' : '',
+      smtpHost: undefined,
+      smtpPort: undefined
+    };
+
+    return res.json({ company: safeCompany });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }
@@ -44,8 +54,49 @@ export async function updateCompanyProfile(req: AuthenticatedRequest, res: Respo
       return res.status(404).json({ error: 'Company profile not found' });
     }
 
-    // Handle profile update
+    // Handle profile update — encrypt SMTP password before storing
     const updatedData = { ...req.body };
+    if (updatedData.smtpPassword && updatedData.smtpPassword !== '••••••••') {
+      updatedData.smtpPassword = encryptSmtp(updatedData.smtpPassword);
+    } else if (updatedData.smtpPassword === '••••••••') {
+      // User didn't change the password — keep existing encrypted value
+      delete updatedData.smtpPassword;
+    }
+
+    // Auto-compute SMTP Host and Port based on SMTP User email domain on the server side
+    // and ignore any client-submitted host/port
+    delete updatedData.smtpHost;
+    delete updatedData.smtpPort;
+
+    if (updatedData.smtpUser !== undefined) {
+      if (updatedData.smtpUser) {
+        const email = updatedData.smtpUser.trim().toLowerCase();
+        if (email.endsWith('@gmail.com')) {
+          updatedData.smtpHost = 'smtp.gmail.com';
+          updatedData.smtpPort = 465;
+          updatedData.smtpSecure = true;
+        } else if (email.endsWith('@outlook.com') || email.endsWith('@hotmail.com') || email.endsWith('@live.com') || email.endsWith('@office365.com')) {
+          updatedData.smtpHost = 'smtp.office365.com';
+          updatedData.smtpPort = 587;
+          updatedData.smtpSecure = false;
+        } else if (email.endsWith('@yahoo.com')) {
+          updatedData.smtpHost = 'smtp.mail.yahoo.com';
+          updatedData.smtpPort = 465;
+          updatedData.smtpSecure = true;
+        } else {
+          // General fallback
+          updatedData.smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+          updatedData.smtpPort = Number(process.env.SMTP_PORT) || 465;
+          updatedData.smtpSecure = process.env.SMTP_SECURE === 'true' || updatedData.smtpPort === 465;
+        }
+      } else {
+        // smtpUser is empty, clear SMTP settings
+        updatedData.smtpHost = null;
+        updatedData.smtpPort = null;
+        updatedData.smtpSecure = false;
+      }
+    }
+
     const updatedProfile = await prisma.company.update({
       where: { id: companyId },
       data: updatedData

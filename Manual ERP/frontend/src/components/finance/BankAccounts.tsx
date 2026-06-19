@@ -65,7 +65,7 @@ export default function BankAccounts() {
         accountType,
         balance: balance ? parseFloat(balance) : 0
       });
-      if (!parsed.success) throw new Error(parsed.error.errors[0].message);
+      if (!parsed.success) throw new Error(parsed.error.issues[0].message);
       await createMutation.mutateAsync(parsed.data);
       setLocalSuccess("Bank account registered successfully!");
       setTimeout(() => {

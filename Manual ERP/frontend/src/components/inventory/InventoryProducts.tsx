@@ -106,7 +106,7 @@ export default function InventoryProducts({
 
     const parseResult = StockAdjustSchema.safeParse(payload);
     if (!parseResult.success) {
-      setLocalErr(parseResult.error.errors[0].message);
+      setLocalErr(parseResult.error.issues[0].message);
       setLoading(false);
       return;
     }

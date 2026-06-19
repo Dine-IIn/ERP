@@ -104,7 +104,7 @@ export default function Payroll({
     };
     const parseResult = PayrollGenerateSchema.safeParse(payload);
     if (!parseResult.success) {
-      setLocalErr(parseResult.error.errors[0].message);
+      setLocalErr(parseResult.error.issues[0].message);
       setLoading(false);
       return;
     }

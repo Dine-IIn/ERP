@@ -74,7 +74,7 @@ export default function Payments() {
         bankDetails: bankDetails.trim() || null,
         notes: notes.trim() || null
       });
-      if (!parsed.success) throw new Error(parsed.error.errors[0].message);
+      if (!parsed.success) throw new Error(parsed.error.issues[0].message);
       await createMutation.mutateAsync(parsed.data);
       setLocalSuccess("Payment recorded successfully!");
       setTimeout(() => {

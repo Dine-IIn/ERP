@@ -178,7 +178,7 @@ export default function ProductMaster({
 
     const parsed = ProductSchema.safeParse(payload);
     if (!parsed.success) {
-      setLocalErr(parsed.error.errors[0].message);
+      setLocalErr(parsed.error.issues[0].message);
       setLoading(false);
       return;
     }
