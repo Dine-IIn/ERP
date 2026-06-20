@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { Search, Plus, Trash2, X, AlertCircle, FileText, CheckCircle2, Download, RefreshCw } from 'lucide-react';
+import { Search, Plus, Trash2, X, AlertCircle, FileText, CheckCircle2, Download, RefreshCw, MessageSquare, Mail } from 'lucide-react';
 import { CreateVendorQuotationBodySchema } from '../../utils/schemas';
+import WhatsappShareModal from '../sales/WhatsappShareModal';
+import EmailShareModal from '../sales/EmailShareModal';
 
 interface VendorQuotationItem {
   id?: string;
@@ -51,6 +53,8 @@ export default function VendorQuotations({
 }: VendorQuotationsProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [whatsappShareData, setWhatsappShareData] = useState<any>(null);
+  const [emailShareData, setEmailShareData] = useState<any>(null);
 
   const [vendorId, setVendorId] = useState('');
   const [quoteNo, setQuoteNo] = useState('');
@@ -274,6 +278,50 @@ export default function VendorQuotations({
                           </button>
                         </>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const vObj = vendors.find(v => v.id === q.vendorId || v.id === q.vendor?.id);
+                          setEmailShareData({
+                            recipientEmail: vObj?.email || '',
+                            subject: `Vendor Quotation Bid ${q.quoteNo}`,
+                            body: `Dear ${q.vendor?.name || vObj?.name || 'Partner'},\n\nWe have recorded supplier quotation bid ${q.quoteNo}.\n\nQuotation Details:\nDate: ${new Date(q.date).toLocaleDateString()}\nValid Till: ${q.validUntil ? new Date(q.validUntil).toLocaleDateString() : 'N/A'}\nTotal Bid Value: ${currencySymbol}${q.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}\n\nThank you!`,
+                          });
+                        }}
+                        className="p-1.5 hover:bg-slate-850 text-slate-550 hover:text-indigo-400 transition-colors rounded-lg inline-flex items-center"
+                        title="Share via Email"
+                      >
+                        <Mail className="w-4 h-4" />
+                      </button>
+
+                      {(() => {
+                        const features = JSON.parse(localStorage.getItem('erp_company_features') || '[]');
+                        const showWhatsappBtn = features.includes('ADMIN_WHATSAPP');
+                        if (!showWhatsappBtn) return null;
+                        const vObj = vendors.find(v => v.id === q.vendorId || v.id === q.vendor?.id);
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setWhatsappShareData({
+                                documentId: q.id,
+                                documentType: 'QUOTATION',
+                                documentNumber: q.quoteNo,
+                                customerName: q.vendor?.name || vObj?.name || '',
+                                customerCode: q.vendor?.id || vObj?.id || '',
+                                contactNo: vObj?.contactNo || '',
+                                amount: q.total,
+                                date: q.date,
+                                currencySymbol: currencySymbol
+                              });
+                            }}
+                            className="p-1.5 hover:bg-slate-850 text-slate-550 hover:text-emerald-450 transition-colors rounded-lg inline-flex items-center"
+                            title="Share via WhatsApp"
+                          >
+                            <MessageSquare className="w-4 h-4" />
+                          </button>
+                        );
+                      })()}
                       <button
                         onClick={() => handleDelete(q.id, q.quoteNo)}
                         className="p-1.5 hover:bg-slate-850 text-slate-550 hover:text-red-400 transition-colors rounded-lg"
@@ -505,6 +553,21 @@ export default function VendorQuotations({
             </form>
           </div>
         </div>
+      )}
+      {whatsappShareData && (
+        <WhatsappShareModal
+          isOpen={!!whatsappShareData}
+          onClose={() => setWhatsappShareData(null)}
+          {...whatsappShareData}
+        />
+      )}
+
+      {emailShareData && (
+        <EmailShareModal
+          isOpen={!!emailShareData}
+          onClose={() => setEmailShareData(null)}
+          {...emailShareData}
+        />
       )}
     </div>
   );

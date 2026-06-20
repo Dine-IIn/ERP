@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
-import { ShoppingCart, Search, Plus, Trash2, X, AlertCircle, CheckCircle2, DollarSign, Calendar, Tag, Trash, Eye, Edit, Download } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ShoppingCart, Search, Plus, Trash2, X, AlertCircle, CheckCircle2, DollarSign, Calendar, Tag, Trash, Eye, Edit, Download, MessageSquare, Mail, Loader2 } from 'lucide-react';
+import WhatsappShareModal from '../sales/WhatsappShareModal';
+import EmailShareModal from '../sales/EmailShareModal';
 import { apiClient } from '../../utils/apiService';
 import { useQuery } from '@tanstack/react-query';
 import { CreatePurchaseOrderBodySchema } from '../../utils/schemas';
@@ -61,6 +63,11 @@ export default function PurchaseOrders({
   const [isEditing, setIsEditing] = useState(false);
   const [editOrderId, setEditOrderId] = useState<string | null>(null);
   const [selectedDetailOrder, setSelectedDetailOrder] = useState<PurchaseOrder | null>(null);
+  const [whatsappShareData, setWhatsappShareData] = useState<any>(null);
+  const [emailShareData, setEmailShareData] = useState<any>(null);
+  const [pdfGeneratingOrder, setPdfGeneratingOrder] = useState<any>(null);
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [sharingLoadingId, setSharingLoadingId] = useState<string | null>(null);
 
   const [vendorId, setVendorId] = useState('');
   const [poNo, setPoNo] = useState('');
@@ -408,6 +415,196 @@ export default function PurchaseOrders({
                       >
                         <Eye className="w-4 h-4" />
                       </button>
+                      <button
+                        disabled={sharingLoadingId === o.id}
+                        onClick={async () => {
+                          setSharingLoadingId(o.id);
+                          let base64 = '';
+                          try {
+                            let currentSettings = {
+                              showLogo: true,
+                              showCompanyDetails: true,
+                              showBillingAddress: true,
+                              showShippingAddress: true,
+                              showBankDetails: true,
+                              showTerms: true,
+                              colProductCode: true,
+                              colUnitPrice: true,
+                              colDiscount: true,
+                              colTax: true,
+                            };
+                            let customTitleVal = 'Purchase Order';
+                            let customNotesVal = 'We require delivery within the specified date range. Please send invoice copies on dispatch.';
+                            let themeColorVal = 'indigo';
+
+                            const savedSettings = o.templateSettings ? JSON.parse(o.templateSettings) : null;
+                            if (savedSettings) {
+                              currentSettings = { ...currentSettings, ...savedSettings };
+                              customTitleVal = savedSettings.title || 'Purchase Order';
+                              customNotesVal = savedSettings.terms || '';
+                              themeColorVal = savedSettings.themeColor || 'indigo';
+                            } else if (templates.length > 0) {
+                              const defaultTpl = templates.find((t: any) => t.isDefault);
+                              if (defaultTpl) {
+                                currentSettings = {
+                                  showLogo: defaultTpl.showLogo ?? true,
+                                  showCompanyDetails: defaultTpl.showCompanyDetails ?? true,
+                                  showBillingAddress: defaultTpl.showBillingAddress ?? true,
+                                  showShippingAddress: defaultTpl.showShippingAddress ?? true,
+                                  showBankDetails: defaultTpl.showBankDetails ?? true,
+                                  showTerms: defaultTpl.showTerms ?? true,
+                                  colProductCode: defaultTpl.colProductCode ?? true,
+                                  colUnitPrice: defaultTpl.colUnitPrice ?? true,
+                                  colDiscount: defaultTpl.colDiscount ?? true,
+                                  colTax: defaultTpl.colTax ?? true,
+                                };
+                                customTitleVal = defaultTpl.title || 'Purchase Order';
+                                customNotesVal = defaultTpl.terms || '';
+                                themeColorVal = defaultTpl.themeColor || 'indigo';
+                              }
+                            }
+
+                            setPdfGeneratingOrder({
+                              order: o,
+                              pdfCustomizer: currentSettings,
+                              customTitle: customTitleVal,
+                              customNotes: customNotesVal,
+                              themeColor: themeColorVal
+                            });
+
+                            await new Promise(resolve => setTimeout(resolve, 350));
+                            const element = document.getElementById('pdf-email-render-pane');
+                            if (element) {
+                              const { generatePdfFromHtmlElement } = await import('../../utils/pdfDocumentUtils');
+                              base64 = await generatePdfFromHtmlElement(element);
+                            }
+                          } catch (e) {
+                            console.error("Failed to generate PDF for Email:", e);
+                          } finally {
+                            setPdfGeneratingOrder(null);
+                            setSharingLoadingId(null);
+                          }
+
+                          const vendorObj = vendors.find(v => v.id === o.vendorId);
+                          setEmailShareData({
+                            recipientEmail: vendorObj?.email || '',
+                            subject: `Purchase Order ${o.poNo} from ERP Console`,
+                            body: `Dear ${o.vendor?.name || 'Partner'},\n\nPlease find attached Sourcing Purchase Order ${o.poNo}.\n\nPO Date: ${new Date(o.date).toLocaleDateString()}\nTotal PO Valuation: ${currencySymbol}${o.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}\n\nRegards,\nSourcing Division`,
+                            pdfBase64: base64,
+                            pdfFilename: `PO_${o.poNo}.pdf`
+                          });
+                        }}
+                        className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-indigo-400 transition-all rounded-lg inline-flex items-center justify-center disabled:opacity-50"
+                        title="Email PDF to Vendor"
+                      >
+                        {sharingLoadingId === o.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Mail className="w-4 h-4" />
+                        )}
+                      </button>
+
+                      {(() => {
+                        const features = JSON.parse(localStorage.getItem('erp_company_features') || '[]');
+                        const showWhatsappBtn = features.includes('ADMIN_WHATSAPP');
+                        if (!showWhatsappBtn) return null;
+                        return (
+                          <button
+                            disabled={sharingLoadingId === o.id}
+                            onClick={async () => {
+                              setSharingLoadingId(o.id);
+                              let base64 = '';
+                              try {
+                                let currentSettings = {
+                                  showLogo: true,
+                                  showCompanyDetails: true,
+                                  showBillingAddress: true,
+                                  showShippingAddress: true,
+                                  showBankDetails: true,
+                                  showTerms: true,
+                                  colProductCode: true,
+                                  colUnitPrice: true,
+                                  colDiscount: true,
+                                  colTax: true,
+                                };
+                                let customTitleVal = 'Purchase Order';
+                                let customNotesVal = 'We require delivery within the specified date range. Please send invoice copies on dispatch.';
+                                let themeColorVal = 'indigo';
+
+                                const savedSettings = o.templateSettings ? JSON.parse(o.templateSettings) : null;
+                                if (savedSettings) {
+                                  currentSettings = { ...currentSettings, ...savedSettings };
+                                  customTitleVal = savedSettings.title || 'Purchase Order';
+                                  customNotesVal = savedSettings.terms || '';
+                                  themeColorVal = savedSettings.themeColor || 'indigo';
+                                } else if (templates.length > 0) {
+                                  const defaultTpl = templates.find((t: any) => t.isDefault);
+                                  if (defaultTpl) {
+                                    currentSettings = {
+                                      showLogo: defaultTpl.showLogo ?? true,
+                                      showCompanyDetails: defaultTpl.showCompanyDetails ?? true,
+                                      showBillingAddress: defaultTpl.showBillingAddress ?? true,
+                                      showShippingAddress: defaultTpl.showShippingAddress ?? true,
+                                      showBankDetails: defaultTpl.showBankDetails ?? true,
+                                      showTerms: defaultTpl.showTerms ?? true,
+                                      colProductCode: defaultTpl.colProductCode ?? true,
+                                      colUnitPrice: defaultTpl.colUnitPrice ?? true,
+                                      colDiscount: defaultTpl.colDiscount ?? true,
+                                      colTax: defaultTpl.colTax ?? true,
+                                    };
+                                    customTitleVal = defaultTpl.title || 'Purchase Order';
+                                    customNotesVal = defaultTpl.terms || '';
+                                    themeColorVal = defaultTpl.themeColor || 'indigo';
+                                  }
+                                }
+
+                                setPdfGeneratingOrder({
+                                  order: o,
+                                  pdfCustomizer: currentSettings,
+                                  customTitle: customTitleVal,
+                                  customNotes: customNotesVal,
+                                  themeColor: themeColorVal
+                                });
+
+                                await new Promise(resolve => setTimeout(resolve, 350));
+                                const element = document.getElementById('pdf-email-render-pane');
+                                if (element) {
+                                  const { generatePdfFromHtmlElement } = await import('../../utils/pdfDocumentUtils');
+                                  base64 = await generatePdfFromHtmlElement(element);
+                                }
+                              } catch (e) {
+                                console.error("Failed to generate PDF for WhatsApp:", e);
+                              } finally {
+                                setPdfGeneratingOrder(null);
+                                setSharingLoadingId(null);
+                              }
+
+                              const vendorObj = vendors.find(v => v.id === o.vendorId);
+                              setWhatsappShareData({
+                                documentId: o.id,
+                                documentType: 'PURCHASE_ORDER',
+                                documentNumber: o.poNo,
+                                customerName: vendorObj?.name || '',
+                                customerCode: vendorObj?.id || '',
+                                contactNo: vendorObj?.contactNo || '',
+                                amount: o.total,
+                                date: o.date,
+                                currencySymbol: currencySymbol,
+                                pdfBase64: base64,
+                                pdfFilename: `PO_${o.poNo}.pdf`
+                              });
+                            }}
+                            className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-emerald-450 transition-all rounded-lg inline-flex items-center justify-center disabled:opacity-50"
+                            title="Share via WhatsApp"
+                          >
+                            {sharingLoadingId === o.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <MessageSquare className="w-4 h-4" />
+                            )}
+                          </button>
+                        );
+                      })()}
 
                       {o.status !== 'COMPLETED' && (
                         <button
@@ -900,7 +1097,7 @@ export default function PurchaseOrders({
                 {/* Right Side: Visual Preview */}
                 <div className="flex-1 bg-slate-950 p-8 overflow-y-auto flex justify-center">
                   {/* Paper sheet */}
-                  <div className="w-[210mm] min-h-[297mm] bg-white text-black p-10 shadow-2xl text-[11px] relative flex flex-col justify-between font-sans leading-relaxed select-text">
+                  <div id="pdf-preview-pane" className="w-[210mm] min-h-[297mm] bg-white text-black p-10 shadow-2xl text-[11px] relative flex flex-col justify-between font-sans leading-relaxed select-text">
                     <div className="space-y-6">
                       {/* Document Header */}
                       <div className="flex justify-between items-start border-b-2 pb-5" style={{ borderColor: currentThemeHex }}>
@@ -1050,12 +1247,14 @@ export default function PurchaseOrders({
               {/* Footer Buttons */}
               <div className="p-4 border-t border-[var(--border-color)] shrink-0 flex justify-end gap-3 bg-slate-950/20">
                 <button
+                  disabled={pdfBusy}
                   onClick={() => setCustomizingOrder(null)}
                   className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-350 font-bold text-xs rounded-xl border-0 cursor-pointer transition-all"
                 >
                   Cancel
                 </button>
                 <button
+                  disabled={pdfBusy}
                   onClick={() => {
                     setActivePrintOrder(order);
                   }}
@@ -1236,6 +1435,185 @@ export default function PurchaseOrders({
                 {customNotes}
               </div>
             )}
+          </div>
+        );
+      })()}
+      {whatsappShareData && (
+        <WhatsappShareModal
+          isOpen={!!whatsappShareData}
+          onClose={() => setWhatsappShareData(null)}
+          {...whatsappShareData}
+        />
+      )}
+
+      {emailShareData && (
+        <EmailShareModal
+          isOpen={!!emailShareData}
+          onClose={() => setEmailShareData(null)}
+          {...emailShareData}
+        />
+      )}
+
+      {pdfGeneratingOrder && (() => {
+        const { order, pdfCustomizer, customTitle, customNotes, themeColor } = pdfGeneratingOrder;
+        const discountVal = order.subtotal * ((order.discount || 0) / 100);
+        const taxVal = (order.subtotal - discountVal) * ((order.tax || 0) / 100);
+        const currentThemeHex = getThemeHex(themeColor);
+        const logoSrc = companyProfile?.logoUrl;
+        
+        return (
+          <div style={{ position: 'absolute', left: '-9999px', top: '-9999px' }}>
+            <div
+              id="pdf-email-render-pane"
+              className="bg-white text-black p-10"
+              style={{
+                width: '210mm',
+                minHeight: '297mm',
+                boxSizing: 'border-box',
+                fontFamily: 'sans-serif',
+                fontSize: `11px`
+              }}
+            >
+              <div className="space-y-6">
+                {/* Header */}
+                <div className="flex justify-between items-start border-b-2 pb-5" style={{ borderColor: currentThemeHex }}>
+                  <div>
+                    {pdfCustomizer.showLogo && logoSrc && (
+                      <img src={logoSrc} alt="Logo" className="max-h-12 object-contain mb-3" />
+                    )}
+                    <div className="text-xl font-extrabold uppercase" style={{ color: currentThemeHex }}>{customTitle}</div>
+                    <div className="font-mono text-[10px] text-slate-650 mt-1">PO No: {order.poNo}</div>
+                  </div>
+
+                  {pdfCustomizer.showCompanyDetails && companyProfile && (
+                    <div className="text-right text-[10px] text-slate-700 leading-normal max-w-xs">
+                      <strong className="text-slate-900 text-[11px]">{companyProfile.name}</strong><br/>
+                      {companyProfile.addressLine1 && `${companyProfile.addressLine1}, `}
+                      {companyProfile.addressLine2 && `${companyProfile.addressLine2}, `}<br/>
+                      {companyProfile.city && `${companyProfile.city}, `}
+                      {companyProfile.state && `${companyProfile.state} - `}
+                      {companyProfile.pincode && companyProfile.pincode}<br/>
+                      {companyProfile.gstNumber && <strong>GSTIN: {companyProfile.gstNumber}</strong>}
+                    </div>
+                  )}
+                </div>
+
+                {/* Meta */}
+                <div className="grid grid-cols-2 gap-6 text-[10px] text-slate-700">
+                  <div className="space-y-1">
+                    <div className="text-[9px] uppercase font-bold text-slate-450">PO Metadata</div>
+                    <div>PO Issue Date: <span className="font-semibold text-slate-900">{new Date(order.date).toLocaleDateString()}</span></div>
+                    <div>Expected Delivery: <span className="font-semibold text-slate-900">{order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString() : 'N/A'}</span></div>
+                    <div>Status: <span className="font-semibold text-slate-900">{order.status}</span></div>
+                  </div>
+                  <div className="space-y-1 text-right">
+                    <div className="text-[9px] uppercase font-bold text-slate-455">Vendor Partner</div>
+                    <div className="font-semibold text-slate-900">{order.vendor?.name}</div>
+                    {order.vendor?.contactNo && <div>Tel: {order.vendor.contactNo}</div>}
+                  </div>
+                </div>
+
+                {/* Addresses Row */}
+                <div className="grid grid-cols-2 gap-6 border-t border-slate-200 pt-4">
+                  {pdfCustomizer.showBillingAddress && (
+                    <div className="text-[10px] text-slate-700 leading-relaxed">
+                      <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Supplier Vendor</span>
+                      <strong className="text-slate-900">{order.vendor?.name}</strong><br/>
+                      {order.vendor?.address || 'Supplier address records'}
+                    </div>
+                  )}
+                  
+                  {pdfCustomizer.showShippingAddress && companyProfile && (
+                    <div className="text-[10px] text-slate-700 leading-relaxed text-right">
+                      <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Delivery Destination</span>
+                      <strong className="text-slate-900">{companyProfile.name}</strong><br/>
+                      {companyProfile.addressLine1 && `${companyProfile.addressLine1}, `}
+                      {companyProfile.addressLine2 && companyProfile.addressLine2}<br/>
+                      {companyProfile.city && `${companyProfile.city}, `}
+                      {companyProfile.state && `${companyProfile.state}`}
+                    </div>
+                  )}
+                </div>
+
+                {/* Items Table */}
+                <div className="pt-2">
+                  <table className="w-full text-left text-[10px] border-collapse">
+                    <thead>
+                      <tr className="border-b-2 font-bold bg-slate-50" style={{ borderBottomColor: currentThemeHex }}>
+                        <th className="py-2.5 px-2 text-slate-800">Description</th>
+                        {pdfCustomizer.colProductCode && <th className="py-2.5 px-2">SKU / Code</th>}
+                        <th className="py-2.5 px-2 text-right">Qty</th>
+                        {pdfCustomizer.colUnitPrice && <th className="py-2.5 px-2 text-right">Price</th>}
+                        {pdfCustomizer.colDiscount && <th className="py-2.5 px-2 text-right">Discount</th>}
+                        <th className="py-2.5 px-2 text-right">Subtotal</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(order.items || []).map((it: any) => {
+                        const prod = products.find(p => p.id === it.productId);
+                        const itemSub = it.quantity * it.price;
+                        const itemDisc = itemSub * ((it.discount || 0) / 100);
+                        return (
+                          <tr key={it.id} className="border-b border-slate-100">
+                            <td className="py-2.5 px-2">
+                              <strong className="text-slate-900">{prod?.name || it.product?.name || 'Stock Item'}</strong>
+                              {prod?.hsnSacCode && <span className="text-[9px] text-slate-550 block mt-0.5">HSN Code: {prod.hsnSacCode}</span>}
+                            </td>
+                            {pdfCustomizer.colProductCode && (
+                              <td className="py-2.5 px-2 font-mono text-slate-650">{prod?.sku || 'N/A'}</td>
+                            )}
+                            <td className="py-2.5 px-2 text-right font-mono">{it.quantity} {prod?.uom || it.product?.uom || 'PCS'}</td>
+                            {pdfCustomizer.colUnitPrice && (
+                              <td className="py-2.5 px-2 text-right font-mono">{currencySymbol}{it.price.toFixed(2)}</td>
+                            )}
+                            {pdfCustomizer.colDiscount && (
+                              <td className="py-2.5 px-2 text-right font-mono">{it.discount || 0}%</td>
+                            )}
+                            <td className="py-2.5 px-2 text-right font-mono font-semibold text-slate-900">{currencySymbol}{(itemSub - itemDisc).toFixed(2)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Calculations Table */}
+                <div className="flex justify-end pt-2">
+                  <table className="w-[50%] text-[10px] text-slate-700">
+                    <tbody>
+                      <tr className="border-b border-slate-100">
+                        <td className="py-1.5 text-left">Gross Subtotal:</td>
+                        <td className="py-1.5 text-right font-mono text-slate-900">{currencySymbol}{order.subtotal.toFixed(2)}</td>
+                      </tr>
+                      {order.discount > 0 && (
+                        <tr className="border-b border-slate-100">
+                          <td className="py-1.5 text-left text-red-500">Global Sourcing Discount ({order.discount}%):</td>
+                          <td className="py-1.5 text-right font-mono text-red-550">-{currencySymbol}{discountVal.toFixed(2)}</td>
+                        </tr>
+                      )}
+
+                      {pdfCustomizer.colTax && (
+                        <tr className="border-b border-slate-100">
+                          <td className="py-1.5 text-left">Sourcing GST ({order.tax}%):</td>
+                          <td className="py-1.5 text-right font-mono text-slate-900">{currencySymbol}{taxVal.toFixed(2)}</td>
+                        </tr>
+                      )}
+
+                      <tr className="border-t-2 font-extrabold text-[12px]" style={{ color: currentThemeHex, borderTopColor: currentThemeHex }}>
+                        <td className="py-2.5 text-left">Total PO Cost:</td>
+                        <td className="py-2.5 text-right font-mono">{currencySymbol}{order.total.toFixed(2)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {pdfCustomizer.showTerms && (
+                <div className="border-t border-slate-200 pt-4 mt-12 text-[9px] text-slate-550 text-center leading-normal whitespace-pre-line">
+                  {customNotes}
+                </div>
+              )}
+            </div>
           </div>
         );
       })()}

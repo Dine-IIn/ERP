@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { FileText, Search, Plus, Edit, Trash2, X, AlertCircle, CheckCircle2, DollarSign, Calendar, Tag, Trash, Eye, Printer } from 'lucide-react';
+import { FileText, Search, Plus, Edit, Trash2, X, AlertCircle, CheckCircle2, DollarSign, Calendar, Tag, Trash, Eye, Printer, MessageSquare, Mail, Loader2 } from 'lucide-react';
+import WhatsappShareModal from './WhatsappShareModal';
+import EmailShareModal from './EmailShareModal';
 
 interface QuotationItem {
   id?: string;
@@ -60,7 +62,11 @@ export default function Quotations({
   const [showAddModal, setShowAddModal] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [previewQuote, setPreviewQuote] = useState<Quotation | null>(null);
-
+  const [whatsappShareData, setWhatsappShareData] = useState<any>(null);
+  const [emailShareData, setEmailShareData] = useState<any>(null);
+  const [pdfGeneratingQuote, setPdfGeneratingQuote] = useState<any>(null);
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [sharingLoadingId, setSharingLoadingId] = useState<string | null>(null);
   const [customerId, setCustomerId] = useState('');
 
   const getCurrencyCodeFromSymbol = (symbol: string): string => {
@@ -326,8 +332,106 @@ export default function Quotations({
                           <Eye className="w-4 h-4" />
                         </button>
                         <button
+                          disabled={sharingLoadingId === q.id}
+                          onClick={async () => {
+                            setSharingLoadingId(q.id);
+                            let base64 = '';
+                            try {
+                              setPdfGeneratingQuote({
+                                quote: q,
+                                quoteCustomer,
+                                quoteCurrencySymbol
+                              });
+
+                              await new Promise(resolve => setTimeout(resolve, 350));
+                              const element = document.getElementById('pdf-email-render-pane');
+                              if (element) {
+                                const { generatePdfFromHtmlElement } = await import('../../utils/pdfDocumentUtils');
+                                base64 = await generatePdfFromHtmlElement(element);
+                              }
+                            } catch (e) {
+                              console.error("Failed to generate PDF for Email:", e);
+                            } finally {
+                              setPdfGeneratingQuote(null);
+                              setSharingLoadingId(null);
+                            }
+
+                            setEmailShareData({
+                              recipientEmail: quoteCustomer?.email || '',
+                              subject: `Quotation Proposal ${q.quoteNo} from ERP Console`,
+                              body: `Dear ${quoteCustomer?.name || 'Client'},\n\nPlease find attached Price Quotation ${q.quoteNo}.\n\nTotal Valuation: ${quoteCurrencySymbol}${q.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}\n\nRegards,\nSales Division`,
+                              pdfBase64: base64,
+                              pdfFilename: `Quotation_${q.quoteNo}.pdf`
+                            });
+                          }}
+                          className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-indigo-400 transition-colors rounded-lg inline-flex items-center justify-center disabled:opacity-50"
+                          title="Email PDF to Customer"
+                        >
+                          {sharingLoadingId === q.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Mail className="w-4 h-4" />
+                          )}
+                        </button>
+
+                        {(() => {
+                          const features = JSON.parse(localStorage.getItem('erp_company_features') || '[]');
+                          const showWhatsappBtn = features.includes('ADMIN_WHATSAPP');
+                          if (!showWhatsappBtn) return null;
+                          return (
+                            <button
+                              disabled={sharingLoadingId === q.id}
+                              onClick={async () => {
+                                setSharingLoadingId(q.id);
+                                let base64 = '';
+                                try {
+                                  setPdfGeneratingQuote({
+                                    quote: q,
+                                    quoteCustomer,
+                                    quoteCurrencySymbol
+                                  });
+
+                                  await new Promise(resolve => setTimeout(resolve, 350));
+                                  const element = document.getElementById('pdf-email-render-pane');
+                                  if (element) {
+                                    const { generatePdfFromHtmlElement } = await import('../../utils/pdfDocumentUtils');
+                                    base64 = await generatePdfFromHtmlElement(element);
+                                  }
+                                } catch (e) {
+                                  console.error("Failed to generate PDF for WhatsApp:", e);
+                                } finally {
+                                  setPdfGeneratingQuote(null);
+                                  setSharingLoadingId(null);
+                                }
+
+                                setWhatsappShareData({
+                                  documentId: q.id,
+                                  documentType: 'QUOTATION',
+                                  documentNumber: q.quoteNo,
+                                  customerName: quoteCustomer?.name || '',
+                                  customerCode: quoteCustomer?.id || '',
+                                  contactNo: quoteCustomer?.contactNo || '',
+                                  amount: q.total,
+                                  date: q.date,
+                                  currencySymbol: quoteCurrencySymbol,
+                                  pdfBase64: base64,
+                                  pdfFilename: `Quotation_${q.quoteNo}.pdf`
+                                });
+                              }}
+                              className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-emerald-455 transition-all rounded-lg inline-flex items-center justify-center disabled:opacity-50"
+                              title="Share via WhatsApp"
+                            >
+                              {sharingLoadingId === q.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <MessageSquare className="w-4 h-4" />
+                              )}
+                            </button>
+                          );
+                        })()}
+                        <button
                           onClick={() => handleDelete(q.id, q.quoteNo)}
-                          className="p-1.5 hover:bg-slate-850 text-slate-550 hover:text-red-400 transition-colors rounded-lg"
+                          className="p-1.5 hover:bg-slate-855 text-slate-550 hover:text-red-450 transition-colors rounded-lg"
                           title="Permanently remove"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -726,6 +830,7 @@ export default function Quotations({
               <div className="flex gap-3">
                 <button
                   type="button"
+                  disabled={pdfBusy}
                   onClick={() => {
                     const printable = document.getElementById('printable-quotation-sheet');
                     if (!printable) return;
@@ -743,6 +848,7 @@ export default function Quotations({
                 </button>
                 <button
                   type="button"
+                  disabled={pdfBusy}
                   onClick={() => setShowPreviewModal(false)}
                   className="px-4.5 py-2 text-slate-400 hover:text-white transition-all text-sm font-semibold hover:bg-slate-800 rounded-xl"
                 >
@@ -752,6 +858,122 @@ export default function Quotations({
             </div>
           </div>
         </div>
+        );
+      })()}
+      {whatsappShareData && (
+        <WhatsappShareModal
+          isOpen={!!whatsappShareData}
+          onClose={() => setWhatsappShareData(null)}
+          {...whatsappShareData}
+        />
+      )}
+
+      {emailShareData && (
+        <EmailShareModal
+          isOpen={!!emailShareData}
+          onClose={() => setEmailShareData(null)}
+          {...emailShareData}
+        />
+      )}
+
+      {pdfGeneratingQuote && (() => {
+        const { quote, quoteCustomer, quoteCurrencySymbol } = pdfGeneratingQuote;
+        const gross = quote.subtotal;
+        const disc = gross * (quote.discount / 100);
+        return (
+          <div style={{ position: 'absolute', left: '-9999px', top: '-9999px' }}>
+            <div
+              id="pdf-email-render-pane"
+              className="bg-white text-slate-900 p-10"
+              style={{
+                width: '210mm',
+                minHeight: '297mm',
+                boxSizing: 'border-box',
+                fontFamily: 'sans-serif',
+                fontSize: `11px`
+              }}
+            >
+              <div className="flex justify-between items-start border-b-2 border-slate-300 pb-6">
+                <div>
+                  <h2 className="text-2xl font-black uppercase text-slate-850 tracking-tight">Price Proposal</h2>
+                  <div className="font-mono text-xs text-slate-500 mt-1">NO: <span className="font-bold text-slate-800">{quote.quoteNo}</span></div>
+                  <div className="font-mono text-xs text-slate-500">DATE: {new Date(quote.date).toLocaleDateString()}</div>
+                  {quote.expiryDate && (
+                    <div className="font-mono text-xs text-red-500 font-semibold mt-0.5">VALID UNTIL: {new Date(quote.expiryDate).toLocaleDateString()}</div>
+                  )}
+                </div>
+                <div className="text-right">
+                  <h3 className="text-sm font-black uppercase text-indigo-700 tracking-wider">ERP Platform</h3>
+                  <p className="text-xs text-slate-500 mt-1">Tenant Corporate Business Office</p>
+                  <p className="text-xs text-slate-500">Sales Commercial Dept</p>
+                </div>
+              </div>
+
+              {/* Customer reference */}
+              <div className="my-6">
+                <h4 className="text-[10px] text-slate-400 uppercase tracking-widest font-black">Recipient Client</h4>
+                <p className="text-sm font-bold text-slate-800 mt-1">{quote.customer.name}</p>
+                <p className="text-xs text-slate-500">Corporate Customer Partner</p>
+              </div>
+
+              {/* Items grid */}
+              <table className="w-full text-left text-xs border-collapse mt-8">
+                <thead>
+                  <tr className="border-b-2 border-slate-300 text-slate-550 font-bold uppercase tracking-wider bg-slate-50">
+                    <th className="py-2.5 px-3">Item Description</th>
+                    <th className="py-2.5 px-3 text-right">Base cost</th>
+                    <th className="py-2.5 px-3 text-right">Volume Qty</th>
+                    <th className="py-2.5 px-3 text-right">Margin Disc</th>
+                    <th className="py-2.5 px-3 text-right">Total Net</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {quote.items.map((it: any, idx: number) => {
+                    const itemGross = it.quantity * it.price;
+                    const itemDisc = itemGross * (it.discount / 100);
+                    return (
+                      <tr key={idx} className="hover:bg-slate-50">
+                        <td className="py-3 px-3 font-semibold text-slate-800">
+                          {it.product?.name || 'Commercial Line Item'}
+                          {it.product?.uom && <span className="text-[10px] text-slate-550 font-mono ml-1">({it.product.uom})</span>}
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono text-slate-700">{quoteCurrencySymbol}{it.price.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                        <td className="py-3 px-3 text-right font-mono text-slate-700">{it.quantity}</td>
+                        <td className="py-3 px-3 text-right font-mono text-red-500">-{it.discount}%</td>
+                        <td className="py-3 px-3 text-right font-mono text-slate-800 font-bold">
+                          {quoteCurrencySymbol}{(itemGross - itemDisc).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              {/* Summaries */}
+              <div className="flex justify-end mt-8 border-t-2 border-slate-200 pt-6">
+                <div className="w-64 space-y-2 text-xs font-mono">
+                  <div className="flex justify-between text-slate-550">
+                    <span>Subtotal Gross:</span>
+                    <span>{quoteCurrencySymbol}{quote.subtotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  {quote.discount > 0 && (
+                    <div className="flex justify-between text-red-500">
+                      <span>Global discount (-{quote.discount}%):</span>
+                      <span>-{quoteCurrencySymbol}{(quote.subtotal * (quote.discount / 100)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-slate-550 border-b border-slate-200 pb-2">
+                    <span>Tax Bracket ({quote.tax}%):</span>
+                    <span>{quoteCurrencySymbol}{((quote.subtotal * (1 - quote.discount / 100)) * (quote.tax / 100)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-850 font-black text-sm pt-2">
+                    <span>Document Total:</span>
+                    <span>{quoteCurrencySymbol}{quote.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         );
       })()}
     </div>

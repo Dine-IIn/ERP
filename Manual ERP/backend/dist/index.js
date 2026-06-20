@@ -23,8 +23,11 @@ const crm_1 = require("./controllers/crm");
 const purchases_1 = require("./controllers/purchases");
 const inventory_1 = require("./controllers/inventory");
 const forecast_1 = require("./controllers/forecast");
+const whatsapp_1 = require("./controllers/whatsapp");
+const whatsapp_2 = __importDefault(require("./services/whatsapp"));
 const forecast_2 = require("./services/forecast");
 const forecastScheduler_1 = require("./services/forecastScheduler");
+const currency_1 = require("./services/currency");
 const controllers_3 = require("./controllers");
 const sales_1 = require("./controllers/sales");
 const hrms_1 = require("./controllers/hrms");
@@ -333,6 +336,7 @@ app.post('/api/master/products', auth_1.authenticateToken, master_data_1.createP
 app.patch('/api/master/products/:id', auth_1.authenticateToken, master_data_1.updateProduct);
 app.delete('/api/master/products/:id', auth_1.authenticateToken, master_data_1.deleteProduct);
 // 9. Sales Module Scoped Consolidated APIs
+app.get('/api/sales/exchange-rates', auth_1.authenticateToken, sales_1.getExchangeRates);
 app.get('/api/sales/orders', auth_1.authenticateToken, sales_2.listSalesOrders);
 app.post('/api/sales/orders', auth_1.authenticateToken, sales_2.createSalesOrder);
 app.patch('/api/sales/orders/:id', auth_1.authenticateToken, sales_2.updateSalesOrder);
@@ -352,6 +356,7 @@ app.post('/api/sales/challans', auth_1.authenticateToken, sales_2.createDelivery
 app.patch('/api/sales/challans/:id', auth_1.authenticateToken, sales_2.updateDeliveryChallan);
 app.delete('/api/sales/challans/:id', auth_1.authenticateToken, sales_2.deleteDeliveryChallan);
 app.post('/api/sales/challans/:id/email', auth_1.authenticateToken, sales_2.sendDeliveryChallanEmail);
+app.post('/api/email/send', auth_1.authenticateToken, sales_2.sendGenericEmail);
 app.get('/api/sales/dispatches', auth_1.authenticateToken, sales_2.listDispatches);
 app.post('/api/sales/dispatches', auth_1.authenticateToken, sales_2.createDispatch);
 app.patch('/api/sales/dispatches/:id', auth_1.authenticateToken, sales_2.updateDispatch);
@@ -495,6 +500,32 @@ app.get('/api/reports/purchase', auth_1.authenticateToken, reports_1.getPurchase
 app.get('/api/reports/inventory', auth_1.authenticateToken, reports_1.getInventoryReport);
 app.get('/api/reports/hr', auth_1.authenticateToken, reports_1.getHrReport);
 app.get('/api/reports/financial', auth_1.authenticateToken, reports_1.getFinancialReport);
+// 9.9 WhatsApp Integration Module Routes
+const requireEitherWhatsappFeature = async (req, res, next) => {
+    if (req.user?.isSuperAdmin)
+        return next();
+    const hasLink = await db_1.default.companyFeature.findFirst({
+        where: { companyId: req.user?.companyId, feature: { key: 'WHATSAPP_SHARE_LINK' } }
+    });
+    const hasDevice = await db_1.default.companyFeature.findFirst({
+        where: { companyId: req.user?.companyId, feature: { key: 'WHATSAPP_LINKED_DEVICE' } }
+    });
+    if (!hasLink && !hasDevice) {
+        return res.status(403).json({ error: "WhatsApp communication features are not enabled for your company." });
+    }
+    next();
+};
+app.get('/api/whatsapp/status', auth_1.authenticateToken, requireEitherWhatsappFeature, (0, auth_1.requirePermission)('WHATSAPP', 'view'), whatsapp_1.getWhatsappStatus);
+app.post('/api/whatsapp/connect', auth_1.authenticateToken, (0, auth_1.requireFeature)('WHATSAPP_LINKED_DEVICE'), (0, auth_1.requirePermission)('WHATSAPP', 'connect'), whatsapp_1.connectWhatsapp);
+app.post('/api/whatsapp/disconnect', auth_1.authenticateToken, (0, auth_1.requireFeature)('WHATSAPP_LINKED_DEVICE'), (0, auth_1.requirePermission)('WHATSAPP', 'disconnect'), whatsapp_1.disconnectWhatsapp);
+app.get('/api/whatsapp/qr', auth_1.authenticateToken, (0, auth_1.requireFeature)('WHATSAPP_LINKED_DEVICE'), (0, auth_1.requirePermission)('WHATSAPP', 'connect'), whatsapp_1.getWhatsappQr);
+app.post('/api/whatsapp/send', auth_1.authenticateToken, requireEitherWhatsappFeature, (0, auth_1.requirePermission)('WHATSAPP', 'send'), whatsapp_1.sendWhatsappMessage);
+app.get('/api/whatsapp/templates', auth_1.authenticateToken, requireEitherWhatsappFeature, (0, auth_1.requirePermission)('WHATSAPP', 'templates.manage'), whatsapp_1.getWhatsappTemplates);
+app.post('/api/whatsapp/templates', auth_1.authenticateToken, requireEitherWhatsappFeature, (0, auth_1.requirePermission)('WHATSAPP', 'templates.manage'), whatsapp_1.saveWhatsappTemplate);
+app.put('/api/whatsapp/templates/:id', auth_1.authenticateToken, requireEitherWhatsappFeature, (0, auth_1.requirePermission)('WHATSAPP', 'templates.manage'), whatsapp_1.saveWhatsappTemplate);
+app.put('/api/whatsapp/settings', auth_1.authenticateToken, requireEitherWhatsappFeature, (0, auth_1.requirePermission)('WHATSAPP', 'templates.manage'), whatsapp_1.updateWhatsappSettings);
+app.delete('/api/whatsapp/templates/:id', auth_1.authenticateToken, requireEitherWhatsappFeature, (0, auth_1.requirePermission)('WHATSAPP', 'templates.manage'), whatsapp_1.deleteWhatsappTemplate);
+app.get('/api/whatsapp/logs', auth_1.authenticateToken, requireEitherWhatsappFeature, (0, auth_1.requirePermission)('WHATSAPP', 'view'), whatsapp_1.getWhatsappLogs);
 // Automated Seeding Function to ensure feature keys exist and are mapped to companies
 async function seedDatabase() {
     try {
@@ -578,7 +609,10 @@ async function seedDatabase() {
                         "MANUFACTURING_QC",
                         "MANUFACTURING_SHOP_FLOOR",
                         "MANUFACTURING_REPORTS",
-                        "MANUFACTURING_COSTING"
+                        "MANUFACTURING_COSTING",
+                        "COMMUNICATION",
+                        "WHATSAPP_SHARE_LINK",
+                        "WHATSAPP_LINKED_DEVICE"
                     ]
                 }
             }
@@ -674,6 +708,7 @@ async function seedDatabase() {
                 permissions.MANUFACTURING_SHOP_FLOOR = ["read", "write", "delete"];
                 permissions.MANUFACTURING_REPORTS = ["read", "write", "delete"];
                 permissions.MANUFACTURING_COSTING = ["read", "write", "delete"];
+                permissions.WHATSAPP = ["view", "connect", "disconnect", "send", "templates.manage"];
                 await db_1.default.role.update({
                     where: { id: adminRole.id },
                     data: { permissions: JSON.stringify(permissions) }
@@ -702,6 +737,22 @@ seedDatabase().then(() => {
         }
         catch (err) {
             console.error("❌ [AI Forecasting] Failed to start scheduler/worker:", err);
+        }
+        // Initialize daily currency sync loop
+        try {
+            (0, currency_1.startCurrencySyncLoop)();
+            console.log("🌐 [Currency Service] Daily currency sync loop started successfully.");
+        }
+        catch (err) {
+            console.error("❌ [Currency Service] Failed to start currency sync loop:", err);
+        }
+        // Initialize WhatsApp sessions
+        try {
+            whatsapp_2.default.init();
+            console.log("💬 [WhatsApp Service] Multi-tenant WhatsApp manager initialized.");
+        }
+        catch (err) {
+            console.error("❌ [WhatsApp Service] Failed to initialize WhatsApp service:", err);
         }
     });
 });

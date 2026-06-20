@@ -679,19 +679,29 @@ export async function updateProformaInvoice(req: AuthenticatedRequest, res: Resp
     const finalTax = tax !== undefined ? parseFloat(tax) : existingInvoice.tax;
     const finalTotal = total !== undefined ? parseFloat(total) : existingInvoice.total;
 
-    try {
-      await validateInvoiceTaxAndTotal(
-        companyId,
-        finalCustomerId,
-        finalItems,
-        finalDiscount,
-        finalDiscountType,
-        finalTax,
-        finalTotal,
-        null
-      );
-    } catch (valError: any) {
-      return res.status(400).json({ error: valError.message });
+    const isEditingCalculations = 
+      items !== undefined || 
+      tax !== undefined || 
+      total !== undefined || 
+      discount !== undefined || 
+      discountType !== undefined ||
+      customerId !== undefined;
+
+    if (isEditingCalculations) {
+      try {
+        await validateInvoiceTaxAndTotal(
+          companyId,
+          finalCustomerId,
+          finalItems,
+          finalDiscount,
+          finalDiscountType,
+          finalTax,
+          finalTotal,
+          null
+        );
+      } catch (valError: any) {
+        return res.status(400).json({ error: valError.message });
+      }
     }
 
     let customerData = {};
@@ -800,43 +810,83 @@ export async function sendProformaInvoiceEmail(req: AuthenticatedRequest, res: R
     const { id } = req.params;
     const invoice = await prisma.proformaInvoice.findFirst({
       where: { id, companyId },
-      include: { customer: true, items: { include: { product: true } } }
+      include: { customer: true }
     });
 
     if (!invoice) return res.status(404).json({ error: "Proforma Invoice not found" });
     if (!invoice.customer.email) return res.status(400).json({ error: "Selected Customer has no registered email ID." });
 
+    const { resolveAndCompileMessage } = require('../utils');
     const symbol = invoice.customer.currencySymbol || "$";
-    const emailBody = `Dear ${invoice.customer.name},\r\n\r\nPlease find details for Proforma Invoice ${invoice.invoiceNo}.\r\n\r\nInvoice Date: ${invoice.date.toLocaleDateString()}\r\nTotal Amount Due: ${symbol}${invoice.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}\r\n\r\nThank you for doing business with us!`;
+    const defaultBody = `Dear ${invoice.customer.name},\r\n\r\nPlease find details for Proforma Invoice ${invoice.invoiceNo}.\r\n\r\nInvoice Date: ${invoice.date.toLocaleDateString()}\r\nTotal Amount Due: ${symbol}${invoice.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}\r\n\r\nThank you for doing business with us!`;
 
-    // Fetch company name for PDF
-    const company = await prisma.company.findUnique({
-      where: { id: companyId },
-      select: { name: true }
-    });
-    const companyName = company?.name || "ERP Workspace";
+    const emailBody = await resolveAndCompileMessage(
+      companyId,
+      'PROFORMA_INVOICE',
+      invoice.id,
+      'EMAIL',
+      defaultBody
+    );
 
-    // Generate PDF attachment
-    const pdfData = {
-      ...invoice,
-      companyName,
-      currencySymbol: symbol
-    };
-    const pdfBuffer = generateInvoicePdf("proforma", pdfData);
+    // Generate or attach PDF
+    let pdfBuffer: Buffer | undefined;
+    let filename = req.body.pdfFilename || `Proforma_${invoice.invoiceNo}.pdf`;
+    if (req.body.pdfBase64) {
+      pdfBuffer = Buffer.from(req.body.pdfBase64, 'base64');
+    }
 
-    await sendEmailNotification(
+    // Run email notification asynchronously in the background to prevent timeouts
+    sendEmailNotification(
       invoice.customer.email,
       `Proforma Invoice ${invoice.invoiceNo} from ERP Console`,
       emailBody,
       req.user?.companyCode,
-      [{ filename: `Proforma_${invoice.invoiceNo}.pdf`, content: pdfBuffer }]
-    );
+      pdfBuffer ? [{ filename, content: pdfBuffer }] : undefined
+    ).catch((err: any) => {
+      console.error(`Failed to send Proforma Invoice email for ${invoice.invoiceNo}:`, err);
+    });
 
-    return res.json({ message: `Proforma Invoice ${invoice.invoiceNo} emailed successfully to ${invoice.customer.email}` });
+    return res.json({ message: `Proforma Invoice ${invoice.invoiceNo} email dispatch initiated to ${invoice.customer.email}` });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }
 }
+
+export async function sendGenericEmail(req: AuthenticatedRequest, res: Response) {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { to, subject, body, pdfBase64, pdfFilename } = req.body;
+    if (!to) return res.status(400).json({ error: "Recipient email is required." });
+    if (!subject) return res.status(400).json({ error: "Subject is required." });
+    if (!body) return res.status(400).json({ error: "Email body is required." });
+
+    let attachments: { filename: string; content: Buffer }[] | undefined;
+    if (pdfBase64) {
+      attachments = [{
+        filename: pdfFilename || "document.pdf",
+        content: Buffer.from(pdfBase64, 'base64')
+      }];
+    }
+
+    // Run email notification asynchronously in the background to prevent timeouts
+    sendEmailNotification(
+      to,
+      subject,
+      body,
+      req.user?.companyCode,
+      attachments
+    ).catch((err: any) => {
+      console.error(`Failed to send generic email to ${to}:`, err);
+    });
+
+    return res.json({ message: `Email dispatch initiated to ${to}` });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
 
 // ==========================================
 // 3. SALES INVOICES CONTROLLERS
@@ -1058,19 +1108,30 @@ export async function updateSalesInvoice(req: AuthenticatedRequest, res: Respons
     const finalTotal = total !== undefined ? parseFloat(total) : existingInvoice.total;
     const finalShippingState = shippingState !== undefined ? shippingState : existingInvoice.shippingState;
 
-    try {
-      await validateInvoiceTaxAndTotal(
-        companyId,
-        finalCustomerId,
-        finalItems,
-        finalDiscount,
-        finalDiscountType,
-        finalTax,
-        finalTotal,
-        finalShippingState
-      );
-    } catch (valError: any) {
-      return res.status(400).json({ error: valError.message });
+    const isEditingCalculations = 
+      items !== undefined || 
+      tax !== undefined || 
+      total !== undefined || 
+      discount !== undefined || 
+      discountType !== undefined ||
+      customerId !== undefined ||
+      shippingState !== undefined;
+
+    if (isEditingCalculations) {
+      try {
+        await validateInvoiceTaxAndTotal(
+          companyId,
+          finalCustomerId,
+          finalItems,
+          finalDiscount,
+          finalDiscountType,
+          finalTax,
+          finalTotal,
+          finalShippingState
+        );
+      } catch (valError: any) {
+        return res.status(400).json({ error: valError.message });
+      }
     }
 
     let customerData = {};
@@ -1241,8 +1302,17 @@ export async function sendSalesInvoiceEmail(req: AuthenticatedRequest, res: Resp
     if (!invoice) return res.status(404).json({ error: "Sales Invoice not found" });
     if (!invoice.customer.email) return res.status(400).json({ error: "Selected Customer has no registered email ID." });
 
+    const { resolveAndCompileMessage } = require('../utils');
     const symbol = invoice.customer.currencySymbol || "$";
-    const emailBody = `Dear ${invoice.customer.name},\r\n\r\nPlease find details for Sales Invoice ${invoice.invoiceNo}.\r\n\r\nInvoice Date: ${invoice.date.toLocaleDateString()}\r\nTotal Amount Due: ${symbol}${invoice.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}\r\nPayment Status: ${invoice.status}\r\n\r\nThank you for your valuable corporate business!`;
+    const defaultBody = `Dear ${invoice.customer.name},\r\n\r\nPlease find details for Sales Invoice ${invoice.invoiceNo}.\r\n\r\nInvoice Date: ${invoice.date.toLocaleDateString()}\r\nTotal Amount Due: ${symbol}${invoice.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}\r\nPayment Status: ${invoice.status}\r\n\r\nThank you for your valuable corporate business!`;
+
+    const emailBody = await resolveAndCompileMessage(
+      companyId,
+      'SALES_INVOICE',
+      invoice.id,
+      'EMAIL',
+      defaultBody
+    );
 
     // Fetch company name for PDF
     const company = await prisma.company.findUnique({
@@ -1252,22 +1322,31 @@ export async function sendSalesInvoiceEmail(req: AuthenticatedRequest, res: Resp
     const companyName = company?.name || "ERP Workspace";
 
     // Generate PDF attachment
-    const pdfData = {
-      ...invoice,
-      companyName,
-      currencySymbol: symbol
-    };
-    const pdfBuffer = generateInvoicePdf("invoice", pdfData);
+    let pdfBuffer: Buffer;
+    let filename = req.body.pdfFilename || `Invoice_${invoice.invoiceNo}.pdf`;
+    if (req.body.pdfBase64) {
+      pdfBuffer = Buffer.from(req.body.pdfBase64, 'base64');
+    } else {
+      const pdfData = {
+        ...invoice,
+        companyName,
+        currencySymbol: symbol
+      };
+      pdfBuffer = generateInvoicePdf("invoice", pdfData);
+    }
 
-    await sendEmailNotification(
+    // Run email notification asynchronously in the background to prevent timeouts
+    sendEmailNotification(
       invoice.customer.email,
       `Sales Invoice ${invoice.invoiceNo} from ERP Console`,
       emailBody,
       req.user?.companyCode,
-      [{ filename: `Invoice_${invoice.invoiceNo}.pdf`, content: pdfBuffer }]
-    );
+      [{ filename, content: pdfBuffer }]
+    ).catch((err: any) => {
+      console.error(`Failed to send Sales Invoice email for ${invoice.invoiceNo}:`, err);
+    });
 
-    return res.json({ message: `Sales Invoice ${invoice.invoiceNo} emailed successfully to ${invoice.customer.email}` });
+    return res.json({ message: `Sales Invoice ${invoice.invoiceNo} email dispatch initiated to ${invoice.customer.email}` });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }
@@ -1432,7 +1511,16 @@ export async function sendDeliveryChallanEmail(req: AuthenticatedRequest, res: R
     if (!challan) return res.status(404).json({ error: "Delivery Challan not found" });
     if (!challan.customer.email) return res.status(400).json({ error: "Selected Customer has no registered email ID." });
 
-    const emailBody = `Dear ${challan.customer.name},\r\n\r\nPlease find details for Delivery Challan ${challan.challanNo}.\r\n\r\nChallan Date: ${challan.date.toLocaleDateString()}\r\nChallan Transit Status: ${challan.status}\r\n\r\nThank you!`;
+    const { resolveAndCompileMessage } = require('../utils');
+    const defaultBody = `Dear ${challan.customer.name},\r\n\r\nPlease find details for Delivery Challan ${challan.challanNo}.\r\n\r\nChallan Date: ${challan.date.toLocaleDateString()}\r\nChallan Transit Status: ${challan.status}\r\n\r\nThank you!`;
+
+    const emailBody = await resolveAndCompileMessage(
+      companyId,
+      'DELIVERY_CHALLAN',
+      challan.id,
+      'EMAIL',
+      defaultBody
+    );
 
     // Fetch company name for PDF
     const company = await prisma.company.findUnique({
@@ -1443,27 +1531,36 @@ export async function sendDeliveryChallanEmail(req: AuthenticatedRequest, res: R
 
     const symbol = challan.customer.currencySymbol || "$";
     const subtotal = challan.items.reduce((acc, item) => acc + (item.quantity * item.price), 0);
-    const pdfData = {
-      ...challan,
-      companyName,
-      currencySymbol: symbol,
-      subtotal,
-      discount: 0,
-      discountType: "PERCENTAGE",
-      tax: 0,
-      total: subtotal
-    };
-    const pdfBuffer = generateInvoicePdf("challan", pdfData);
+    let pdfBuffer: Buffer;
+    let filename = req.body.pdfFilename || `Challan_${challan.challanNo}.pdf`;
+    if (req.body.pdfBase64) {
+      pdfBuffer = Buffer.from(req.body.pdfBase64, 'base64');
+    } else {
+      const pdfData = {
+        ...challan,
+        companyName,
+        currencySymbol: symbol,
+        subtotal,
+        discount: 0,
+        discountType: "PERCENTAGE",
+        tax: 0,
+        total: subtotal
+      };
+      pdfBuffer = generateInvoicePdf("challan", pdfData);
+    }
 
-    await sendEmailNotification(
+    // Run email notification asynchronously in the background to prevent timeouts
+    sendEmailNotification(
       challan.customer.email,
       `Delivery Challan ${challan.challanNo} from ERP Console`,
       emailBody,
       req.user?.companyCode,
-      [{ filename: `Challan_${challan.challanNo}.pdf`, content: pdfBuffer }]
-    );
+      [{ filename, content: pdfBuffer }]
+    ).catch((err: any) => {
+      console.error(`Failed to send Delivery Challan email for ${challan.challanNo}:`, err);
+    });
 
-    return res.json({ message: `Delivery Challan ${challan.challanNo} emailed successfully to ${challan.customer.email}` });
+    return res.json({ message: `Delivery Challan ${challan.challanNo} email dispatch initiated to ${challan.customer.email}` });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }

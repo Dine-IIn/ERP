@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../utils/apiService';
 import { ReceiptSchema } from '../../utils/schemas';
-import { Download, Plus, Search, X, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Download, Plus, Search, X, AlertCircle, CheckCircle2, MessageSquare, Mail } from 'lucide-react';
+import WhatsappShareModal from '../sales/WhatsappShareModal';
+import EmailShareModal from '../sales/EmailShareModal';
 
 interface Receipt {
   id: string;
@@ -16,14 +18,24 @@ interface Receipt {
   createdAt: string;
 }
 
-export default function Receipts() {
+export default function Receipts({ currencySymbol = '$' }: { currencySymbol?: string }) {
   const queryClient = useQueryClient();
+  const [whatsappShareData, setWhatsappShareData] = useState<any>(null);
+  const [emailShareData, setEmailShareData] = useState<any>(null);
 
   const { data: receipts = [] } = useQuery({
     queryKey: ['receipts'],
     queryFn: async () => {
       const res = await apiClient.get<{receipts: any[]}>('/api/finance/receipts');
       return res.receipts || [];
+    }
+  });
+
+  const { data: customers = [] } = useQuery({
+    queryKey: ['customers'],
+    queryFn: async () => {
+      const res = await apiClient.get<{customers: any[]}>('/api/sales/customers');
+      return res.customers || [];
     }
   });
 
@@ -93,8 +105,6 @@ export default function Receipts() {
       referenceNo.toLowerCase().includes(term);
   });
 
-  const currencySymbol = '$';
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -154,6 +164,7 @@ export default function Receipts() {
                   <th className="py-3.5 px-5">Method</th>
                   <th className="py-3.5 px-5">Reference No</th>
                   <th className="py-3.5 px-5 text-right">Inflow Amount</th>
+                  <th className="py-3.5 px-5 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/50">
@@ -170,6 +181,52 @@ export default function Receipts() {
                     <td className="py-3.5 px-5 font-mono text-slate-350 font-semibold">{r.referenceNo || '-'}</td>
                     <td className="py-3.5 px-5 font-mono text-emerald-400 text-right font-black text-sm">
                       +{currencySymbol}{r.amount.toFixed(2)}
+                    </td>
+                    <td className="py-3.5 px-5 text-right space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const matchedCustomer = customers.find((c: any) => c.name?.toLowerCase() === r.payerName?.toLowerCase());
+                          setEmailShareData({
+                            recipientEmail: matchedCustomer?.email || '',
+                            subject: `Receipt Voucher ${r.referenceNo || `RCP-${r.id.substring(0, 8)}`}`,
+                            body: `Dear ${r.payerName},\n\nWe have successfully recorded your payment/receipt.\n\nReceipt Details:\nReference No: ${r.referenceNo || 'N/A'}\nDate: ${new Date(r.date).toLocaleDateString()}\nCategory: ${r.category}\nAmount: ${currencySymbol}${r.amount.toFixed(2)}\n\nThank you for doing business with us!`,
+                          });
+                        }}
+                        className="px-2 py-1 bg-indigo-600/10 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded transition-all cursor-pointer border-0 bg-transparent flex items-center gap-1 text-[9px] uppercase font-bold inline-flex"
+                        title="Share via Email"
+                      >
+                        <Mail className="w-3 h-3" /> Email
+                      </button>
+
+                      {(() => {
+                        const features = JSON.parse(localStorage.getItem('erp_company_features') || '[]');
+                        const showWhatsappBtn = features.includes('ADMIN_WHATSAPP');
+                        if (!showWhatsappBtn) return null;
+                        const matchedCustomer = customers.find((c: any) => c.name?.toLowerCase() === r.payerName?.toLowerCase());
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setWhatsappShareData({
+                                documentId: r.id,
+                                documentType: 'PAYMENT_RECEIPT',
+                                documentNumber: r.referenceNo || `RCP-${r.id.substring(0, 8)}`,
+                                customerName: r.payerName,
+                                customerCode: matchedCustomer?.id || '',
+                                contactNo: matchedCustomer?.contactNo || '',
+                                amount: r.amount,
+                                date: r.date,
+                                currencySymbol: currencySymbol
+                              });
+                            }}
+                            className="px-2 py-1 bg-emerald-600/10 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded transition-all cursor-pointer border-0 bg-transparent flex items-center gap-1 text-[9px] uppercase font-bold inline-flex"
+                            title="Share via WhatsApp"
+                          >
+                            <MessageSquare className="w-3 h-3" /> Share
+                          </button>
+                        );
+                      })()}
                     </td>
                   </tr>
                 ))}
@@ -306,6 +363,21 @@ export default function Receipts() {
             </form>
           </div>
         </div>
+      )}
+      {whatsappShareData && (
+        <WhatsappShareModal
+          isOpen={!!whatsappShareData}
+          onClose={() => setWhatsappShareData(null)}
+          {...whatsappShareData}
+        />
+      )}
+
+      {emailShareData && (
+        <EmailShareModal
+          isOpen={!!emailShareData}
+          onClose={() => setEmailShareData(null)}
+          {...emailShareData}
+        />
       )}
     </div>
   );

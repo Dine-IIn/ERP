@@ -526,3 +526,144 @@ export function numberToIndianWords(amount: number): string {
   result += " Only";
   return result.replace(/\s+/g, ' ').trim();
 }
+
+export async function resolveAndCompileMessage(
+  companyId: string,
+  documentType: string,
+  documentId: string,
+  targetChannel: 'WHATSAPP' | 'EMAIL',
+  fallbackDefaultText: string
+): Promise<string> {
+  // 1. Fetch company details
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { name: true, whatsappDefaultCountryCode: true }
+  });
+
+  const placeholders: Record<string, string> = {
+    companyName: company?.name || 'ERP Workspace'
+  };
+
+  // 2. Fetch template from DB
+  const templateRecord = await prisma.whatsappTemplate.findFirst({
+    where: { companyId, documentType }
+  });
+
+  let templateText = '';
+  if (templateRecord) {
+    if (targetChannel === 'WHATSAPP') {
+      templateText = templateRecord.template;
+    } else {
+      templateText = templateRecord.useSameForEmail || !templateRecord.emailTemplate
+        ? templateRecord.template
+        : templateRecord.emailTemplate;
+    }
+  }
+
+  if (!templateText) {
+    templateText = fallbackDefaultText;
+  }
+
+  // 3. Resolve Placeholders based on document type
+  if (documentType === 'SALES_INVOICE') {
+    const doc = await prisma.salesInvoice.findFirst({
+      where: { id: documentId, companyId },
+      include: { customer: true }
+    });
+    if (doc) {
+      placeholders.customerName = doc.customer.name;
+      placeholders.customerCode = doc.customer.id;
+      placeholders.invoiceNumber = doc.invoiceNo;
+      placeholders.invoiceDate = doc.date.toLocaleDateString();
+      placeholders.invoiceAmount = `${doc.customer.currencySymbol || '$'}${doc.total.toFixed(2)}`;
+      placeholders.dueDate = doc.dueDate ? new Date(doc.dueDate).toLocaleDateString() : '';
+    }
+  } else if (documentType === 'PROFORMA_INVOICE') {
+    const doc = await prisma.proformaInvoice.findFirst({
+      where: { id: documentId, companyId },
+      include: { customer: true }
+    });
+    if (doc) {
+      placeholders.customerName = doc.customer.name;
+      placeholders.customerCode = doc.customer.id;
+      placeholders.invoiceNumber = doc.invoiceNo;
+      placeholders.invoiceDate = doc.date.toLocaleDateString();
+      placeholders.invoiceAmount = `${doc.customer.currencySymbol || '$'}${doc.total.toFixed(2)}`;
+      placeholders.dueDate = doc.dueDate ? new Date(doc.dueDate).toLocaleDateString() : '';
+    }
+  } else if (documentType === 'DELIVERY_CHALLAN') {
+    const doc = await prisma.deliveryChallan.findFirst({
+      where: { id: documentId, companyId },
+      include: { customer: true }
+    });
+    if (doc) {
+      placeholders.customerName = doc.customer.name;
+      placeholders.customerCode = doc.customer.id;
+      placeholders.challanNumber = doc.challanNo;
+      placeholders.invoiceDate = doc.date.toLocaleDateString();
+      placeholders.invoiceAmount = '';
+      placeholders.dueDate = '';
+    }
+  } else if (documentType === 'PURCHASE_ORDER') {
+    const doc = await prisma.purchaseOrder.findFirst({
+      where: { id: documentId, companyId },
+      include: { vendor: true }
+    });
+    if (doc) {
+      placeholders.customerName = doc.vendor.name;
+      placeholders.customerCode = doc.vendor.id;
+      placeholders.poNumber = doc.poNo;
+      placeholders.invoiceDate = doc.date.toLocaleDateString();
+      placeholders.invoiceAmount = `${doc.vendor.currencySymbol || '$'}${doc.total.toFixed(2)}`;
+      placeholders.dueDate = '';
+    }
+  } else if (documentType === 'QUOTATION') {
+    const doc = await prisma.quotation.findFirst({
+      where: { id: documentId, companyId },
+      include: { customer: true }
+    });
+    if (doc) {
+      placeholders.customerName = doc.customer.name;
+      placeholders.customerCode = doc.customer.id;
+      placeholders.quotationNumber = doc.quoteNo;
+      placeholders.invoiceDate = doc.date.toLocaleDateString();
+      placeholders.invoiceAmount = `${doc.customer.currencySymbol || '$'}${doc.total.toFixed(2)}`;
+      placeholders.dueDate = '';
+    }
+  } else if (documentType === 'PAYMENT_RECEIPT') {
+    const doc = await prisma.companyReceipt.findFirst({
+      where: { id: documentId, companyId }
+    });
+    if (doc) {
+      placeholders.customerName = doc.payerName;
+      placeholders.customerCode = '';
+      placeholders.receiptNumber = doc.referenceNo || doc.id;
+      placeholders.invoiceDate = doc.date.toLocaleDateString();
+      placeholders.invoiceAmount = `$${doc.amount.toFixed(2)}`;
+      placeholders.dueDate = '';
+    }
+  } else if (documentType === 'DEBIT_NOTE') {
+    const doc = await prisma.purchaseReturn.findFirst({
+      where: { id: documentId, companyId },
+      include: { purchaseOrder: { include: { vendor: true } }, items: true }
+    });
+    if (doc) {
+      const vendor = doc.purchaseOrder?.vendor;
+      placeholders.customerName = vendor?.name || 'Supplier';
+      placeholders.customerCode = vendor?.id || '';
+      placeholders.invoiceNumber = doc.returnNo;
+      placeholders.invoiceDate = doc.returnDate.toLocaleDateString();
+      const debitVal = doc.items.reduce((sum, it) => sum + (it.quantity * it.price), 0);
+      placeholders.invoiceAmount = `${vendor?.currencySymbol || '$'}${debitVal.toFixed(2)}`;
+      placeholders.dueDate = '';
+    }
+  }
+
+  // 4. Compile Template
+  let result = templateText;
+  for (const key in placeholders) {
+    result = result.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), placeholders[key] || '');
+  }
+  result = result.replace(/\{\{\w+\}\}/g, '');
+  return result;
+}

@@ -605,3 +605,36 @@ export const UpdateVendorBodySchema = z.object({
 }).passthrough();
 export const UpdateWorkCenterBodySchema = z.any();
 export const UpdateWorkOrderBodySchema = z.any();
+
+// WhatsApp Module Schemas
+export const CreateWhatsappTemplateSchema = z.object({
+  documentType: z.string(),
+  template: z.string().min(1, "Template body cannot be empty"),
+  emailTemplate: z.string().optional().nullable(),
+  useSameForEmail: z.boolean().optional(),
+  isActive: z.boolean().optional()
+});
+
+export const UpdateWhatsappTemplateSchema = z.object({
+  template: z.string().min(1, "Template body cannot be empty"),
+  emailTemplate: z.string().optional().nullable(),
+  useSameForEmail: z.boolean().optional(),
+  isActive: z.boolean().optional()
+});
+
+export const SendWhatsappMessageSchema = z.object({
+  documentType: z.string().optional(),
+  documentId: z.string().optional(),
+  recipientPhone: z.string(),
+  customMessage: z.string().optional(),
+  customPlaceholders: z.record(z.string()).optional(),
+  mode: z.enum(["SHARE_LINK", "AUTOMATED"]),
+  pdfBase64: z.string().optional(),
+  pdfFilename: z.string().optional()
+});
+
+export const UpdateWhatsappSettingsSchema = z.object({
+  defaultCountryCode: z.string().optional(),
+  maxLimitPerHour: z.number().int().positive().optional()
+});
+

@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { ShoppingCart, Search, Plus, Edit, Trash2, X, AlertCircle, DollarSign, Calendar, Tag, Layers, CheckCircle2, Download } from 'lucide-react';
+import { ShoppingCart, Search, Plus, Edit, Trash2, X, AlertCircle, DollarSign, Calendar, Tag, Layers, CheckCircle2, Download, MessageSquare, Mail, Loader2 } from 'lucide-react';
 import { apiClient } from '../../utils/apiService';
 import { useQuery } from '@tanstack/react-query';
 import { CreateSalesOrderBodySchema } from '../../utils/schemas';
 import CustomerTaxBankPdfSection from './CustomerTaxBankPdfSection';
+import WhatsappShareModal from './WhatsappShareModal';
+import EmailShareModal from './EmailShareModal';
 import {
   DEFAULT_PDF_CUSTOMIZER,
   mergePdfCustomizerFromTemplate,
@@ -83,6 +85,11 @@ export default function SalesOrder({
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [customizingOrder, setCustomizingOrder] = useState<any>(null);
   const [activePrintOrder, setActivePrintOrder] = useState<any>(null);
+  const [whatsappShareData, setWhatsappShareData] = useState<any>(null);
+  const [emailShareData, setEmailShareData] = useState<any>(null);
+  const [pdfGeneratingInv, setPdfGeneratingInv] = useState<any>(null);
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [sharingLoadingId, setSharingLoadingId] = useState<string | null>(null);
 
   const { data: profileData } = useQuery({ queryKey: ['companyProfile'], queryFn: () => apiClient.get<any>('/api/admin/company/profile') });
   const companyProfile = profileData?.company || null;
@@ -394,6 +401,161 @@ export default function SalesOrder({
                       >
                         <Download className="w-3 h-3" /> PDF
                       </button>
+                      <button
+                        type="button"
+                        disabled={sharingLoadingId === order.id}
+                        onClick={async () => {
+                          setSharingLoadingId(order.id);
+                          let base64 = '';
+                          try {
+                            let currentSettings = { ...DEFAULT_PDF_CUSTOMIZER };
+                            let customTitleVal = 'Sales Order';
+                            let customNotesVal = 'All orders are subject to final acceptance. Thank you!';
+                            let themeColorVal = 'indigo';
+
+                            const savedSettings = order.templateSettings ? JSON.parse(order.templateSettings) : null;
+                            if (savedSettings) {
+                              currentSettings = { ...DEFAULT_PDF_CUSTOMIZER, ...savedSettings };
+                              customTitleVal = savedSettings.title || 'Sales Order';
+                              customNotesVal = savedSettings.terms || '';
+                              themeColorVal = savedSettings.themeColor || 'indigo';
+                            } else if (templates.length > 0) {
+                              const defaultTpl = pickDefaultTemplate(templates);
+                              if (defaultTpl) {
+                                currentSettings = mergePdfCustomizerFromTemplate(defaultTpl);
+                                customTitleVal = defaultTpl.title || 'Sales Order';
+                                customNotesVal = defaultTpl.terms || '';
+                                themeColorVal = defaultTpl.themeColor || 'indigo';
+                              }
+                            }
+
+                            setPdfGeneratingInv({
+                              order,
+                              pdfCustomizer: currentSettings,
+                              customTitle: customTitleVal,
+                              customNotes: customNotesVal,
+                              themeColor: themeColorVal
+                            });
+
+                            await new Promise(resolve => setTimeout(resolve, 350));
+                            const element = document.getElementById('pdf-email-render-pane');
+                            if (element) {
+                              const { generatePdfFromHtmlElement } = await import('../../utils/pdfDocumentUtils');
+                              base64 = await generatePdfFromHtmlElement(element);
+                            }
+                          } catch (e) {
+                            console.error("Failed to generate PDF for Email:", e);
+                          } finally {
+                            setPdfGeneratingInv(null);
+                            setSharingLoadingId(null);
+                          }
+
+                          const custObj = customers.find(c => c.id === order.customerId);
+                          setEmailShareData({
+                            recipientEmail: custObj?.email || '',
+                            subject: `Sales Order ${order.orderNo} from ERP Console`,
+                            body: `Dear ${custObj?.name || 'Client'},\n\nPlease find details for Sales Order ${order.orderNo}.\n\nOrder Date: ${new Date(order.date).toLocaleDateString()}\nTotal Amount: ${custObj?.currencySymbol || currencySymbolProp}${order.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}\n\nThank you for doing business with us!`,
+                            pdfBase64: base64,
+                            pdfFilename: `Order_${order.orderNo}.pdf`
+                          });
+                        }}
+                        className="px-2 py-1 bg-indigo-600/10 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded transition-all cursor-pointer border-0 bg-transparent flex items-center gap-1 text-[9px] uppercase font-bold"
+                        title="Email PDF to Customer"
+                      >
+                        {sharingLoadingId === order.id ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" /> Sending...
+                          </>
+                        ) : (
+                          <>
+                            <Mail className="w-3 h-3" /> Email
+                          </>
+                        )}
+                      </button>
+                      {(() => {
+                        const features = JSON.parse(localStorage.getItem('erp_company_features') || '[]');
+                        const showWhatsappBtn = features.includes('ADMIN_WHATSAPP');
+                        if (!showWhatsappBtn) return null;
+                        return (
+                          <button
+                            type="button"
+                            disabled={sharingLoadingId === order.id}
+                            onClick={async () => {
+                              setSharingLoadingId(order.id);
+                              let base64 = '';
+                              try {
+                                let currentSettings = { ...DEFAULT_PDF_CUSTOMIZER };
+                                let customTitleVal = 'Sales Order';
+                                let customNotesVal = 'All orders are subject to final acceptance. Thank you!';
+                                let themeColorVal = 'indigo';
+
+                                const savedSettings = order.templateSettings ? JSON.parse(order.templateSettings) : null;
+                                if (savedSettings) {
+                                  currentSettings = { ...DEFAULT_PDF_CUSTOMIZER, ...savedSettings };
+                                  customTitleVal = savedSettings.title || 'Sales Order';
+                                  customNotesVal = savedSettings.terms || '';
+                                  themeColorVal = savedSettings.themeColor || 'indigo';
+                                } else if (templates.length > 0) {
+                                  const defaultTpl = pickDefaultTemplate(templates);
+                                  if (defaultTpl) {
+                                    currentSettings = mergePdfCustomizerFromTemplate(defaultTpl);
+                                    customTitleVal = defaultTpl.title || 'Sales Order';
+                                    customNotesVal = defaultTpl.terms || '';
+                                    themeColorVal = defaultTpl.themeColor || 'indigo';
+                                  }
+                                }
+
+                                setPdfGeneratingInv({
+                                  order,
+                                  pdfCustomizer: currentSettings,
+                                  customTitle: customTitleVal,
+                                  customNotes: customNotesVal,
+                                  themeColor: themeColorVal
+                                });
+
+                                await new Promise(resolve => setTimeout(resolve, 350));
+                                const element = document.getElementById('pdf-email-render-pane');
+                                if (element) {
+                                  const { generatePdfFromHtmlElement } = await import('../../utils/pdfDocumentUtils');
+                                  base64 = await generatePdfFromHtmlElement(element);
+                                }
+                              } catch (e) {
+                                console.error("Failed to generate PDF for WhatsApp:", e);
+                              } finally {
+                                setPdfGeneratingInv(null);
+                                setSharingLoadingId(null);
+                              }
+
+                              const custObj = customers.find(c => c.id === order.customerId);
+                              setWhatsappShareData({
+                                documentId: order.id,
+                                documentType: 'SALES_ORDER',
+                                documentNumber: order.orderNo,
+                                customerName: custObj?.name || '',
+                                customerCode: custObj?.id || '',
+                                contactNo: custObj?.contactNo || '',
+                                amount: order.total,
+                                date: order.date,
+                                currencySymbol: custObj?.currencySymbol || currencySymbolProp,
+                                pdfBase64: base64,
+                                pdfFilename: `Order_${order.orderNo}.pdf`
+                              });
+                            }}
+                            className="px-2 py-1 bg-emerald-600/10 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded transition-all cursor-pointer border-0 bg-transparent flex items-center gap-1 text-[9px] uppercase font-bold"
+                            title="Share via WhatsApp"
+                          >
+                            {sharingLoadingId === order.id ? (
+                              <>
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Preparing...
+                              </>
+                            ) : (
+                              <>
+                                <MessageSquare className="w-3 h-3" /> Share
+                              </>
+                            )}
+                          </button>
+                        );
+                      })()}
                       <button
                         type="button"
                         onClick={() => openEditModal(order)}
@@ -928,16 +1090,17 @@ export default function SalesOrder({
                   </div>
                 </div>
               </div>
-
               {/* Footer Buttons */}
               <div className="p-4 border-t border-[var(--border-color)] shrink-0 flex justify-end gap-3 bg-slate-950/20">
                 <button
+                  disabled={pdfBusy}
                   onClick={() => setCustomizingOrder(null)}
                   className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-350 font-bold text-xs rounded-xl border-0 cursor-pointer transition-all"
                 >
                   Cancel
                 </button>
                 <button
+                  disabled={pdfBusy}
                   onClick={async () => {
                     const settingsToSave = {
                       title: customTitle,
@@ -1188,6 +1351,239 @@ export default function SalesOrder({
           </div>
         );
       })()}
+
+      {pdfGeneratingInv && (() => {
+        const order = pdfGeneratingInv.order;
+        const pdfCustomizer = pdfGeneratingInv.pdfCustomizer;
+        const customTitle = pdfGeneratingInv.customTitle;
+        const customNotes = pdfGeneratingInv.customNotes;
+        const themeColor = pdfGeneratingInv.themeColor;
+        const cust = resolveCustomerForPdf(customers, order.customerId, order);
+        const taxBank = resolveCustomerTaxBank(cust, order);
+        const currencySymbol = cust?.currencySymbol || currencySymbolProp;
+        const currentThemeHex = getThemeHex(themeColor);
+        
+        const sub = (order?.items || []).reduce((acc: number, item: any) => {
+          return acc + (item.quantity * item.price);
+        }, 0);
+        const discountVal = order.discountType === 'AMOUNT' ? (order.discount || 0) : sub * ((order.discount || 0) / 100);
+        const taxableAmount = sub - discountVal;
+        const taxRate = taxableAmount > 0 ? (order.tax / taxableAmount) * 100 : 0.0;
+        
+        const taxVal = order.tax || 0;
+        const totalVal = order.total || (taxableAmount + taxVal);
+
+        return (
+          <div style={{ position: 'absolute', left: '-9999px', top: '-9999px' }}>
+            <div
+              id="pdf-email-render-pane"
+              className="bg-white text-black p-10 animate-fade-in"
+              style={{
+                width: '210mm',
+                minHeight: '297mm',
+                boxSizing: 'border-box',
+                fontFamily: 'sans-serif',
+                fontSize: `${pdfCustomizer.bodyFontSize}px`
+              }}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: `${pdfCustomizer.sectionSpacing}px` }}>
+                {/* Header */}
+                <div
+                  className="border-b-2"
+                  style={{
+                    borderColor: currentThemeHex,
+                    paddingBottom: `${pdfCustomizer.headerPadding}px`,
+                    marginBottom: `${pdfCustomizer.sectionSpacing}px`,
+                    display: 'flex',
+                    flexDirection: pdfCustomizer.headerAlign === 'center' ? 'column' : 'row',
+                    alignItems: pdfCustomizer.headerAlign === 'center' ? 'center' : 'flex-start',
+                    justifyContent: 'space-between',
+                    textAlign: pdfCustomizer.headerAlign
+                  }}
+                >
+                  <div>
+                    {pdfCustomizer.showLogo && companyProfile?.logoUrl && (
+                      <img src={companyProfile.logoUrl} alt="Logo" className="max-h-12 object-contain mb-3" />
+                    )}
+                    <div className="text-xl font-extrabold uppercase" style={{ color: currentThemeHex }}>{customTitle}</div>
+                    <div className="font-mono text-[10px] text-slate-650 mt-1">Order No: {order.orderNo}</div>
+                  </div>
+
+                  {pdfCustomizer.showCompanyDetails && companyProfile && (
+                    <div
+                      style={{
+                        textAlign: pdfCustomizer.headerAlign === 'center' ? 'center' : pdfCustomizer.headerAlign === 'right' ? 'left' : 'right',
+                        fontSize: `${pdfCustomizer.bodyFontSize}px`
+                      }}
+                      className="text-slate-700 leading-normal max-w-xs whitespace-pre-line"
+                    >
+                      <div className="font-extrabold text-slate-900" style={{ fontSize: `${pdfCustomizer.headerFontSize}px` }}>{companyProfile.name}</div>
+                      <div className="text-slate-500 font-medium mt-0.5" style={{ fontSize: `${pdfCustomizer.headerFontSize * 0.7}px` }}>
+                        {companyProfile.addressLine1 && `${companyProfile.addressLine1}, `}
+                        {companyProfile.addressLine2 && `${companyProfile.addressLine2}, `}<br/>
+                        {companyProfile.city && `${companyProfile.city}, `}
+                        {companyProfile.state && `${companyProfile.state} - `}
+                        {companyProfile.pincode && companyProfile.pincode}<br/>
+                        {companyProfile.gstNumber && <strong>GSTIN: {companyProfile.gstNumber}</strong>}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Meta */}
+                {pdfCustomizer.showMetadata && (
+                  <div className="grid grid-cols-2 gap-6 text-[10px] text-slate-700" style={{ fontSize: `${pdfCustomizer.bodyFontSize - 0.5}px` }}>
+                    <div className="space-y-1">
+                      <div className="text-[9px] uppercase font-bold text-slate-455">Order Metadata</div>
+                      <div>Document Date: <span className="font-semibold text-slate-900">{new Date(order.date).toLocaleDateString()}</span></div>
+                      <div>Delivery Expected: <span className="font-semibold text-slate-900">{order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString() : 'Immediate'}</span></div>
+                      <div>Status: <span className="font-semibold text-slate-900">{order.status}</span></div>
+                    </div>
+                    <div className="space-y-1 text-right">
+                      <div className="text-[9px] uppercase font-bold text-slate-455">Customer Details</div>
+                      <div className="font-semibold text-slate-900">{cust?.name || 'Client Name'}</div>
+                      <div>Type: {cust?.customerType || 'INDIVIDUAL'}</div>
+                      <div>Category: {cust?.customerGroup || 'Standard Group'}</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Addresses Row */}
+                <div className="grid grid-cols-2 gap-6 border-t border-slate-200 pt-4" style={{ textAlign: pdfCustomizer.addressAlign }}>
+                  {pdfCustomizer.showBillingAddress && (
+                    <div className="text-slate-700 leading-relaxed" style={{ textAlign: pdfCustomizer.addressAlign }}>
+                      <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Billing Destination (Bill To)</span>
+                      <strong className="text-slate-900">{cust?.name || 'Client Name'}</strong><br/>
+                      {order.billingAddress || cust?.billingAddress || 'Billing address pending'}
+                      <CustomerTaxBankPdfSection pdfCustomizer={pdfCustomizer} taxBank={taxBank} />
+                    </div>
+                  )}
+                  {pdfCustomizer.showShippingAddress && (
+                    <div className="text-slate-700 leading-relaxed text-right" style={{ textAlign: pdfCustomizer.addressAlign === 'left' ? 'left' : pdfCustomizer.addressAlign === 'center' ? 'center' : 'right' }}>
+                      <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Shipping Destination (Ship To)</span>
+                      <strong className="text-slate-900">{order.shippingName || cust?.name}</strong><br/>
+                      {order.shippingAddress || cust?.shippingAddress || order.billingAddress || cust?.billingAddress || 'Shipping address pending'}<br/>
+                      {order.shippingState && <span>State: {order.shippingState}</span>}
+                    </div>
+                  )}
+                </div>
+
+                {/* Items Table */}
+                <div className="pt-2">
+                  <table
+                    className="w-full text-left border-collapse"
+                    style={{
+                      fontSize: `${pdfCustomizer.bodyFontSize}px`,
+                      borderWidth: pdfCustomizer.borderWidth > 0 ? `${pdfCustomizer.borderWidth}px` : '0px',
+                      borderStyle: 'solid',
+                      borderColor: (currentThemeHex as string) === '#000000' ? '#ddd' : currentThemeHex
+                    }}
+                  >
+                    <thead>
+                      <tr className="border-b-2 font-bold bg-slate-50" style={{ borderBottomColor: currentThemeHex, borderBottomWidth: `${pdfCustomizer.borderWidth}px` }}>
+                        <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthProduct}%` }} className="text-slate-800">Description</th>
+                        {pdfCustomizer.colProductCode && <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthCode}%` }}>SKU / Code</th>}
+                        <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthQty}%` }} className="text-right">Qty</th>
+                        {pdfCustomizer.colUnitPrice && <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthPrice}%` }} className="text-right">Price</th>}
+                        {pdfCustomizer.colDiscount && <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthDiscount}%` }} className="text-right">Discount</th>}
+                        <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthSubtotal}%` }} className="text-right">Subtotal</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(order.items || []).map((it: any) => {
+                        const prod = products.find(p => p.id === it.productId);
+                        const itemSub = it.quantity * it.price;
+                        const itemDisc = itemSub * ((it.discount || 0) / 100);
+                        return (
+                          <tr key={it.id} className="border-b border-slate-100">
+                            <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="font-medium text-slate-900">
+                              {prod?.name || 'Item'}
+                            </td>
+                            {pdfCustomizer.colProductCode && (
+                              <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="font-mono text-slate-650">{prod?.sku || 'N/A'}</td>
+                            )}
+                            <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="text-right font-mono">{it.quantity} {prod?.uom || 'PCS'}</td>
+                            {pdfCustomizer.colUnitPrice && (
+                              <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="text-right font-mono">{currencySymbol}{it.price.toFixed(2)}</td>
+                            )}
+                            {pdfCustomizer.colDiscount && (
+                              <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="text-right font-mono">{it.discount || 0}%</td>
+                            )}
+                            <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="text-right font-mono font-semibold text-slate-900">{currencySymbol}{(itemSub - itemDisc).toFixed(2)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Totals */}
+                <div className={`flex ${pdfCustomizer.totalsAlign === 'left' ? 'justify-start' : pdfCustomizer.totalsAlign === 'center' ? 'justify-center' : 'justify-end'} pt-2`}>
+                  <table className="w-[50%] text-slate-700" style={{ fontSize: `${pdfCustomizer.bodyFontSize}px` }}>
+                    <tbody>
+                      <tr className="border-b border-slate-100">
+                        <td className="py-1 px-2 font-medium">Subtotal</td>
+                        <td className="py-1 px-2 text-right font-semibold text-slate-900">{currencySymbol}{sub.toFixed(2)}</td>
+                      </tr>
+                      {discountVal > 0 && (
+                        <tr className="border-b border-slate-100 text-emerald-600">
+                          <td className="py-1 px-2 font-medium">Discount</td>
+                          <td className="py-1 px-2 text-right font-semibold">-{currencySymbol}{discountVal.toFixed(2)}</td>
+                        </tr>
+                      )}
+                      {pdfCustomizer.colTax && (
+                        <tr className="border-b border-slate-100 text-slate-650">
+                          <td className="py-1 px-2 font-medium">Estimated Tax (GST {taxRate.toFixed(1)}%)</td>
+                          <td className="py-1 px-2 text-right font-semibold">{currencySymbol}{taxVal.toFixed(2)}</td>
+                        </tr>
+                      )}
+                      <tr className="font-bold text-[12px] bg-slate-50" style={{ color: currentThemeHex }}>
+                        <td className="py-2 px-2">Estimated Grand Total</td>
+                        <td className="py-2 px-2 text-right">{currencySymbol}{totalVal.toFixed(2)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Bank Details */}
+                {pdfCustomizer.showBankDetails && bankAccounts.length > 0 && (
+                  <div className="border border-slate-200 bg-slate-50 p-3.5 rounded-lg text-[9px] text-slate-700 leading-normal space-y-1.5 mt-8">
+                    <span className="font-extrabold text-slate-900 uppercase block tracking-wider">Payment Bank Destination</span>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div><strong>Bank Name:</strong> {bankAccounts[0].bankName}</div>
+                      <div><strong>Account Number:</strong> {bankAccounts[0].accountNo}</div>
+                      <div><strong>IFSC Code:</strong> {bankAccounts[0].ifscCode}</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Footer Terms */}
+                {pdfCustomizer.showTerms && (
+                  <div className="border-t border-slate-200 pt-4 mt-12 text-[9px] text-slate-550 text-center leading-normal whitespace-pre-line">
+                    {customNotes}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {whatsappShareData && (
+        <WhatsappShareModal
+          isOpen={!!whatsappShareData}
+          onClose={() => setWhatsappShareData(null)}
+          {...whatsappShareData}
+        />
+      )}
+
+      {emailShareData && (
+        <EmailShareModal
+          isOpen={!!emailShareData}
+          onClose={() => setEmailShareData(null)}
+          {...emailShareData}
+        />
+      )}
     </div>
   );
 }

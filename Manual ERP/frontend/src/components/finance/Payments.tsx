@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../utils/apiService';
 import { PaymentSchema } from '../../utils/schemas';
-import { Send, Plus, Search, X, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Send, Plus, Search, X, AlertCircle, CheckCircle2, MessageSquare, Mail } from 'lucide-react';
+import WhatsappShareModal from '../sales/WhatsappShareModal';
+import EmailShareModal from '../sales/EmailShareModal';
 
 interface Payment {
   id: string;
@@ -41,6 +43,8 @@ export default function Payments() {
   });
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [whatsappShareData, setWhatsappShareData] = useState<any>(null);
+  const [emailShareData, setEmailShareData] = useState<any>(null);
   const [vendorId, setVendorId] = useState('');
   const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('BANK_TRANSFER');
@@ -161,6 +165,7 @@ export default function Payments() {
                   <th className="py-3.5 px-5">Method</th>
                   <th className="py-3.5 px-5">Reference No</th>
                   <th className="py-3.5 px-5 text-right">Amount</th>
+                  <th className="py-3.5 px-5 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/50">
@@ -173,6 +178,53 @@ export default function Payments() {
                     <td className="py-3.5 px-5 font-mono text-slate-350">{p.referenceNo || '-'}</td>
                     <td className="py-3.5 px-5 font-mono text-white text-right font-black text-sm">
                       ${p.amount.toFixed(2)}
+                    </td>
+                    <td className="py-3.5 px-5 text-right space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const matchedVendor = vendors.find(v => v.id === p.vendorId || v.id === p.vendor?.id);
+                          setEmailShareData({
+                            recipientEmail: matchedVendor?.email || '',
+                            subject: `Payment Voucher ${p.paymentNo}`,
+                            body: `Dear ${p.vendor?.name || matchedVendor?.name || 'Partner'},\n\nWe have processed payout transaction ${p.paymentNo}.\n\nPayment Details:\nDate: ${new Date(p.paymentDate).toLocaleDateString()}\nMethod: ${p.paymentMethod}\nReference No: ${p.referenceNo || 'N/A'}\nAmount Paid: $${p.amount.toFixed(2)}\n\nThank you!`,
+                          });
+                        }}
+                        className="px-2 py-1 bg-indigo-600/10 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded transition-all cursor-pointer border-0 bg-transparent flex items-center gap-1 text-[9px] uppercase font-bold inline-flex"
+                        title="Share via Email"
+                      >
+                        <Mail className="w-3 h-3" /> Email
+                      </button>
+
+                      {(() => {
+                        const features = JSON.parse(localStorage.getItem('erp_company_features') || '[]');
+                        const showWhatsappBtn = features.includes('ADMIN_WHATSAPP');
+                        if (!showWhatsappBtn) return null;
+                        
+                        const matchedVendor = vendors.find(v => v.id === p.vendorId || v.id === p.vendor?.id);
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setWhatsappShareData({
+                                documentId: p.id,
+                                documentType: 'VENDOR_PAYMENT',
+                                documentNumber: p.paymentNo,
+                                customerName: p.vendor?.name || matchedVendor?.name || 'Vendor',
+                                customerCode: p.vendor?.id || matchedVendor?.id || '',
+                                contactNo: matchedVendor?.contactNo || '',
+                                amount: p.amount,
+                                date: p.paymentDate,
+                                currencySymbol: '$'
+                              });
+                            }}
+                            className="px-2 py-1 bg-emerald-600/10 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded transition-all cursor-pointer border-0 bg-transparent flex items-center gap-1 text-[9px] uppercase font-bold inline-flex animate-fade-in"
+                            title="Share via WhatsApp"
+                          >
+                            <MessageSquare className="w-3 h-3" /> Share
+                          </button>
+                        );
+                      })()}
                     </td>
                   </tr>
                 ))}
@@ -310,6 +362,21 @@ export default function Payments() {
             </form>
           </div>
         </div>
+      )}
+      {whatsappShareData && (
+        <WhatsappShareModal
+          isOpen={!!whatsappShareData}
+          onClose={() => setWhatsappShareData(null)}
+          {...whatsappShareData}
+        />
+      )}
+
+      {emailShareData && (
+        <EmailShareModal
+          isOpen={!!emailShareData}
+          onClose={() => setEmailShareData(null)}
+          {...emailShareData}
+        />
       )}
     </div>
   );

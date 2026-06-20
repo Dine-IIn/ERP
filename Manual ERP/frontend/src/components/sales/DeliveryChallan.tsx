@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Truck, Search, Plus, Edit, Trash2, X, AlertCircle, Calendar, CheckCircle2, Mail, Download, Package } from 'lucide-react';
+import { Truck, Search, Plus, Edit, Trash2, X, AlertCircle, Calendar, CheckCircle2, Mail, Download, Package, MessageSquare, Loader2 } from 'lucide-react';
 import { apiClient } from '../../utils/apiService';
 import { useQuery } from '@tanstack/react-query';
 import { CreateDeliveryChallanBodySchema } from '../../utils/schemas';
 import CustomerTaxBankPdfSection from './CustomerTaxBankPdfSection';
+import WhatsappShareModal from './WhatsappShareModal';
 import {
   DEFAULT_PDF_CUSTOMIZER,
   mergePdfCustomizerFromTemplate,
@@ -20,7 +21,7 @@ interface DeliveryChallanProps {
   onCreateChallan: (challan: any) => Promise<void>;
   onUpdateChallan: (id: string, challan: any) => Promise<void>;
   onDeleteChallan: (id: string) => Promise<void>;
-  onEmailChallan: (id: string) => Promise<void>;
+  onEmailChallan: (id: string, pdfBase64?: string, pdfFilename?: string) => Promise<void>;
   currencySymbol?: string;
 }
 
@@ -72,6 +73,9 @@ export default function DeliveryChallan({
   // Print Preview States
   const [customizingInvoice, setCustomizingInvoice] = useState<any>(null);
   const [activePrintInvoice, setActivePrintInvoice] = useState<any>(null);
+  const [pdfGeneratingInv, setPdfGeneratingInv] = useState<any>(null);
+  const [sharingLoadingId, setSharingLoadingId] = useState<string | null>(null);
+  const [pdfBusy, setPdfBusy] = useState(false);
   const [customTitle, setCustomTitle] = useState('DELIVERY CHALLAN');
   const [customNotes, setCustomNotes] = useState('1. Please receive the goods in sound physical condition.\n2. Return duplicate copy duly signed and stamped.');
   const [themeColor, setThemeColor] = useState('emerald');
@@ -186,6 +190,7 @@ export default function DeliveryChallan({
   const [localSuccess, setLocalSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [emailingId, setEmailingId] = useState<string | null>(null);
+  const [whatsappShareData, setWhatsappShareData] = useState<any>(null);
 
   const openAddModal = () => {
     setCustomerId(customers[0]?.id || '');
@@ -335,13 +340,60 @@ export default function DeliveryChallan({
   };
 
   const handleEmail = async (id: string, challanNo: string) => {
+    const dc = challans.find(c => c.id === id);
+    if (!dc) return;
+
     setEmailingId(id);
     try {
-      await onEmailChallan(id);
-      alert(`Delivery Challan '${challanNo}' successfully dispatched to customer email!`);
+      // 1. Resolve template settings
+      let currentSettings = { ...DEFAULT_PDF_CUSTOMIZER, colDiscount: false, colTax: false };
+      let customTitleVal = 'DELIVERY CHALLAN';
+      let customNotesVal = '1. Please receive the goods in sound physical condition.\n2. Return duplicate copy duly signed and stamped.';
+      let themeColorVal = 'emerald';
+
+      try {
+        const savedSettings = dc.templateSettings ? JSON.parse(dc.templateSettings) : null;
+        if (savedSettings) {
+          currentSettings = { ...DEFAULT_PDF_CUSTOMIZER, ...savedSettings };
+          customTitleVal = savedSettings.title || 'DELIVERY CHALLAN';
+          customNotesVal = savedSettings.terms || '';
+          themeColorVal = savedSettings.themeColor || 'emerald';
+        } else if (templates.length > 0) {
+          const defaultTpl = pickDefaultTemplate(templates);
+          if (defaultTpl) {
+            currentSettings = mergePdfCustomizerFromTemplate(defaultTpl);
+            customTitleVal = defaultTpl.title || 'DELIVERY CHALLAN';
+            customNotesVal = defaultTpl.terms || '';
+            themeColorVal = defaultTpl.themeColor || 'emerald';
+          }
+        }
+      } catch (e) {
+        console.error("Failed to parse saved settings:", e);
+      }
+
+      // 2. Trigger render of offscreen div
+      setPdfGeneratingInv({
+        inv: dc,
+        pdfCustomizer: currentSettings,
+        customTitle: customTitleVal,
+        customNotes: customNotesVal,
+        themeColor: themeColorVal
+      });
+
+      // 3. Wait for layout, generate PDF, and call onEmailChallan
+      await new Promise(resolve => setTimeout(resolve, 350));
+      const element = document.getElementById('pdf-email-render-pane');
+      if (!element) throw new Error("Hidden PDF rendering pane not found.");
+
+      const { generatePdfFromHtmlElement } = await import('../../utils/pdfDocumentUtils');
+      const base64 = await generatePdfFromHtmlElement(element);
+
+      await onEmailChallan(id, base64, `Challan_${challanNo}.pdf`);
+      alert(`Delivery Challan '${challanNo}' successfully emailed with your customized template!`);
     } catch (err: any) {
       alert(err.message || "Failed to email Delivery Challan");
     } finally {
+      setPdfGeneratingInv(null);
       setEmailingId(null);
     }
   };
@@ -454,6 +506,92 @@ export default function DeliveryChallan({
                     >
                       <Mail className="w-3 h-3" /> {emailingId === dc.id ? 'Sending...' : 'Email'}
                     </button>
+                    {(() => {
+                      const features = JSON.parse(localStorage.getItem('erp_company_features') || '[]');
+                      const showWhatsappBtn = features.includes('ADMIN_WHATSAPP');
+                      if (!showWhatsappBtn) return null;
+                      return (
+                        <button
+                          type="button"
+                          disabled={sharingLoadingId === dc.id}
+                          onClick={async () => {
+                            setSharingLoadingId(dc.id);
+                            let base64 = '';
+                            try {
+                              // 1. Resolve template settings
+                              let currentSettings = { ...DEFAULT_PDF_CUSTOMIZER, colDiscount: false, colTax: false };
+                              let customTitleVal = 'DELIVERY CHALLAN';
+                              let customNotesVal = '1. Please receive the goods in sound physical condition.\n2. Return duplicate copy duly signed and stamped.';
+                              let themeColorVal = 'emerald';
+
+                              const savedSettings = dc.templateSettings ? JSON.parse(dc.templateSettings) : null;
+                              if (savedSettings) {
+                                currentSettings = { ...DEFAULT_PDF_CUSTOMIZER, ...savedSettings };
+                                customTitleVal = savedSettings.title || 'DELIVERY CHALLAN';
+                                customNotesVal = savedSettings.terms || '';
+                                themeColorVal = savedSettings.themeColor || 'emerald';
+                              } else if (templates.length > 0) {
+                                const defaultTpl = pickDefaultTemplate(templates);
+                                if (defaultTpl) {
+                                  currentSettings = mergePdfCustomizerFromTemplate(defaultTpl);
+                                  customTitleVal = defaultTpl.title || 'DELIVERY CHALLAN';
+                                  customNotesVal = defaultTpl.terms || '';
+                                  themeColorVal = defaultTpl.themeColor || 'emerald';
+                                }
+                              }
+
+                              // 2. Render hidden offscreen div
+                              setPdfGeneratingInv({
+                                inv: dc,
+                                pdfCustomizer: currentSettings,
+                                customTitle: customTitleVal,
+                                customNotes: customNotesVal,
+                                themeColor: themeColorVal
+                              });
+
+                              // 3. Wait for render and generate PDF base64
+                              await new Promise(resolve => setTimeout(resolve, 350));
+                              const element = document.getElementById('pdf-email-render-pane');
+                              if (element) {
+                                const { generatePdfFromHtmlElement } = await import('../../utils/pdfDocumentUtils');
+                                base64 = await generatePdfFromHtmlElement(element);
+                              }
+                            } catch (e) {
+                              console.error("Failed to generate PDF for WhatsApp:", e);
+                            } finally {
+                              setPdfGeneratingInv(null);
+                              setSharingLoadingId(null);
+                            }
+
+                            const custObj = customers.find(c => c.id === dc.customerId);
+                            setWhatsappShareData({
+                              documentId: dc.id,
+                              documentType: 'DELIVERY_CHALLAN',
+                              documentNumber: dc.challanNo,
+                              customerName: custObj?.name || '',
+                              customerCode: custObj?.id || '',
+                              contactNo: custObj?.contactNo || '',
+                              amount: (dc.items || []).reduce((sum: number, it: any) => sum + (it.quantity * (it.price || 0)), 0),
+                              date: dc.date,
+                              currencySymbol: custObj?.currencySymbol || currencySymbol,
+                              pdfBase64: base64,
+                              pdfFilename: `Challan_${dc.challanNo}.pdf`
+                            });
+                          }}
+                          className="px-2 py-1 bg-emerald-600/10 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded transition-all cursor-pointer border-0 bg-transparent flex items-center gap-1 text-[9px] uppercase font-bold text-center"
+                        >
+                          {sharingLoadingId === dc.id ? (
+                            <>
+                              <Loader2 className="w-3 h-3 animate-spin" /> Preparing...
+                            </>
+                          ) : (
+                            <>
+                              <MessageSquare className="w-3 h-3" /> Share
+                            </>
+                          )}
+                        </button>
+                      );
+                    })()}
                     <button
                       type="button"
                       onClick={() => openEditModal(dc)}
@@ -970,16 +1108,34 @@ export default function DeliveryChallan({
               {/* Footer Buttons */}
               <div className="p-4 border-t border-[var(--border-color)] shrink-0 flex justify-end gap-3 bg-slate-950/20">
                 <button
+                  disabled={pdfBusy}
                   onClick={() => setCustomizingInvoice(null)}
-                  className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-350 font-bold text-xs rounded-xl border-0 cursor-pointer transition-all"
+                  className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-350 font-bold text-xs rounded-xl border-0 cursor-pointer transition-all disabled:opacity-50"
                 >
                   Cancel
                 </button>
+
+
                 <button
-                  onClick={() => {
+                  disabled={pdfBusy}
+                  onClick={async () => {
+                    const settingsToSave = {
+                      title: customTitle,
+                      terms: customNotes,
+                      themeColor: themeColor,
+                      ...pdfCustomizer
+                    };
+                    try {
+                      await onUpdateChallan(dc.id, {
+                        templateSettings: JSON.stringify(settingsToSave)
+                      });
+                      dc.templateSettings = JSON.stringify(settingsToSave);
+                    } catch (e) {
+                      console.error("Failed to save template settings to challan:", e);
+                    }
                     setActivePrintInvoice(dc);
                   }}
-                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl border-0 cursor-pointer transition-all shadow-lg shadow-emerald-600/10"
+                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl border-0 cursor-pointer transition-all shadow-lg shadow-emerald-600/10 disabled:opacity-50"
                 >
                   Print Challan Directly
                 </button>
@@ -1217,6 +1373,228 @@ export default function DeliveryChallan({
           </div>
         );
       })()}
+
+      {pdfGeneratingInv && (() => {
+        const { inv: dc, pdfCustomizer, customTitle, customNotes, themeColor } = pdfGeneratingInv;
+        const cust = resolveCustomerForPdf(customers, dc.customerId, dc);
+        const taxBank = resolveCustomerTaxBank(cust);
+        const logoSrc = pdfCustomizer.logoBase64 || companyProfile?.logoUrl;
+        const currentThemeHex = getThemeHex(themeColor);
+
+        return (
+          <div style={{ position: 'absolute', left: '-9999px', top: '-9999px' }}>
+            <div
+              id="pdf-email-render-pane"
+              className="bg-white text-black p-10 animate-fade-in"
+              style={{
+                width: '210mm',
+                minHeight: '297mm',
+                boxSizing: 'border-box',
+                fontFamily: 'sans-serif',
+                fontSize: `${pdfCustomizer.bodyFontSize}px`
+              }}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: `${pdfCustomizer.sectionSpacing}px` }}>
+                {/* Header */}
+                <div
+                  className="border-b-2"
+                  style={{
+                    borderColor: currentThemeHex,
+                    paddingBottom: `${pdfCustomizer.headerPadding}px`,
+                    marginBottom: `${pdfCustomizer.sectionSpacing}px`,
+                    display: 'flex',
+                    flexDirection: pdfCustomizer.headerAlign === 'center' ? 'column' : 'row',
+                    alignItems: pdfCustomizer.headerAlign === 'center' ? 'center' : 'flex-start',
+                    justifyContent: 'space-between',
+                    textAlign: pdfCustomizer.headerAlign
+                  }}
+                >
+                  <div style={{ textAlign: pdfCustomizer.headerAlign }}>
+                    {pdfCustomizer.showLogo && logoSrc && (
+                      <img src={logoSrc} alt="Logo" style={{ height: `${pdfCustomizer.logoSize}px`, objectFit: 'contain' }} className="mb-3" />
+                    )}
+                    <div
+                      className="font-extrabold uppercase title-text"
+                      style={{
+                        color: currentThemeHex,
+                        fontSize: `${pdfCustomizer.titleFontSize}px`,
+                        textAlign: pdfCustomizer.titleAlign
+                      }}
+                    >
+                      {customTitle}
+                    </div>
+                    <div className="font-mono text-[10px] text-slate-650 mt-1">Challan No: {dc.challanNo}</div>
+                  </div>
+
+                  {pdfCustomizer.showCompanyDetails && (pdfCustomizer.headerName || companyProfile) && (
+                    <div
+                      style={{
+                        textAlign: pdfCustomizer.headerAlign === 'center' ? 'center' : pdfCustomizer.headerAlign === 'right' ? 'left' : 'right',
+                      }}
+                      className="text-slate-700 leading-normal max-w-xs whitespace-pre-line text-right"
+                    >
+                      {pdfCustomizer.headerName ? (
+                        <>
+                          <div className="font-extrabold text-slate-900" style={{ fontSize: `${pdfCustomizer.headerFontSize}px` }}>{pdfCustomizer.headerName}</div>
+                          <div className="text-slate-500 font-medium mt-0.5" style={{ fontSize: `${pdfCustomizer.headerFontSize * 0.7}px` }}>{pdfCustomizer.headerSubtitle}</div>
+                        </>
+                      ) : companyProfile ? (
+                        <>
+                          <div className="font-extrabold text-slate-900" style={{ fontSize: `${pdfCustomizer.headerFontSize}px` }}>{companyProfile.name}</div>
+                          <div className="text-slate-550 font-medium mt-0.5" style={{ fontSize: `${pdfCustomizer.headerFontSize * 0.7}px` }}>
+                            {companyProfile.addressLine1 && `${companyProfile.addressLine1}, `}
+                            {companyProfile.addressLine2 && `${companyProfile.addressLine2}, `}<br/>
+                            {companyProfile.city && `${companyProfile.city}, `}
+                            {companyProfile.state && `${companyProfile.state} - `}
+                            {companyProfile.pincode && companyProfile.pincode}<br/>
+                            {companyProfile.gstNumber && <strong>GSTIN: {companyProfile.gstNumber}</strong>}
+                          </div>
+                        </>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+
+                {/* Meta */}
+                {(pdfCustomizer.showMetadata || pdfCustomizer.showCustomerDetails) && (
+                  <div className="grid grid-cols-2 gap-6 text-[10px] text-slate-700">
+                    {pdfCustomizer.showMetadata ? (
+                      <div className="space-y-1">
+                        <div className="text-[9px] uppercase font-bold text-slate-455">Document Metadata</div>
+                        {pdfCustomizer.showInvoiceDate && <div>Issue Date: <span className="font-semibold text-slate-900">{new Date(dc.date).toLocaleDateString()}</span></div>}
+                        {pdfCustomizer.showStatus && <div>Status: <span className="font-semibold text-slate-900">{dc.status}</span></div>}
+                      </div>
+                    ) : <div />}
+                    {pdfCustomizer.showCustomerDetails ? (
+                      <div className="space-y-1 text-right">
+                        <div className="text-[9px] uppercase font-bold text-slate-455">Recipient Details</div>
+                        {pdfCustomizer.showCustomerName && <div className="font-semibold text-slate-900">{cust?.name || 'Client Name'}</div>}
+                        {pdfCustomizer.showCustomerType && <div>Type: {cust?.customerType || 'INDIVIDUAL'}</div>}
+                        {pdfCustomizer.showCustomerTel && cust?.contactNo && <div>Tel: {cust.contactNo}</div>}
+                      </div>
+                    ) : <div />}
+                  </div>
+                )}
+
+                {/* Addresses Row */}
+                <div className="grid grid-cols-2 gap-6 border-t border-slate-200 pt-4" style={{ textAlign: pdfCustomizer.addressAlign }}>
+                  {pdfCustomizer.showBillingAddress && (
+                    <div className="text-slate-700 leading-relaxed" style={{ textAlign: pdfCustomizer.addressAlign }}>
+                      <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Billing Address</span>
+                      <strong className="text-slate-900">{cust?.name}</strong><br/>
+                      {cust?.billingAddress || 'Billing address pending'}
+                      <CustomerTaxBankPdfSection pdfCustomizer={pdfCustomizer} taxBank={taxBank} />
+                    </div>
+                  )}
+                  
+                  {pdfCustomizer.showShippingAddress && (
+                    <div className="text-slate-700 leading-relaxed text-right" style={{ textAlign: pdfCustomizer.addressAlign === 'left' ? 'left' : pdfCustomizer.addressAlign === 'center' ? 'center' : 'right' }}>
+                      <span className="text-[9px] uppercase font-bold block mb-1" style={{ color: currentThemeHex }}>Shipping Destination (Ship To)</span>
+                      <strong className="text-slate-900">{cust?.name}</strong><br/>
+                      {cust?.shippingAddress || cust?.billingAddress || 'Shipping address pending'}
+                    </div>
+                  )}
+                </div>
+
+                {/* Items Table */}
+                <div className="pt-2">
+                  <table className="w-full text-left border-collapse" style={{ fontSize: `${pdfCustomizer.bodyFontSize}px` }}>
+                    <thead>
+                      <tr className="border-b-2 font-bold bg-slate-50" style={{ borderBottomColor: currentThemeHex }}>
+                        <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthProduct}%` }} className="text-slate-800">Description</th>
+                        {pdfCustomizer.colProductCode && <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthCode}%` }}>SKU / Code</th>}
+                        <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthQty}%` }} className="text-right">Quantity</th>
+                        {pdfCustomizer.colUnitPrice && <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthPrice}%` }} className="text-right">Unit Value</th>}
+                        <th style={{ padding: `${pdfCustomizer.tablePadding}px`, width: `${pdfCustomizer.colWidthSubtotal}%` }} className="text-right">Total Valuation</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(dc.items || []).map((it: any) => {
+                        const prod = products.find(p => p.id === it.productId);
+                        const itemSub = it.quantity * (it.price || 0);
+                        return (
+                          <tr key={it.id || it.productId} className="border-b border-slate-100">
+                            <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="font-medium text-slate-900">
+                              {prod?.name || 'Unknown Product'}
+                              {prod?.description && <span className="block text-[8px] text-slate-500 font-normal mt-0.5">{prod.description}</span>}
+                            </td>
+                            {pdfCustomizer.colProductCode && (
+                              <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="font-mono text-slate-650">{prod?.sku || 'N/A'}</td>
+                            )}
+                            <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="text-right font-mono">{it.quantity} {prod?.uom || 'PCS'}</td>
+                            {pdfCustomizer.colUnitPrice && (
+                              <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="text-right font-mono">{currencySymbol || symbol}{(it.price || 0).toFixed(2)}</td>
+                            )}
+                            <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="text-right font-mono font-semibold text-slate-900">{currencySymbol || symbol}{itemSub.toFixed(2)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Calculations Table */}
+                <div className={`flex ${pdfCustomizer.totalsAlign === 'left' ? 'justify-start' : pdfCustomizer.totalsAlign === 'center' ? 'justify-center' : 'justify-end'} pt-2`}>
+                  <table className="w-[50%] text-slate-700" style={{ fontSize: `${pdfCustomizer.bodyFontSize}px` }}>
+                    <tbody>
+                      <tr className="border-t-2 font-extrabold text-[12px]" style={{ color: currentThemeHex, borderTopColor: currentThemeHex }}>
+                        <td className="py-2.5 text-left">Total Valuation:</td>
+                        <td className="py-2.5 text-right font-mono">
+                          {currencySymbol || symbol}{(dc.items || []).reduce((sum: number, it: any) => sum + (it.quantity * (it.price || 0)), 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Footer: Terms Left, Signature Right */}
+              {(pdfCustomizer.showSignature || (pdfCustomizer.showTerms && customNotes)) && (
+                <div
+                  className="border-t border-slate-200 pt-4 mt-6 flex justify-between items-start gap-8"
+                  style={{
+                    borderTopWidth: pdfCustomizer.borderWidth > 0 ? `${pdfCustomizer.borderWidth}px` : '0px',
+                    borderColor: (themeColor as string) === '#000000' ? '#ddd' : `${currentThemeHex}40`,
+                    paddingBottom: `${pdfCustomizer.footerPadding}px`
+                  }}
+                >
+                  {/* Left block: Terms & Conditions */}
+                  <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+                    {pdfCustomizer.showTerms && customNotes && (
+                      <div className="text-slate-550 leading-normal" style={{ fontSize: `${pdfCustomizer.bodyFontSize - 1}px` }}>
+                        <strong className="block uppercase text-[8.5px] text-slate-700 font-bold mb-1">Terms & Conditions</strong>
+                        <div className="whitespace-pre-wrap">{customNotes}</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right block: Signature Signoff */}
+                  {pdfCustomizer.showSignature && (
+                    <div className="shrink-0 text-center w-40 flex flex-col items-center">
+                      {pdfCustomizer.signatureBase64 ? (
+                        <div className="h-12 flex items-center justify-center p-0.5 mb-1 bg-slate-50/50 rounded max-w-full">
+                          <img src={pdfCustomizer.signatureBase64} alt="Signature" style={{ maxHeight: `${pdfCustomizer.signatureSize}px`, objectFit: 'contain' }} />
+                        </div>
+                      ) : (
+                        <div className="h-12 w-full border-b border-slate-300 border-dashed mb-1" />
+                      )}
+                      <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wide block">{pdfCustomizer.signatureLabel}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {whatsappShareData && (
+        <WhatsappShareModal
+          isOpen={!!whatsappShareData}
+          onClose={() => setWhatsappShareData(null)}
+          {...whatsappShareData}
+        />
+      )}
     </div>
   );
 }

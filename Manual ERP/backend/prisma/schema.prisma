@@ -130,6 +130,13 @@ model Company {
   forecastPredictions    ForecastPrediction[]
   forecastJobs           ForecastJob[]
 
+  // WhatsApp Integration
+  whatsappDefaultCountryCode String?              @default("+91")
+  whatsappMaxLimitPerHour    Int?                 @default(100)
+  whatsappSession            WhatsappSession?
+  whatsappMessageLogs        WhatsappMessageLog[]
+  whatsappTemplates          WhatsappTemplate[]
+
   @@map("companies")
 }
 
@@ -1556,5 +1563,60 @@ model ExchangeRate {
   @@unique([baseCode, targetCode])
   @@map("exchange_rates")
 }
+
+model WhatsappSession {
+  id              String    @id @default(uuid())
+  companyId       String    @unique
+  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sessionName     String
+  phoneNumber     String?
+  displayName     String?
+  isConnected     Boolean   @default(false)
+  lastConnectedAt DateTime?
+  createdBy       String?
+  updatedBy       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("whatsapp_sessions")
+}
+
+model WhatsappMessageLog {
+  id             String    @id @default(uuid())
+  companyId      String
+  company        Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  documentType   String
+  documentId     String
+  recipientPhone String
+  message        String
+  attachmentUrl  String?
+  status         String
+  error          String?
+  sentAt         DateTime?
+  createdBy      String?
+  updatedBy      String?
+  createdAt      DateTime  @default(now())
+
+  @@map("whatsapp_message_logs")
+}
+
+model WhatsappTemplate {
+  id              String   @id @default(uuid())
+  companyId       String
+  company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  documentType    String
+  template        String
+  emailTemplate   String?
+  useSameForEmail Boolean  @default(true)
+  isActive        Boolean  @default(true)
+  createdBy       String?
+  updatedBy       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([companyId, documentType])
+  @@map("whatsapp_templates")
+}
+
 
 

@@ -36,6 +36,7 @@ export const HIERARCHICAL_FEATURES = [
   { key: "ADMIN_BACKUP", name: "Snapshots Backup & Restores", description: "Schedule and execute local tenant backups" },
   { key: "ADMIN_USERS", name: "Employee Users & Approvals", description: "Approve signups and manage employee profiles" },
   { key: "ADMIN_DEPARTMENTS", name: "Corporate Departments Settings", description: "Map structures and delegate managers" },
+  { key: "ADMIN_WHATSAPP", name: "WhatsApp Integration", description: "Configure WhatsApp templates and sync linked devices" },
 
   { key: "MASTER_DATA", name: "MASTER DATA HUB", description: "Manage Employees, Customers, Vendors, Products, and Taxes profiles" },
   { key: "MASTER_EMPLOYEE", name: "Employee Master", description: "Manage hierarchies, timing shifts, and secure documents" },
@@ -107,7 +108,12 @@ export const HIERARCHICAL_FEATURES = [
   { key: "MANUFACTURING_QC", name: "Quality Control & Reworks", description: "Inspect manufactured batches and reject defects" },
   { key: "MANUFACTURING_SHOP_FLOOR", name: "Shop Floor Work Centers", description: "Manage assembly stations, capacities, and factory rosters" },
   { key: "MANUFACTURING_REPORTS", name: "Production Reports", description: "Examine monthly production outputs and analytics" },
-  { key: "MANUFACTURING_COSTING", name: "Production Cost Analysis", description: "Track overhead allocation and item cost deviations" }
+  { key: "MANUFACTURING_COSTING", name: "Production Cost Analysis", description: "Track overhead allocation and item cost deviations" },
+
+  // COMMUNICATION & WHATSAPP FEATURES
+  { key: "COMMUNICATION", name: "COMMUNICATION FEATURES", description: "WhatsApp & Email Channels" },
+  { key: "WHATSAPP_SHARE_LINK", name: "WhatsApp Share Link", description: "Open prefilled WhatsApp message link" },
+  { key: "WHATSAPP_LINKED_DEVICE", name: "WhatsApp Linked Device", description: "Send automated messages and attachments using Baileys QR sync" }
 ];
 
 // Global reference to the WebSockets emitter

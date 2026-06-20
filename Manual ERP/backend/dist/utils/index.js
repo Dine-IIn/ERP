@@ -3,6 +3,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.encryptSmtp = encryptSmtp;
+exports.decryptSmtp = decryptSmtp;
 exports.hashPassword = hashPassword;
 exports.comparePassword = comparePassword;
 exports.generateToken = generateToken;
@@ -11,13 +13,59 @@ exports.sendSmtpEmail = sendSmtpEmail;
 exports.sendSimulatedOTP = sendSimulatedOTP;
 exports.verifySimulatedOTP = verifySimulatedOTP;
 exports.sendEmailNotification = sendEmailNotification;
+exports.numberToIndianWords = numberToIndianWords;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const db_1 = __importDefault(require("../services/db"));
 const tls_1 = __importDefault(require("tls"));
 const net_1 = __importDefault(require("net"));
+const crypto_1 = __importDefault(require("crypto"));
 dotenv_1.default.config();
+// ==========================================
+// AES-256-CBC ENCRYPTION FOR SMTP PASSWORDS
+// ==========================================
+const SMTP_ENCRYPTION_KEY = process.env.SMTP_ENCRYPTION_KEY || 'erp-smtp-secret-key-32bytes!!!!'; // Must be exactly 32 chars
+const SMTP_IV_LENGTH = 16;
+/**
+ * Encrypt an SMTP password for secure storage using AES-256-CBC.
+ * Returns a string in format: iv_hex:encrypted_hex
+ */
+function encryptSmtp(plainText) {
+    if (!plainText)
+        return '';
+    const iv = crypto_1.default.randomBytes(SMTP_IV_LENGTH);
+    const key = Buffer.from(SMTP_ENCRYPTION_KEY.padEnd(32, '0').slice(0, 32), 'utf-8');
+    const cipher = crypto_1.default.createCipheriv('aes-256-cbc', key, iv);
+    let encrypted = cipher.update(plainText, 'utf-8', 'hex');
+    encrypted += cipher.final('hex');
+    return iv.toString('hex') + ':' + encrypted;
+}
+/**
+ * Decrypt an AES-256-CBC encrypted SMTP password.
+ * Expects input in format: iv_hex:encrypted_hex
+ * Falls back to returning the raw value if decryption fails (for unencrypted legacy values).
+ */
+function decryptSmtp(encryptedText) {
+    if (!encryptedText)
+        return '';
+    try {
+        const parts = encryptedText.split(':');
+        if (parts.length !== 2)
+            return encryptedText; // Legacy unencrypted value
+        const iv = Buffer.from(parts[0], 'hex');
+        if (iv.length !== SMTP_IV_LENGTH)
+            return encryptedText; // Not encrypted format
+        const key = Buffer.from(SMTP_ENCRYPTION_KEY.padEnd(32, '0').slice(0, 32), 'utf-8');
+        const decipher = crypto_1.default.createDecipheriv('aes-256-cbc', key, iv);
+        let decrypted = decipher.update(parts[1], 'hex', 'utf-8');
+        decrypted += decipher.final('utf-8');
+        return decrypted;
+    }
+    catch {
+        return encryptedText; // Fallback for legacy unencrypted passwords
+    }
+}
 const JWT_SECRET = process.env.JWT_SECRET || "fallback-secret-erp-key-12345-enterprise-ready";
 // Password Hashing Helpers
 async function hashPassword(password) {
@@ -89,16 +137,43 @@ function sendSmtpEmail(opts) {
                     step = 7;
                     break;
                 case 7: // DATA challenge (354) received, send headers + email body ending with "."
-                    const headers = [
-                        `From: ${opts.from}`,
-                        `To: ${opts.to}`,
-                        `Subject: ${opts.subject}`,
-                        'MIME-Version: 1.0',
-                        'Content-Type: text/plain; charset=utf-8',
-                        '',
-                        opts.text,
-                        '.'
-                    ].join('\r\n');
+                    const boundary = `----=_Part_${Math.random().toString(36).substring(2)}_${Date.now()}`;
+                    let headers = '';
+                    if (opts.attachments && opts.attachments.length > 0) {
+                        const emailParts = [
+                            `From: ${opts.from}`,
+                            `To: ${opts.to}`,
+                            `Subject: ${opts.subject}`,
+                            'MIME-Version: 1.0',
+                            `Content-Type: multipart/mixed; boundary="${boundary}"`,
+                            '',
+                            `--${boundary}`,
+                            'Content-Type: text/plain; charset=utf-8',
+                            'Content-Transfer-Encoding: 7bit',
+                            '',
+                            opts.text,
+                            ''
+                        ];
+                        for (const att of opts.attachments) {
+                            const base64Content = att.content.toString('base64');
+                            const wrappedContent = base64Content.replace(/(.{76})/g, '$1\r\n');
+                            emailParts.push(`--${boundary}`, `Content-Type: application/octet-stream; name="${att.filename}"`, 'Content-Transfer-Encoding: base64', `Content-Disposition: attachment; filename="${att.filename}"`, '', wrappedContent, '');
+                        }
+                        emailParts.push(`--${boundary}--`, '.');
+                        headers = emailParts.join('\r\n');
+                    }
+                    else {
+                        headers = [
+                            `From: ${opts.from}`,
+                            `To: ${opts.to}`,
+                            `Subject: ${opts.subject}`,
+                            'MIME-Version: 1.0',
+                            'Content-Type: text/plain; charset=utf-8',
+                            '',
+                            opts.text,
+                            '.'
+                        ].join('\r\n');
+                    }
                     send(headers);
                     step = 8;
                     break;
@@ -175,15 +250,14 @@ async function sendSimulatedOTP(target, companyCode) {
     });
     const isEmail = target.includes('@');
     if (isEmail) {
-        // 1. Check Global Env first
-        let host = process.env.SMTP_HOST;
-        let port = Number(process.env.SMTP_PORT) || 465;
-        let secure = process.env.SMTP_SECURE === 'true' || port === 465;
-        let user = process.env.SMTP_USER;
-        let pass = process.env.SMTP_PASS;
-        let sender = process.env.SMTP_SENDER || user || "noreply@erp.anbindustries.com";
-        // 2. Check Company SMTP fallback if companyCode is provided
-        if (!host && companyCode) {
+        // 1. Check Company SMTP FIRST if companyCode is provided (Priority: Company > Env)
+        let host;
+        let port = 465;
+        let secure = true;
+        let user;
+        let pass;
+        let sender = "noreply@erp.anbindustries.com";
+        if (companyCode) {
             const company = await db_1.default.company.findUnique({
                 where: { companyCode: companyCode.toUpperCase() }
             });
@@ -192,9 +266,20 @@ async function sendSimulatedOTP(target, companyCode) {
                 port = company.smtpPort || 465;
                 secure = company.smtpSecure || port === 465;
                 user = company.smtpUser || undefined;
-                pass = company.smtpPassword || undefined;
+                pass = company.smtpPassword ? decryptSmtp(company.smtpPassword) : undefined;
                 sender = company.smtpSender || user || `noreply@${company.companyCode.toLowerCase()}.com`;
+                console.log(`📧 [SMTP] Using Company SMTP for ${companyCode}`);
             }
+        }
+        // 2. Fallback to Global Env vars if Company SMTP not configured
+        if (!host && process.env.SMTP_HOST) {
+            host = process.env.SMTP_HOST;
+            port = Number(process.env.SMTP_PORT) || 465;
+            secure = process.env.SMTP_SECURE === 'true' || port === 465;
+            user = process.env.SMTP_USER;
+            pass = process.env.SMTP_PASS;
+            sender = process.env.SMTP_SENDER || user || "noreply@erp.anbindustries.com";
+            console.log(`📧 [SMTP] Using env var fallback for OTP email`);
         }
         if (!host) {
             if (process.env.NODE_ENV !== 'production') {
@@ -283,14 +368,15 @@ async function verifySimulatedOTP(target, otpCode) {
     });
     return true;
 }
-async function sendEmailNotification(to, subject, text, companyCode) {
-    let host = process.env.SMTP_HOST;
-    let port = Number(process.env.SMTP_PORT) || 465;
-    let secure = process.env.SMTP_SECURE === 'true' || port === 465;
-    let user = process.env.SMTP_USER;
-    let pass = process.env.SMTP_PASS;
-    let sender = process.env.SMTP_SENDER || user || "noreply@erp.anbindustries.com";
-    if (!host && companyCode) {
+async function sendEmailNotification(to, subject, text, companyCode, attachments) {
+    // 1. Check Company SMTP FIRST if companyCode is provided (Priority: Company > Env)
+    let host;
+    let port = 465;
+    let secure = true;
+    let user;
+    let pass;
+    let sender = "noreply@erp.anbindustries.com";
+    if (companyCode) {
         const company = await db_1.default.company.findUnique({
             where: { companyCode: companyCode.toUpperCase() }
         });
@@ -299,9 +385,20 @@ async function sendEmailNotification(to, subject, text, companyCode) {
             port = company.smtpPort || 465;
             secure = company.smtpSecure || port === 465;
             user = company.smtpUser || undefined;
-            pass = company.smtpPassword || undefined;
+            pass = company.smtpPassword ? decryptSmtp(company.smtpPassword) : undefined;
             sender = company.smtpSender || user || `noreply@${company.companyCode.toLowerCase()}.com`;
+            console.log(`📧 [SMTP] Using Company SMTP for ${companyCode}`);
         }
+    }
+    // 2. Fallback to Global Env vars if Company SMTP not configured
+    if (!host && process.env.SMTP_HOST) {
+        host = process.env.SMTP_HOST;
+        port = Number(process.env.SMTP_PORT) || 465;
+        secure = process.env.SMTP_SECURE === 'true' || port === 465;
+        user = process.env.SMTP_USER;
+        pass = process.env.SMTP_PASS;
+        sender = process.env.SMTP_SENDER || user || "noreply@erp.anbindustries.com";
+        console.log(`📧 [SMTP] Using env var fallback for email to ${to}`);
     }
     if (!host) {
         if (process.env.NODE_ENV !== 'production') {
@@ -319,7 +416,46 @@ async function sendEmailNotification(to, subject, text, companyCode) {
         from: sender,
         to,
         subject,
-        text
+        text,
+        attachments
     });
+}
+function numberToIndianWords(amount) {
+    if (amount === 0)
+        return "Indian Rupees Zero Only";
+    const isNegative = amount < 0;
+    const absoluteAmount = Math.abs(amount);
+    const rupees = Math.floor(absoluteAmount);
+    const paise = Math.round((absoluteAmount - rupees) * 100);
+    const convertToWords = (n) => {
+        const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+        const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+        if (n < 20)
+            return ones[n];
+        if (n < 100)
+            return tens[Math.floor(n / 10)] + (n % 10 !== 0 ? " " + ones[n % 10] : "");
+        if (n < 1000)
+            return ones[Math.floor(n / 100)] + " Hundred" + (n % 100 !== 0 ? " " + convertToWords(n % 100) : "");
+        if (n < 100000)
+            return convertToWords(Math.floor(n / 1000)) + " Thousand" + (n % 1000 !== 0 ? " " + convertToWords(n % 1000) : "");
+        if (n < 10000000)
+            return convertToWords(Math.floor(n / 100000)) + " Lakh" + (n % 100000 !== 0 ? " " + convertToWords(n % 100000) : "");
+        return convertToWords(Math.floor(n / 10000000)) + " Crore" + (n % 10000000 !== 0 ? " " + convertToWords(n % 10000000) : "");
+    };
+    let result = "Indian Rupees ";
+    if (isNegative) {
+        result += "Negative ";
+    }
+    if (rupees > 0) {
+        result += convertToWords(rupees);
+    }
+    else {
+        result += "Zero";
+    }
+    if (paise > 0) {
+        result += " And " + convertToWords(paise) + " Paisa";
+    }
+    result += " Only";
+    return result.replace(/\s+/g, ' ').trim();
 }
 //# sourceMappingURL=index.js.map

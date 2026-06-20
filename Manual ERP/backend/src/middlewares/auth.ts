@@ -128,7 +128,7 @@ export function requireFeature(featureKey: string) {
 }
 
 // 4. Enforce Fine-Grained Role-Based Access Control (RBAC)
-export function requirePermission(featureKey: string, action: "read" | "write" | "delete") {
+export function requirePermission(featureKey: string, action: string) {
   return async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     if (!req.user) {
       return res.status(401).json({ error: "Authentication required" });

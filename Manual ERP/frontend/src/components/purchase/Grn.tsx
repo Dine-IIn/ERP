@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { Package, Search, Plus, Trash2, X, AlertCircle, CheckCircle2, Clipboard, ShieldCheck, HelpCircle } from 'lucide-react';
+import { Package, Search, Plus, Trash2, X, AlertCircle, CheckCircle2, Clipboard, ShieldCheck, HelpCircle, MessageSquare, Mail } from 'lucide-react';
+import WhatsappShareModal from '../sales/WhatsappShareModal';
+import EmailShareModal from '../sales/EmailShareModal';
 
 interface GrnItem {
   id?: string;
@@ -50,6 +52,8 @@ export default function Grn({
 }: GrnProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [whatsappShareData, setWhatsappShareData] = useState<any>(null);
+  const [emailShareData, setEmailShareData] = useState<any>(null);
 
   const [poId, setPoId] = useState('');
   const [grnNo, setGrnNo] = useState('');
@@ -259,6 +263,57 @@ export default function Grn({
                       </span>
                     </td>
                     <td className="py-4 px-6 text-right space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const matchedPo = purchaseOrders.find(po => po.id === g.purchaseOrderId || po.poNo === g.purchaseOrder?.poNo);
+                          const vendorName = matchedPo?.vendor?.name || g.purchaseOrder?.vendor?.name || 'Vendor';
+                          const vendorEmail = matchedPo?.vendor?.email || g.purchaseOrder?.vendor?.email || '';
+                          setEmailShareData({
+                            recipientEmail: vendorEmail,
+                            subject: `Goods Receipt Note ${g.grnNo}`,
+                            body: `Dear ${vendorName},\n\nWe have recorded Goods Receipt Note (GRN) ${g.grnNo} for PO reference ${g.purchaseOrder?.poNo}.\n\nReceipt Details:\nReceived Date: ${new Date(g.receivedDate).toLocaleDateString()}\nChallan No: ${g.challanNo || 'N/A'}\nStatus: ${g.status}\n\nThank you!`,
+                          });
+                        }}
+                        className="p-1.5 hover:bg-slate-850 text-slate-550 hover:text-indigo-400 transition-colors rounded-lg inline-flex items-center"
+                        title="Share via Email"
+                      >
+                        <Mail className="w-4 h-4" />
+                      </button>
+
+                      {(() => {
+                        const features = JSON.parse(localStorage.getItem('erp_company_features') || '[]');
+                        const showWhatsappBtn = features.includes('ADMIN_WHATSAPP');
+                        if (!showWhatsappBtn) return null;
+                        
+                        const matchedPo = purchaseOrders.find(po => po.id === g.purchaseOrderId || po.poNo === g.purchaseOrder?.poNo);
+                        const vendorName = matchedPo?.vendor?.name || g.purchaseOrder?.vendor?.name || 'Vendor';
+                        const vendorCode = matchedPo?.vendor?.id || g.purchaseOrder?.vendor?.id || '';
+                        const contactNo = matchedPo?.vendor?.contactNo || g.purchaseOrder?.vendor?.contactNo || '';
+
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setWhatsappShareData({
+                                documentId: g.id,
+                                documentType: 'GOODS_RECEIPT',
+                                documentNumber: g.grnNo,
+                                customerName: vendorName,
+                                customerCode: vendorCode,
+                                contactNo: contactNo,
+                                amount: 0,
+                                date: g.receivedDate,
+                                currencySymbol: ''
+                              });
+                            }}
+                            className="p-1.5 hover:bg-slate-850 text-slate-550 hover:text-emerald-450 transition-colors rounded-lg inline-flex items-center"
+                            title="Share via WhatsApp"
+                          >
+                            <MessageSquare className="w-4 h-4" />
+                          </button>
+                        );
+                      })()}
                       <button
                         onClick={() => handleDelete(g.id, g.grnNo)}
                         className="p-1.5 hover:bg-slate-850 text-slate-550 hover:text-red-400 transition-colors rounded-lg"
@@ -493,6 +548,21 @@ export default function Grn({
             </form>
           </div>
         </div>
+      )}
+      {whatsappShareData && (
+        <WhatsappShareModal
+          isOpen={!!whatsappShareData}
+          onClose={() => setWhatsappShareData(null)}
+          {...whatsappShareData}
+        />
+      )}
+
+      {emailShareData && (
+        <EmailShareModal
+          isOpen={!!emailShareData}
+          onClose={() => setEmailShareData(null)}
+          {...emailShareData}
+        />
       )}
     </div>
   );

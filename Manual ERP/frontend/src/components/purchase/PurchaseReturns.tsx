@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { PackageX, Search, Plus, Trash2, X, AlertCircle, CheckCircle2, ClipboardSignature, ArrowLeftRight } from 'lucide-react';
+import { PackageX, Search, Plus, Trash2, X, AlertCircle, CheckCircle2, DollarSign, Calendar, Tag, Trash, Eye, Clipboard, MessageSquare, Mail } from 'lucide-react';
+import WhatsappShareModal from '../sales/WhatsappShareModal';
+import EmailShareModal from '../sales/EmailShareModal';
 
 interface PurchaseReturnItem {
   id?: string;
@@ -45,6 +47,8 @@ export default function PurchaseReturns({
 }: PurchaseReturnsProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [whatsappShareData, setWhatsappShareData] = useState<any>(null);
+  const [emailShareData, setEmailShareData] = useState<any>(null);
 
   const [poId, setPoId] = useState('');
   const [returnNo, setReturnNo] = useState('');
@@ -242,8 +246,54 @@ export default function PurchaseReturns({
                       </td>
                       <td className="py-4 px-6 text-right space-x-2">
                         <button
+                          type="button"
+                          onClick={() => {
+                            const linkedPo = purchaseOrders.find(po => po.id === r.poId || po.id === r.purchaseOrder?.id || po.poNo === r.purchaseOrder?.poNo);
+                            const vendor = r.purchaseOrder?.vendor || linkedPo?.vendor;
+                            setEmailShareData({
+                              recipientEmail: vendor?.email || '',
+                              subject: `Debit Note Return Voucher ${r.returnNo}`,
+                              body: `Dear ${vendor?.name || 'Partner'},\n\nWe have recorded a purchase return debit note voucher ${r.returnNo}.\n\nReturn Details:\nDate: ${new Date(r.returnDate).toLocaleDateString()}\nLinked PO: ${r.purchaseOrder.poNo}\nReason: ${r.reason || 'N/A'}\nDebit Value: ${currencySymbol}${debitVal.toFixed(2)}\n\nItems returned:\n${r.items.map(it => `- ${it.product?.name || 'Product'} (Qty: ${it.quantity}, Price: ${currencySymbol}${it.price})`).join('\n')}\n\nThank you!`,
+                            });
+                          }}
+                          className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-indigo-400 transition-colors rounded-lg inline-flex items-center justify-center"
+                          title="Share via Email"
+                        >
+                          <Mail className="w-4 h-4" />
+                        </button>
+
+                        {(() => {
+                          const features = JSON.parse(localStorage.getItem('erp_company_features') || '[]');
+                          const showWhatsappBtn = features.includes('ADMIN_WHATSAPP');
+                          if (!showWhatsappBtn) return null;
+                          const linkedPo = purchaseOrders.find(po => po.id === r.poId || po.id === r.purchaseOrder?.id || po.poNo === r.purchaseOrder?.poNo);
+                          const vendor = r.purchaseOrder?.vendor || linkedPo?.vendor;
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setWhatsappShareData({
+                                  documentId: r.id,
+                                  documentType: 'DEBIT_NOTE',
+                                  documentNumber: r.returnNo,
+                                  customerName: vendor?.name || '',
+                                  customerCode: vendor?.id || '',
+                                  contactNo: vendor?.contactNo || '',
+                                  amount: debitVal,
+                                  date: r.returnDate,
+                                  currencySymbol: currencySymbol
+                                });
+                              }}
+                              className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-emerald-450 transition-colors rounded-lg inline-flex items-center justify-center"
+                              title="Share via WhatsApp"
+                            >
+                              <MessageSquare className="w-4 h-4" />
+                            </button>
+                          );
+                        })()}
+                        <button
                           onClick={() => handleDelete(r.id, r.returnNo)}
-                          className="p-1.5 hover:bg-slate-850 text-slate-550 hover:text-red-400 transition-colors rounded-lg"
+                          className="p-1.5 hover:bg-slate-855 text-slate-555 hover:text-red-450 transition-colors rounded-lg"
                           title="Void return voucher (Re-add physical stock)"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -433,6 +483,21 @@ export default function PurchaseReturns({
             </form>
           </div>
         </div>
+      )}
+      {whatsappShareData && (
+        <WhatsappShareModal
+          isOpen={!!whatsappShareData}
+          onClose={() => setWhatsappShareData(null)}
+          {...whatsappShareData}
+        />
+      )}
+
+      {emailShareData && (
+        <EmailShareModal
+          isOpen={!!emailShareData}
+          onClose={() => setEmailShareData(null)}
+          {...emailShareData}
+        />
       )}
     </div>
   );

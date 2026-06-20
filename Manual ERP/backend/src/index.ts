@@ -11,7 +11,9 @@ import jwt from 'jsonwebtoken';
 import prisma from './services/db';
 import {
   authenticateToken,
-  requireSuperAdmin
+  requireSuperAdmin,
+  requireFeature,
+  requirePermission
 } from './middlewares/auth';
 import {
   requestSignupOTP,
@@ -129,6 +131,21 @@ import {
   getTenantForecastHistory,
   triggerSuperCompanyForecast
 } from './controllers/forecast';
+
+import {
+  getWhatsappStatus,
+  connectWhatsapp,
+  disconnectWhatsapp,
+  getWhatsappQr,
+  sendWhatsappMessage,
+  updateWhatsappSettings,
+  getWhatsappTemplates,
+  saveWhatsappTemplate,
+  deleteWhatsappTemplate,
+  getWhatsappLogs
+} from './controllers/whatsapp';
+
+import whatsappService from './services/whatsapp';
 
 import { startForecastWorkerLoop } from './services/forecast';
 import { startForecastScheduler } from './services/forecastScheduler';
@@ -301,8 +318,8 @@ const corsOptions: cors.CorsOptions = {
 
 // Enable CORS and JSON parsing middleware
 app.use(cors(corsOptions));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Set up rate limiter for authentication routes
 const authLimiter = rateLimit({
@@ -553,7 +570,8 @@ import {
   listDocumentTemplates,
   createDocumentTemplate,
   updateDocumentTemplate,
-  deleteDocumentTemplate
+  deleteDocumentTemplate,
+  sendGenericEmail
 } from './controllers/sales';
 
 // 6. General Administration Module Routes (Company Profile & Features Only)
@@ -632,6 +650,7 @@ app.post('/api/sales/challans', authenticateToken, createDeliveryChallan);
 app.patch('/api/sales/challans/:id', authenticateToken, updateDeliveryChallan);
 app.delete('/api/sales/challans/:id', authenticateToken, deleteDeliveryChallan);
 app.post('/api/sales/challans/:id/email', authenticateToken, sendDeliveryChallanEmail);
+app.post('/api/email/send', authenticateToken, sendGenericEmail);
 
 app.get('/api/sales/dispatches', authenticateToken, listDispatches);
 app.post('/api/sales/dispatches', authenticateToken, createDispatch);
@@ -808,6 +827,33 @@ app.get('/api/reports/inventory', authenticateToken, getInventoryReport);
 app.get('/api/reports/hr', authenticateToken, getHrReport);
 app.get('/api/reports/financial', authenticateToken, getFinancialReport);
 
+// 9.9 WhatsApp Integration Module Routes
+const requireEitherWhatsappFeature = async (req: any, res: any, next: any) => {
+  if (req.user?.isSuperAdmin) return next();
+  const hasLink = await prisma.companyFeature.findFirst({
+    where: { companyId: req.user?.companyId, feature: { key: 'WHATSAPP_SHARE_LINK' } }
+  });
+  const hasDevice = await prisma.companyFeature.findFirst({
+    where: { companyId: req.user?.companyId, feature: { key: 'WHATSAPP_LINKED_DEVICE' } }
+  });
+  if (!hasLink && !hasDevice) {
+    return res.status(403).json({ error: "WhatsApp communication features are not enabled for your company." });
+  }
+  next();
+};
+
+app.get('/api/whatsapp/status', authenticateToken, requireEitherWhatsappFeature, requirePermission('WHATSAPP', 'view'), getWhatsappStatus);
+app.post('/api/whatsapp/connect', authenticateToken, requireFeature('WHATSAPP_LINKED_DEVICE'), requirePermission('WHATSAPP', 'connect'), connectWhatsapp);
+app.post('/api/whatsapp/disconnect', authenticateToken, requireFeature('WHATSAPP_LINKED_DEVICE'), requirePermission('WHATSAPP', 'disconnect'), disconnectWhatsapp);
+app.get('/api/whatsapp/qr', authenticateToken, requireFeature('WHATSAPP_LINKED_DEVICE'), requirePermission('WHATSAPP', 'connect'), getWhatsappQr);
+app.post('/api/whatsapp/send', authenticateToken, requireEitherWhatsappFeature, requirePermission('WHATSAPP', 'send'), sendWhatsappMessage);
+app.get('/api/whatsapp/templates', authenticateToken, requireEitherWhatsappFeature, requirePermission('WHATSAPP', 'templates.manage'), getWhatsappTemplates);
+app.post('/api/whatsapp/templates', authenticateToken, requireEitherWhatsappFeature, requirePermission('WHATSAPP', 'templates.manage'), saveWhatsappTemplate);
+app.put('/api/whatsapp/templates/:id', authenticateToken, requireEitherWhatsappFeature, requirePermission('WHATSAPP', 'templates.manage'), saveWhatsappTemplate);
+app.put('/api/whatsapp/settings', authenticateToken, requireEitherWhatsappFeature, requirePermission('WHATSAPP', 'templates.manage'), updateWhatsappSettings);
+app.delete('/api/whatsapp/templates/:id', authenticateToken, requireEitherWhatsappFeature, requirePermission('WHATSAPP', 'templates.manage'), deleteWhatsappTemplate);
+app.get('/api/whatsapp/logs', authenticateToken, requireEitherWhatsappFeature, requirePermission('WHATSAPP', 'view'), getWhatsappLogs);
+
 // Automated Seeding Function to ensure feature keys exist and are mapped to companies
 async function seedDatabase() {
   try {
@@ -894,7 +940,10 @@ async function seedDatabase() {
             "MANUFACTURING_QC",
             "MANUFACTURING_SHOP_FLOOR",
             "MANUFACTURING_REPORTS",
-            "MANUFACTURING_COSTING"
+            "MANUFACTURING_COSTING",
+            "COMMUNICATION",
+            "WHATSAPP_SHARE_LINK",
+            "WHATSAPP_LINKED_DEVICE"
           ]
         }
       }
@@ -1001,6 +1050,7 @@ async function seedDatabase() {
         permissions.MANUFACTURING_SHOP_FLOOR = ["read", "write", "delete"];
         permissions.MANUFACTURING_REPORTS = ["read", "write", "delete"];
         permissions.MANUFACTURING_COSTING = ["read", "write", "delete"];
+        permissions.WHATSAPP = ["view", "connect", "disconnect", "send", "templates.manage"];
 
 
         await prisma.role.update({
@@ -1039,6 +1089,14 @@ seedDatabase().then(() => {
       console.log("🌐 [Currency Service] Daily currency sync loop started successfully.");
     } catch (err) {
       console.error("❌ [Currency Service] Failed to start currency sync loop:", err);
+    }
+
+    // Initialize WhatsApp sessions
+    try {
+      whatsappService.init();
+      console.log("💬 [WhatsApp Service] Multi-tenant WhatsApp manager initialized.");
+    } catch (err) {
+      console.error("❌ [WhatsApp Service] Failed to initialize WhatsApp service:", err);
     }
   });
 });

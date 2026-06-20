@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { DollarSign, Search, Plus, Trash2, X, AlertCircle, CheckCircle2, CreditCard, Banknote } from 'lucide-react';
+import { DollarSign, Search, Plus, Trash2, X, AlertCircle, CheckCircle2, CreditCard, Banknote, MessageSquare, Mail } from 'lucide-react';
+import WhatsappShareModal from '../sales/WhatsappShareModal';
+import EmailShareModal from '../sales/EmailShareModal';
 
 interface VendorPayment {
   id: string;
@@ -32,6 +34,8 @@ export default function VendorPayments({
 }: VendorPaymentsProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [whatsappShareData, setWhatsappShareData] = useState<any>(null);
+  const [emailShareData, setEmailShareData] = useState<any>(null);
 
   const [vendorId, setVendorId] = useState('');
   const [paymentNo, setPaymentNo] = useState('');
@@ -203,6 +207,51 @@ export default function VendorPayments({
                     </td>
                     <td className="py-4 px-6 text-right space-x-2">
                       <button
+                        type="button"
+                        onClick={() => {
+                          const matchedVendor = vendors.find(v => v.id === p.vendorId || v.id === p.vendor?.id);
+                          setEmailShareData({
+                            recipientEmail: matchedVendor?.email || '',
+                            subject: `Payment Voucher ${p.paymentNo}`,
+                            body: `Dear ${p.vendor?.name || matchedVendor?.name || 'Partner'},\n\nWe have recorded payment voucher ${p.paymentNo}.\n\nPayment Details:\nDate: ${new Date(p.paymentDate).toLocaleDateString()}\nMethod: ${p.paymentMethod}\nReference No: ${p.referenceNo || 'N/A'}\nAmount Paid: ${currencySymbol}${p.amount.toFixed(2)}\n\nThank you!`,
+                          });
+                        }}
+                        className="p-1.5 hover:bg-slate-850 text-slate-550 hover:text-indigo-400 transition-colors rounded-lg inline-flex items-center"
+                        title="Share via Email"
+                      >
+                        <Mail className="w-4 h-4" />
+                      </button>
+
+                      {(() => {
+                        const features = JSON.parse(localStorage.getItem('erp_company_features') || '[]');
+                        const showWhatsappBtn = features.includes('ADMIN_WHATSAPP');
+                        if (!showWhatsappBtn) return null;
+                        
+                        const matchedVendor = vendors.find(v => v.id === p.vendorId || v.id === p.vendor?.id);
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setWhatsappShareData({
+                                documentId: p.id,
+                                documentType: 'VENDOR_PAYMENT',
+                                documentNumber: p.paymentNo,
+                                customerName: p.vendor?.name || matchedVendor?.name || 'Vendor',
+                                customerCode: p.vendor?.id || matchedVendor?.id || '',
+                                contactNo: matchedVendor?.contactNo || '',
+                                amount: p.amount,
+                                date: p.paymentDate,
+                                currencySymbol: currencySymbol
+                              });
+                            }}
+                            className="p-1.5 hover:bg-slate-850 text-slate-550 hover:text-emerald-450 transition-colors rounded-lg inline-flex items-center"
+                            title="Share via WhatsApp"
+                          >
+                            <MessageSquare className="w-4 h-4" />
+                          </button>
+                        );
+                      })()}
+                      <button
                         onClick={() => handleDelete(p.id, p.paymentNo)}
                         className="p-1.5 hover:bg-slate-850 text-slate-550 hover:text-red-400 transition-colors rounded-lg"
                         title="Void payment voucher"
@@ -373,6 +422,22 @@ export default function VendorPayments({
             </form>
           </div>
         </div>
+      )}
+
+      {whatsappShareData && (
+        <WhatsappShareModal
+          isOpen={!!whatsappShareData}
+          onClose={() => setWhatsappShareData(null)}
+          {...whatsappShareData}
+        />
+      )}
+
+      {emailShareData && (
+        <EmailShareModal
+          isOpen={!!emailShareData}
+          onClose={() => setEmailShareData(null)}
+          {...emailShareData}
+        />
       )}
     </div>
   );

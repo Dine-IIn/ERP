@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CentralLicenseSchema = exports.CentralDiscoverySchema = exports.CentralDevConfigSchema = exports.BankAccountSchema = exports.AdjustStockBodySchema = exports.UpdateTaxBodySchema = exports.CreateTaxBodySchema = exports.UpdateDocumentTemplateBodySchema = exports.CreateDocumentTemplateBodySchema = exports.ListDocumentTemplatesQuerySchema = exports.UpdateServiceTicketBodySchema = exports.CreateServiceTicketBodySchema = exports.UpdateQuotationStatusBodySchema = exports.CreateQuotationBodySchema = exports.UpdateDispatchBodySchema = exports.CreateDispatchBodySchema = exports.UpdateDeliveryChallanBodySchema = exports.CreateDeliveryChallanBodySchema = exports.UpdateSalesInvoiceBodySchema = exports.CreateSalesInvoiceBodySchema = exports.UpdateProformaInvoiceBodySchema = exports.CreateProformaInvoiceBodySchema = exports.UpdateSalesOrderBodySchema = exports.CreateSalesOrderBodySchema = exports.GetHrReportQuerySchema = exports.GetInventoryReportQuerySchema = exports.GetPurchaseReportQuerySchema = exports.GetSalesReportQuerySchema = exports.CreateVendorPaymentBodySchema = exports.CreatePurchaseReturnBodySchema = exports.CreateGrnBodySchema = exports.UpdatePurchaseOrderStatusBodySchema = exports.CreatePurchaseOrderBodySchema = exports.UpdateVendorQuotationStatusBodySchema = exports.CreateVendorQuotationBodySchema = exports.DepartmentSchema = exports.DashboardLayoutSchema = exports.ApprovalRequestSchema = exports.ApprovalWorkflowSchema = exports.CurrencySchema = exports.TaxSettingSchema = exports.CompanyProfileSchema = exports.CreateRoleSchema = exports.ApproveUserSchema = exports.UpdateCompanyUserSchema = exports.CreateCompanyAdminSchema = exports.UpdateCompanySchema = exports.CreateCompanySchema = exports.LoginSchema = exports.SignupSchema = void 0;
 exports.UpdateLeaveStatusSchema = exports.UpdateJobCardBodySchema = exports.UpdateEmployeeSchema = exports.UpdateDepartmentSchema = exports.UpdateCustomerBodySchema = exports.UpdateChatGroupSettingsSchema = exports.UpdateBomBodySchema = exports.UpdateBackupSettingsSchema = exports.ShiftRosterSchema = exports.SendChatMessageSchema = exports.RestoreBackupSchema = exports.ReceiptSchema = exports.PaymentSchema = exports.OpportunitySchema = exports.ManageChatGroupMembersSchema = exports.ListVendorsQuerySchema = exports.ListProductsQuerySchema = exports.ListPayrollQuerySchema = exports.ListLeaveRequestsQuerySchema = exports.ListCustomersQuerySchema = exports.ListAuditLogsQuerySchema = exports.ListAttendanceQuerySchema = exports.LeaveRequestSchema = exports.LeadSchema = exports.IssueMaterialsToWorkOrderBodySchema = exports.GetChatGroupMessagesQuerySchema = exports.GeneratePayrollSchema = exports.FollowUpSchema = exports.ExpenseSchema = exports.DownloadBackupQuerySchema = exports.DisbursePayrollSchema = exports.CreateWorkOrderBodySchema = exports.CreateWorkCenterBodySchema = exports.CreateVendorBodySchema = exports.CreateUserAdminSchema = exports.CreateShiftBodySchema = exports.CreateRoutingBodySchema = exports.CreateQcRecordBodySchema = exports.CreateProductBodySchema = exports.CreatePlanBodySchema = exports.CreateLogBodySchema = exports.CreateJobCardBodySchema = exports.CreateDepartmentSchema = exports.CreateCustomerBodySchema = exports.CreateChatGroupSchema = exports.CreateCategoryBodySchema = exports.CreateBrandBodySchema = exports.CreateBomBodySchema = exports.CompleteJobCardBodySchema = exports.CentralUpdaterSchema = void 0;
-exports.UpdateWorkOrderBodySchema = exports.UpdateWorkCenterBodySchema = exports.UpdateVendorBodySchema = exports.UpdateUserAdminSchema = exports.UpdateShiftBodySchema = exports.UpdateRoutingBodySchema = exports.UpdateRolePermissionsSchema = exports.UpdateReworkCardBodySchema = exports.UpdateQcRecordBodySchema = exports.UpdateProductBodySchema = exports.UpdatePlanBodySchema = void 0;
+exports.UpdateWhatsappSettingsSchema = exports.SendWhatsappMessageSchema = exports.UpdateWhatsappTemplateSchema = exports.CreateWhatsappTemplateSchema = exports.UpdateWorkOrderBodySchema = exports.UpdateWorkCenterBodySchema = exports.UpdateVendorBodySchema = exports.UpdateUserAdminSchema = exports.UpdateShiftBodySchema = exports.UpdateRoutingBodySchema = exports.UpdateRolePermissionsSchema = exports.UpdateReworkCardBodySchema = exports.UpdateQcRecordBodySchema = exports.UpdateProductBodySchema = exports.UpdatePlanBodySchema = void 0;
 const zod_1 = require("zod");
 exports.SignupSchema = zod_1.z.object({
     companyCode: zod_1.z.string().min(2).max(12).toUpperCase(),
@@ -245,12 +245,14 @@ exports.CreateSalesOrderBodySchema = zod_1.z.object({
     customerId: zod_1.z.any().optional(),
     deliveryDate: zod_1.z.any().optional(),
     discount: zod_1.z.any().optional(),
+    discountType: zod_1.z.enum(['PERCENTAGE', 'AMOUNT']).optional().default('PERCENTAGE'),
     items: zod_1.z.any().optional()
 }).passthrough();
 exports.UpdateSalesOrderBodySchema = zod_1.z.object({
     customerId: zod_1.z.any().optional(),
     deliveryDate: zod_1.z.any().optional(),
     discount: zod_1.z.any().optional(),
+    discountType: zod_1.z.enum(['PERCENTAGE', 'AMOUNT']).optional(),
     status: zod_1.z.any().optional(),
     items: zod_1.z.any().optional()
 }).passthrough();
@@ -258,6 +260,7 @@ exports.CreateProformaInvoiceBodySchema = zod_1.z.object({
     customerId: zod_1.z.any().optional(),
     dueDate: zod_1.z.any().optional(),
     discount: zod_1.z.any().optional(),
+    discountType: zod_1.z.enum(['PERCENTAGE', 'AMOUNT']).optional().default('PERCENTAGE'),
     tax: zod_1.z.any().optional(),
     subtotal: zod_1.z.any().optional(),
     total: zod_1.z.any().optional(),
@@ -268,6 +271,7 @@ exports.UpdateProformaInvoiceBodySchema = zod_1.z.object({
     customerId: zod_1.z.any().optional(),
     dueDate: zod_1.z.any().optional(),
     discount: zod_1.z.any().optional(),
+    discountType: zod_1.z.enum(['PERCENTAGE', 'AMOUNT']).optional(),
     tax: zod_1.z.any().optional(),
     subtotal: zod_1.z.any().optional(),
     total: zod_1.z.any().optional(),
@@ -278,6 +282,7 @@ exports.CreateSalesInvoiceBodySchema = zod_1.z.object({
     customerId: zod_1.z.any().optional(),
     dueDate: zod_1.z.any().optional(),
     discount: zod_1.z.any().optional(),
+    discountType: zod_1.z.enum(['PERCENTAGE', 'AMOUNT']).optional().default('PERCENTAGE'),
     tax: zod_1.z.any().optional(),
     subtotal: zod_1.z.any().optional(),
     total: zod_1.z.any().optional(),
@@ -294,6 +299,7 @@ exports.UpdateSalesInvoiceBodySchema = zod_1.z.object({
     customerId: zod_1.z.any().optional(),
     dueDate: zod_1.z.any().optional(),
     discount: zod_1.z.any().optional(),
+    discountType: zod_1.z.enum(['PERCENTAGE', 'AMOUNT']).optional(),
     tax: zod_1.z.any().optional(),
     subtotal: zod_1.z.any().optional(),
     total: zod_1.z.any().optional(),
@@ -412,7 +418,28 @@ exports.CreateBomBodySchema = zod_1.z.any();
 exports.CreateBrandBodySchema = zod_1.z.any();
 exports.CreateCategoryBodySchema = zod_1.z.any();
 exports.CreateChatGroupSchema = zod_1.z.any();
-exports.CreateCustomerBodySchema = zod_1.z.any();
+exports.CreateCustomerBodySchema = zod_1.z.object({
+    name: zod_1.z.string(),
+    customerType: zod_1.z.string(),
+    customerGroup: zod_1.z.string().optional().nullable(),
+    contactPerson: zod_1.z.string().optional().nullable(),
+    contactNo: zod_1.z.string(),
+    email: zod_1.z.string().optional().nullable(),
+    billingAddress: zod_1.z.string().optional().nullable(),
+    shippingAddress: zod_1.z.string().optional().nullable(),
+    creditLimit: zod_1.z.any().optional(),
+    creditTime: zod_1.z.any().optional(),
+    state: zod_1.z.string().optional(),
+    country: zod_1.z.string().optional().default('India'),
+    clientClassification: zod_1.z.string().optional(),
+    currencySymbol: zod_1.z.string().optional(),
+    bankName: zod_1.z.string().optional().nullable(),
+    accountHolderName: zod_1.z.string().optional().nullable(),
+    accountNumber: zod_1.z.string().optional().nullable(),
+    ifscCode: zod_1.z.string().optional().nullable(),
+    gstNumber: zod_1.z.string().optional().nullable(),
+    panNumber: zod_1.z.string().optional().nullable(),
+}).passthrough();
 exports.CreateDepartmentSchema = zod_1.z.any();
 exports.CreateJobCardBodySchema = zod_1.z.any();
 exports.CreateLogBodySchema = zod_1.z.any();
@@ -422,7 +449,24 @@ exports.CreateQcRecordBodySchema = zod_1.z.any();
 exports.CreateRoutingBodySchema = zod_1.z.any();
 exports.CreateShiftBodySchema = zod_1.z.any();
 exports.CreateUserAdminSchema = zod_1.z.any();
-exports.CreateVendorBodySchema = zod_1.z.any();
+exports.CreateVendorBodySchema = zod_1.z.object({
+    name: zod_1.z.string(),
+    isVendor: zod_1.z.boolean().optional(),
+    contactNo: zod_1.z.string(),
+    email: zod_1.z.string().optional().nullable(),
+    bankDetails: zod_1.z.string().optional().nullable(),
+    paymentTerms: zod_1.z.string().optional().nullable(),
+    gstDetails: zod_1.z.string().optional().nullable(),
+    creditTime: zod_1.z.any().optional(),
+    bankName: zod_1.z.string().optional().nullable(),
+    accountHolderName: zod_1.z.string().optional().nullable(),
+    accountNumber: zod_1.z.string().optional().nullable(),
+    ifscCode: zod_1.z.string().optional().nullable(),
+    gstNumber: zod_1.z.string().optional().nullable(),
+    panNumber: zod_1.z.string().optional().nullable(),
+    currencySymbol: zod_1.z.string().optional(),
+    currencyId: zod_1.z.string().optional(),
+}).passthrough();
 exports.CreateWorkCenterBodySchema = zod_1.z.any();
 exports.CreateWorkOrderBodySchema = zod_1.z.any();
 exports.DisbursePayrollSchema = zod_1.z.any();
@@ -436,11 +480,16 @@ exports.LeadSchema = zod_1.z.any();
 exports.LeaveRequestSchema = zod_1.z.any();
 exports.ListAttendanceQuerySchema = zod_1.z.any();
 exports.ListAuditLogsQuerySchema = zod_1.z.any();
-exports.ListCustomersQuerySchema = zod_1.z.any();
+exports.ListCustomersQuerySchema = zod_1.z.object({
+    search: zod_1.z.string().optional(),
+    group: zod_1.z.string().optional(),
+}).passthrough();
 exports.ListLeaveRequestsQuerySchema = zod_1.z.any();
 exports.ListPayrollQuerySchema = zod_1.z.any();
 exports.ListProductsQuerySchema = zod_1.z.any();
-exports.ListVendorsQuerySchema = zod_1.z.any();
+exports.ListVendorsQuerySchema = zod_1.z.object({
+    search: zod_1.z.string().optional(),
+}).passthrough();
 exports.ManageChatGroupMembersSchema = zod_1.z.any();
 exports.OpportunitySchema = zod_1.z.any();
 exports.PaymentSchema = zod_1.z.any();
@@ -451,7 +500,28 @@ exports.ShiftRosterSchema = zod_1.z.any();
 exports.UpdateBackupSettingsSchema = zod_1.z.any();
 exports.UpdateBomBodySchema = zod_1.z.any();
 exports.UpdateChatGroupSettingsSchema = zod_1.z.any();
-exports.UpdateCustomerBodySchema = zod_1.z.any();
+exports.UpdateCustomerBodySchema = zod_1.z.object({
+    name: zod_1.z.string().optional(),
+    customerType: zod_1.z.string().optional(),
+    customerGroup: zod_1.z.string().optional().nullable(),
+    contactPerson: zod_1.z.string().optional().nullable(),
+    contactNo: zod_1.z.string().optional(),
+    email: zod_1.z.string().optional().nullable(),
+    billingAddress: zod_1.z.string().optional().nullable(),
+    shippingAddress: zod_1.z.string().optional().nullable(),
+    creditLimit: zod_1.z.any().optional(),
+    creditTime: zod_1.z.any().optional(),
+    state: zod_1.z.string().optional(),
+    country: zod_1.z.string().optional(),
+    clientClassification: zod_1.z.string().optional(),
+    currencySymbol: zod_1.z.string().optional(),
+    bankName: zod_1.z.string().optional().nullable(),
+    accountHolderName: zod_1.z.string().optional().nullable(),
+    accountNumber: zod_1.z.string().optional().nullable(),
+    ifscCode: zod_1.z.string().optional().nullable(),
+    gstNumber: zod_1.z.string().optional().nullable(),
+    panNumber: zod_1.z.string().optional().nullable(),
+}).passthrough();
 exports.UpdateDepartmentSchema = zod_1.z.any();
 exports.UpdateEmployeeSchema = zod_1.z.any();
 exports.UpdateJobCardBodySchema = zod_1.z.any();
@@ -464,7 +534,48 @@ exports.UpdateRolePermissionsSchema = zod_1.z.any();
 exports.UpdateRoutingBodySchema = zod_1.z.any();
 exports.UpdateShiftBodySchema = zod_1.z.any();
 exports.UpdateUserAdminSchema = zod_1.z.any();
-exports.UpdateVendorBodySchema = zod_1.z.any();
+exports.UpdateVendorBodySchema = zod_1.z.object({
+    name: zod_1.z.string().optional(),
+    isVendor: zod_1.z.boolean().optional(),
+    contactNo: zod_1.z.string().optional(),
+    email: zod_1.z.string().optional().nullable(),
+    bankDetails: zod_1.z.string().optional().nullable(),
+    paymentTerms: zod_1.z.string().optional().nullable(),
+    gstDetails: zod_1.z.string().optional().nullable(),
+    creditTime: zod_1.z.any().optional(),
+    bankName: zod_1.z.string().optional().nullable(),
+    accountHolderName: zod_1.z.string().optional().nullable(),
+    accountNumber: zod_1.z.string().optional().nullable(),
+    ifscCode: zod_1.z.string().optional().nullable(),
+    gstNumber: zod_1.z.string().optional().nullable(),
+    panNumber: zod_1.z.string().optional().nullable(),
+    currencySymbol: zod_1.z.string().optional(),
+    currencyId: zod_1.z.string().optional(),
+}).passthrough();
 exports.UpdateWorkCenterBodySchema = zod_1.z.any();
 exports.UpdateWorkOrderBodySchema = zod_1.z.any();
+// WhatsApp Module Schemas
+exports.CreateWhatsappTemplateSchema = zod_1.z.object({
+    documentType: zod_1.z.string(),
+    template: zod_1.z.string().min(1, "Template body cannot be empty"),
+    isActive: zod_1.z.boolean().optional()
+});
+exports.UpdateWhatsappTemplateSchema = zod_1.z.object({
+    template: zod_1.z.string().min(1, "Template body cannot be empty"),
+    isActive: zod_1.z.boolean().optional()
+});
+exports.SendWhatsappMessageSchema = zod_1.z.object({
+    documentType: zod_1.z.string().optional(),
+    documentId: zod_1.z.string().optional(),
+    recipientPhone: zod_1.z.string(),
+    customMessage: zod_1.z.string().optional(),
+    customPlaceholders: zod_1.z.record(zod_1.z.string()).optional(),
+    mode: zod_1.z.enum(["SHARE_LINK", "AUTOMATED"]),
+    pdfBase64: zod_1.z.string().optional(),
+    pdfFilename: zod_1.z.string().optional()
+});
+exports.UpdateWhatsappSettingsSchema = zod_1.z.object({
+    defaultCountryCode: zod_1.z.string().optional(),
+    maxLimitPerHour: zod_1.z.number().int().positive().optional()
+});
 //# sourceMappingURL=index.js.map

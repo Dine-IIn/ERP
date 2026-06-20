@@ -27,7 +27,9 @@ export const MASTER_FEATURES_HIERARCHY = [
       { key: 'ADMIN_AUDIT', name: 'Audit Trail Logs', desc: 'Track administrative action logs and trails' },
       { key: 'ADMIN_BACKUP', name: 'snapshots Backups', desc: 'Schedule, trigger, or download JSON data snapshots' },
       { key: 'ADMIN_USERS', name: 'Employee Users', desc: 'Approve registrations, modify profiles, and assign roles' },
-      { key: 'ADMIN_DEPARTMENTS', name: 'Corporate Departments', desc: 'Map divisions, assign specific features, and delegate managers' }
+      { key: 'ADMIN_DEPARTMENTS', name: 'Corporate Departments', desc: 'Map divisions, assign specific features, and delegate managers' },
+      { key: 'WHATSAPP_SHARE_LINK', name: 'WhatsApp Share Link (Manual)', desc: 'Open prefilled message link in WhatsApp Web/App (Send directly if WhatsApp active)' },
+      { key: 'WHATSAPP_LINKED_DEVICE', name: 'WhatsApp Linked Device (QR Scan)', desc: 'Connect device via QR & send automatically in background' }
     ]
   },
   {

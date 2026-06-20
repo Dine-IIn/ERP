@@ -9,6 +9,8 @@ const CompanyProfile = React.lazy(() => import('./components/administration/Comp
 const RolesPermissions = React.lazy(() => import('./components/administration/RolesPermissions'));
 const AuditLogs = React.lazy(() => import('./components/administration/AuditLogs'));
 const SnapshotBackups = React.lazy(() => import('./components/administration/SnapshotBackups'));
+const WhatsappSettings = React.lazy(() => import('./components/administration/WhatsappSettings'));
+const WhatsappDeviceSync = React.lazy(() => import('./components/administration/WhatsappDeviceSync'));
 const EmployeeRegistry = React.lazy(() => import('./components/administration/EmployeeRegistry'));
 const CorporateDepartments = React.lazy(() => import('./components/administration/CorporateDepartments'));
 const CentralServices = React.lazy(() => import('./components/administration/CentralServices'));
@@ -275,6 +277,8 @@ const getDeviceDetails = () => {
 
 const getFeatureIcon = (key: string) => {
   switch (key) {
+    case 'ADMIN_WHATSAPP':
+      return <MessageSquare className="w-4 h-4" style={{ flexShrink: 0 }} />;
     case 'GENERAL':
     case 'GENERAL_CHAT':
       return <MessageSquare className="w-4 h-4" style={{ flexShrink: 0 }} />;
@@ -790,6 +794,7 @@ export default function App() {
   const [editCompanyFeatures, setEditCompanyFeatures] = useState<string[]>([]);
   const [isEditingAccess, setIsEditingAccess] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+  const [whatsappTab, setWhatsappTab] = useState<'settings' | 'sync'>('settings');
   
   const [pendingUsers, setPendingUsers] = useState<any[]>([]); // Company Admin approvals list
   const [companyUsers, setCompanyUsers] = useState<any[]>([]); // Company Admin employees list
@@ -3111,8 +3116,8 @@ export default function App() {
     fetchSalesData();
   };
 
-  const handleEmailProformaInvoice = async (id: string) => {
-    await apiRequest(`/api/sales/proforma/${id}/email`, 'POST');
+  const handleEmailProformaInvoice = async (id: string, pdfBase64?: string, pdfFilename?: string) => {
+    await apiRequest(`/api/sales/proforma/${id}/email`, 'POST', { pdfBase64, pdfFilename });
   };
 
   // --- SALES INVOICE OPERATIONS ---
@@ -3134,8 +3139,8 @@ export default function App() {
     fetchSalesData();
   };
 
-  const handleEmailSalesInvoice = async (id: string) => {
-    await apiRequest(`/api/sales/invoices/${id}/email`, 'POST');
+  const handleEmailSalesInvoice = async (id: string, pdfBase64?: string, pdfFilename?: string) => {
+    await apiRequest(`/api/sales/invoices/${id}/email`, 'POST', { pdfBase64, pdfFilename });
   };
 
   // --- DELIVERY CHALLAN OPERATIONS ---
@@ -3157,8 +3162,8 @@ export default function App() {
     fetchSalesData();
   };
 
-  const handleEmailDeliveryChallan = async (id: string) => {
-    await apiRequest(`/api/sales/challans/${id}/email`, 'POST');
+  const handleEmailDeliveryChallan = async (id: string, pdfBase64?: string, pdfFilename?: string) => {
+    await apiRequest(`/api/sales/challans/${id}/email`, 'POST', { pdfBase64, pdfFilename });
   };
 
   // --- DISPATCH OPERATIONS ---
@@ -4129,7 +4134,18 @@ export default function App() {
                         }
 
                         // Filter children by what features are granted to the company
-                        const activeChildren = cat.children.filter(child => companyFeatures.includes(child.key));
+                        let activeChildren = cat.children.filter(child => companyFeatures.includes(child.key));
+                        if (cat.key === 'ADMINISTRATION') {
+                          const hasWhatsapp = activeChildren.some(c => c.key === 'WHATSAPP_SHARE_LINK' || c.key === 'WHATSAPP_LINKED_DEVICE');
+                          activeChildren = activeChildren.filter(c => c.key !== 'WHATSAPP_SHARE_LINK' && c.key !== 'WHATSAPP_LINKED_DEVICE');
+                          if (hasWhatsapp) {
+                            activeChildren.push({
+                              key: 'ADMIN_WHATSAPP',
+                              name: 'WhatsApp Integration',
+                              desc: 'Configure WhatsApp templates and sync linked devices'
+                            });
+                          }
+                        }
                         if (activeChildren.length === 0) {
                           return null;
                         }
@@ -4564,6 +4580,52 @@ export default function App() {
                         handleDeleteDept={handleDeleteDept}
                       />
                     )}
+
+                    {activeWorkspaceSubModule === 'ADMIN_WHATSAPP' && (() => {
+                      const hasLinkedDevice = companyFeatures.includes('WHATSAPP_LINKED_DEVICE');
+                      let activeTab = whatsappTab;
+                      if (!hasLinkedDevice) activeTab = 'settings';
+
+                      return (
+                        <div className="space-y-6 animate-fade-in">
+                          <div className="flex border-b border-slate-800 gap-6 mb-4">
+                            <button
+                              type="button"
+                              onClick={() => setWhatsappTab('settings')}
+                              className={`pb-3 text-sm font-bold border-b-2 transition-all cursor-pointer bg-transparent border-0 ${
+                                activeTab === 'settings' ? 'border-indigo-500 text-indigo-400 font-bold' : 'border-transparent text-slate-400 hover:text-white'
+                              }`}
+                            >
+                              WhatsApp Configuration
+                            </button>
+                            {hasLinkedDevice && (
+                              <button
+                                type="button"
+                                onClick={() => setWhatsappTab('sync')}
+                                className={`pb-3 text-sm font-bold border-b-2 transition-all cursor-pointer bg-transparent border-0 ${
+                                  activeTab === 'sync' ? 'border-indigo-500 text-indigo-400 font-bold' : 'border-transparent text-slate-400 hover:text-white'
+                                }`}
+                              >
+                                Linked Devices (QR Scan)
+                              </button>
+                            )}
+                          </div>
+                          {activeTab === 'settings' ? (
+                            <React.Suspense fallback={<div className="text-white p-6">Loading settings...</div>}>
+                              <WhatsappSettings
+                                apiRequest={apiRequest}
+                                companyDefaultCountryCode={adminProfileData?.whatsappDefaultCountryCode || '+91'}
+                                onSettingsUpdated={fetchAdminConsoleData}
+                              />
+                            </React.Suspense>
+                          ) : (
+                            <React.Suspense fallback={<div className="text-white p-6">Loading Device Sync...</div>}>
+                              <WhatsappDeviceSync apiRequest={apiRequest} />
+                            </React.Suspense>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               )}
@@ -5263,6 +5325,8 @@ export default function App() {
                   </div>
                 </div>
               )}
+
+
 
               {/* ==========================================
                   REPORTS & ANALYTICS WORKSPACE
