@@ -156,23 +156,6 @@ export default function WhatsappShareModal({
       return;
     }
 
-    // Try to send the PDF + message in the background via backend if pdfBase64 is available and hasLinkedDevice is true
-    if (pdfBase64 && hasLinkedDevice) {
-      try {
-        await apiClient.post('/api/whatsapp/send', {
-          recipientPhone: cleanPhone,
-          customMessage: messageText,
-          documentType,
-          documentId,
-          mode: 'AUTOMATED',
-          pdfBase64,
-          pdfFilename
-        });
-      } catch (e) {
-        console.error("Failed to send background PDF for Open WhatsApp link:", e);
-      }
-    }
-
     const encodedText = encodeURIComponent(messageText);
     const desktopUrl = `whatsapp://send?phone=${cleanPhone}&text=${encodedText}`;
     const webUrl = `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encodedText}`;
