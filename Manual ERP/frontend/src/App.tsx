@@ -1575,7 +1575,7 @@ export default function App() {
   const fetchChatGroups = async () => {
     if (!localStorage.getItem('erp_token')) return;
     try {
-      const groups = await apiRequest('/api/chat/groups', 'GET');
+      const groups = await apiRequest('/api/chat/groups', 'GET', undefined, true);
       setChatGroups(groups || []);
     } catch (e) {
       console.error("Error fetching chat groups:", e);
@@ -1873,10 +1873,12 @@ export default function App() {
   // 2. HTTP API REQUEST AGENT
   // ==========================================
   
-  const apiRequest = async (url: string, method: 'GET' | 'POST' | 'PATCH' | 'DELETE' = 'GET', body?: any): Promise<any> => {
-    setErrorMsg(null);
-    setSuccessMsg(null);
-    setLoading(true);
+  const apiRequest = async (url: string, method: 'GET' | 'POST' | 'PATCH' | 'DELETE' = 'GET', body?: any, silent = false): Promise<any> => {
+    if (!silent) {
+      setErrorMsg(null);
+      setSuccessMsg(null);
+      setLoading(true);
+    }
 
     try {
       let data;
@@ -1889,11 +1891,13 @@ export default function App() {
       } else if (method === 'DELETE') {
         data = await apiClient.delete<any>(url);
       }
-      setLoading(false);
+      if (!silent) setLoading(false);
       return data;
     } catch (err: any) {
-      setLoading(false);
-      setErrorMsg(err.message);
+      if (!silent) {
+        setLoading(false);
+        setErrorMsg(err.message);
+      }
       throw err;
     }
   };
@@ -1901,7 +1905,7 @@ export default function App() {
   const fetchWorkspaceStats = async () => {
     if (!token) return;
     try {
-      const data = await apiRequest('/api/chat/stats', 'GET');
+      const data = await apiRequest('/api/chat/stats', 'GET', undefined, true);
       if (data) {
         setWorkspaceStats({
           totalCompanyExpense: data.totalCompanyExpense || 0,
@@ -3238,7 +3242,7 @@ export default function App() {
 
   const fetchDepartments = async () => {
     try {
-      const res = await apiRequest('/api/admin/departments', 'GET');
+      const res = await apiRequest('/api/admin/departments', 'GET', undefined, true);
       setDepartmentList(res.departments || []);
     } catch (e) {
       console.error("Error fetching departments:", e);
