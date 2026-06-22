@@ -86,6 +86,17 @@ export default function SalesInvoice({
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    const handleClose = (e: Event) => {
+      if (showModal) {
+        e.preventDefault();
+        setShowModal(false);
+      }
+    };
+    window.addEventListener('close-active-modal', handleClose);
+    return () => window.removeEventListener('close-active-modal', handleClose);
+  }, [showModal]);
   const [whatsappShareData, setWhatsappShareData] = useState<any>(null);
 
   const [customerId, setCustomerId] = useState('');
@@ -1015,7 +1026,7 @@ export default function SalesInvoice({
                     />
                   </div>
                   <div>
-                    <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Shipping State (Compulsory) *</label>
+                    <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Shipping State</label>
                     <select
                       required={diffShipping}
                       value={shippingState}

@@ -45,6 +45,18 @@ export default function Payments() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [whatsappShareData, setWhatsappShareData] = useState<any>(null);
   const [emailShareData, setEmailShareData] = useState<any>(null);
+
+  React.useEffect(() => {
+    const handleClose = (e: Event) => {
+      if (showAddModal) {
+        e.preventDefault();
+        setShowAddModal(false);
+      }
+    };
+    window.addEventListener('close-active-modal', handleClose);
+    return () => window.removeEventListener('close-active-modal', handleClose);
+  }, [showAddModal]);
+
   const [vendorId, setVendorId] = useState('');
   const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('BANK_TRANSFER');

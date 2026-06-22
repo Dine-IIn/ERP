@@ -26,7 +26,7 @@ export default function GstSettings() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: (data: any) => apiClient.patch('/api/admin/company/tax', data),
+    mutationFn: (data: any) => apiClient.patch('/api/admin/company/profile', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['companyProfile'] });
       queryClient.invalidateQueries({ queryKey: ['gstWorksheet'] });
@@ -36,7 +36,7 @@ export default function GstSettings() {
   const { data: companyProfile = {} as any } = useQuery({
     queryKey: ['companyProfile'],
     queryFn: async () => {
-      const res = await apiClient.get<any>('/api/admin/company');
+      const res = await apiClient.get<any>('/api/admin/company/profile');
       return res.company || {};
     }
   });
@@ -44,14 +44,34 @@ export default function GstSettings() {
   const { data: gstWorksheet = {} as any, refetch: onRefreshWorksheet } = useQuery({
     queryKey: ['gstWorksheet'],
     queryFn: async () => {
-      const res = await apiClient.get<any>('/api/finance/gst/worksheet');
-      return res.worksheet || {};
+      const res = await apiClient.get<any>('/api/finance/gst-worksheet');
+      return res || {};
     }
   });
 
   const [showEditModal, setShowEditModal] = useState(false);
-  const [gstin, setGstin] = useState(companyProfile?.gstin || '');
-  const [pan, setPan] = useState(companyProfile?.pan || '');
+  const [gstin, setGstin] = useState('');
+  const [pan, setPan] = useState('');
+
+  React.useEffect(() => {
+    const handleClose = (e: Event) => {
+      if (showEditModal) {
+        e.preventDefault();
+        setShowEditModal(false);
+      }
+    };
+    window.addEventListener('close-active-modal', handleClose);
+    return () => window.removeEventListener('close-active-modal', handleClose);
+  }, [showEditModal]);
+
+  React.useEffect(() => {
+    if (companyProfile?.gstin) {
+      setGstin(companyProfile.gstin);
+    }
+    if (companyProfile?.pan) {
+      setPan(companyProfile.pan);
+    }
+  }, [companyProfile]);
 
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);

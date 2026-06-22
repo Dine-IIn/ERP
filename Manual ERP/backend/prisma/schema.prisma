@@ -405,6 +405,7 @@ model Vendor {
   paymentTerms String?
   gstDetails   String?
   creditTime   Int      @default(0)
+  creditLimit  Float    @default(0.0)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   bankName             String?

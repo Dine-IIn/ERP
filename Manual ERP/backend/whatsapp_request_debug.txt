@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-06-21T16:54:43.577Z",
+  "documentType": "PROFORMA_INVOICE",
+  "documentId": "df4ea4b1-de9d-4c74-83e5-8dc221b1e7bb",
+  "recipientPhone": "919879694954",
+  "mode": "AUTOMATED",
+  "pdfFilename": "Proforma_PI-2026-6497.pdf",
+  "hasPdfBase64": true,
+  "pdfBase64Length": 14271496,
+  "pdfBase64Snippet": "JVBERi0xLjMKJbrfrOAKMyAwIG9iago8PC9UeXBlIC9QYWdlCi9QYXJlbnQgMSAwIFIKL1Jlc291cmNlcyAyIDAgUgovTWVkaWFC"
+}

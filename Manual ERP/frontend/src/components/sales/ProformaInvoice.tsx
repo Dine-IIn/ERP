@@ -12,6 +12,7 @@ import {
   pickDefaultTemplate,
   resolveCustomerForPdf,
   resolveCustomerTaxBank,
+  DEFAULT_PDF_CUSTOMIZER,
 } from '../../utils/pdfDocumentUtils';
 
 interface ProformaInvoiceProps {
@@ -423,8 +424,12 @@ export default function ProformaInvoice({
       });
 
       // 3. Wait for layout, generate PDF, and call onEmailInvoice
-      await new Promise(resolve => setTimeout(resolve, 350));
-      const element = document.getElementById('pdf-email-render-pane');
+      let element: HTMLElement | null = null;
+      for (let i = 0; i < 30; i++) {
+        element = document.getElementById('pdf-email-render-pane');
+        if (element) break;
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
       if (!element) throw new Error("Hidden PDF rendering pane not found.");
 
       const { generatePdfFromHtmlElement } = await import('../../utils/pdfDocumentUtils');
@@ -600,14 +605,24 @@ export default function ProformaInvoice({
                               });
 
                               // 3. Wait for render and generate PDF base64
-                              await new Promise(resolve => setTimeout(resolve, 350));
-                              const element = document.getElementById('pdf-email-render-pane');
+                              let element: HTMLElement | null = null;
+                              for (let i = 0; i < 30; i++) {
+                                element = document.getElementById('pdf-email-render-pane');
+                                if (element) break;
+                                await new Promise(resolve => setTimeout(resolve, 50));
+                              }
                               if (element) {
                                 const { generatePdfFromHtmlElement } = await import('../../utils/pdfDocumentUtils');
                                 base64 = await generatePdfFromHtmlElement(element);
+                                if (!base64) {
+                                  alert("Warning: Generated PDF Base64 string is empty!");
+                                }
+                              } else {
+                                alert("Error: Hidden PDF rendering pane element not found in DOM.");
                               }
-                            } catch (e) {
+                            } catch (e: any) {
                               console.error("Failed to generate PDF for WhatsApp:", e);
+                              alert("Exception during PDF Generation: " + (e.message || e));
                             } finally {
                               setPdfGeneratingInv(null);
                               setSharingLoadingId(null);
@@ -1768,12 +1783,12 @@ export default function ProformaInvoice({
                             )}
                             <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="text-right font-mono">{it.quantity} {prod?.uom || 'PCS'}</td>
                             {pdfCustomizer.colUnitPrice && (
-                              <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="text-right font-mono">{inv.customer?.currencySymbol || currencySymbolProp}{it.price.toFixed(2)}</td>
+                              <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="text-right font-mono">{inv.customer?.currencySymbol || currencySymbolProp}{Number(it.price || 0).toFixed(2)}</td>
                             )}
                             {pdfCustomizer.colDiscount && (
                               <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="text-right font-mono">{it.discount || 0}%</td>
                             )}
-                            <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="text-right font-mono font-semibold text-slate-900">{inv.customer?.currencySymbol || currencySymbolProp}{(itemSub - itemDisc).toFixed(2)}</td>
+                            <td style={{ padding: `${pdfCustomizer.tablePadding}px` }} className="text-right font-mono font-semibold text-slate-900">{inv.customer?.currencySymbol || currencySymbolProp}{Number(itemSub - itemDisc).toFixed(2)}</td>
                           </tr>
                         );
                       })}
@@ -1787,27 +1802,27 @@ export default function ProformaInvoice({
                     <tbody>
                       <tr className="border-b border-slate-100">
                         <td className="py-1 px-2 font-medium">Subtotal</td>
-                        <td className="py-1 px-2 text-right font-semibold text-slate-900">{inv.customer?.currencySymbol || currencySymbolProp}{inv.subtotal.toFixed(2)}</td>
+                        <td className="py-1 px-2 text-right font-semibold text-slate-900">{inv.customer?.currencySymbol || currencySymbolProp}{Number(inv.subtotal || 0).toFixed(2)}</td>
                       </tr>
                       {discountVal > 0 && (
                         <tr className="border-b border-slate-100 text-emerald-600">
                           <td className="py-1 px-2 font-medium">Discount</td>
-                          <td className="py-1 px-2 text-right font-semibold">-{inv.customer?.currencySymbol || currencySymbolProp}{discountVal.toFixed(2)}</td>
+                          <td className="py-1 px-2 text-right font-semibold">-{inv.customer?.currencySymbol || currencySymbolProp}{Number(discountVal || 0).toFixed(2)}</td>
                         </tr>
                       )}
                       {pdfCustomizer.showTaxableAmount && (
                         <tr className="border-b border-slate-100 text-slate-600">
                           <td className="py-1 px-2 font-medium">Taxable Amount</td>
-                          <td className="py-1 px-2 text-right font-semibold">{inv.customer?.currencySymbol || currencySymbolProp}{taxableAmount.toFixed(2)}</td>
+                          <td className="py-1 px-2 text-right font-semibold">{inv.customer?.currencySymbol || currencySymbolProp}{Number(taxableAmount || 0).toFixed(2)}</td>
                         </tr>
                       )}
                       <tr className="border-b border-slate-100 text-slate-650">
-                        <td className="py-1 px-2 font-medium">Estimated Tax (GST {taxRate.toFixed(1)}%)</td>
-                        <td className="py-1 px-2 text-right font-semibold">{inv.customer?.currencySymbol || currencySymbolProp}{inv.tax.toFixed(2)}</td>
+                        <td className="py-1 px-2 font-medium">Estimated Tax (GST {Number(taxRate || 0).toFixed(1)}%)</td>
+                        <td className="py-1 px-2 text-right font-semibold">{inv.customer?.currencySymbol || currencySymbolProp}{Number(inv.tax || 0).toFixed(2)}</td>
                       </tr>
                       <tr className="font-bold text-[12px] bg-slate-50" style={{ color: currentThemeHex }}>
                         <td className="py-2 px-2">Estimated Grand Total</td>
-                        <td className="py-2 px-2 text-right">{inv.customer?.currencySymbol || currencySymbolProp}{inv.total.toFixed(2)}</td>
+                        <td className="py-2 px-2 text-right">{inv.customer?.currencySymbol || currencySymbolProp}{Number(inv.total || 0).toFixed(2)}</td>
                       </tr>
                     </tbody>
                   </table>

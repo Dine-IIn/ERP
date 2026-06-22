@@ -32,6 +32,7 @@ interface VendorQuotationsProps {
   products: any[];
   onCreateQuotation: (payload: any) => Promise<void>;
   onUpdateQuotationStatus: (id: string, payload: { status: string }) => Promise<void>;
+  onUpdateQuotation?: (id: string, payload: any) => Promise<void>;
   onDeleteQuotation: (id: string) => Promise<void>;
   currencySymbol?: string;
 }
@@ -48,13 +49,27 @@ export default function VendorQuotations({
   products,
   onCreateQuotation,
   onUpdateQuotationStatus,
+  onUpdateQuotation,
   onDeleteQuotation,
   currencySymbol = '$'
 }: VendorQuotationsProps) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [whatsappShareData, setWhatsappShareData] = useState<any>(null);
   const [emailShareData, setEmailShareData] = useState<any>(null);
+
+  React.useEffect(() => {
+    const handleClose = (e: Event) => {
+      if (showModal) {
+        e.preventDefault();
+        setShowModal(false);
+      }
+    };
+    window.addEventListener('close-active-modal', handleClose);
+    return () => window.removeEventListener('close-active-modal', handleClose);
+  }, [showModal]);
 
   const [vendorId, setVendorId] = useState('');
   const [quoteNo, setQuoteNo] = useState('');
@@ -69,6 +84,8 @@ export default function VendorQuotations({
   const [loading, setLoading] = useState(false);
 
   const openAddModal = () => {
+    setIsEditing(false);
+    setEditingId(null);
     setVendorId(vendors[0]?.id || '');
     setQuoteNo('');
     setDate(new Date().toISOString().substring(0, 10));
@@ -76,6 +93,27 @@ export default function VendorQuotations({
     setTaxPercent('18.00');
     setStatus('PENDING');
     setItems([{ productId: products[0]?.id || '', quantity: '1', price: String(products[0]?.pricing || 0) }]);
+    setLocalErr(null);
+    setLocalSuccess(null);
+    setShowModal(true);
+  };
+
+  const openEditModal = (q: VendorQuotation) => {
+    setIsEditing(true);
+    setEditingId(q.id);
+    setVendorId(q.vendorId);
+    setQuoteNo(q.quoteNo);
+    setDate(q.date ? q.date.substring(0, 10) : '');
+    setValidUntil(q.validUntil ? q.validUntil.substring(0, 10) : '');
+    // Calculate tax percent based on subtotal and tax values
+    const pct = q.subtotal > 0 ? ((q.tax / q.subtotal) * 100).toFixed(2) : '18.00';
+    setTaxPercent(pct);
+    setStatus(q.status);
+    setItems(q.items.map(it => ({
+      productId: it.productId,
+      quantity: String(it.quantity),
+      price: String(it.price)
+    })));
     setLocalErr(null);
     setLocalSuccess(null);
     setShowModal(true);
@@ -138,16 +176,18 @@ export default function VendorQuotations({
       }))
     };
 
-    const parsed = CreateVendorQuotationBodySchema.safeParse(payload);
-    if (!parsed.success) {
-      setLocalErr("Validation error: " + parsed.error.issues[0].message);
-      setLoading(false);
-      return;
-    }
-
     try {
-      await onCreateQuotation(payload);
-      setLocalSuccess("Supplier price bid registered successfully!");
+      if (isEditing && editingId) {
+        if (onUpdateQuotation) {
+          await onUpdateQuotation(editingId, payload);
+          setLocalSuccess("Supplier price bid updated successfully!");
+        } else {
+          throw new Error("Update handler is not implemented.");
+        }
+      } else {
+        await onCreateQuotation(payload);
+        setLocalSuccess("Supplier price bid registered successfully!");
+      }
       setTimeout(() => {
         setShowModal(false);
       }, 1000);
@@ -323,6 +363,15 @@ export default function VendorQuotations({
                         );
                       })()}
                       <button
+                        onClick={() => openEditModal(q)}
+                        className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-amber-450 transition-colors rounded-lg inline-flex items-center"
+                        title="Edit Sourcing Proposal Details"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      </button>
+                      <button
                         onClick={() => handleDelete(q.id, q.quoteNo)}
                         className="p-1.5 hover:bg-slate-850 text-slate-550 hover:text-red-400 transition-colors rounded-lg"
                         title="Delete price bid sheet"
@@ -344,7 +393,7 @@ export default function VendorQuotations({
           <div className="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden transform transition-all max-h-[90vh] flex flex-col">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-slate-800 bg-slate-950/20">
-              <h3 className="text-lg font-bold text-white">Log Supplier Competitive Price Quote</h3>
+              <h3 className="text-lg font-bold text-white">{isEditing ? 'Modify Supplier Competitive Price Quote' : 'Log Supplier Competitive Price Quote'}</h3>
               <button
                 onClick={() => setShowModal(false)}
                 className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-all"
@@ -498,7 +547,7 @@ export default function VendorQuotations({
                             onClick={() => removeItemRow(index)}
                             className="p-1 hover:bg-slate-800 text-red-500/80 hover:text-red-400 rounded transition-all ml-2"
                           >
-                            <Trash className="w-4 h-4" />
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         )}
                       </div>
@@ -547,7 +596,7 @@ export default function VendorQuotations({
                   disabled={loading}
                   className="px-5 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white transition-all text-sm font-bold rounded-xl shadow-lg shadow-amber-500/20"
                 >
-                  {loading ? 'Processing...' : 'Register price bid'}
+                  {loading ? 'Processing...' : isEditing ? 'Save price changes' : 'Register price bid'}
                 </button>
               </div>
             </form>

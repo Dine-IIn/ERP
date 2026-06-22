@@ -610,6 +610,7 @@ export const VendorSchema = z.object({
   paymentTerms: z.string().optional().nullable(),
   gstDetails: z.string().optional().nullable(),
   creditTime: z.any().optional(),
+  creditLimit: z.any().optional(),
   bankName: z.string().optional().nullable(),
   accountHolderName: z.string().optional().nullable(),
   accountNumber: z.string().optional().nullable(),

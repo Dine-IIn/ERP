@@ -53,9 +53,22 @@ export default function ProductMaster({
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-
   // Manage inline settings modal for categories/brands
   const [showManageCatBrandModal, setShowManageCatBrandModal] = useState(false);
+
+  React.useEffect(() => {
+    const handleClose = (e: Event) => {
+      if (showManageCatBrandModal) {
+        e.preventDefault();
+        setShowManageCatBrandModal(false);
+      } else if (showModal) {
+        e.preventDefault();
+        setShowModal(false);
+      }
+    };
+    window.addEventListener('close-active-modal', handleClose);
+    return () => window.removeEventListener('close-active-modal', handleClose);
+  }, [showModal, showManageCatBrandModal]);
   const [manageType, setManageType] = useState<'category' | 'brand'>('category');
   const [newCatBrandName, setNewCatBrandName] = useState('');
   const [manageErr, setManageErr] = useState<string | null>(null);
@@ -253,21 +266,36 @@ export default function ProductMaster({
   const getBrandName = (id: string) => brands.find(b => b.id === id)?.name || '';
 
   const filtered = (products || []).filter(p => {
-    const name = p?.name || '';
-    const hsn = p?.hsnSacCode || '';
-    const catName = p?.category?.name || '';
-    const brandName = p?.brand?.name || '';
+    if (!p) return false;
+    const name = p.name || '';
+    const hsn = String(p.hsnSacCode || '');
+    const catName = p.category?.name || '';
+    const brandName = p.brand?.name || '';
     const term = (searchTerm || '').toLowerCase();
 
     const matchesSearch = name.toLowerCase().includes(term) ||
-      hsn.includes(term) ||
+      hsn.toLowerCase().includes(term) ||
       catName.toLowerCase().includes(term) ||
       brandName.toLowerCase().includes(term);
 
-    const matchesCategory = categoryFilter === '' || p?.categoryId === categoryFilter;
-    const matchesBrand = brandFilter === '' || p?.brandId === brandFilter;
+    const matchesCategory = categoryFilter === '' || p.categoryId === categoryFilter;
+    const matchesBrand = brandFilter === '' || p.brandId === brandFilter;
     return matchesSearch && matchesCategory && matchesBrand;
   });
+
+  // BOM Reference dropdown click outside ref logic
+  const bomRefContainer = React.useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (bomRefContainer.current && !bomRefContainer.current.contains(event.target as Node)) {
+        setShowBomDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   return (
     <div className="animate-fade-in flex flex-col gap-4 text-left select-none">
@@ -395,7 +423,7 @@ export default function ProductMaster({
                 {/* UOM & Base Pricing */}
                 <td className="p-3 shrink-0">
                   <span className="text-[var(--text-primary)] font-bold flex items-center gap-0.5 font-mono">
-                    <span className="text-indigo-400 font-bold mr-0.5">{currencySymbol}</span> {prod.pricing ? prod.pricing.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
+                    <span className="text-indigo-400 font-bold mr-0.5">{currencySymbol}</span> {prod.pricing ? Number(prod.pricing).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
                   </span>
                   <span className="text-[9px] text-[var(--text-secondary)] block mt-0.5 font-sans font-medium uppercase">
                     Metric: {prod.uom || 'PCS'}
@@ -595,7 +623,7 @@ export default function ProductMaster({
               </div>
 
               {/* BOM Reference & Minimum Order Quantity (MOQ) */}
-              <div className="relative">
+              <div className="relative" ref={bomRefContainer}>
                 <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">BOM Reference (Bill of Materials)</label>
                 <div className="flex gap-2">
                   <input
@@ -653,7 +681,7 @@ export default function ProductMaster({
                         bom.version.toLowerCase().includes(bomSearch.toLowerCase()) ||
                         (bom.finishedProduct?.name || '').toLowerCase().includes(bomSearch.toLowerCase())
                       ).length === 0 && (
-                        <div className="text-center py-2 text-[var(--text-muted)] text-[10px] italic">No matching BOM found</div>
+                        <div className="text-center py-4 text-xs text-slate-500 italic">No matching BOM structures found</div>
                       )}
                     </div>
                   </div>

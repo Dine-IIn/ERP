@@ -33,6 +33,17 @@ export default function CustomerMaster({
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    const handleClose = (e: Event) => {
+      if (showModal) {
+        e.preventDefault();
+        setShowModal(false);
+      }
+    };
+    window.addEventListener('close-active-modal', handleClose);
+    return () => window.removeEventListener('close-active-modal', handleClose);
+  }, [showModal]);
   
   const [form, setForm] = useState({
     name: '',
@@ -376,19 +387,6 @@ export default function CustomerMaster({
                 />
               </div>
 
-              {/* Customer Type select */}
-              <div>
-                <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Account Category Type</label>
-                <select
-                  value={form.customerType}
-                  onChange={e => setForm({ ...form, customerType: e.target.value })}
-                  className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none cursor-pointer"
-                >
-                  <option value="INDIVIDUAL">INDIVIDUAL (Single Client)</option>
-                  <option value="COMPANY">COMPANY (Enterprise Client)</option>
-                </select>
-              </div>
-
               {/* Currency Symbol Selection */}
               <div>
                 <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Billing Currency Symbol</label>
@@ -449,7 +447,7 @@ export default function CustomerMaster({
                 <>
                   {/* State dropdown for National */}
                   <div>
-                    <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Billing / Shipping State (Compulsory)</label>
+                    <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Billing / Shipping State</label>
                     <select
                       className="w-full bg-[var(--bg-secondary)] border border-[var(--border-primary)] p-2 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none focus:border-indigo-500"
                       value={form.state}
@@ -621,11 +619,11 @@ export default function CustomerMaster({
               {/* Address Section */}
               <div className="md:col-span-2 border-t border-[var(--border-color)] pt-3">
                 <span className="text-[9px] font-bold text-indigo-400 tracking-wider uppercase block mb-2 flex items-center gap-1">
-                  <MapPin className="w-3.5 h-3.5" /> Destination Addresses
+                  <MapPin className="w-3.5 h-3.5" /> Addresses
                 </span>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[8px] font-bold text-[var(--text-secondary)] block mb-1">Billing Destination Address</label>
+                    <label className="text-[8px] font-bold text-[var(--text-secondary)] block mb-1">Billing Address</label>
                     <textarea
                       rows={2}
                       value={form.billingAddress}
@@ -635,7 +633,7 @@ export default function CustomerMaster({
                     />
                   </div>
                   <div>
-                    <label className="text-[8px] font-bold text-[var(--text-secondary)] block mb-1">Shipping Destination Address (Same as billing if blank)</label>
+                    <label className="text-[8px] font-bold text-[var(--text-secondary)] block mb-1">Shipping Address (Same as billing if blank)</label>
                     <textarea
                       rows={2}
                       value={form.shippingAddress}

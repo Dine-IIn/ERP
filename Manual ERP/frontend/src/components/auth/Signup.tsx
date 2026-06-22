@@ -139,7 +139,7 @@ export default function Signup({
 
             <div>
               <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">
-                Mobile No {signupVerificationMethod === 'SMS' ? <span className="text-indigo-400 font-extrabold">(Compulsory OTP)</span> : <span className="text-slate-500 font-semibold">(Optional)</span>}
+                Mobile No {signupVerificationMethod === 'SMS' ? <span className="text-[var(--text-primary)]">(Required)</span> : <span className="text-slate-500 font-semibold">(Optional)</span>}
               </label>
               <div className="mt-1 relative">
                 <Phone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
@@ -155,7 +155,7 @@ export default function Signup({
 
             <div>
               <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">
-                Email Address {signupVerificationMethod === 'EMAIL' ? <span className="text-indigo-400 font-extrabold">(Compulsory OTP)</span> : <span className="text-slate-500 font-semibold">(Optional)</span>}
+                Email Address {signupVerificationMethod === 'EMAIL' ? <span className="text-[var(--text-primary)]">(Required)</span> : <span className="text-slate-500 font-semibold">(Optional)</span>}
               </label>
               <div className="mt-1 relative">
                 <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />

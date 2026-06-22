@@ -83,6 +83,25 @@ export async function createCustomer(req: AuthenticatedRequest, res: Response) {
       }
     });
 
+    // Auto onboard bank account in bank account hub
+    if (bankName && accountNumber && ifscCode) {
+      const existingAccount = await prisma.companyBankAccount.findFirst({
+        where: { companyId, accountNo: accountNumber }
+      });
+      if (!existingAccount) {
+        await prisma.companyBankAccount.create({
+          data: {
+            companyId,
+            bankName,
+            accountNo: accountNumber,
+            ifscCode,
+            accountType: "CURRENT",
+            balance: 0.0
+          }
+        });
+      }
+    }
+
     await logAudit(
       companyId,
       req.user?.userId || null,
@@ -149,6 +168,25 @@ export async function updateCustomer(req: AuthenticatedRequest, res: Response) {
         ...(panNumber !== undefined && { panNumber: panNumber || null })
       }
     });
+
+    // Auto onboard bank account in bank account hub
+    if (updated.bankName && updated.accountNumber && updated.ifscCode) {
+      const existingAccount = await prisma.companyBankAccount.findFirst({
+        where: { companyId, accountNo: updated.accountNumber }
+      });
+      if (!existingAccount) {
+        await prisma.companyBankAccount.create({
+          data: {
+            companyId,
+            bankName: updated.bankName,
+            accountNo: updated.accountNumber,
+            ifscCode: updated.ifscCode,
+            accountType: "CURRENT",
+            balance: 0.0
+          }
+        });
+      }
+    }
 
     await logAudit(
       companyId,
@@ -244,7 +282,7 @@ export async function createVendor(req: AuthenticatedRequest, res: Response) {
 
     const parsedBody = CreateVendorBodySchema.safeParse(req.body);
     if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
-    const { name, isVendor, contactNo, email, bankDetails, paymentTerms, gstDetails, creditTime, bankName, accountHolderName, accountNumber, ifscCode, gstNumber, panNumber, currencySymbol, currencyId } = parsedBody.data;
+    const { name, isVendor, contactNo, email, bankDetails, paymentTerms, gstDetails, creditTime, creditLimit, bankName, accountHolderName, accountNumber, ifscCode, gstNumber, panNumber, currencySymbol, currencyId } = parsedBody.data;
 
     if (!name || !contactNo) {
       return res.status(400).json({ error: "Name and contactNo are required fields" });
@@ -268,6 +306,7 @@ export async function createVendor(req: AuthenticatedRequest, res: Response) {
         paymentTerms: paymentTerms || null,
         gstDetails: gstDetails || null,
         creditTime: creditTime ? parseInt(creditTime) : 0,
+        creditLimit: creditLimit ? parseFloat(creditLimit) : 0.0,
         bankName: bankName || null,
         accountHolderName: accountHolderName || null,
         accountNumber: accountNumber || null,
@@ -278,6 +317,25 @@ export async function createVendor(req: AuthenticatedRequest, res: Response) {
         currencyId: currencyId || "USD"
       }
     });
+
+    // Auto onboard bank account in bank account hub
+    if (bankName && accountNumber && ifscCode) {
+      const existingAccount = await prisma.companyBankAccount.findFirst({
+        where: { companyId, accountNo: accountNumber }
+      });
+      if (!existingAccount) {
+        await prisma.companyBankAccount.create({
+          data: {
+            companyId,
+            bankName,
+            accountNo: accountNumber,
+            ifscCode,
+            accountType: "CURRENT",
+            balance: 0.0
+          }
+        });
+      }
+    }
 
     await logAudit(
       companyId,
@@ -305,7 +363,7 @@ export async function updateVendor(req: AuthenticatedRequest, res: Response) {
     const { id } = req.params;
     const parsedBody = UpdateVendorBodySchema.safeParse(req.body);
     if (!parsedBody.success) return res.status(400).json({ error: "Invalid input", details: parsedBody.error.issues });
-    const { name, isVendor, contactNo, email, bankDetails, paymentTerms, gstDetails, creditTime, bankName, accountHolderName, accountNumber, ifscCode, gstNumber, panNumber, currencySymbol, currencyId } = parsedBody.data;
+    const { name, isVendor, contactNo, email, bankDetails, paymentTerms, gstDetails, creditTime, creditLimit, bankName, accountHolderName, accountNumber, ifscCode, gstNumber, panNumber, currencySymbol, currencyId } = parsedBody.data;
 
     const vendorToUpdate = await prisma.vendor.findFirst({
       where: { id, companyId }
@@ -332,6 +390,7 @@ export async function updateVendor(req: AuthenticatedRequest, res: Response) {
         ...(paymentTerms !== undefined && { paymentTerms: paymentTerms || null }),
         ...(gstDetails !== undefined && { gstDetails: gstDetails || null }),
         ...(creditTime !== undefined && { creditTime: parseInt(creditTime) || 0 }),
+        ...(creditLimit !== undefined && { creditLimit: parseFloat(creditLimit) || 0.0 }),
         ...(bankName !== undefined && { bankName: bankName || null }),
         ...(accountHolderName !== undefined && { accountHolderName: accountHolderName || null }),
         ...(accountNumber !== undefined && { accountNumber: accountNumber || null }),
@@ -342,6 +401,25 @@ export async function updateVendor(req: AuthenticatedRequest, res: Response) {
         ...(currencyId !== undefined && { currencyId })
       }
     });
+
+    // Auto onboard bank account in bank account hub
+    if (updated.bankName && updated.accountNumber && updated.ifscCode) {
+      const existingAccount = await prisma.companyBankAccount.findFirst({
+        where: { companyId, accountNo: updated.accountNumber }
+      });
+      if (!existingAccount) {
+        await prisma.companyBankAccount.create({
+          data: {
+            companyId,
+            bankName: updated.bankName,
+            accountNo: updated.accountNumber,
+            ifscCode: updated.ifscCode,
+            accountType: "CURRENT",
+            balance: 0.0
+          }
+        });
+      }
+    }
 
     await logAudit(
       companyId,

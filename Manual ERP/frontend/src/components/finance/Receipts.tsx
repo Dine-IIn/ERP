@@ -47,6 +47,18 @@ export default function Receipts({ currencySymbol = '$' }: { currencySymbol?: st
   const [showAddModal, setShowAddModal] = useState(false);
   const [amount, setAmount] = useState('');
   const [payerName, setPayerName] = useState('');
+
+  React.useEffect(() => {
+    const handleClose = (e: Event) => {
+      if (showAddModal) {
+        e.preventDefault();
+        setShowAddModal(false);
+      }
+    };
+    window.addEventListener('close-active-modal', handleClose);
+    return () => window.removeEventListener('close-active-modal', handleClose);
+  }, [showAddModal]);
+
   const [category, setCategory] = useState('SALES_REVENUE');
   const [paymentMethod, setPaymentMethod] = useState('BANK_TRANSFER');
   const [referenceNo, setReferenceNo] = useState('');

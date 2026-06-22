@@ -143,14 +143,65 @@ When Tauri queries `/api/updater/:target/:version`, Central Services responds wi
 
 ---
 
-## 📱 5. Android Wrapper Deployment (Capacitor)
+## 📱 5. Android Wrapper Deployment & APK Packaging (Capacitor)
 
-The React client compiles into a native Android wrapper using Capacitor:
-- **Asset sync:** Run `corepack pnpm run build` to output the dist folder, then synchronize assets to the native layer:
-  ```bash
-  corepack npx cap sync
-  ```
-- **Local Notification Navigation:** On background push notifications, native handlers capture payloads, automatically toggle the drawer menu, and route the screen to the matching DM/group room.
+The React client compiles into a native Android application using Capacitor. Below are the steps to build, synchronize, and package the app into an APK/AAB.
+
+### Step 1: Build the Web Assets
+First, compile the production-ready React client assets (outputs to `frontend/dist`):
+```bash
+cd frontend
+corepack pnpm run build
+```
+
+### Step 2: Sync Web Assets to Android Project
+Copy the compiled web assets into the Android native platform directory:
+```bash
+npx cap sync android
+```
+
+### Step 3: Package & Generate the Android App (APK / AAB)
+
+#### Option A: Command Line Interface (CLI)
+This is the fastest method to build the package without opening Android Studio.
+1. Navigate to the `android` subdirectory:
+   ```bash
+   cd android
+   ```
+2. Compile using the Gradle wrapper (`gradlew`):
+   - **For Local Debug APK** (For direct testing on physical devices or emulators):
+     ```powershell
+     # On Windows (PowerShell/CMD)
+     .\gradlew assembleDebug
+     
+     # On macOS/Linux
+     ./gradlew assembleDebug
+     ```
+     *Output Path:* `frontend/android/app/build/outputs/apk/debug/app-debug.apk`
+   
+   - **For Release APK** (Unsigned):
+     ```powershell
+     # On Windows (PowerShell/CMD)
+     .\gradlew assembleRelease
+     
+     # On macOS/Linux
+     ./gradlew assembleRelease
+     ```
+     *Output Path:* `frontend/android/app/build/outputs/apk/release/app-release-unsigned.apk`
+
+#### Option B: Android Studio (Recommended for Play Store Signed Releases)
+1. Open the native Android project in Android Studio:
+   ```bash
+   npx cap open android
+   ```
+2. Once Android Studio finishes indexing:
+   - Go to the top menu and select **Build** > **Generate Signed Bundle / APK...**
+   - Choose **APK** (for manual testing/installation) or **Android App Bundle** (`.aab`, required for publishing to the Google Play Store).
+   - Create or select your release Keystore file (`.jks` / `.keystore`), enter key credentials, and proceed.
+   - Choose the **release** build variant and click **Finish**.
+   - *Output Path:* The final signed package will be generated inside `frontend/android/app/release/` (or `frontend/android/app/build/outputs/apk/release/` depending on Android Studio config).
+
+---
 
 ---
 

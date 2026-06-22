@@ -14,6 +14,7 @@ exports.sendSimulatedOTP = sendSimulatedOTP;
 exports.verifySimulatedOTP = verifySimulatedOTP;
 exports.sendEmailNotification = sendEmailNotification;
 exports.numberToIndianWords = numberToIndianWords;
+exports.resolveAndCompileMessage = resolveAndCompileMessage;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const dotenv_1 = __importDefault(require("dotenv"));
@@ -457,5 +458,140 @@ function numberToIndianWords(amount) {
     }
     result += " Only";
     return result.replace(/\s+/g, ' ').trim();
+}
+async function resolveAndCompileMessage(companyId, documentType, documentId, targetChannel, fallbackDefaultText) {
+    // 1. Fetch company details
+    const company = await db_1.default.company.findUnique({
+        where: { id: companyId },
+        select: { name: true, whatsappDefaultCountryCode: true }
+    });
+    const placeholders = {
+        companyName: company?.name || 'ERP Workspace'
+    };
+    // 2. Fetch template from DB
+    const templateRecord = await db_1.default.whatsappTemplate.findFirst({
+        where: { companyId, documentType }
+    });
+    let templateText = '';
+    if (templateRecord) {
+        if (targetChannel === 'WHATSAPP') {
+            templateText = templateRecord.template;
+        }
+        else {
+            templateText = templateRecord.useSameForEmail || !templateRecord.emailTemplate
+                ? templateRecord.template
+                : templateRecord.emailTemplate;
+        }
+    }
+    if (!templateText) {
+        templateText = fallbackDefaultText;
+    }
+    // 3. Resolve Placeholders based on document type
+    if (documentType === 'SALES_INVOICE') {
+        const doc = await db_1.default.salesInvoice.findFirst({
+            where: { id: documentId, companyId },
+            include: { customer: true }
+        });
+        if (doc) {
+            placeholders.customerName = doc.customer.name;
+            placeholders.customerCode = doc.customer.id;
+            placeholders.invoiceNumber = doc.invoiceNo;
+            placeholders.invoiceDate = doc.date.toLocaleDateString();
+            placeholders.invoiceAmount = `${doc.customer.currencySymbol || '$'}${doc.total.toFixed(2)}`;
+            placeholders.dueDate = doc.dueDate ? new Date(doc.dueDate).toLocaleDateString() : '';
+        }
+    }
+    else if (documentType === 'PROFORMA_INVOICE') {
+        const doc = await db_1.default.proformaInvoice.findFirst({
+            where: { id: documentId, companyId },
+            include: { customer: true }
+        });
+        if (doc) {
+            placeholders.customerName = doc.customer.name;
+            placeholders.customerCode = doc.customer.id;
+            placeholders.invoiceNumber = doc.invoiceNo;
+            placeholders.invoiceDate = doc.date.toLocaleDateString();
+            placeholders.invoiceAmount = `${doc.customer.currencySymbol || '$'}${doc.total.toFixed(2)}`;
+            placeholders.dueDate = doc.dueDate ? new Date(doc.dueDate).toLocaleDateString() : '';
+        }
+    }
+    else if (documentType === 'DELIVERY_CHALLAN') {
+        const doc = await db_1.default.deliveryChallan.findFirst({
+            where: { id: documentId, companyId },
+            include: { customer: true }
+        });
+        if (doc) {
+            placeholders.customerName = doc.customer.name;
+            placeholders.customerCode = doc.customer.id;
+            placeholders.challanNumber = doc.challanNo;
+            placeholders.invoiceDate = doc.date.toLocaleDateString();
+            placeholders.invoiceAmount = '';
+            placeholders.dueDate = '';
+        }
+    }
+    else if (documentType === 'PURCHASE_ORDER') {
+        const doc = await db_1.default.purchaseOrder.findFirst({
+            where: { id: documentId, companyId },
+            include: { vendor: true }
+        });
+        if (doc) {
+            placeholders.customerName = doc.vendor.name;
+            placeholders.customerCode = doc.vendor.id;
+            placeholders.poNumber = doc.poNo;
+            placeholders.invoiceDate = doc.date.toLocaleDateString();
+            placeholders.invoiceAmount = `${doc.vendor.currencySymbol || '$'}${doc.total.toFixed(2)}`;
+            placeholders.dueDate = '';
+        }
+    }
+    else if (documentType === 'QUOTATION') {
+        const doc = await db_1.default.quotation.findFirst({
+            where: { id: documentId, companyId },
+            include: { customer: true }
+        });
+        if (doc) {
+            placeholders.customerName = doc.customer.name;
+            placeholders.customerCode = doc.customer.id;
+            placeholders.quotationNumber = doc.quoteNo;
+            placeholders.invoiceDate = doc.date.toLocaleDateString();
+            placeholders.invoiceAmount = `${doc.customer.currencySymbol || '$'}${doc.total.toFixed(2)}`;
+            placeholders.dueDate = '';
+        }
+    }
+    else if (documentType === 'PAYMENT_RECEIPT') {
+        const doc = await db_1.default.companyReceipt.findFirst({
+            where: { id: documentId, companyId }
+        });
+        if (doc) {
+            placeholders.customerName = doc.payerName;
+            placeholders.customerCode = '';
+            placeholders.receiptNumber = doc.referenceNo || doc.id;
+            placeholders.invoiceDate = doc.date.toLocaleDateString();
+            placeholders.invoiceAmount = `$${doc.amount.toFixed(2)}`;
+            placeholders.dueDate = '';
+        }
+    }
+    else if (documentType === 'DEBIT_NOTE') {
+        const doc = await db_1.default.purchaseReturn.findFirst({
+            where: { id: documentId, companyId },
+            include: { purchaseOrder: { include: { vendor: true } }, items: true }
+        });
+        if (doc) {
+            const vendor = doc.purchaseOrder?.vendor;
+            placeholders.customerName = vendor?.name || 'Supplier';
+            placeholders.customerCode = vendor?.id || '';
+            placeholders.invoiceNumber = doc.returnNo;
+            placeholders.invoiceDate = doc.returnDate.toLocaleDateString();
+            const debitVal = doc.items.reduce((sum, it) => sum + (it.quantity * it.price), 0);
+            placeholders.invoiceAmount = `${vendor?.currencySymbol || '$'}${debitVal.toFixed(2)}`;
+            placeholders.dueDate = '';
+        }
+    }
+    // 4. Compile Template
+    let result = templateText;
+    for (const key in placeholders) {
+        result = result.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), placeholders[key] || '');
+    }
+    result = result.replace(/\{\{\w+\}\}/g, '');
+    return result;
 }
 //# sourceMappingURL=index.js.map

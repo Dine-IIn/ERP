@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../utils/apiService';
 import { PayrollGenerateSchema } from '../../utils/schemas';
@@ -25,13 +25,13 @@ interface PayrollProps {
   payrolls?: PayrollRecord[];
   employees?: any[];
   onGeneratePayroll?: (data: any) => Promise<void>;
-  onDisbursePayroll?: (id: string, refNo: string, notes: string) => Promise<void>;
+  onDisbursePayroll?: (id: string, payload: { referenceNo: string; notes: string }) => Promise<void>;
   currencySymbol?: string;
 }
 
 export default function Payroll({
   payrolls,
-  employees,
+  employees = [],
   onGeneratePayroll,
   onDisbursePayroll,
   currencySymbol = '$'
@@ -40,7 +40,10 @@ export default function Payroll({
 
   const { data: fetchedPayrolls } = useQuery({
     queryKey: ['hrms-payroll'],
-    queryFn: () => apiClient.get<PayrollRecord[]>('/api/hrms/payroll')
+    queryFn: async () => {
+      const res = await apiClient.get<{ payrolls: PayrollRecord[] }>('/api/hrms/payroll');
+      return (res && res.payrolls) || [];
+    }
   });
 
   const generateMutation = useMutation({
@@ -62,21 +65,93 @@ export default function Payroll({
   const [basicSalary, setBasicSalary] = useState('3000');
   const [allowances, setAllowances] = useState('200');
   const [deductions, setDeductions] = useState('100');
+  const [calcMode, setCalcMode] = useState<'FIXED' | 'HOURLY'>('FIXED');
+  const [hoursWorked, setHoursWorked] = useState('160');
+  const [hourlyRate, setHourlyRate] = useState('20');
 
   const [showDisburseModal, setShowDisburseModal] = useState(false);
   const [activePayroll, setActivePayroll] = useState<PayrollRecord | null>(null);
   const [referenceNo, setReferenceNo] = useState('');
   const [notes, setNotes] = useState('');
 
+  React.useEffect(() => {
+    const handleClose = (e: Event) => {
+      if (showDisburseModal) {
+        e.preventDefault();
+        setShowDisburseModal(false);
+      } else if (showAddModal) {
+        e.preventDefault();
+        setShowAddModal(false);
+      }
+    };
+    window.addEventListener('close-active-modal', handleClose);
+    return () => window.removeEventListener('close-active-modal', handleClose);
+  }, [showAddModal, showDisburseModal]);
+
   const [loading, setLoading] = useState(false);
   const [localErr, setLocalErr] = useState<string | null>(null);
   const [localSuccess, setLocalSuccess] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
-  const filteredPayrolls = activePayrolls.filter(payroll => {
-    const employee = payroll?.user?.username || '';
-    const status = payroll?.status || '';
-    const reference = payroll?.referenceNo || '';
+  useEffect(() => {
+    if (!userId) return;
+    const emp = employees.find(e => e.id === userId);
+    if (!emp) return;
+
+    let salaryType = 'FIXED';
+    let salaryRate = 0;
+
+    if (emp.documents) {
+      try {
+        const parsed = JSON.parse(emp.documents);
+        salaryType = parsed.salaryType || 'FIXED';
+        salaryRate = parseFloat(parsed.salaryRate) || 0;
+      } catch (err) {
+        console.error("Error parsing employee documents for payroll:", err);
+      }
+    }
+
+    apiClient.get<{ attendances: any[] }>('/api/hrms/attendance').then(res => {
+      const logs = (res && res.attendances) || [];
+      const filteredLogs = logs.filter(l => {
+        if (l.userId !== userId) return false;
+        const logDate = new Date(l.date || l.createdAt);
+        return (logDate.getMonth() + 1) === Number(month) && logDate.getFullYear() === Number(year);
+      });
+
+      const totalHours = filteredLogs.reduce((acc, curr) => acc + (parseFloat(curr.duration) || 0), 0);
+      
+      setHoursWorked(String(Math.round(totalHours * 100) / 100));
+
+      if (salaryType === 'HOURLY') {
+        setCalcMode('HOURLY');
+        setHourlyRate(String(salaryRate));
+        setBasicSalary(String(Math.round(totalHours * salaryRate * 100) / 100));
+      } else {
+        setCalcMode('FIXED');
+        setHourlyRate('0');
+        setBasicSalary(String(salaryRate));
+      }
+    }).catch(err => {
+      console.error("Failed to load attendance logs for payroll auto-calculation:", err);
+      if (salaryType === 'HOURLY') {
+        setCalcMode('HOURLY');
+        setHourlyRate(String(salaryRate));
+        setBasicSalary(String(Number(hoursWorked) * salaryRate));
+      } else {
+        setCalcMode('FIXED');
+        setHourlyRate('0');
+        setBasicSalary(String(salaryRate));
+      }
+    });
+
+  }, [userId, month, year, employees]);
+
+  const filteredPayrolls = (activePayrolls || []).filter(payroll => {
+    if (!payroll) return false;
+    const employee = payroll.user?.username || '';
+    const status = payroll.status || '';
+    const reference = payroll.referenceNo || '';
     const term = (searchTerm || '').toLowerCase();
     return employee.toLowerCase().includes(term) ||
       status.toLowerCase().includes(term) ||
@@ -133,7 +208,7 @@ export default function Payroll({
     setLoading(true);
     try {
       if (onDisbursePayroll) {
-        await onDisbursePayroll(activePayroll.id, referenceNo.trim(), notes.trim());
+        await onDisbursePayroll(activePayroll.id, { referenceNo: referenceNo.trim(), notes: notes.trim() });
       } else {
         await disburseMutation.mutateAsync({ id: activePayroll.id, refNo: referenceNo.trim(), notes: notes.trim() });
       }
@@ -227,10 +302,10 @@ export default function Payroll({
                   <tr key={payroll.id} className="hover:bg-slate-800/10 transition-colors">
                     <td className="py-4 px-5 font-bold text-slate-250">{payroll.user?.username || 'Staff'}</td>
                     <td className="py-4 px-5 font-medium text-slate-450">{getMonthName(payroll.month)} {payroll.year}</td>
-                    <td className="py-4 px-5 font-mono text-slate-300">{currencySymbol}{payroll.basicSalary.toFixed(2)}</td>
-                    <td className="py-4 px-5 font-mono text-emerald-400">+{currencySymbol}{payroll.allowances.toFixed(2)}</td>
-                    <td className="py-4 px-5 font-mono text-rose-400">-{currencySymbol}{payroll.deductions.toFixed(2)}</td>
-                    <td className="py-4 px-5 font-mono text-white font-bold">{currencySymbol}{payroll.netSalary.toFixed(2)}</td>
+                    <td className="py-4 px-5 font-mono text-slate-300">{currencySymbol}{Number(payroll.basicSalary || 0).toFixed(2)}</td>
+                    <td className="py-4 px-5 font-mono text-emerald-400">+{currencySymbol}{Number(payroll.allowances || 0).toFixed(2)}</td>
+                    <td className="py-4 px-5 font-mono text-rose-400">-{currencySymbol}{Number(payroll.deductions || 0).toFixed(2)}</td>
+                    <td className="py-4 px-5 font-mono text-white font-bold">{currencySymbol}{Number(payroll.netSalary || 0).toFixed(2)}</td>
                     <td className="py-4 px-5">
                       <span className={`px-2 py-0.5 rounded-full border text-[10px] font-bold ${payroll.status === "DISBURSED" ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-450" : "bg-amber-500/10 border-amber-500/20 text-amber-400"}`}>
                         {payroll.status}
@@ -334,15 +409,84 @@ export default function Payroll({
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
-                <div className="space-y-1">
-                  <label className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Basic Salary</label>
+              {/* Calculation Mode Toggle */}
+              <div className="space-y-1">
+                <label className="text-slate-450 text-xs font-semibold uppercase tracking-wider block">Payroll Calculation Basis</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCalcMode('FIXED');
+                      setBasicSalary('3000');
+                    }}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                      calcMode === 'FIXED'
+                        ? 'bg-indigo-600 border-indigo-500 text-white'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Fixed Salary Per Month
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCalcMode('HOURLY');
+                      setBasicSalary(String(Number(hoursWorked) * Number(hourlyRate)));
+                    }}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                      calcMode === 'HOURLY'
+                        ? 'bg-indigo-600 border-indigo-500 text-white'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Hourly Wage Rate
+                  </button>
+                </div>
+              </div>
+
+              {calcMode === 'HOURLY' ? (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Hours Worked</label>
+                    <input
+                      type="number"
+                      value={hoursWorked}
+                      onChange={(e) => {
+                        setHoursWorked(e.target.value);
+                        setBasicSalary(String(Number(e.target.value) * Number(hourlyRate)));
+                      }}
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-850 rounded-xl text-white text-xs outline-none font-mono focus:border-indigo-500 text-center"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Hourly Rate ({currencySymbol})</label>
+                    <input
+                      type="number"
+                      value={hourlyRate}
+                      onChange={(e) => {
+                        setHourlyRate(e.target.value);
+                        setBasicSalary(String(Number(hoursWorked) * Number(e.target.value)));
+                      }}
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-850 rounded-xl text-white text-xs outline-none font-mono focus:border-indigo-500 text-center"
+                      required
+                    />
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="grid grid-cols-4 gap-2">
+                <div className="space-y-1 col-span-2">
+                  <label className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">
+                    {calcMode === 'HOURLY' ? 'Computed Basic Wages' : 'Basic Salary'}
+                  </label>
                   <input
                     type="number"
                     value={basicSalary}
                     onChange={(e) => setBasicSalary(e.target.value)}
                     className="w-full px-2 py-1.5 bg-slate-950 border border-slate-850 rounded-lg text-white text-xs outline-none text-center font-mono focus:border-indigo-500"
                     required
+                    readOnly={calcMode === 'HOURLY'}
                   />
                 </div>
                 <div className="space-y-1">

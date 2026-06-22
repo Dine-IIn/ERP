@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { EmployeeSchema } from '../../utils/schemas';
-import { Users, User, Shield, Briefcase, Calendar, Lock, Plus, Trash2, Edit, Check, AlertCircle, X, Search } from 'lucide-react';
+import { Users, User, Shield, Briefcase, Calendar, Lock, Plus, Trash2, Edit, Check, AlertCircle, X, Search, Banknote } from 'lucide-react';
 
 interface EmployeeMasterProps {
   companyUsers: any[];
@@ -15,6 +15,11 @@ interface EmployeeMasterProps {
   editingAdminUserId: string | null;
   setEditingAdminUserId: React.Dispatch<React.SetStateAction<string | null>>;
   currentUser: any;
+  pendingUsers?: any[];
+  approveSelectedRole?: Record<string, string>;
+  setApproveSelectedRole?: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  handleApproveUser?: (userId: string) => Promise<void>;
+  currencySymbol?: string;
 }
 
 const EmployeeMaster = React.memo(function EmployeeMaster({
@@ -30,6 +35,11 @@ const EmployeeMaster = React.memo(function EmployeeMaster({
   editingAdminUserId,
   setEditingAdminUserId,
   currentUser,
+  pendingUsers = [],
+  approveSelectedRole = {},
+  setApproveSelectedRole = () => {},
+  handleApproveUser = async () => {},
+  currencySymbol = '$',
 }: EmployeeMasterProps) {
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [showFormModal, setShowFormModal] = useState(false);
@@ -37,12 +47,25 @@ const EmployeeMaster = React.memo(function EmployeeMaster({
   const [employeeSearch, setEmployeeSearch] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('ALL');
 
+  React.useEffect(() => {
+    const handleClose = (e: Event) => {
+      if (showFormModal) {
+        e.preventDefault();
+        setShowFormModal(false);
+      }
+    };
+    window.addEventListener('close-active-modal', handleClose);
+    return () => window.removeEventListener('close-active-modal', handleClose);
+  }, [showFormModal]);
+
   // Local state for structured identity documents
   const [docForm, setDocForm] = useState({
     aadhaarNumber: '',
     panNumber: '',
     customDocType: '',
-    customDocNumber: ''
+    customDocNumber: '',
+    salaryType: 'FIXED',
+    salaryRate: '0'
   });
 
   // Synchronize docForm into parent adminUserForm.documents reactively
@@ -89,7 +112,9 @@ const EmployeeMaster = React.memo(function EmployeeMaster({
       aadhaarNumber: '',
       panNumber: '',
       customDocType: '',
-      customDocNumber: ''
+      customDocNumber: '',
+      salaryType: 'FIXED',
+      salaryRate: '0'
     });
     setIsEditingAdminUser(false);
     setEditingAdminUserId(null);
@@ -103,6 +128,8 @@ const EmployeeMaster = React.memo(function EmployeeMaster({
     let pan = '';
     let customType = '';
     let customNo = '';
+    let salaryType = 'FIXED';
+    let salaryRate = '0';
 
     if (user.documents) {
       try {
@@ -112,6 +139,8 @@ const EmployeeMaster = React.memo(function EmployeeMaster({
         pan = parsed.panNumber || parsed.panCard || parsed.pan || '';
         customType = parsed.customDocType || '';
         customNo = parsed.customDocNumber || '';
+        salaryType = parsed.salaryType || 'FIXED';
+        salaryRate = String(parsed.salaryRate || '0');
       } catch {
         docStr = user.documents;
         customType = 'Raw Metadata';
@@ -138,7 +167,9 @@ const EmployeeMaster = React.memo(function EmployeeMaster({
       aadhaarNumber: aadhaar,
       panNumber: pan,
       customDocType: customType,
-      customDocNumber: customNo
+      customDocNumber: customNo,
+      salaryType,
+      salaryRate
     });
 
     setIsEditingAdminUser(true);
@@ -206,6 +237,47 @@ const EmployeeMaster = React.memo(function EmployeeMaster({
           <Plus className="w-3.5 h-3.5" /> Onboard New Colleague
         </button>
       </div>
+
+      {pendingUsers && pendingUsers.length > 0 && (
+        <div className="bg-indigo-600/5 border border-indigo-500/20 p-4 rounded-xl flex flex-col gap-3 select-none text-left mb-2 animate-fade-in">
+          <span className="text-[10px] font-bold text-indigo-400 tracking-wider uppercase block border-b border-indigo-500/10 pb-2 flex items-center gap-1.5 text-left">
+            Pending Signup Approvals ({pendingUsers.length})
+          </span>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-left">
+            {pendingUsers.map(pending => (
+              <div key={pending.id} className="border border-[var(--border-color)] bg-[var(--bg-secondary)] rounded-xl p-3.5 flex flex-col gap-2.5 text-left">
+                <div className="text-left">
+                  <span className="font-bold text-xs text-[var(--text-primary)] block font-display">{pending.username}</span>
+                  <span className="text-[9px] text-[var(--text-secondary)] font-mono block mt-0.5">Mobile: {pending.mobileNo}</span>
+                  {pending.email && <span className="text-[9px] text-[var(--text-muted)] lowercase block mt-0.5">Email: {pending.email}</span>}
+                </div>
+                
+                <div className="flex flex-col gap-1.5 text-left">
+                  <label className="text-[8px] font-bold text-[var(--text-secondary)] tracking-wider block text-left">Assign Access Role</label>
+                  <select
+                    value={approveSelectedRole[pending.id] || ''}
+                    onChange={e => setApproveSelectedRole(prev => ({ ...prev, [pending.id]: e.target.value }))}
+                    className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] py-1 px-2 rounded text-[10px] cursor-pointer text-[var(--text-primary)] font-semibold"
+                  >
+                    <option value="">-- Access Role --</option>
+                    {companyRoles.map(r => (
+                      <option key={r.id} value={r.id}>{r.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleApproveUser(pending.id)}
+                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-1.5 rounded text-[10px] cursor-pointer transition-colors shadow-sm border-0"
+                >
+                  Approve User Signup
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start mt-2">
         
@@ -324,6 +396,34 @@ const EmployeeMaster = React.memo(function EmployeeMaster({
                 </div>
               </div>
 
+              {/* Wage & Salary settings */}
+              <div className="bg-[var(--bg-secondary)]/50 border border-[var(--border-color)]/70 p-3 rounded-lg">
+                <span className="text-[8px] font-bold text-[var(--text-muted)] tracking-wider uppercase block mb-1.5">Wage & Payroll Particulars</span>
+                <div className="text-xs text-[var(--text-primary)] font-semibold flex items-center gap-1.5">
+                  <Banknote className="w-3.5 h-3.5 text-indigo-400" /> Salary Model: <span className="text-indigo-400 font-extrabold">
+                    {(() => {
+                      try {
+                        const parsed = JSON.parse(selectedUser.documents);
+                        return parsed.salaryType === 'HOURLY' ? 'Hourly Wages' : 'Fixed Salary';
+                      } catch {
+                        return 'Fixed Salary';
+                      }
+                    })()}
+                  </span>
+                </div>
+                <div className="text-[10px] text-[var(--text-secondary)] font-mono mt-1 pl-5">
+                  Rate Amount: {(() => {
+                    try {
+                      const parsed = JSON.parse(selectedUser.documents);
+                      const rate = parsed.salaryRate || '0';
+                      return `${currencySymbol} ${rate}${parsed.salaryType === 'HOURLY' ? ' / Hour' : ' / Month'}`;
+                    } catch {
+                      return `${currencySymbol} 0 / Month`;
+                    }
+                  })()}
+                </div>
+              </div>
+
               {/* Documents pan/adhaar */}
               <div className="bg-[var(--bg-secondary)]/50 border border-[var(--border-color)]/70 p-3 rounded-lg">
                 <span className="text-[8px] font-bold text-[var(--text-muted)] tracking-wider uppercase block mb-1.5">Authorized Identity Documents</span>
@@ -426,7 +526,7 @@ const EmployeeMaster = React.memo(function EmployeeMaster({
             </div>
 
             {localErr && (
-              <div className="p-3 mt-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-lg text-xs flex items-center gap-2">
+              <div className="p-3 mt-4 bg-rose-500/10 border border-rose-500/20 text-rose-450 rounded-lg text-xs flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{localErr}</span>
               </div>
@@ -579,6 +679,37 @@ const EmployeeMaster = React.memo(function EmployeeMaster({
                       value={adminUserForm.shiftEnd}
                       onChange={e => setAdminUserForm({ ...adminUserForm, shiftEnd: e.target.value })}
                       className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] py-1.5 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Wage & Payroll Configuration */}
+              <div className="md:col-span-2 border-t border-[var(--border-color)] pt-3 mt-1">
+                <span className="text-[9px] font-bold text-indigo-400 tracking-wider uppercase block mb-2">Wage & Payroll Configuration</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[8px] font-bold text-[var(--text-secondary)] block mb-1">Salary Model Basis</label>
+                    <select
+                      value={docForm.salaryType}
+                      onChange={e => setDocForm({ ...docForm, salaryType: e.target.value })}
+                      className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-1.5 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none cursor-pointer"
+                    >
+                      <option value="FIXED">FIXED (Monthly Flat Salary)</option>
+                      <option value="HOURLY">HOURLY (Wages based on attendance hours)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[8px] font-bold text-[var(--text-secondary)] block mb-1">
+                      {docForm.salaryType === 'HOURLY' ? `Hourly Wage Rate (${currencySymbol})` : `Fixed Salary Per Month (${currencySymbol})`}
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={docForm.salaryRate}
+                      onChange={e => setDocForm({ ...docForm, salaryRate: e.target.value })}
+                      className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] py-1.5 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none font-mono"
+                      placeholder="e.g. 5000"
                     />
                   </div>
                 </div>

@@ -63,6 +63,20 @@ export default function PurchaseOrders({
   const [isEditing, setIsEditing] = useState(false);
   const [editOrderId, setEditOrderId] = useState<string | null>(null);
   const [selectedDetailOrder, setSelectedDetailOrder] = useState<PurchaseOrder | null>(null);
+
+  React.useEffect(() => {
+    const handleClose = (e: Event) => {
+      if (selectedDetailOrder) {
+        e.preventDefault();
+        setSelectedDetailOrder(null);
+      } else if (showModal) {
+        e.preventDefault();
+        setShowModal(false);
+      }
+    };
+    window.addEventListener('close-active-modal', handleClose);
+    return () => window.removeEventListener('close-active-modal', handleClose);
+  }, [showModal, selectedDetailOrder]);
   const [whatsappShareData, setWhatsappShareData] = useState<any>(null);
   const [emailShareData, setEmailShareData] = useState<any>(null);
   const [pdfGeneratingOrder, setPdfGeneratingOrder] = useState<any>(null);

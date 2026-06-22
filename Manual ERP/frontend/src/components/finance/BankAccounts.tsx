@@ -34,6 +34,18 @@ export default function BankAccounts() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [bankName, setBankName] = useState('');
   const [accountNo, setAccountNo] = useState('');
+
+  React.useEffect(() => {
+    const handleClose = (e: Event) => {
+      if (showAddModal) {
+        e.preventDefault();
+        setShowAddModal(false);
+      }
+    };
+    window.addEventListener('close-active-modal', handleClose);
+    return () => window.removeEventListener('close-active-modal', handleClose);
+  }, [showAddModal]);
+
   const [branchName, setBranchName] = useState('');
   const [ifscCode, setIfscCode] = useState('');
   const [accountType, setAccountType] = useState('CURRENT');

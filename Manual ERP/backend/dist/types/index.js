@@ -458,6 +458,7 @@ exports.CreateVendorBodySchema = zod_1.z.object({
     paymentTerms: zod_1.z.string().optional().nullable(),
     gstDetails: zod_1.z.string().optional().nullable(),
     creditTime: zod_1.z.any().optional(),
+    creditLimit: zod_1.z.any().optional(),
     bankName: zod_1.z.string().optional().nullable(),
     accountHolderName: zod_1.z.string().optional().nullable(),
     accountNumber: zod_1.z.string().optional().nullable(),
@@ -543,6 +544,7 @@ exports.UpdateVendorBodySchema = zod_1.z.object({
     paymentTerms: zod_1.z.string().optional().nullable(),
     gstDetails: zod_1.z.string().optional().nullable(),
     creditTime: zod_1.z.any().optional(),
+    creditLimit: zod_1.z.any().optional(),
     bankName: zod_1.z.string().optional().nullable(),
     accountHolderName: zod_1.z.string().optional().nullable(),
     accountNumber: zod_1.z.string().optional().nullable(),
@@ -558,10 +560,14 @@ exports.UpdateWorkOrderBodySchema = zod_1.z.any();
 exports.CreateWhatsappTemplateSchema = zod_1.z.object({
     documentType: zod_1.z.string(),
     template: zod_1.z.string().min(1, "Template body cannot be empty"),
+    emailTemplate: zod_1.z.string().optional().nullable(),
+    useSameForEmail: zod_1.z.boolean().optional(),
     isActive: zod_1.z.boolean().optional()
 });
 exports.UpdateWhatsappTemplateSchema = zod_1.z.object({
     template: zod_1.z.string().min(1, "Template body cannot be empty"),
+    emailTemplate: zod_1.z.string().optional().nullable(),
+    useSameForEmail: zod_1.z.boolean().optional(),
     isActive: zod_1.z.boolean().optional()
 });
 exports.SendWhatsappMessageSchema = zod_1.z.object({

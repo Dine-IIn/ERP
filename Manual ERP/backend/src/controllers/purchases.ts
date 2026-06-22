@@ -169,20 +169,44 @@ export async function updateVendorQuotationStatus(req: AuthenticatedRequest, res
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
-    
-    const parsedBody = UpdateVendorQuotationStatusBodySchema.safeParse(req.body);
-    if (!parsedBody.success) return res.status(400).json({ error: "Bad Request", details: parsedBody.error });
-    const {  status  } = parsedBody.data;
-
-
     const quote = await prisma.vendorQuotation.findFirst({ where: { id, companyId } });
     if (!quote) return res.status(404).json({ error: "Vendor Quotation not found" });
-    const updated = await prisma.vendorQuotation.update({
-      where: { id },
-      data: { status }
+
+    const { vendorId, quoteNo, date, validUntil, subtotal, tax, total, status, items } = req.body;
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const q = await tx.vendorQuotation.update({
+        where: { id },
+        data: {
+          ...(vendorId && { vendorId }),
+          ...(quoteNo && { quoteNo }),
+          ...(date && { date: new Date(date) }),
+          ...(validUntil !== undefined && { validUntil: validUntil ? new Date(validUntil) : null }),
+          ...(subtotal !== undefined && { subtotal: parseFloat(subtotal) || 0.0 }),
+          ...(tax !== undefined && { tax: parseFloat(tax) || 0.0 }),
+          ...(total !== undefined && { total: parseFloat(total) || 0.0 }),
+          ...(status && { status })
+        }
+      });
+
+      if (items && Array.isArray(items)) {
+        await tx.vendorQuotationItem.deleteMany({ where: { quoteId: id } });
+        if (items.length > 0) {
+          await tx.vendorQuotationItem.createMany({
+            data: items.map((it: any) => ({
+              quoteId: id,
+              productId: it.productId,
+              quantity: parseFloat(it.quantity) || 1.0,
+              price: parseFloat(it.price) || 0.0
+            }))
+          });
+        }
+      }
+
+      return q;
     });
 
-    return res.json({ message: "Vendor Quotation status updated", quotation: updated });
+    return res.json({ message: "Vendor Quotation updated successfully", quotation: updated });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }

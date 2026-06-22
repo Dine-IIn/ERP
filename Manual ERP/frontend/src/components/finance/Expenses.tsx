@@ -15,7 +15,7 @@ interface Expense {
   createdAt: string;
 }
 
-export default function Expenses() {
+export default function Expenses({ currencySymbol = '$' }: { currencySymbol?: string }) {
   const queryClient = useQueryClient();
 
   const { data: expenses = [] } = useQuery({
@@ -34,6 +34,17 @@ export default function Expenses() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
+
+  React.useEffect(() => {
+    const handleClose = (e: Event) => {
+      if (showAddModal) {
+        e.preventDefault();
+        setShowAddModal(false);
+      }
+    };
+    window.addEventListener('close-active-modal', handleClose);
+    return () => window.removeEventListener('close-active-modal', handleClose);
+  }, [showAddModal]);
   const [category, setCategory] = useState('OFFICE');
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [syncToCashbook, setSyncToCashbook] = useState(true);
@@ -99,7 +110,6 @@ export default function Expenses() {
   });
 
   // Calculate stats
-  const currencySymbol = '$';
   const totalExpenseSum = filteredExpenses.reduce((sum, e) => sum + e.amount, 0.0);
 
   const getCategoryColor = (cat: string) => {

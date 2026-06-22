@@ -125,8 +125,8 @@ const corsOptions = {
 };
 // Enable CORS and JSON parsing middleware
 app.use((0, cors_1.default)(corsOptions));
-app.use(express_1.default.json({ limit: '10mb' }));
-app.use(express_1.default.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express_1.default.json({ limit: '50mb' }));
+app.use(express_1.default.urlencoded({ extended: true, limit: '50mb' }));
 // Set up rate limiter for authentication routes
 const authLimiter = (0, express_rate_limit_1.default)({
     windowMs: 15 * 60 * 1000,

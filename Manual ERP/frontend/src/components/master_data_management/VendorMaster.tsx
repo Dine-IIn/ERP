@@ -21,6 +21,17 @@ export default function VendorMaster({
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
+  React.useEffect(() => {
+    const handleClose = (e: Event) => {
+      if (showModal) {
+        e.preventDefault();
+        setShowModal(false);
+      }
+    };
+    window.addEventListener('close-active-modal', handleClose);
+    return () => window.removeEventListener('close-active-modal', handleClose);
+  }, [showModal]);
+
   const [form, setForm] = useState({
     name: '',
     isVendor: true, // true = Vendor, false = Supplier
@@ -31,7 +42,9 @@ export default function VendorMaster({
     gstNumber: '',
     panNumber: '',
     currencySymbol: '$',
-    currencyId: 'USD'
+    currencyId: 'USD',
+    creditTime: '0',
+    creditLimit: '0'
   });
 
   const [bankDetailsForm, setBankDetailsForm] = useState({
@@ -56,7 +69,9 @@ export default function VendorMaster({
       gstNumber: '',
       panNumber: '',
       currencySymbol: '$',
-      currencyId: 'USD'
+      currencyId: 'USD',
+      creditTime: '0',
+      creditLimit: '0'
     });
     setBankDetailsForm({
       bankName: '',
@@ -82,7 +97,9 @@ export default function VendorMaster({
       gstNumber: vend.gstNumber || vend.gstDetails || '',
       panNumber: vend.panNumber || '',
       currencySymbol: vend.currencySymbol || '$',
-      currencyId: vend.currencyId || 'USD'
+      currencyId: vend.currencyId || 'USD',
+      creditTime: String(vend.creditTime || 0),
+      creditLimit: String(vend.creditLimit || 0)
     });
 
     let parsedBank = { bankName: '', accountHolder: '', accountNumber: '', ifscCode: '' };
@@ -137,7 +154,8 @@ export default function VendorMaster({
         accountNumber: bankDetailsForm.accountNumber,
         ifscCode: bankDetailsForm.ifscCode
       }),
-      creditTime: 0,
+      creditTime: parseInt(form.creditTime) || 0,
+      creditLimit: parseFloat(form.creditLimit) || 0.0,
       bankName: bankDetailsForm.bankName,
       accountHolderName: bankDetailsForm.accountHolder,
       accountNumber: bankDetailsForm.accountNumber,
@@ -251,7 +269,7 @@ export default function VendorMaster({
               <th className="p-3 text-[10px] uppercase tracking-wider">Vendor/Supplier Name</th>
               <th className="p-3 text-[10px] uppercase tracking-wider">Classification type</th>
               <th className="p-3 text-[10px] uppercase tracking-wider">Contact Info</th>
-              <th className="p-3 text-[10px] uppercase tracking-wider">GSTIN / Payment terms</th>
+              <th className="p-3 text-[10px] uppercase tracking-wider">GSTIN & Credit Settings</th>
               <th className="p-3 text-[10px] uppercase tracking-wider text-right">Actions</th>
             </tr>
           </thead>
@@ -292,8 +310,9 @@ export default function VendorMaster({
                       PAN: {v.panNumber}
                     </span>
                   )}
-                  <span className="text-[10px] text-[var(--text-secondary)] block mt-0.5 font-mono uppercase">
-                    Terms: {v.paymentTerms ? v.paymentTerms.replace('_', ' ') : 'IMMEDIATE'} | Currency: {v.currencyId || 'USD'} ({v.currencySymbol || '$'})
+
+                  <span className="text-[10px] text-[var(--text-secondary)] flex items-center gap-1 mt-0.5 font-mono">
+                    Limit: <span className="text-indigo-400 font-bold">{v.currencySymbol || '$'}</span> {v.creditLimit ? v.creditLimit.toLocaleString() : '0.00'} | Cycle: {v.creditTime || 0} Days | Currency: {v.currencyId || 'USD'}
                   </span>
                 </td>
                 <td className="p-3 text-right">
@@ -419,45 +438,6 @@ export default function VendorMaster({
                 />
               </div>
 
-              {/* GSTIN Details */}
-              <div>
-                <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">GSTIN Number (GST Details)</label>
-                <input
-                  type="text"
-                  value={form.gstNumber}
-                  onChange={e => setForm({ ...form, gstNumber: e.target.value })}
-                  className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none font-mono uppercase"
-                  placeholder="e.g. 24AAAAA1111A1Z1"
-                />
-              </div>
-
-              {/* PAN Number */}
-              <div>
-                <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">PAN Number (Optional)</label>
-                <input
-                  type="text"
-                  value={form.panNumber}
-                  onChange={e => setForm({ ...form, panNumber: e.target.value })}
-                  className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none font-mono uppercase"
-                  placeholder="e.g. ABCDE1234F"
-                />
-              </div>
-
-              {/* Payment Terms Select */}
-              <div>
-                <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Agreed Payment Terms</label>
-                <select
-                  value={form.paymentTerms}
-                  onChange={e => setForm({ ...form, paymentTerms: e.target.value })}
-                  className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none cursor-pointer"
-                >
-                  <option value="IMMEDIATE">IMMEDIATE (Due on Receipt)</option>
-                  <option value="NET_15">NET 15 (Due within 15 days)</option>
-                  <option value="NET_30">NET 30 (Due within 30 days)</option>
-                  <option value="NET_60">NET 60 (Due within 60 days)</option>
-                </select>
-              </div>
-
               {/* Preferred Currency Select */}
               <div>
                 <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block mb-1">Preferred Currency</label>
@@ -521,6 +501,60 @@ export default function VendorMaster({
                       onChange={e => setBankDetailsForm({ ...bankDetailsForm, ifscCode: e.target.value })}
                       className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] py-1.5 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none font-mono uppercase"
                       placeholder="e.g. HDFC000XXXX"
+                    />
+                  </div>
+                </div>
+              </div>
+              {/* Credit Margin Settings */}
+              <div className="md:col-span-2 border-t border-[var(--border-color)] pt-3 mt-1">
+                <span className="text-[9px] font-bold text-indigo-400 tracking-wider uppercase block mb-2">Credit Margin Settings</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[8px] font-bold text-[var(--text-secondary)] block mb-1">Credit Limit Amount ({form.currencySymbol || '$'})</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={form.creditLimit}
+                      onChange={e => setForm({ ...form, creditLimit: e.target.value })}
+                      className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] py-1.5 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[8px] font-bold text-[var(--text-secondary)] block mb-1">Max Credit Days (Credit Time)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={form.creditTime}
+                      onChange={e => setForm({ ...form, creditTime: e.target.value })}
+                      className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] py-1.5 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+              {/* Tax Details section */}
+              <div className="md:col-span-2 border-t border-[var(--border-color)] pt-3 flex flex-col gap-3">
+                <span className="text-[9px] font-bold text-indigo-400 tracking-wider uppercase block mb-0.5 flex items-center gap-1">
+                  Tax Details (Optional)
+                </span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[8px] font-bold text-[var(--text-secondary)] block mb-1 uppercase">GSTIN / Tax Number</label>
+                    <input
+                      type="text"
+                      value={form.gstNumber}
+                      onChange={e => setForm({ ...form, gstNumber: e.target.value })}
+                      className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] py-1.5 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none font-mono uppercase"
+                      placeholder="e.g. 24AAAAA1111A1Z1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[8px] font-bold text-[var(--text-secondary)] block mb-1 uppercase">PAN Number</label>
+                    <input
+                      type="text"
+                      value={form.panNumber}
+                      onChange={e => setForm({ ...form, panNumber: e.target.value })}
+                      className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] py-1.5 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none font-mono uppercase"
+                      placeholder="e.g. ABCDE1234F"
                     />
                   </div>
                 </div>

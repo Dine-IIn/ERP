@@ -28,7 +28,8 @@ export const getActiveFetch = (): typeof fetch => {
   // Toggle this flag to test standard browser fetch vs Tauri native http plugin fetch:
   // - Set useBypass to true: returns window.fetch to bypass tauri-plugin-http permissions scope validation (works on localhost port 5173).
   // - Set useBypass to false: returns tauriFetch to execute calls through Tauri's native Rust client (required for production WebView mixed content bypass).
-  const useBypass = false; 
+  const useBypass = typeof window !== 'undefined' && 
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'); 
 
   if (isTauriClient() && !useBypass) {
     return tauriFetch;

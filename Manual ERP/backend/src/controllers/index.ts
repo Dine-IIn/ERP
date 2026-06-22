@@ -36,7 +36,7 @@ export const HIERARCHICAL_FEATURES = [
   { key: "ADMIN_BACKUP", name: "Snapshots Backup & Restores", description: "Schedule and execute local tenant backups" },
   { key: "ADMIN_USERS", name: "Employee Users & Approvals", description: "Approve signups and manage employee profiles" },
   { key: "ADMIN_DEPARTMENTS", name: "Corporate Departments Settings", description: "Map structures and delegate managers" },
-  { key: "ADMIN_WHATSAPP", name: "WhatsApp Integration", description: "Configure WhatsApp templates and sync linked devices" },
+  { key: "ADMIN_WHATSAPP", name: "Document Sharing Settings", description: "Configure document dispatch templates and sync linked devices" },
 
   { key: "MASTER_DATA", name: "MASTER DATA HUB", description: "Manage Employees, Customers, Vendors, Products, and Taxes profiles" },
   { key: "MASTER_EMPLOYEE", name: "Employee Master", description: "Manage hierarchies, timing shifts, and secure documents" },
@@ -112,8 +112,8 @@ export const HIERARCHICAL_FEATURES = [
 
   // COMMUNICATION & WHATSAPP FEATURES
   { key: "COMMUNICATION", name: "COMMUNICATION FEATURES", description: "WhatsApp & Email Channels" },
-  { key: "WHATSAPP_SHARE_LINK", name: "WhatsApp Share Link", description: "Open prefilled WhatsApp message link" },
-  { key: "WHATSAPP_LINKED_DEVICE", name: "WhatsApp Linked Device", description: "Send automated messages and attachments using Baileys QR sync" }
+  { key: "WHATSAPP_SHARE_LINK", name: "Document Sharing Integration", description: "Open prefilled message link or trigger generic sharing systems" },
+  { key: "WHATSAPP_LINKED_DEVICE", name: "Automated Dispatch Integration", description: "Send automated messages and attachments using linked device QR sync" }
 ];
 
 // Global reference to the WebSockets emitter

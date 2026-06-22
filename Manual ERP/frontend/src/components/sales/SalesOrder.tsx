@@ -51,6 +51,17 @@ export default function SalesOrder({
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
+  React.useEffect(() => {
+    const handleClose = (e: Event) => {
+      if (showModal) {
+        e.preventDefault();
+        setShowModal(false);
+      }
+    };
+    window.addEventListener('close-active-modal', handleClose);
+    return () => window.removeEventListener('close-active-modal', handleClose);
+  }, [showModal]);
+
   const [customerId, setCustomerId] = useState('');
 
   const getCurrencyCodeFromSymbol = (symbol: string): string => {

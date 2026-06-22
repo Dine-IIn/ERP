@@ -4,6 +4,8 @@ import prisma from '../services/db';
 import whatsappService from '../services/whatsapp';
 import { generateInvoicePdf } from '../utils/pdf';
 import { logAudit } from '../utils/audit';
+import fs from 'fs';
+import path from 'path';
 import {
   CreateWhatsappTemplateSchema,
   UpdateWhatsappTemplateSchema,
@@ -127,6 +129,26 @@ export async function sendWhatsappMessage(req: AuthenticatedRequest, res: Respon
       pdfBase64,
       pdfFilename
     } = parsed.data;
+
+    try {
+      fs.writeFileSync(
+        path.join(process.cwd(), 'whatsapp_request_debug.txt'),
+        JSON.stringify({
+          timestamp: new Date().toISOString(),
+          documentType,
+          documentId,
+          recipientPhone,
+          mode,
+          pdfFilename,
+          hasPdfBase64: !!pdfBase64,
+          pdfBase64Length: pdfBase64?.length || 0,
+          pdfBase64Snippet: pdfBase64 ? pdfBase64.substring(0, 100) : null
+        }, null, 2),
+        'utf-8'
+      );
+    } catch (writeErr) {
+      console.error('Failed to write whatsapp request debug file:', writeErr);
+    }
 
     // Rate Limiting Check (Database Fallback)
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
@@ -312,29 +334,36 @@ export async function sendWhatsappMessage(req: AuthenticatedRequest, res: Respon
 
     // Mode 2: Send Automatically via back-end Baileys session
     const attachment = pdfBuffer ? { filename, content: pdfBuffer } : undefined;
-    whatsappService.sendMessage(companyId, targetPhone, message, attachment)
-      .then(async () => {
-        await prisma.whatsappMessageLog.create({
-          data: {
-            ...logData,
-            status: 'SENT',
-            sentAt: new Date()
-          }
-        });
-      })
-      .catch(async (sendErr: any) => {
-        console.error(`WhatsApp automated transmission failed for company ${companyId} to ${targetPhone}:`, sendErr);
-        await prisma.whatsappMessageLog.create({
-          data: {
-            ...logData,
-            status: 'FAILED',
-            error: sendErr.message || 'WhatsApp transmission failed.'
-          }
-        });
-      });
+    
+    console.log(`[WhatsApp Send] Sending message. documentType=${documentType}, targetPhone=${targetPhone}, hasAttachment=${!!attachment}, filename=${filename}, pdfBufferLength=${pdfBuffer ? pdfBuffer.length : 0}`);
 
-    return res.json({ success: true, message: 'WhatsApp message dispatch initiated automatically in background.' });
+    try {
+      await whatsappService.sendMessage(companyId, targetPhone, message, attachment);
+      
+      await prisma.whatsappMessageLog.create({
+        data: {
+          ...logData,
+          status: 'SENT',
+          sentAt: new Date()
+        }
+      });
+      
+      return res.json({ success: true, message: 'WhatsApp message sent successfully with PDF attachment!' });
+    } catch (sendErr: any) {
+      console.error(`WhatsApp automated transmission failed for company ${companyId} to ${targetPhone}:`, sendErr);
+      
+      await prisma.whatsappMessageLog.create({
+        data: {
+          ...logData,
+          status: 'FAILED',
+          error: sendErr.message || 'WhatsApp transmission failed.'
+        }
+      });
+      
+      return res.status(500).json({ error: sendErr.message || 'WhatsApp transmission failed.' });
+    }
   } catch (error: any) {
+    console.error(`WhatsApp send controller error:`, error);
     return res.status(500).json({ error: error.message });
   }
 }

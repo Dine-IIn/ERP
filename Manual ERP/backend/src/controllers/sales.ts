@@ -1913,20 +1913,45 @@ export async function updateQuotationStatus(req: AuthenticatedRequest, res: Resp
     if (!companyId) return res.status(401).json({ error: "Unauthorized" });
 
     const { id } = req.params;
-    
-    const parsedBody = UpdateQuotationStatusBodySchema.safeParse(req.body);
-    if (!parsedBody.success) return res.status(400).json({ error: "Bad Request", details: parsedBody.error });
-    const {  status  } = parsedBody.data;
-
-
     const quote = await prisma.quotation.findFirst({ where: { id, companyId } });
     if (!quote) return res.status(404).json({ error: "Quotation not found" });
-    const quotation = await prisma.quotation.update({
-      where: { id },
-      data: { status }
+
+    const { customerId, date, expiryDate, subtotal, discount, tax, total, status, items } = req.body;
+
+    const quotation = await prisma.$transaction(async (tx) => {
+      const updated = await tx.quotation.update({
+        where: { id },
+        data: {
+          ...(customerId && { customerId }),
+          ...(date && { date: new Date(date) }),
+          ...(expiryDate !== undefined && { expiryDate: expiryDate ? new Date(expiryDate) : null }),
+          ...(subtotal !== undefined && { subtotal: parseFloat(subtotal) || 0.0 }),
+          ...(discount !== undefined && { discount: parseFloat(discount) || 0.0 }),
+          ...(tax !== undefined && { tax: parseFloat(tax) || 0.0 }),
+          ...(total !== undefined && { total: parseFloat(total) || 0.0 }),
+          ...(status && { status })
+        }
+      });
+
+      if (items && Array.isArray(items)) {
+        await tx.quotationItem.deleteMany({ where: { quoteId: id } });
+        if (items.length > 0) {
+          await tx.quotationItem.createMany({
+            data: items.map((it: any) => ({
+              quoteId: id,
+              productId: it.productId,
+              quantity: parseFloat(it.quantity) || 1.0,
+              price: parseFloat(it.price) || 0.0,
+              discount: parseFloat(it.discount) || 0.0
+            }))
+          });
+        }
+      }
+
+      return updated;
     });
 
-    return res.json({ message: "Quotation status updated", quotation });
+    return res.json({ message: "Quotation updated successfully", quotation });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }

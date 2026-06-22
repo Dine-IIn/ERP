@@ -34,6 +34,7 @@ interface QuotationsProps {
   products: any[];
   onCreateQuotation: (quote: any) => Promise<void>;
   onUpdateQuotationStatus: (id: string, payload: { status: string }) => Promise<void>;
+  onUpdateQuotation?: (id: string, payload: any) => Promise<void>;
   onDeleteQuotation: (id: string) => Promise<void>;
   currencySymbol?: string;
   exchangeRates?: Record<string, number>;
@@ -53,14 +54,31 @@ export default function Quotations({
   products,
   onCreateQuotation,
   onUpdateQuotationStatus,
+  onUpdateQuotation,
   onDeleteQuotation,
   currencySymbol: currencySymbolProp = '$',
   exchangeRates = {},
   companyCurrencyId = 'USD'
 }: QuotationsProps) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
+
+  React.useEffect(() => {
+    const handleClose = (e: Event) => {
+      if (showPreviewModal) {
+        e.preventDefault();
+        setShowPreviewModal(false);
+      } else if (showAddModal) {
+        e.preventDefault();
+        setShowAddModal(false);
+      }
+    };
+    window.addEventListener('close-active-modal', handleClose);
+    return () => window.removeEventListener('close-active-modal', handleClose);
+  }, [showAddModal, showPreviewModal]);
   const [previewQuote, setPreviewQuote] = useState<Quotation | null>(null);
   const [whatsappShareData, setWhatsappShareData] = useState<any>(null);
   const [emailShareData, setEmailShareData] = useState<any>(null);
@@ -99,6 +117,8 @@ export default function Quotations({
   const [loading, setLoading] = useState(false);
 
   const openAddModal = () => {
+    setIsEditing(false);
+    setEditingId(null);
     const defaultCustId = customers[0]?.id || '';
     setCustomerId(defaultCustId);
     setDate(new Date().toISOString().substring(0, 10));
@@ -113,6 +133,26 @@ export default function Quotations({
     const converted = convertAmount(basePrice, companyCurrencyId, targetCurrency);
 
     setItems([{ productId: products[0]?.id || '', quantity: '1', price: String(Number(converted.toFixed(2))), discount: '0.00' }]);
+    setLocalErr(null);
+    setLocalSuccess(null);
+    setShowAddModal(true);
+  };
+
+  const openEditModal = (q: Quotation) => {
+    setIsEditing(true);
+    setEditingId(q.id);
+    setCustomerId(q.customerId);
+    setDate(q.date ? q.date.substring(0, 10) : '');
+    setExpiryDate(q.expiryDate ? q.expiryDate.substring(0, 10) : '');
+    setDiscountPercent(String(q.discount));
+    setTaxPercent(String(q.tax));
+    setStatus(q.status);
+    setItems(q.items.map(it => ({
+      productId: it.productId,
+      quantity: String(it.quantity),
+      price: String(it.price),
+      discount: String(it.discount)
+    })));
     setLocalErr(null);
     setLocalSuccess(null);
     setShowAddModal(true);
@@ -192,8 +232,17 @@ export default function Quotations({
     };
 
     try {
-      await onCreateQuotation(payload);
-      setLocalSuccess("Legal Price Quotation compiled and saved!");
+      if (isEditing && editingId) {
+        if (onUpdateQuotation) {
+          await onUpdateQuotation(editingId, payload);
+          setLocalSuccess("Quotation specifications updated successfully!");
+        } else {
+          throw new Error("Update quotation handler is not implemented.");
+        }
+      } else {
+        await onCreateQuotation(payload);
+        setLocalSuccess("Legal Price Quotation compiled and saved!");
+      }
       setTimeout(() => {
         setShowAddModal(false);
       }, 1000);
@@ -430,6 +479,13 @@ export default function Quotations({
                           );
                         })()}
                         <button
+                          onClick={() => openEditModal(q)}
+                          className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-blue-450 transition-colors rounded-lg inline-flex items-center justify-center"
+                          title="Modify Quotation Details"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
                           onClick={() => handleDelete(q.id, q.quoteNo)}
                           className="p-1.5 hover:bg-slate-855 text-slate-550 hover:text-red-450 transition-colors rounded-lg"
                           title="Permanently remove"
@@ -452,7 +508,7 @@ export default function Quotations({
           <div className="w-full max-w-4xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden transform transition-all max-h-[90vh] flex flex-col">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-slate-800 bg-slate-950/20">
-              <h3 className="text-lg font-bold text-white">Create Price Quotation Sheet</h3>
+              <h3 className="text-lg font-bold text-white">{isEditing ? 'Modify Price Quotation Sheet' : 'Create Price Quotation Sheet'}</h3>
               <button
                 onClick={() => setShowAddModal(false)}
                 className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-all"
@@ -684,9 +740,9 @@ export default function Quotations({
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-5 py-2 bg-blue-550 hover:bg-blue-600 disabled:opacity-50 text-white transition-all text-sm font-bold rounded-xl shadow-lg shadow-blue-500/20"
+                  className="px-5 py-2.5 bg-blue-550 hover:bg-blue-600 disabled:opacity-50 text-white font-bold rounded-xl shadow-lg transition-all"
                 >
-                  {loading ? 'Processing...' : 'Generate price sheet'}
+                  {loading ? 'Processing...' : isEditing ? 'Save price changes' : 'Generate price sheet'}
                 </button>
               </div>
             </form>

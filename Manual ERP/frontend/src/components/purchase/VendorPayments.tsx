@@ -37,6 +37,17 @@ export default function VendorPayments({
   const [whatsappShareData, setWhatsappShareData] = useState<any>(null);
   const [emailShareData, setEmailShareData] = useState<any>(null);
 
+  React.useEffect(() => {
+    const handleClose = (e: Event) => {
+      if (showModal) {
+        e.preventDefault();
+        setShowModal(false);
+      }
+    };
+    window.addEventListener('close-active-modal', handleClose);
+    return () => window.removeEventListener('close-active-modal', handleClose);
+  }, [showModal]);
+
   const [vendorId, setVendorId] = useState('');
   const [paymentNo, setPaymentNo] = useState('');
   const [paymentDate, setPaymentDate] = useState('');
@@ -174,38 +185,47 @@ export default function VendorPayments({
               <p className="text-slate-400 font-medium">No vendor payments recorded</p>
             </div>
           ) : (
-            <table className="w-full text-left text-sm">
+            <table className="w-full text-left text-sm table-fixed">
+              <colgroup>
+                <col className="w-[15%]" />
+                <col className="w-[18%]" />
+                <col className="w-[11%]" />
+                <col className="w-[12%]" />
+                <col className="w-[15%]" />
+                <col className="w-[13%]" />
+                <col className="w-[16%]" />
+              </colgroup>
               <thead>
                 <tr className="border-b border-slate-800 text-slate-400 font-medium uppercase tracking-wider text-xs bg-slate-950/40">
-                  <th className="py-4 px-6">Payment Voucher No</th>
-                  <th className="py-4 px-6">Vendor Supplier</th>
-                  <th className="py-4 px-6">Payment Date</th>
-                  <th className="py-4 px-6">Payout Amount</th>
-                  <th className="py-4 px-6">Transfer Mode</th>
-                  <th className="py-4 px-6">Bank References</th>
-                  <th className="py-4 px-6 text-right">Actions</th>
+                  <th className="py-4 px-4">Payment Voucher No</th>
+                  <th className="py-4 px-4">Vendor Supplier</th>
+                  <th className="py-4 px-4">Payment Date</th>
+                  <th className="py-4 px-4">Payout Amount</th>
+                  <th className="py-4 px-4">Transfer Mode</th>
+                  <th className="py-4 px-4">Bank References</th>
+                  <th className="py-4 px-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
                 {filteredPayments.map((p) => (
                   <tr key={p.id} className="hover:bg-slate-800/20 transition-colors">
-                    <td className="py-4 px-6 font-bold text-white font-mono">{p.paymentNo}</td>
-                    <td className="py-4 px-6 font-semibold text-slate-200">{p.vendor.name}</td>
-                    <td className="py-4 px-6 font-mono text-slate-350">{new Date(p.paymentDate).toLocaleDateString()}</td>
-                    <td className="py-4 px-6 font-mono text-emerald-400 text-base font-bold">
+                    <td className="py-4 px-4 font-bold text-white font-mono">{p.paymentNo}</td>
+                    <td className="py-4 px-4 font-semibold text-slate-200">{p.vendor.name}</td>
+                    <td className="py-4 px-4 font-mono text-slate-350">{new Date(p.paymentDate).toLocaleDateString()}</td>
+                    <td className="py-4 px-4 font-mono text-emerald-400 text-base font-bold">
                       {currencySymbol}{p.amount.toLocaleString()}
                     </td>
-                    <td className="py-4 px-6">
+                    <td className="py-4 px-4">
                       <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${getMethodStyle(p.paymentMethod)}`}>
                         {p.paymentMethod.replace('_', ' ')}
                       </span>
                     </td>
-                    <td className="py-4 px-6 font-mono text-xs text-slate-400 space-y-0.5">
+                    <td className="py-4 px-4 font-mono text-xs text-slate-400 space-y-0.5">
                       {p.referenceNo && <div>Ref: {p.referenceNo}</div>}
                       {p.bankDetails && <div className="text-slate-550 line-clamp-1">{p.bankDetails}</div>}
                       {!p.referenceNo && !p.bankDetails && <span className="text-slate-650 italic">None</span>}
                     </td>
-                    <td className="py-4 px-6 text-right space-x-2">
+                    <td className="py-4 px-4 text-right space-x-2">
                       <button
                         type="button"
                         onClick={() => {

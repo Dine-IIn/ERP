@@ -11,7 +11,6 @@ const AuditLogs = React.lazy(() => import('./components/administration/AuditLogs
 const SnapshotBackups = React.lazy(() => import('./components/administration/SnapshotBackups'));
 const WhatsappSettings = React.lazy(() => import('./components/administration/WhatsappSettings'));
 const WhatsappDeviceSync = React.lazy(() => import('./components/administration/WhatsappDeviceSync'));
-const EmployeeRegistry = React.lazy(() => import('./components/administration/EmployeeRegistry'));
 const CorporateDepartments = React.lazy(() => import('./components/administration/CorporateDepartments'));
 const CentralServices = React.lazy(() => import('./components/administration/CentralServices'));
 const EmployeeMaster = React.lazy(() => import('./components/master_data_management/EmployeeMaster'));
@@ -734,16 +733,16 @@ export default function App() {
 
   // Expandable Category Sidebar States
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
-    crm: true,
-    hr: true,
-    finance: true,
-    master_data: true,
-    sales_data: true,
-    admin: true,
-    alerts: true,
-    hrms_data: true,
-    finance_data: true,
-    reports_data: true
+    crm: false,
+    hr: false,
+    finance: false,
+    master_data: false,
+    sales_data: false,
+    admin: false,
+    alerts: false,
+    hrms_data: false,
+    finance_data: false,
+    reports_data: false
   });
 
   // Profile modal and dropdown toggles
@@ -1272,19 +1271,33 @@ export default function App() {
     };
   }, []);
 
-  // --- GLOBAL KEYBOARD HOOK (ESC -> DASHBOARD) ---
+  // --- GLOBAL KEYBOARD HOOK (ESC -> CLOSE FORM OR MODAL OR BACK TO DASHBOARD) ---
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setActiveWorkspaceModule('dashboard');
-        setActiveWorkspaceSubModule('');
+        const hasOpenModal = Array.from(document.querySelectorAll('.fixed.inset-0')).some(el => {
+          const zIndex = window.getComputedStyle(el).zIndex;
+          const parsed = parseInt(zIndex, 10);
+          return !isNaN(parsed) && parsed >= 50;
+        });
+
+        if (hasOpenModal) {
+          const event = new CustomEvent('close-active-modal', { cancelable: true });
+          window.dispatchEvent(event);
+          return;
+        }
+
+        if (activeWorkspaceSubModule || activeWorkspaceModule !== 'dashboard') {
+          setActiveWorkspaceSubModule('');
+          setActiveWorkspaceModule('dashboard');
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, []);
+  }, [activeWorkspaceModule, activeWorkspaceSubModule]);
 
   // Client-side inactivity timer for desktop sessions (configurable via VITE_INACTIVITY_TIMEOUT_MINUTES env)
   useEffect(() => {
@@ -2451,6 +2464,42 @@ export default function App() {
       setCompanyUsers(dashboardData.users || []);
       setCompanyRoles(dashboardData.roles || []);
       
+      try {
+        const profileRes = await apiRequest('/api/admin/company/profile', 'GET');
+        if (profileRes?.company) {
+          setAdminProfileData(profileRes.company);
+          const activeCurrency = profileRes.company.currencyId || 'USD';
+          setAdminProfileForm({
+            legalCompanyName: profileRes.company.legalCompanyName || '',
+            companyEmail: profileRes.company.companyEmail || '',
+            companyPhone: profileRes.company.companyPhone || '',
+            website: profileRes.company.website || '',
+            industryType: profileRes.company.industryType || '',
+            businessType: profileRes.company.businessType || '',
+            gstin: profileRes.company.gstin || '',
+            pan: profileRes.company.pan || '',
+            country: profileRes.company.country || '',
+            state: profileRes.company.state || '',
+            city: profileRes.company.city || '',
+            addressLine1: profileRes.company.addressLine1 || '',
+            primaryColor: profileRes.company.primaryColor || '',
+            secondaryColor: profileRes.company.secondaryColor || '',
+            smtpHost: profileRes.company.smtpHost || '',
+            smtpPort: profileRes.company.smtpPort ? String(profileRes.company.smtpPort) : '',
+            smtpUser: profileRes.company.smtpUser || '',
+            smtpPassword: profileRes.company.smtpPassword || '',
+            currencyId: activeCurrency
+          });
+          if (user && user.currencyId !== activeCurrency) {
+            const updatedUser = { ...user, currencyId: activeCurrency };
+            setUser(updatedUser);
+            localStorage.setItem('erp_user', JSON.stringify(updatedUser));
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching company profile in fetchUserWorkspaceData:", err);
+      }
+
       fetchMasterData();
       fetchSalesData();
       fetchTaxesData();
@@ -4141,8 +4190,8 @@ export default function App() {
                           if (hasWhatsapp) {
                             activeChildren.push({
                               key: 'ADMIN_WHATSAPP',
-                              name: 'WhatsApp Integration',
-                              desc: 'Configure WhatsApp templates and sync linked devices'
+                              name: 'Document Sharing templates',
+                              desc: 'Configure message templates for document sharing and sync linked devices'
                             });
                           }
                         }
@@ -4545,23 +4594,24 @@ export default function App() {
                     )}
 
                     {activeWorkspaceSubModule === 'ADMIN_USERS' && (
-                      <EmployeeRegistry
+                      <EmployeeMaster
                         companyUsers={companyUsers}
                         companyRoles={companyRoles}
                         departmentList={departmentList}
-                        pendingUsers={pendingUsers}
-                        approveSelectedRole={approveSelectedRole}
-                        setApproveSelectedRole={setApproveSelectedRole}
-                        handleApproveUser={handleApproveUser}
+                        handleCreateOrUpdateAdminUserSubmit={handleCreateOrUpdateAdminUserSubmit}
+                        handleDeleteAdminUser={handleDeleteAdminUser}
+                        currencySymbol={currencySymbol}
+                        adminUserForm={adminUserForm}
+                        setAdminUserForm={setAdminUserForm}
                         isEditingAdminUser={isEditingAdminUser}
                         setIsEditingAdminUser={setIsEditingAdminUser}
                         editingAdminUserId={editingAdminUserId}
                         setEditingAdminUserId={setEditingAdminUserId}
-                        adminUserForm={adminUserForm}
-                        setAdminUserForm={setAdminUserForm}
-                        handleCreateOrUpdateAdminUserSubmit={handleCreateOrUpdateAdminUserSubmit}
-                        handleDeleteAdminUser={handleDeleteAdminUser}
                         currentUser={user}
+                        pendingUsers={pendingUsers}
+                        approveSelectedRole={approveSelectedRole}
+                        setApproveSelectedRole={setApproveSelectedRole}
+                        handleApproveUser={handleApproveUser}
                       />
                     )}
 
@@ -4596,7 +4646,7 @@ export default function App() {
                                 activeTab === 'settings' ? 'border-indigo-500 text-indigo-400 font-bold' : 'border-transparent text-slate-400 hover:text-white'
                               }`}
                             >
-                              WhatsApp Configuration
+                              Document Message Templates
                             </button>
                             {hasLinkedDevice && (
                               <button
@@ -4644,6 +4694,7 @@ export default function App() {
                         departmentList={departmentList}
                         handleCreateOrUpdateAdminUserSubmit={handleCreateOrUpdateAdminUserSubmit}
                         handleDeleteAdminUser={handleDeleteAdminUser}
+                        currencySymbol={currencySymbol}
                         adminUserForm={adminUserForm}
                         setAdminUserForm={setAdminUserForm}
                         isEditingAdminUser={isEditingAdminUser}
@@ -4788,6 +4839,7 @@ export default function App() {
                         products={productsList}
                         onCreateQuotation={handleCreateQuotation}
                         onUpdateQuotationStatus={handleUpdateQuotationStatus}
+                        onUpdateQuotation={handleUpdateQuotationStatus}
                         onDeleteQuotation={handleDeleteQuotation}
                         currencySymbol={currencySymbol}
                         exchangeRates={exchangeRates}
@@ -4861,6 +4913,7 @@ export default function App() {
                         products={productsList}
                         onCreateQuotation={handleCreateVendorQuotation}
                         onUpdateQuotationStatus={handleUpdateVendorQuotationStatus}
+                        onUpdateQuotation={handleUpdateVendorQuotationStatus}
                         onDeleteQuotation={handleDeleteVendorQuotation}
                         currencySymbol={currencySymbol}
                       />

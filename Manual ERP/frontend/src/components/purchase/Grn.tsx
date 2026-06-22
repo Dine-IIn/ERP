@@ -55,6 +55,17 @@ export default function Grn({
   const [whatsappShareData, setWhatsappShareData] = useState<any>(null);
   const [emailShareData, setEmailShareData] = useState<any>(null);
 
+  React.useEffect(() => {
+    const handleClose = (e: Event) => {
+      if (showModal) {
+        e.preventDefault();
+        setShowModal(false);
+      }
+    };
+    window.addEventListener('close-active-modal', handleClose);
+    return () => window.removeEventListener('close-active-modal', handleClose);
+  }, [showModal]);
+
   const [poId, setPoId] = useState('');
   const [grnNo, setGrnNo] = useState('');
   const [receivedDate, setReceivedDate] = useState('');

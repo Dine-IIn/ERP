@@ -7,8 +7,8 @@ interface DashboardWidget {
   title: string;
   source: 'SALES_REV' | 'SALES_COUNT' | 'STOCK_ITEMS' | 'CRM_LEADS' | 'HRMS_USERS' | 'MFG_JOBS' | 'FINANCE_OUTFLOW';
   type: 'KPI' | 'LIST' | 'CHART';
-  width: 1 | 2 | 3; // Grid columns
-  height: 1 | 2; // Grid rows
+  width: number; // Grid columns (1 to 6)
+  height: number; // Grid rows (1 to 4)
   color: 'indigo' | 'emerald' | 'rose' | 'amber' | 'slate';
 }
 
@@ -84,8 +84,8 @@ export default function CustomizableDashboard({
   const [newTitle, setNewTitle] = useState('');
   const [newSource, setNewSource] = useState<DashboardWidget['source']>('SALES_REV');
   const [newType, setNewType] = useState<DashboardWidget['type']>('KPI');
-  const [newWidth, setNewWidth] = useState<1 | 2 | 3>(1);
-  const [newHeight, setNewHeight] = useState<1 | 2>(1);
+  const [newWidth, setNewWidth] = useState<number>(1);
+  const [newHeight, setNewHeight] = useState<number>(1);
   const [newColor, setNewColor] = useState<DashboardWidget['color']>('indigo');
 
   const [editingWidgetId, setEditingWidgetId] = useState<string | null>(null);
@@ -296,12 +296,12 @@ export default function CustomizableDashboard({
       }
 
       return (
-        <div className="flex flex-col justify-between h-full text-left space-y-4">
-          <div className="space-y-1">
-            <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 block">{w.title}</span>
-            <div className={`text-2xl font-black font-mono tracking-tight ${colors.text}`}>{valueDisplay}</div>
+        <div className="flex flex-col justify-between h-full text-left space-y-1.5">
+          <div className="space-y-0.5">
+            <span className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block">{w.title}</span>
+            <div className={`text-xl font-black font-mono tracking-tight ${colors.text}`}>{valueDisplay}</div>
           </div>
-          <div className="text-[9px] font-medium text-slate-500">{subtitle}</div>
+          <div className="text-[8px] font-medium text-slate-500 truncate">{subtitle}</div>
         </div>
       );
     }
@@ -373,8 +373,8 @@ export default function CustomizableDashboard({
       }
 
       return (
-        <div className="flex flex-col justify-between h-full text-left space-y-3">
-          <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 block border-b border-slate-800 pb-1">{w.title}</span>
+        <div className="flex flex-col justify-between h-full text-left space-y-1.5">
+          <span className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block border-b border-slate-800 pb-0.5">{w.title}</span>
           <div className="flex-1 overflow-x-auto min-h-0">
             {rows.length > 0 ? (
               <table className="w-full text-left">
@@ -410,26 +410,26 @@ export default function CustomizableDashboard({
       ];
 
       return (
-        <div className="flex flex-col justify-between h-full text-left space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-1">
-            <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 block">{w.title}</span>
-            <span className="text-[8px] text-slate-550">Dynamic performance totals</span>
+        <div className="flex flex-col justify-between h-full text-left space-y-1.5">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-0.5">
+            <span className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 block">{w.title}</span>
+            <span className="text-[7.5px] text-slate-550">Dynamic performance</span>
           </div>
 
-          <div className="flex-1 flex items-end justify-between gap-3 pt-4 min-h-0">
+          <div className="flex-1 flex items-end justify-between gap-2 pt-2 min-h-0">
             {salesPoints.map((item, idx) => {
               const maxVal = Math.max(...salesPoints.map(m => m.value || 1));
               const percent = Math.min(100, Math.max(12, (item.value / maxVal) * 100));
               return (
-                <div key={idx} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end">
-                  <div className="text-[8px] font-bold font-mono text-slate-450">${Math.round(item.value / 1000)}k</div>
-                  <div className="w-full bg-slate-950 border border-slate-900 rounded-lg overflow-hidden flex-1 min-h-[48px] relative flex items-end">
+                <div key={idx} className="flex-1 flex flex-col items-center gap-1 h-full justify-end">
+                  <div className="text-[7px] font-bold font-mono text-slate-450">${Math.round(item.value / 1000)}k</div>
+                  <div className="w-full bg-slate-950 border border-slate-900 rounded overflow-hidden flex-1 min-h-[30px] relative flex items-end">
                     <div
                       style={{ height: `${percent}%` }}
                       className={`w-full rounded-t-sm bg-gradient-to-t from-indigo-600 to-indigo-400`}
                     />
                   </div>
-                  <div className="text-[9px] font-bold text-slate-500 uppercase">{item.month}</div>
+                  <div className="text-[8px] font-bold text-slate-500 uppercase">{item.month}</div>
                 </div>
               );
             })}
@@ -459,15 +459,21 @@ export default function CustomizableDashboard({
       )}
 
       {/* Grid Dashboard */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6" style={{ gridAutoRows: '200px' }}>
+      <div className="grid grid-cols-1 md:grid-cols-6 gap-4" style={{ gridAutoRows: '140px' }}>
         {widgets.map((w, idx) => {
           const colors = getColorClasses(w.color);
           return (
             <div
               key={w.id}
-              className={`p-6 border rounded-2xl flex flex-col justify-between hover:-translate-y-0.5 transition-all relative group h-full ${
-                w.width === 3 ? 'md:col-span-3 col-span-1' : w.width === 2 ? 'md:col-span-2 col-span-1' : 'col-span-1'
+              className={`p-4 border rounded-xl flex flex-col justify-between hover:-translate-y-0.5 transition-all relative group h-full ${
+                w.width === 6 ? 'md:col-span-6 col-span-1' :
+                w.width === 5 ? 'md:col-span-5 col-span-1' :
+                w.width === 4 ? 'md:col-span-4 col-span-1' :
+                w.width === 3 ? 'md:col-span-3 col-span-1' :
+                w.width === 2 ? 'md:col-span-2 col-span-1' : 'col-span-1'
               } ${
+                w.height === 4 ? 'row-span-4' :
+                w.height === 3 ? 'row-span-3' :
                 w.height === 2 ? 'row-span-2' : 'row-span-1'
               } ${colors.bg}`}
             >
@@ -607,12 +613,15 @@ export default function CustomizableDashboard({
                       <label className="text-[8.5px] font-bold text-slate-400 uppercase">Width columns</label>
                       <select
                         value={newWidth}
-                        onChange={e => setNewWidth(parseInt(e.target.value) as any)}
+                        onChange={e => setNewWidth(parseInt(e.target.value))}
                         className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 py-2 px-3 rounded-xl text-xs text-white focus:outline-none cursor-pointer"
                       >
                         <option value={1}>1 column</option>
                         <option value={2}>2 columns</option>
-                        <option value={3}>3 columns (Full width)</option>
+                        <option value={3}>3 columns</option>
+                        <option value={4}>4 columns</option>
+                        <option value={5}>5 columns</option>
+                        <option value={6}>6 columns (Full width)</option>
                       </select>
                     </div>
 
@@ -620,11 +629,13 @@ export default function CustomizableDashboard({
                       <label className="text-[8.5px] font-bold text-slate-400 uppercase">Height rows</label>
                       <select
                         value={newHeight}
-                        onChange={e => setNewHeight(parseInt(e.target.value) as any)}
+                        onChange={e => setNewHeight(parseInt(e.target.value))}
                         className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 py-2 px-3 rounded-xl text-xs text-white focus:outline-none cursor-pointer"
                       >
                         <option value={1}>1 row</option>
-                        <option value={2}>2 rows (Double height)</option>
+                        <option value={2}>2 rows</option>
+                        <option value={3}>3 rows</option>
+                        <option value={4}>4 rows</option>
                       </select>
                     </div>
                   </div>
