@@ -276,8 +276,6 @@ const getDeviceDetails = () => {
 
 const getFeatureIcon = (key: string) => {
   switch (key) {
-    case 'ADMIN_WHATSAPP':
-      return <MessageSquare className="w-4 h-4" style={{ flexShrink: 0 }} />;
     case 'GENERAL':
     case 'GENERAL_CHAT':
       return <MessageSquare className="w-4 h-4" style={{ flexShrink: 0 }} />;

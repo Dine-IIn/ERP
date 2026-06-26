@@ -752,7 +752,7 @@ export default function SalesInvoice({
                     </button>
                     {(() => {
                       const features = JSON.parse(localStorage.getItem('erp_company_features') || '[]');
-                      const showWhatsappBtn = features.includes('ADMIN_WHATSAPP');
+                      const showWhatsappBtn = features.includes('WHATSAPP_SHARE_LINK') || features.includes('WHATSAPP_LINKED_DEVICE') || features.includes('ADMIN_WHATSAPP');
                       if (!showWhatsappBtn) return null;
                       return (
                         <button
