@@ -1,7 +1,0 @@
-import { Module } from '@nestjs/common';
-import { RealtimeGateway } from './gateways/realtime.gateway';
-
-@Module({
-  providers: [RealtimeGateway],
-})
-export class RealtimeModule {}
