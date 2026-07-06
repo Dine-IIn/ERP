@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { VendorSchema } from '../../utils/schemas';
 import { Truck, Search, Plus, Edit, Trash2, X, AlertCircle, Briefcase, CreditCard, ShieldAlert } from 'lucide-react';
+import { prefixDialCode } from '../../utils/countryDialCodes';
 
 interface VendorMasterProps {
   vendors: any[];
@@ -421,9 +422,18 @@ export default function VendorMaster({
                   required
                   value={form.contactNo}
                   onChange={e => setForm({ ...form, contactNo: e.target.value })}
+                  onFocus={() => {
+                    // Auto-prefix +91 (India) when user clicks into field if no country code yet
+                    if (form.contactNo && !form.contactNo.startsWith('+')) {
+                      setForm(prev => ({ ...prev, contactNo: prefixDialCode(prev.contactNo, '+91') }));
+                    }
+                  }}
                   className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none"
                   placeholder="e.g. +91XXXXXXXXXX"
                 />
+                <span className="text-[8px] text-[var(--text-muted)] mt-0.5 block">
+                  India (+91) country code is auto-filled. Edit manually for international vendors.
+                </span>
               </div>
 
               {/* Email Address */}

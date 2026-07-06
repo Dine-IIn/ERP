@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { CustomerSchema } from '../../utils/schemas';
 import { UserCheck, Search, Plus, Edit, Trash2, X, AlertCircle, MapPin, DollarSign, Clock } from 'lucide-react';
+import { getDialCodeForCountry, prefixDialCode } from '../../utils/countryDialCodes';
 
 const INDIAN_STATES = [
   "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
@@ -426,7 +427,14 @@ export default function CustomerMaster({
                     <input
                       type="text"
                       value={form.country}
-                      onChange={e => setForm({ ...form, country: e.target.value })}
+                      onChange={e => {
+                        const newCountry = e.target.value;
+                        const dialCode = getDialCodeForCountry(newCountry);
+                        const newContactNo = dialCode
+                          ? prefixDialCode(form.contactNo, dialCode)
+                          : form.contactNo;
+                        setForm({ ...form, country: newCountry, contactNo: newContactNo });
+                      }}
                       placeholder="e.g. United States, Germany"
                       className="w-full bg-[var(--bg-secondary)] border border-[var(--border-primary)] p-2 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none focus:border-indigo-500"
                       required
@@ -482,9 +490,20 @@ export default function CustomerMaster({
                   required
                   value={form.contactNo}
                   onChange={e => setForm({ ...form, contactNo: e.target.value })}
+                  onFocus={() => {
+                    // Auto-prefix when user clicks into the field if number has no country code yet
+                    const country = form.clientClassification === 'INTERNATIONAL' ? form.country : 'India';
+                    const dialCode = getDialCodeForCountry(country);
+                    if (dialCode && form.contactNo && !form.contactNo.startsWith('+')) {
+                      setForm(prev => ({ ...prev, contactNo: prefixDialCode(prev.contactNo, dialCode) }));
+                    }
+                  }}
                   className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-xs text-[var(--text-primary)] focus:outline-none"
                   placeholder="e.g. +91XXXXXXXXXX"
                 />
+                <span className="text-[8px] text-[var(--text-muted)] mt-0.5 block">
+                  Country code is auto-filled based on the selected country.
+                </span>
               </div>
 
               {/* Email Address */}

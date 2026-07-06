@@ -12,7 +12,6 @@ interface Template {
 
 interface WhatsappSettingsProps {
   apiRequest: (url: string, method?: string, body?: any) => Promise<any>;
-  companyDefaultCountryCode?: string;
   companyMaxLimitPerHour?: number;
   onSettingsUpdated: () => void;
 }
@@ -42,17 +41,13 @@ const PLACEHOLDERS = [
 
 export default function WhatsappSettings({
   apiRequest,
-  companyDefaultCountryCode = '+91',
   companyMaxLimitPerHour = 100,
   onSettingsUpdated
 }: WhatsappSettingsProps) {
   // Settings state
-  const [countryCode, setCountryCode] = useState(companyDefaultCountryCode);
   const [saveLoading, setSaveLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  // Template states
   const [templates, setTemplates] = useState<Template[]>([]);
   const [selectedDocType, setSelectedDocType] = useState('SALES_INVOICE');
   const [templateText, setTemplateText] = useState('');
@@ -61,11 +56,7 @@ export default function WhatsappSettings({
   const [activeEditorTab, setActiveEditorTab] = useState<'WHATSAPP' | 'EMAIL'>('WHATSAPP');
   const [templateLoading, setTemplateLoading] = useState(false);
 
-  useEffect(() => {
-    setCountryCode(companyDefaultCountryCode);
-  }, [companyDefaultCountryCode]);
-
-  // Load templates on mount
+  // Template states
   useEffect(() => {
     fetchTemplates();
   }, []);
@@ -132,25 +123,6 @@ export default function WhatsappSettings({
     }
   };
 
-  const handleSaveSettings = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaveLoading(true);
-    setErrorMsg(null);
-    setSuccessMsg(null);
-    try {
-      const res = await apiRequest('/api/whatsapp/settings', 'PUT', {
-        defaultCountryCode: countryCode
-      });
-      setSuccessMsg(res.message || 'WhatsApp settings updated successfully.');
-      onSettingsUpdated();
-      setTimeout(() => setSuccessMsg(null), 3000);
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to save settings.');
-    } finally {
-      setSaveLoading(false);
-    }
-  };
-
   const handleSaveTemplate = async () => {
     setTemplateLoading(true);
     setErrorMsg(null);
@@ -211,7 +183,7 @@ export default function WhatsappSettings({
           <MessageSquare className="w-5 h-5 text-indigo-400" /> Document Message Templates
         </h3>
         <p className="text-[var(--text-secondary)] text-[10px] mt-0.5">
-          Configure default country prefixes, rate limits, and custom prefilled WhatsApp and Email message templates.
+          Configure custom prefilled WhatsApp and Email message templates for each document type.
         </p>
       </div>
 
@@ -228,53 +200,38 @@ export default function WhatsappSettings({
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Settings Configuration */}
-        <div className="lg:col-span-1 flex flex-col gap-6">
-          <form onSubmit={handleSaveSettings} className="bg-[var(--bg-secondary)] border border-[var(--border-color)] p-5 rounded-2xl flex flex-col gap-4 text-left shadow-sm">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--text-primary)] border-b border-[var(--border-color)]/50 pb-2">
-              WhatsApp Configuration
-            </h4>
+          {/* Left Column: Rate Limit Info */}
+          <div className="lg:col-span-1 flex flex-col gap-6">
+            <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] p-5 rounded-2xl flex flex-col gap-4 text-left shadow-sm">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--text-primary)] border-b border-[var(--border-color)]/50 pb-2">
+                WhatsApp Configuration
+              </h4>
 
-            {/* Country Code */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] font-extrabold uppercase tracking-widest text-[var(--text-secondary)]">Default Country Code Prefix</label>
-              <input
-                type="text"
-                required
-                placeholder="e.g. +91"
-                value={countryCode}
-                onChange={(e) => setCountryCode(e.target.value)}
-                className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3.5 rounded-xl text-xs font-semibold text-[var(--text-primary)] outline-none transition-all"
-              />
-              <span className="text-[8.5px] text-[var(--text-muted)] mt-0.5 leading-relaxed">
-                Appended automatically to 10-digit mobile numbers when recipient country codes are missing.
-              </span>
-            </div>
-
-            {/* Rate limiting (View Only / Configurable by Super Admin) */}
-            <div className="flex flex-col gap-1.5 bg-[var(--bg-primary)]/50 border border-[var(--border-color)]/30 p-3 rounded-xl">
-              <label className="text-[9.5px] font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-1.5">
-                <Layers className="w-3.5 h-3.5 text-indigo-400" /> Hourly Limit Enforcement
-              </label>
-              <div className="flex items-baseline justify-between mt-1">
-                <span className="text-[10px] text-[var(--text-muted)] font-medium">Max Limit:</span>
-                <span className="text-xs font-black text-white font-mono">{companyMaxLimitPerHour} msgs / hr</span>
+              {/* Info: Country codes now from master data */}
+              <div className="flex flex-col gap-1.5 bg-indigo-500/5 border border-indigo-500/20 p-3 rounded-xl">
+                <label className="text-[9.5px] font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
+                  <MessageSquare className="w-3.5 h-3.5" /> Country Code Handling
+                </label>
+                <p className="text-[8.5px] text-[var(--text-muted)] leading-relaxed">
+                  Country codes are now set automatically from each customer's and vendor's master record. No global default is needed.
+                </p>
               </div>
-              <span className="text-[8px] text-[var(--text-muted)] mt-1 block">
-                Security policy limit. Rate throttle is set globally by the System Super Administrator to prevent SPAM flag risk.
-              </span>
-            </div>
 
-            <button
-              type="submit"
-              disabled={saveLoading}
-              className="mt-2 w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-extrabold uppercase tracking-wider rounded-xl transition-all cursor-pointer border-0 flex items-center justify-center gap-1.5 shadow-md shadow-indigo-500/10 active:scale-95"
-            >
-              {saveLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-              Save Config
-            </button>
-          </form>
-        </div>
+              {/* Rate limiting (View Only) */}
+              <div className="flex flex-col gap-1.5 bg-[var(--bg-primary)]/50 border border-[var(--border-color)]/30 p-3 rounded-xl">
+                <label className="text-[9.5px] font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-indigo-400" /> Hourly Limit Enforcement
+                </label>
+                <div className="flex items-baseline justify-between mt-1">
+                  <span className="text-[10px] text-[var(--text-muted)] font-medium">Max Limit:</span>
+                  <span className="text-xs font-black text-white font-mono">{companyMaxLimitPerHour} msgs / hr</span>
+                </div>
+                <span className="text-[8px] text-[var(--text-muted)] mt-1 block">
+                  Security policy limit. Rate throttle is set globally by the System Super Administrator to prevent SPAM flag risk.
+                </span>
+              </div>
+            </div>
+          </div>
 
         {/* Right Column: Templates Configuration */}
         <div className="lg:col-span-2 flex flex-col gap-6">

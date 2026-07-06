@@ -113,16 +113,10 @@ export default function WhatsappShareModal({
       // Fetch company profile to get legalCompanyName
       const profileRes = await apiClient.get<any>('/api/admin/company/profile');
       const companyName = profileRes?.company?.legalCompanyName || profileRes?.company?.name || 'Our Company';
-      const defaultPrefix = profileRes?.company?.whatsappDefaultCountryCode || '+91';
 
-      // Prefill prefix if phone doesn't have one
+      // Use contactNo as-is — country code is already set in the master record
       if (contactNo) {
-        let clean = contactNo.trim();
-        if (!clean.startsWith('+') && clean.length === 10) {
-          setPhoneNumber(defaultPrefix + clean);
-        } else {
-          setPhoneNumber(clean);
-        }
+        setPhoneNumber(contactNo.trim());
       }
 
       // Fetch template
