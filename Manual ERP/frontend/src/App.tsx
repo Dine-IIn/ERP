@@ -2781,6 +2781,22 @@ export default function App() {
         }
       }
 
+      // Fetch MRP material deficits and sync to local folder
+      const mrpRes = await apiRequest('/api/manufacturing/mrp', 'GET');
+      if (mrpRes && mrpRes.materialDeficits) {
+        const deficitRows = mrpRes.materialDeficits.map((d: any) => ({
+          'Component Name': d.productName,
+          'UOM': d.uom,
+          'Current Stock': d.currentStock,
+          'Total Planned Demand': d.totalPlannedDemand,
+          'Net Deficit Qty': d.netDeficit,
+          'Unit Price': d.unitPrice,
+          'Est Deficit Cost': d.estimatedDeficitCost,
+          'Status': d.status
+        }));
+        syncLocalSheet('mrp_deficits.csv', deficitRows);
+      }
+
       // Run background check for due/overdue payment notifications
       apiRequest('/api/finance/due-alerts', 'GET').catch(() => {});
     } catch (e) {

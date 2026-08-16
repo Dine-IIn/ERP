@@ -11,8 +11,8 @@ interface AuthenticatedRequest extends Request {
 }
 
 /**
- * 1. AUTOMATED SMART MRP ENGINE
- * Auto-calculates material requirements by scanning active Production Plans & BOMs.
+ * 1. AUTOMATED SMART MRP ENGINE (CUMULATIVE CROSS-ORDER AGGREGATION)
+ * Auto-calculates material requirements by scanning ALL active Production Plans & BOMs simultaneously.
  */
 export async function getMrpRecommendations(req: AuthenticatedRequest, res: Response) {
   try {
@@ -43,9 +43,11 @@ export async function getMrpRecommendations(req: AuthenticatedRequest, res: Resp
 
     const jitRequirements: any[] = [];
     const bulkReorderRecommendations: any[] = [];
+    const materialDeficits: any[] = [];
 
-    // Map to aggregate component requirements
+    // Map to aggregate cumulative component requirements across ALL active plans
     const componentTotalDemand: Record<string, number> = {};
+    const componentProductMap: Record<string, any> = {};
 
     for (const plan of productionPlans) {
       const qty = plan.qtyToProduce;
@@ -63,6 +65,7 @@ export async function getMrpRecommendations(req: AuthenticatedRequest, res: Resp
       for (const comp of components) {
         const totalCompNeeded = comp.qtyRequired * qty;
         componentTotalDemand[comp.productId] = (componentTotalDemand[comp.productId] || 0) + totalCompNeeded;
+        componentProductMap[comp.productId] = comp.product;
 
         const isCostly = comp.product.pricing >= 50; // Threshold for costly item
 
@@ -89,17 +92,32 @@ export async function getMrpRecommendations(req: AuthenticatedRequest, res: Resp
       }
     }
 
-    // Calculate Bulk Reorder recommendations for cheap/general items
+    // 2. Global Cumulative Material Deficit Calculation across ALL Production Plans
     for (const prod of allProducts) {
-      const needed = componentTotalDemand[prod.id] || 0;
+      const cumulativeDemand = componentTotalDemand[prod.id] || 0;
       const currentStock = prod.stock;
-      const reorderLevel = prod.reorderLevel || 5;
+      const netDeficit = Math.max(0, cumulativeDemand - currentStock);
+      const status = netDeficit > 0 ? 'DEFICIT' : 'SUFFICIENT';
 
-      // If stock after planned production drops below reorder level
-      if (currentStock - needed <= reorderLevel) {
-        const shortfall = Math.max(0, (reorderLevel + needed) - currentStock);
+      if (cumulativeDemand > 0 || netDeficit > 0) {
+        materialDeficits.push({
+          productId: prod.id,
+          productName: prod.name,
+          uom: prod.uom,
+          currentStock,
+          totalPlannedDemand: cumulativeDemand,
+          netDeficit,
+          unitPrice: prod.pricing,
+          estimatedDeficitCost: netDeficit * prod.pricing,
+          status
+        });
+      }
+
+      // Calculate Bulk Reorder recommendations for items needing replenishment
+      const reorderLevel = prod.reorderLevel || 5;
+      if (currentStock - cumulativeDemand <= reorderLevel) {
+        const shortfall = Math.max(0, (reorderLevel + cumulativeDemand) - currentStock);
         const moq = prod.moq || 1;
-        // Auto-round up to Minimum Order Quantity (MOQ)
         const recommendedOrderQty = Math.max(moq, Math.ceil(shortfall / moq) * moq);
 
         bulkReorderRecommendations.push({
@@ -107,7 +125,7 @@ export async function getMrpRecommendations(req: AuthenticatedRequest, res: Resp
           productName: prod.name,
           currentStock,
           reorderLevel,
-          plannedDemand: needed,
+          plannedDemand: cumulativeDemand,
           moq,
           recommendedOrderQty,
           unitPrice: prod.pricing,
@@ -118,7 +136,8 @@ export async function getMrpRecommendations(req: AuthenticatedRequest, res: Resp
 
     return res.json({
       jitRequirements,
-      bulkReorderRecommendations
+      bulkReorderRecommendations,
+      materialDeficits
     });
   } catch (error: any) {
     console.error('[MRP Controller Error]:', error);

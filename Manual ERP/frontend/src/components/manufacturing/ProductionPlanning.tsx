@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { CalendarRange, Plus, Search, AlertTriangle, ShieldCheck, BarChart2, Edit2, Trash2 } from 'lucide-react';
+import { CalendarRange, Plus, Search, AlertTriangle, ShieldCheck, BarChart2, Edit2, Trash2, Printer, FileSpreadsheet, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { apiClient, formatNumber } from '../../utils/apiService';
+import { openLocalSheet, syncLocalSheet } from '../../utils/localSheetsService';
 
 interface ProductionPlan {
   id: string;
@@ -228,6 +229,128 @@ export default function ProductionPlanning({ salesOrders = [], products = [], cu
     }
   };
 
+  // 1. Calculate Cumulative Cross-Order Component Demand across ALL Active Plans
+  const globalComponentDemand: Record<string, { name: string; uom: string; totalNeeded: number; productId: string; unitPrice: number }> = {};
+
+  (plansList || []).forEach(plan => {
+    const activeBOM = bomDefinitions.find(bom => bom.id === plan.bomId);
+    if (activeBOM && activeBOM.components) {
+      activeBOM.components.forEach((comp: any) => {
+        const pId = comp.productId;
+        const compName = comp.product?.name || 'Raw Component';
+        const uom = comp.product?.uom || 'units';
+        const unitPrice = comp.product?.pricing || 0;
+        const neededForThisPlan = comp.qtyRequired * plan.qtyToProduce;
+
+        if (!globalComponentDemand[pId]) {
+          globalComponentDemand[pId] = { name: compName, uom, totalNeeded: 0, productId: pId, unitPrice };
+        }
+        globalComponentDemand[pId].totalNeeded += neededForThisPlan;
+      });
+    }
+  });
+
+  // 2. Compute Cumulative Deficit List across ALL plans
+  const cumulativeDeficits = Object.values(globalComponentDemand).map(item => {
+    const stock = warehouseInventory.find(inv => inv.id === item.productId);
+    const availableStock = stock ? stock.available : 0;
+    const netDeficit = Math.max(0, item.totalNeeded - availableStock);
+    return {
+      productId: item.productId,
+      productName: item.name,
+      uom: item.uom,
+      totalPlannedDemand: item.totalNeeded,
+      currentStock: availableStock,
+      netDeficit,
+      unitPrice: item.unitPrice,
+      estimatedDeficitCost: netDeficit * item.unitPrice,
+      status: netDeficit > 0 ? 'DEFICIT' : 'SUFFICIENT'
+    };
+  });
+
+  // 3. Print Low Stock / Deficit Materials Report
+  const handlePrintDeficits = () => {
+    const deficitOnly = cumulativeDeficits.filter(d => d.netDeficit > 0);
+    const rowsHtml = (deficitOnly.length > 0 ? deficitOnly : cumulativeDeficits)
+      .map(
+        d => `
+        <tr style="border-bottom: 1px solid #e2e8f0;">
+          <td style="padding: 8px; text-align: left; font-weight: bold;">${d.productName}</td>
+          <td style="padding: 8px; text-align: center;">${d.uom}</td>
+          <td style="padding: 8px; text-align: right; color: #475569;">${d.currentStock}</td>
+          <td style="padding: 8px; text-align: right; color: #1e293b; font-weight: bold;">${d.totalPlannedDemand}</td>
+          <td style="padding: 8px; text-align: right; color: ${d.netDeficit > 0 ? '#dc2626' : '#16a34a'}; font-weight: bold;">${d.netDeficit}</td>
+          <td style="padding: 8px; text-align: right; font-weight: bold;">$${d.estimatedDeficitCost.toFixed(2)}</td>
+        </tr>
+      `
+      )
+      .join('');
+
+    const printWin = window.open('', '_blank');
+    if (!printWin) return alert('Please allow popups to print the Deficit Materials report.');
+
+    printWin.document.write(`
+      <html>
+        <head>
+          <title>MRP Deficit Materials Report — Production Planning</title>
+          <style>
+            body { font-family: sans-serif; padding: 24px; color: #0f172a; }
+            h1 { font-size: 20px; margin-bottom: 4px; }
+            p { font-size: 12px; color: #64748b; margin-bottom: 16px; }
+            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+            th { background: #f8fafc; border-bottom: 2px solid #cbd5e1; padding: 8px; text-align: left; font-size: 10px; text-transform: uppercase; }
+            .header-bar { display: flex; justify-content: space-between; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px; }
+          </style>
+        </head>
+        <body>
+          <div class="header-bar">
+            <div>
+              <h1>MRP Deficit Materials Report</h1>
+              <p>Cumulative raw material requirements across ALL active production plans vs warehouse stock</p>
+            </div>
+            <div style="text-align: right; font-size: 11px;">
+              <div>Date Generated: ${new Date().toLocaleDateString()}</div>
+              <div>Deficit Items: ${deficitOnly.length}</div>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Component Item</th>
+                <th style="text-align: center;">UOM</th>
+                <th style="text-align: right;">Current Stock</th>
+                <th style="text-align: right;">Total Planned Demand</th>
+                <th style="text-align: right;">Net Deficit Qty</th>
+                <th style="text-align: right;">Est. Deficit Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+          <script>
+            window.onload = function() { window.print(); }
+          </script>
+        </body>
+      </html>
+    `);
+    printWin.document.close();
+  };
+
+  const handleOpenDeficitsSheet = () => {
+    const deficitRows = cumulativeDeficits.map(d => ({
+      'Component Name': d.productName,
+      'UOM': d.uom,
+      'Current Stock': d.currentStock,
+      'Total Planned Demand': d.totalPlannedDemand,
+      'Net Deficit Qty': d.netDeficit,
+      'Unit Price': d.unitPrice,
+      'Est Deficit Cost': d.estimatedDeficitCost,
+      'Status': d.status
+    }));
+    openLocalSheet('mrp_deficits.csv', deficitRows);
+  };
+
   const calculateMRP = (plan: ProductionPlan) => {
     const activeBOM = bomDefinitions.find(bom => bom.id === plan.bomId);
     if (!activeBOM) {
@@ -237,6 +360,7 @@ export default function ProductionPlanning({ salesOrders = [], products = [], cu
           name: 'No component ingredients configured (BOM missing)',
           qtyRequired: 0,
           available: 0,
+          cumulativeNeeded: 0,
           deficit: 0,
           status: 'SUFFICIENT'
         }
@@ -244,15 +368,19 @@ export default function ProductionPlanning({ salesOrders = [], products = [], cu
     }
 
     return (activeBOM.components || []).map((comp: any) => {
-      const totalRequired = comp.qtyRequired * plan.qtyToProduce;
+      const totalRequiredThisPlan = comp.qtyRequired * plan.qtyToProduce;
       const stock = warehouseInventory.find(inv => inv.id === comp.productId);
       const availableStock = stock ? stock.available : 0;
-      const deficit = Math.max(0, totalRequired - availableStock);
+      const cumulativeNeeded = globalComponentDemand[comp.productId]?.totalNeeded || totalRequiredThisPlan;
+
+      // Real cumulative deficit across ALL active plans
+      const deficit = Math.max(0, cumulativeNeeded - availableStock);
 
       return {
         materialId: comp.productId,
         name: comp.product?.name || 'Raw Component',
-        qtyRequired: totalRequired,
+        qtyRequired: totalRequiredThisPlan,
+        cumulativeNeeded,
         available: availableStock,
         deficit,
         status: deficit > 0 ? 'DEFICIT' : 'SUFFICIENT'
@@ -446,15 +574,77 @@ export default function ProductionPlanning({ salesOrders = [], products = [], cu
       ) : (
         /* Material Requirement Planning (MRP) calculations sheet */
         <div className="bg-slate-900/35 border border-slate-800/80 p-6 rounded-2xl space-y-6 backdrop-blur-xl animate-fade-in text-left">
-          <div>
-            <h3 className="text-sm font-bold text-white flex items-center gap-1.5 uppercase tracking-wider">
-              <AlertTriangle className="w-4.5 h-4.5 text-indigo-400" />
-              Real-time MRP Inventory Deficit Calculations
-            </h3>
-            <p className="text-slate-500 text-xs mt-1">
-              Select an active planned schedule to evaluate component shortages and trigger purchase order requisitions.
-            </p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-850 pb-4">
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center gap-1.5 uppercase tracking-wider font-display">
+                <AlertTriangle className="w-4.5 h-4.5 text-indigo-400" />
+                Global Cross-Order Cumulative MRP Deficit Calculations
+              </h3>
+              <p className="text-slate-500 text-xs mt-1">
+                Evaluates cumulative raw material demand across ALL active planned schedules simultaneously to detect true factory shortages.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handlePrintDeficits}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-all border-0 cursor-pointer shadow-md active:scale-95"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                Print Deficit Sheet
+              </button>
+
+              <button
+                type="button"
+                onClick={handleOpenDeficitsSheet}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs transition-all border-0 cursor-pointer shadow-md active:scale-95"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+                Open Deficit Sheet
+              </button>
+            </div>
           </div>
+
+          {/* Global Cross-Order Cumulative Deficit Summary Banner */}
+          {cumulativeDeficits.filter(d => d.netDeficit > 0).length > 0 && (
+            <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-rose-400 uppercase tracking-wide flex items-center gap-1.5">
+                  <AlertCircle className="w-4 h-4 text-rose-400" />
+                  Combined Cross-Order Material Deficits ({cumulativeDeficits.filter(d => d.netDeficit > 0).length} Shortages Flagged)
+                </span>
+                <span className="text-[10px] font-bold text-rose-400 bg-rose-500/20 px-2 py-0.5 rounded">
+                  Factory Deficit Alert
+                </span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-slate-300">
+                  <thead>
+                    <tr className="border-b border-rose-500/20 text-rose-400/80 text-[9px] font-extrabold uppercase tracking-wider text-left">
+                      <th className="py-1.5 px-2">Raw Material Component</th>
+                      <th className="py-1.5 px-2 text-center">UOM</th>
+                      <th className="py-1.5 px-2 text-center">Current Stock</th>
+                      <th className="py-1.5 px-2 text-center text-indigo-300">Total Planned Demand (All Plans)</th>
+                      <th className="py-1.5 px-2 text-center text-rose-400">Net Deficit Qty</th>
+                      <th className="py-1.5 px-2 text-right">Est. Deficit Cost</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cumulativeDeficits.filter(d => d.netDeficit > 0).map((d, idx) => (
+                      <tr key={idx} className="border-b border-rose-500/10 font-mono text-[11px]">
+                        <td className="py-2 px-2 font-bold text-white font-sans">{d.productName}</td>
+                        <td className="py-2 px-2 text-center text-slate-400">{d.uom}</td>
+                        <td className="py-2 px-2 text-center text-slate-400">{d.currentStock}</td>
+                        <td className="py-2 px-2 text-center font-bold text-indigo-300">{d.totalPlannedDemand}</td>
+                        <td className="py-2 px-2 text-center font-black text-rose-400">-{d.netDeficit}</td>
+                        <td className="py-2 px-2 text-right font-bold text-amber-400">${d.estimatedDeficitCost.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {filteredPlans.length === 0 ? (
             <div className="p-16 text-center text-slate-500 border border-dashed border-slate-800 rounded-2xl bg-slate-900/10 flex flex-col items-center justify-center">
@@ -477,7 +667,7 @@ export default function ProductionPlanning({ salesOrders = [], products = [], cu
                       </div>
                       <div className="flex items-center gap-3">
                         {hasDeficit ? (
-                          <span className="flex items-center gap-1 text-[10px] font-bold text-amber-500 bg-amber-500/10 border border-amber-500/20 py-0.5 px-2.5 rounded-full animate-pulse">
+                          <span className="flex items-center gap-1 text-[10px] font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 py-0.5 px-2.5 rounded-full animate-pulse">
                             <AlertTriangle className="w-3.5 h-3.5" /> Deficit Stock Detected
                           </span>
                         ) : (
@@ -494,9 +684,10 @@ export default function ProductionPlanning({ salesOrders = [], products = [], cu
                         <thead>
                           <tr className="border-b border-slate-900 text-slate-500 font-bold uppercase tracking-wider text-[9px]">
                             <th className="py-2 px-3 text-left">Material Component</th>
-                            <th className="py-2 px-3 text-center">Required (units)</th>
-                            <th className="py-2 px-3 text-center">Available (units)</th>
-                            <th className="py-2 px-3 text-center">Calculated Deficit (units)</th>
+                            <th className="py-2 px-3 text-center">This Plan Need</th>
+                            <th className="py-2 px-3 text-center text-indigo-300">Total All Plans Need</th>
+                            <th className="py-2 px-3 text-center">Available Stock</th>
+                            <th className="py-2 px-3 text-center">Calculated Deficit</th>
                             <th className="py-2 px-3 text-right">Actions</th>
                           </tr>
                         </thead>
@@ -505,8 +696,9 @@ export default function ProductionPlanning({ salesOrders = [], products = [], cu
                             <tr key={idx} className="border-b border-slate-900/50 hover:bg-slate-950/20 transition-colors">
                               <td className="py-3 px-3 font-semibold text-slate-200">{item.name}</td>
                               <td className="py-3 px-3 text-center font-mono">{formatNumber(item.qtyRequired)}</td>
+                              <td className="py-3 px-3 text-center font-mono font-bold text-indigo-300">{formatNumber(item.cumulativeNeeded)}</td>
                               <td className="py-3 px-3 text-center font-mono">{formatNumber(item.available)}</td>
-                              <td className={`py-3 px-3 text-center font-mono font-bold ${item.deficit > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
+                              <td className={`py-3 px-3 text-center font-mono font-bold ${item.deficit > 0 ? 'text-rose-400 font-black' : 'text-emerald-400'}`}>
                                 {item.deficit > 0 ? `-${formatNumber(item.deficit)}` : 'Sufficient'}
                               </td>
                               <td className="py-3 px-3 text-right">
