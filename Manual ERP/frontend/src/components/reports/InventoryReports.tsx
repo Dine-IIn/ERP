@@ -1,5 +1,6 @@
 import React from 'react';
-import { Package, Download, AlertTriangle, Layers, Info } from 'lucide-react';
+import { Package, FileSpreadsheet, AlertTriangle, Layers, Info } from 'lucide-react';
+import { openLocalSheet } from '../../utils/localSheetsService';
 
 interface ProductItem {
   name: string;
@@ -28,21 +29,17 @@ export default function InventoryReports({
   token,
   currencySymbol = '$',
 }: InventoryReportsProps) {
-  const handleExportCsv = () => {
-    fetch('/api/reports/inventory?format=csv', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-    .then(response => response.blob())
-    .then(blob => {
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `inventory_report_${new Date().toISOString().slice(0, 10)}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    })
-    .catch(err => alert("Failed to download CSV: " + err.message));
+  const handleOpenSheet = () => {
+    const dataRows = inventoryData.products.map(item => ({
+      Product: item.name,
+      Stock: item.stock,
+      UOM: item.uom,
+      Price: item.pricing,
+      'Asset Value': item.assetValue,
+      'Is Low Stock': item.isLowStock
+    }));
+
+    openLocalSheet('inventory_report.csv', dataRows);
   };
 
   return (
@@ -55,15 +52,15 @@ export default function InventoryReports({
             Inventory & Warehouse Valuations
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            Review stock levels, total physical assets valuation (pricing * stock), and download spreadsheets.
+            Review stock levels, total physical assets valuation (pricing * stock), and synchronize local sheets.
           </p>
         </div>
         <button
-          onClick={handleExportCsv}
-          className="flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-500 hover:bg-indigo-650 active:scale-95 transition-all text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/20 text-xs"
+          onClick={handleOpenSheet}
+          className="flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-500 hover:bg-indigo-600 active:scale-95 transition-all text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/20 text-xs"
         >
-          <Download className="w-4 h-4" />
-          Export Stock CSV
+          <FileSpreadsheet className="w-4 h-4" />
+          Open Inventory Sheet
         </button>
       </div>
 

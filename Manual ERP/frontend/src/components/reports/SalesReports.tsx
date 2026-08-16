@@ -1,5 +1,6 @@
 import React from 'react';
-import { FileBarChart2, Download, TrendingUp, HelpCircle, CheckCircle, Clock } from 'lucide-react';
+import { FileBarChart2, FileSpreadsheet, TrendingUp, HelpCircle, CheckCircle, Clock } from 'lucide-react';
+import { openLocalSheet } from '../../utils/localSheetsService';
 
 interface SalesReportData {
   monthlySales: { month: string; value: number }[];
@@ -20,23 +21,18 @@ export default function SalesReports({
   token,
   currencySymbol = '$',
 }: SalesReportsProps) {
-  const handleExportCsv = () => {
-    // Direct link to download the generated CSV from backend with authorization headers in query or direct download
-    // Since backend expects authenticateToken, we can trigger direct fetch with token and download it in browser
-    fetch('/api/reports/sales?format=csv', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-    .then(response => response.blob())
-    .then(blob => {
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `sales_report_${new Date().toISOString().slice(0, 10)}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    })
-    .catch(err => alert("Failed to compile CSV downloads: " + err.message));
+  const handleOpenSheet = () => {
+    // Generate data rows
+    const dataRows = salesData.monthlySales.map(item => ({
+      Month: item.month,
+      'Sales Value': item.value,
+      'Total Sales Revenue': salesData.totalSalesRevenue,
+      'Invoice Count': salesData.invoiceCount,
+      'Paid Invoices': salesData.paidSalesCount,
+      'Unpaid Invoices': salesData.unpaidSalesCount
+    }));
+
+    openLocalSheet('sales_report.csv', dataRows);
   };
 
   return (
@@ -49,15 +45,15 @@ export default function SalesReports({
             Sales & Invoicing Analytics
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            Review company sales volumes, payment invoice ratios, and download CSV data.
+            Review company sales volumes, payment invoice ratios, and synchronize local sheets.
           </p>
         </div>
         <button
-          onClick={handleExportCsv}
+          onClick={handleOpenSheet}
           className="flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-500 hover:bg-indigo-600 active:scale-95 transition-all text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/20 text-xs"
         >
-          <Download className="w-4 h-4" />
-          Export Sales CSV
+          <FileSpreadsheet className="w-4 h-4" />
+          Open Sales Sheet
         </button>
       </div>
 

@@ -1,5 +1,6 @@
-import React from 'react';
-import { Building } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Building, FileSpreadsheet, Server } from 'lucide-react';
+import ServerSetupModal from './ServerSetupModal';
 
 interface CompanyProfileProps {
   adminProfileForm: {
@@ -34,13 +35,27 @@ export default function CompanyProfile({
   handleUpdateAdminProfileSubmit,
   loading = false,
 }: CompanyProfileProps) {
+  const [localSheetsDir, setLocalSheetsDir] = useState('');
+  const [showServerSetupModal, setShowServerSetupModal] = useState(false);
+
+  useEffect(() => {
+    const savedDir = localStorage.getItem('erp_local_sheets_directory') || '';
+    setLocalSheetsDir(savedDir);
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    localStorage.setItem('erp_local_sheets_directory', localSheetsDir.trim());
+    await handleUpdateAdminProfileSubmit(e);
+  };
+
   return (
     <div className="animate-fade-in flex flex-col gap-4">
       <h3 className="font-bold text-sm text-[var(--text-primary)] border-b border-[var(--border-color)] pb-2 font-display flex items-center gap-1.5 uppercase tracking-wide">
         <Building className="w-4 h-4 text-indigo-400" /> General Company Workspace Registry
       </h3>
       
-      <form onSubmit={handleUpdateAdminProfileSubmit} className="flex flex-col gap-4">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Legal Registered Name</label>
@@ -125,7 +140,7 @@ export default function CompanyProfile({
                 type="text"
                 placeholder="PAN"
                 value={adminProfileForm.pan}
-                onChange={e => setAdminProfileForm({ ...adminProfileForm, pan: e.target.value })}
+                onChange={e => setAdminProfileForm({ ...adminProfileForm, gstin: e.target.value })}
                 className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2 px-3 rounded-lg text-[10px]"
               />
             </div>
@@ -177,6 +192,39 @@ export default function CompanyProfile({
             </div>
           </div>
         </div>
+
+        {/* Local Spreadsheet Sync & Server Setup Settings */}
+        <div className="border-t border-[var(--border-color)]/50 pt-3 mt-1">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[10px] font-bold text-indigo-400 tracking-wider uppercase flex items-center gap-1.5">
+              <FileSpreadsheet className="w-3.5 h-3.5" /> Local Spreadsheet & Server Auto-Start Setup
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowServerSetupModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600/10 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded-lg text-[10px] font-bold border-0 cursor-pointer transition-all shadow-sm"
+            >
+              <Server className="w-3.5 h-3.5" /> Server Setup & Auto-Start Center
+            </button>
+          </div>
+          <div className="grid grid-cols-1 gap-3">
+            <div>
+              <label className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider block">Local Sheets Storage Directory</label>
+              <input
+                type="text"
+                placeholder="e.g. C:\ERP_Sheets"
+                value={localSheetsDir}
+                onChange={e => setLocalSheetsDir(e.target.value)}
+                className="w-full mt-1 bg-[var(--bg-primary)] border border-[var(--border-color)] focus:border-indigo-500/50 py-2.5 px-3 rounded-lg text-xs"
+              />
+              <span className="text-[8.5px] text-[var(--text-muted)] mt-1 block">
+                Provide the full absolute path of the folder on this PC where all Excel sheets are synchronized automatically.
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <ServerSetupModal isOpen={showServerSetupModal} onClose={() => setShowServerSetupModal(false)} />
         
         <div className="border-t border-[var(--border-color)] pt-4 mt-2">
           <span className="text-[10px] font-bold text-indigo-400 tracking-wider uppercase block mb-3">SMTP Mail Integration (Simulated Gate)</span>

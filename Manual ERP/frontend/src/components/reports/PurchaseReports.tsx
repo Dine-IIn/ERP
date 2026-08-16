@@ -1,5 +1,6 @@
 import React from 'react';
-import { ShoppingBag, Download, TrendingUp, HelpCircle, CheckCircle, Clock } from 'lucide-react';
+import { ShoppingBag, FileSpreadsheet, TrendingUp, HelpCircle, CheckCircle, Clock } from 'lucide-react';
+import { openLocalSheet } from '../../utils/localSheetsService';
 
 interface PurchaseReportData {
   monthlyPurchases: { month: string; value: number }[];
@@ -20,21 +21,17 @@ export default function PurchaseReports({
   token,
   currencySymbol = '$',
 }: PurchaseReportsProps) {
-  const handleExportCsv = () => {
-    fetch('/api/reports/purchase?format=csv', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-    .then(response => response.blob())
-    .then(blob => {
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `purchase_report_${new Date().toISOString().slice(0, 10)}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    })
-    .catch(err => alert("Failed to export PO records: " + err.message));
+  const handleOpenSheet = () => {
+    const dataRows = purchaseData.monthlyPurchases.map(item => ({
+      Month: item.month,
+      'Purchases Value': item.value,
+      'Total Purchases Valuation': purchaseData.totalPurchasesValuation,
+      'Purchase Order Count': purchaseData.purchaseCount,
+      'Completed Orders': purchaseData.completedCount,
+      'Pending Orders': purchaseData.pendingCount
+    }));
+
+    openLocalSheet('purchase_report.csv', dataRows);
   };
 
   return (
@@ -47,15 +44,15 @@ export default function PurchaseReports({
             Purchases & Procurement Analytics
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            Review company PO commitments, outstanding balances, and export CSV listings.
+            Review company PO commitments, outstanding balances, and synchronize local sheets.
           </p>
         </div>
         <button
-          onClick={handleExportCsv}
+          onClick={handleOpenSheet}
           className="flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-500 hover:bg-indigo-600 active:scale-95 transition-all text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/20 text-xs"
         >
-          <Download className="w-4 h-4" />
-          Export Purchases CSV
+          <FileSpreadsheet className="w-4 h-4" />
+          Open Purchases Sheet
         </button>
       </div>
 

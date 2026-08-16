@@ -1,5 +1,6 @@
 import React from 'react';
-import { Users, Download, ShieldCheck, Clock, Award, DollarSign } from 'lucide-react';
+import { Users, FileSpreadsheet, ShieldCheck, Clock, Award, DollarSign } from 'lucide-react';
+import { openLocalSheet } from '../../utils/localSheetsService';
 
 interface HrReportData {
   headcount: number;
@@ -20,21 +21,16 @@ export default function HrReports({
   token,
   currencySymbol = '$',
 }: HrReportsProps) {
-  const handleExportCsv = () => {
-    fetch('/api/reports/hr?format=csv', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-    .then(response => response.blob())
-    .then(blob => {
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `hr_report_${new Date().toISOString().slice(0, 10)}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    })
-    .catch(err => alert("Failed to export: " + err.message));
+  const handleOpenSheet = () => {
+    const dataRows = [{
+      Headcount: hrData.headcount,
+      'Present Count': hrData.presentCount,
+      'Late Count': hrData.lateCount,
+      'Total Worked Hours': hrData.totalWorkedHours,
+      'Total Salary Disbursed': hrData.totalSalaryDisbursed
+    }];
+
+    openLocalSheet('hr_report.csv', dataRows);
   };
 
   return (
@@ -47,15 +43,15 @@ export default function HrReports({
             Human Resources (HR) Analytics
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            Review corporate headcount stats, presents vs lates punch ratios, salaries registers, and CSV listings.
+            Review corporate headcount stats, presents vs lates punch ratios, salaries registers, and synchronize local sheets.
           </p>
         </div>
         <button
-          onClick={handleExportCsv}
-          className="flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-500 hover:bg-indigo-650 active:scale-95 transition-all text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/20 text-xs"
+          onClick={handleOpenSheet}
+          className="flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-500 hover:bg-indigo-600 active:scale-95 transition-all text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/20 text-xs"
         >
-          <Download className="w-4 h-4" />
-          Export HR CSV
+          <FileSpreadsheet className="w-4 h-4" />
+          Open HR Sheet
         </button>
       </div>
 

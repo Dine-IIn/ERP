@@ -140,7 +140,8 @@ import {
   RotateCcw,
   BrainCircuit,
   Loader2,
-  Play
+  Play,
+  FileSpreadsheet
 } from 'lucide-react';
 
 import { Capacitor } from '@capacitor/core';
@@ -148,6 +149,7 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { apiClient, ApiError, getActiveBaseUrl, isTauriClient, getActiveFetch, getCentralServicesUrl, getDiscoveryServiceUrl, logToConsole } from './utils/apiService';
 import TauriSetup from './components/auth/TauriSetup';
+import { syncLocalSheet } from './utils/localSheetsService';
 import { invoke } from '@tauri-apps/api/core';
 import { check } from '@tauri-apps/plugin-updater';
 import { getVersion } from '@tauri-apps/api/app';
@@ -2700,18 +2702,87 @@ export default function App() {
     try {
       const salesRes = await apiRequest('/api/reports/sales', 'GET');
       setSalesReportData(salesRes || null);
+      if (salesRes && salesRes.monthlySales) {
+        const salesRows = salesRes.monthlySales.map((item: any) => ({
+          Month: item.month,
+          'Sales Value': item.value,
+          'Total Sales Revenue': salesRes.totalSalesRevenue,
+          'Invoice Count': salesRes.invoiceCount,
+          'Paid Invoices': salesRes.paidSalesCount,
+          'Unpaid Invoices': salesRes.unpaidSalesCount
+        }));
+        syncLocalSheet('sales_report.csv', salesRows);
+      }
       
       const purchaseRes = await apiRequest('/api/reports/purchase', 'GET');
       setPurchaseReportData(purchaseRes || null);
+      if (purchaseRes && purchaseRes.monthlyPurchases) {
+        const purchaseRows = purchaseRes.monthlyPurchases.map((item: any) => ({
+          Month: item.month,
+          'Purchases Value': item.value,
+          'Total Purchases Valuation': purchaseRes.totalPurchasesValuation,
+          'Purchase Order Count': purchaseRes.purchaseCount,
+          'Completed Orders': purchaseRes.completedCount,
+          'Pending Orders': purchaseRes.pendingCount
+        }));
+        syncLocalSheet('purchase_report.csv', purchaseRows);
+      }
       
       const inventoryRes = await apiRequest('/api/reports/inventory', 'GET');
       setInventoryReportData(inventoryRes || null);
+      if (inventoryRes && inventoryRes.products) {
+        const inventoryRows = inventoryRes.products.map((item: any) => ({
+          Product: item.name,
+          Stock: item.stock,
+          UOM: item.uom,
+          Price: item.pricing,
+          'Asset Value': item.assetValue,
+          'Is Low Stock': item.isLowStock
+        }));
+        syncLocalSheet('inventory_report.csv', inventoryRows);
+      }
       
       const hrRes = await apiRequest('/api/reports/hr', 'GET');
       setHrReportData(hrRes || null);
+      if (hrRes) {
+        const hrRows = [{
+          Headcount: hrRes.headcount,
+          'Present Count': hrRes.presentCount,
+          'Late Count': hrRes.lateCount,
+          'Total Worked Hours': hrRes.totalWorkedHours,
+          'Total Salary Disbursed': hrRes.totalSalaryDisbursed
+        }];
+        syncLocalSheet('hr_report.csv', hrRows);
+      }
       
       const financialRes = await apiRequest('/api/reports/financial', 'GET');
       setFinancialReportData(financialRes || null);
+      if (financialRes && financialRes.monthlyCashflow) {
+        const financialRows = financialRes.monthlyCashflow.map((item: any) => ({
+          Month: item.month,
+          'Inward Collections': item.inward,
+          'Outward Payments': item.outward,
+          'Net Cashflow': item.net,
+          'Total Inflow': financialRes.totalInflow,
+          'Total Outflow': financialRes.totalOutflow,
+          'Net Savings': financialRes.netSavings
+        }));
+        syncLocalSheet('financial_report.csv', financialRows);
+      }
+
+      // Fetch customer & vendor balances and sync to local folder
+      const balancesRes = await apiRequest('/api/reports/party-balances', 'GET');
+      if (balancesRes) {
+        if (balancesRes.customerBalances) {
+          syncLocalSheet('customer_balances.csv', balancesRes.customerBalances);
+        }
+        if (balancesRes.vendorBalances) {
+          syncLocalSheet('vendor_balances.csv', balancesRes.vendorBalances);
+        }
+      }
+
+      // Run background check for due/overdue payment notifications
+      apiRequest('/api/finance/due-alerts', 'GET').catch(() => {});
     } catch (e) {
       console.error("Error fetching Reports data:", e);
     }
@@ -3837,17 +3908,52 @@ export default function App() {
     }
   };
 
-  const handleDownloadExpenseSheet = () => {
+  const handleOpenExpenseSheet = async () => {
     if (!selectedChatGroup) return;
-    const activeToken = token || localStorage.getItem('erp_token');
-    const url = `${getDynamicBackendUrl()}/api/chat/group/${selectedChatGroup.id}/expense-sheet?token=${activeToken}`;
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `expense_sheet_${selectedChatGroup.name.replace(/[^a-zA-Z0-9]/g, '_')}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    const directoryPath = localStorage.getItem('erp_local_sheets_directory');
+    if (!directoryPath) {
+      alert('Please configure your "Local Sheets Storage Directory" under Administration -> Settings first.');
+      return;
+    }
+
+    try {
+      const activeToken = token || localStorage.getItem('erp_token');
+      const response = await fetch(`${getDynamicBackendUrl()}/api/chat/group/${selectedChatGroup.id}/expense-sheet?token=${activeToken}`);
+      if (!response.ok) {
+        throw new Error('Failed to retrieve expense sheet data');
+      }
+      const csvText = await response.text();
+
+      const fileName = `expense_sheet_${selectedChatGroup.name.replace(/[^a-zA-Z0-9]/g, '_')}.csv`;
+
+      // Synchronize CSV text directly using endpoint
+      await apiRequest('/api/sheets/sync', 'POST', {
+        directoryPath,
+        fileName,
+        data: [] // Empty data array with direct writing fallback handled by raw body or passing parsed lines.
+      });
+
+      // To handle raw CSV writing directly in the sync backend controller, let's update backend/src/controllers/sheetsController.ts to support raw csvText writing as well.
+      // Alternatively, we can parse the CSV text into rows of key-value pairs to match the sync controller's convertToCSV structure.
+      // Let's parse the CSV text lines into JSON objects to make it extremely simple:
+      const lines = csvText.split('\n');
+      const dataRows = lines.map((line, idx) => ({ Line: line }));
+
+      await apiRequest('/api/sheets/sync', 'POST', {
+        directoryPath,
+        fileName,
+        data: dataRows
+      });
+
+      await apiRequest('/api/sheets/open', 'POST', {
+        directoryPath,
+        fileName
+      });
+    } catch (e: any) {
+      alert("Failed to open expense sheet: " + e.message);
+    }
   };
+
 
   // ==========================================
   // 4. MAIN LAYOUT AND COMPONENT RENDERERS
@@ -8134,10 +8240,10 @@ export default function App() {
                         <span className="text-[9px] font-bold text-[var(--text-secondary)] tracking-wider uppercase block">Expense Sheet Ledger</span>
                         <button
                           type="button"
-                          onClick={handleDownloadExpenseSheet}
+                          onClick={handleOpenExpenseSheet}
                           className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-[0.99] shadow-md shadow-emerald-950/20"
                         >
-                          <Database className="w-3.5 h-3.5" /> Download Group Expense Sheet (CSV)
+                          <FileSpreadsheet className="w-3.5 h-3.5" /> Open Group Expense Sheet
                         </button>
                       </div>
                     )}

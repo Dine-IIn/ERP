@@ -451,16 +451,29 @@ export default function SalesInvoice({
     setItems(items.filter((_, i) => i !== index));
   };
 
-  const handleItemChange = (index: number, field: keyof InvoiceItemInput, value: string) => {
+  const handleItemChange = async (index: number, field: keyof InvoiceItemInput, value: string) => {
     const updated = [...items];
     updated[index][field] = value;
 
     if (field === 'productId') {
       const selectedProd = products.find(p => p.id === value);
       if (selectedProd) {
-        const basePrice = selectedProd.pricing || 0;
+        let priceToUse = selectedProd.pricing || 0;
+
+        // Smart Lookup: Try to fetch price from last bill of this specific customer
+        if (customerId) {
+          try {
+            const priceRes = await apiClient.get<any>(`/api/sales/customer-price?customerId=${customerId}&productId=${value}`);
+            if (priceRes && priceRes.found && priceRes.lastPrice) {
+              priceToUse = priceRes.lastPrice;
+            }
+          } catch (e) {
+            console.error("Could not fetch customer price history:", e);
+          }
+        }
+
         const targetCurrency = getCurrencyCodeFromSymbol(currencySymbol);
-        const converted = convertAmount(basePrice, companyCurrencyId, targetCurrency);
+        const converted = convertAmount(priceToUse, companyCurrencyId, targetCurrency);
         updated[index].price = String(Number(converted.toFixed(2)));
       }
     }

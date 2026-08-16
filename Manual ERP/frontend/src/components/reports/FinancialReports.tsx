@@ -1,5 +1,6 @@
 import React from 'react';
-import { DollarSign, Download, ArrowUpRight, ArrowDownRight, TrendingUp } from 'lucide-react';
+import { DollarSign, FileSpreadsheet, ArrowUpRight, ArrowDownRight, TrendingUp } from 'lucide-react';
+import { openLocalSheet } from '../../utils/localSheetsService';
 
 interface MonthlyCashflow {
   month: string;
@@ -26,43 +27,66 @@ export default function FinancialReports({
   token,
   currencySymbol = '$',
 }: FinancialReportsProps) {
-  const handleExportCsv = () => {
-    fetch('/api/reports/financial?format=csv', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-    .then(response => response.blob())
-    .then(blob => {
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `financial_report_${new Date().toISOString().slice(0, 10)}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    })
-    .catch(err => alert("Failed to export: " + err.message));
+  const handleOpenSheet = () => {
+    const dataRows = financialData.monthlyCashflow.map(item => ({
+      Month: item.month,
+      'Inward Collections': item.inward,
+      'Outward Payments': item.outward,
+      'Net Cashflow': item.net,
+      'Total Inflow': financialData.totalInflow,
+      'Total Outflow': financialData.totalOutflow,
+      'Net Savings': financialData.netSavings
+    }));
+
+    openLocalSheet('financial_report.csv', dataRows);
+  };
+
+  const handleOpenCustomerBalancesSheet = () => {
+    openLocalSheet('customer_balances.csv', []);
+  };
+
+  const handleOpenVendorBalancesSheet = () => {
+    openLocalSheet('vendor_balances.csv', []);
   };
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-slate-900/40 p-6 rounded-2xl border border-slate-800/80 backdrop-blur-xl">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 bg-slate-900/40 p-6 rounded-2xl border border-slate-800/80 backdrop-blur-xl">
         <div>
           <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2">
             <DollarSign className="w-6 h-6 text-indigo-400" />
             Financial curves & cashflow summaries
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            Review company cash inflow collections vs cash outward payments and download spreadsheets.
+            Review company cash inflow collections vs cash outward payments and synchronize local sheets.
           </p>
         </div>
-        <button
-          onClick={handleExportCsv}
-          className="flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-500 hover:bg-indigo-650 active:scale-95 transition-all text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/20 text-xs"
-        >
-          <Download className="w-4 h-4" />
-          Export Cashflow CSV
-        </button>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            onClick={handleOpenCustomerBalancesSheet}
+            className="flex items-center justify-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 transition-all text-white font-semibold rounded-xl text-xs border-0 cursor-pointer shadow-md"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            Customer Balances
+          </button>
+
+          <button
+            onClick={handleOpenVendorBalancesSheet}
+            className="flex items-center justify-center gap-2 px-3.5 py-2 bg-amber-600 hover:bg-amber-500 active:scale-95 transition-all text-white font-semibold rounded-xl text-xs border-0 cursor-pointer shadow-md"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            Vendor Balances
+          </button>
+
+          <button
+            onClick={handleOpenSheet}
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 active:scale-95 transition-all text-white font-semibold rounded-xl text-xs border-0 cursor-pointer shadow-md"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            Cashflow Sheet
+          </button>
+        </div>
       </div>
 
       {/* KPI stats */}

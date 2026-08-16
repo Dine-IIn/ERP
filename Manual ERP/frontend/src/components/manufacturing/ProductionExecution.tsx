@@ -4,6 +4,8 @@ import { apiClient } from '../../utils/apiService';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { LogSchema } from '../../utils/schemas';
 
+import MrpDashboard from './MrpDashboard';
+
 interface ProductionLog {
   id: string;
   woNo: string;
@@ -32,7 +34,7 @@ interface ProductionExecutionProps {
 }
 
 export default function ProductionExecution({ products = [] }: ProductionExecutionProps) {
-  const [activeTab, setActiveTab] = useState<'execution' | 'consumption' | 'ledger'>('execution');
+  const [activeTab, setActiveTab] = useState<'execution' | 'consumption' | 'ledger' | 'mrp'>('execution');
   const [yieldSearch, setYieldSearch] = useState('');
   const [consumptionSearch, setConsumptionSearch] = useState('');
   const [ledgerSearch, setLedgerSearch] = useState('');
@@ -200,6 +202,14 @@ export default function ProductionExecution({ products = [] }: ProductionExecuti
               }`}
             >
               Stock Ledger
+            </button>
+            <button
+              onClick={() => setActiveTab('mrp')}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all cursor-pointer border-0 ${
+                activeTab === 'mrp' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white bg-transparent'
+              }`}
+            >
+              Smart MRP
             </button>
           </div>
           <button
@@ -423,6 +433,8 @@ export default function ProductionExecution({ products = [] }: ProductionExecuti
           )}
         </div>
       )}
+
+      {activeTab === 'mrp' && <MrpDashboard />}
 
       {/* Log Modal */}
       {showLogModal && (

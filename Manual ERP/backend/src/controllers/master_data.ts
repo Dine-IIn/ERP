@@ -722,6 +722,29 @@ export async function updateProduct(req: AuthenticatedRequest, res: Response) {
       if (exist) return res.status(409).json({ error: `Product name '${name}' already exists.` });
     }
 
+    // Perform Cost Roll-Up if pricing changed
+    if (pricing !== undefined && productToUpdate.pricing !== parseFloat(pricing)) {
+      const newP = parseFloat(pricing) || 0.0;
+      const priceDiff = newP - productToUpdate.pricing;
+      
+      const bomComponents = await prisma.bomComponent.findMany({
+        where: { productId: id },
+        include: { bom: { include: { finishedProduct: true } } }
+      });
+
+      for (const comp of bomComponents) {
+        const parentProduct = comp.bom.finishedProduct;
+        if (parentProduct && parentProduct.companyId === companyId) {
+          const costIncrease = priceDiff * comp.qtyRequired;
+          const updatedParentPrice = Math.max(0, parentProduct.pricing + costIncrease);
+          await prisma.product.update({
+            where: { id: parentProduct.id },
+            data: { pricing: updatedParentPrice }
+          });
+        }
+      }
+    }
+
     const updated = await prisma.product.update({
       where: { id },
       data: {

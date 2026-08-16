@@ -73,13 +73,29 @@ import {
   downloadExpenseSheet,
   deleteChatMessage
 } from './controllers/chat';
-
 import {
   listTaxes,
   createTax,
   updateTax,
   deleteTax
 } from './controllers/taxes';
+
+import {
+  syncLocalSheet,
+  openLocalSheet
+} from './controllers/sheetsController';
+
+import {
+  getMrpRecommendations,
+  getLastCustomerPrice,
+  updateRawMaterialCost
+} from './controllers/mrpController';
+
+import {
+  checkDueAndOverduePayments,
+  processCombinedPayment,
+  getCustomerVendorBalances
+} from './controllers/dueRemindersController';
 
 import {
   listLeads,
@@ -450,6 +466,20 @@ app.post('/api/auth/logout', authenticateToken, logout);
 app.patch('/api/auth/profile', authenticateToken, updateSelfProfile);
 app.post('/api/auth/reset-password', resetPassword);
 app.post('/api/auth/forgot-password-otp', requestForgotPasswordOTP);
+
+// Local spreadsheet synchronization routes
+app.post('/api/sheets/sync', authenticateToken, syncLocalSheet);
+app.post('/api/sheets/open', authenticateToken, openLocalSheet);
+
+// Smart MRP, Dynamic Pricing & Cost Roll-Up routes
+app.get('/api/manufacturing/mrp', authenticateToken, getMrpRecommendations);
+app.get('/api/sales/customer-price', authenticateToken, getLastCustomerPrice);
+app.post('/api/master/products/update-cost', authenticateToken, updateRawMaterialCost);
+
+// Payment Due Reminders, Combined Settlements & Outstanding Balances routes
+app.get('/api/finance/due-alerts', authenticateToken, checkDueAndOverduePayments);
+app.post('/api/finance/combined-settlement', authenticateToken, processCombinedPayment);
+app.get('/api/reports/party-balances', authenticateToken, getCustomerVendorBalances);
 
 // 2. Super Admin Routes (Create Companies & Manage Global Tiers)
 app.post('/api/super/company', authenticateToken, requireSuperAdmin, createCompany);
