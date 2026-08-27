@@ -21,11 +21,19 @@ import { MRPPlanningModule } from './components/modules/MRPPlanningModule';
 const MainContent: React.FC = () => {
   const { currentUser, activeModule, setActiveModule } = useERP();
 
-  // Global ESC Key Listener: Closes open forms/modals first, then returns to Dashboard
+  // Global ESC Key Navigation System: Closes in-screen forms/modals first, then returns to Dashboard
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        // Check if any modal dialog overlay is currently visible in DOM
+        // Priority 1: Check if any back/close button with '(ESC)' tag exists in DOM and trigger it
+        const allButtons = Array.from(document.querySelectorAll('button'));
+        const escBtn = allButtons.find(b => b.textContent && b.textContent.includes('(ESC)'));
+        if (escBtn) {
+          (escBtn as HTMLButtonElement).click();
+          return;
+        }
+
+        // Priority 2: Check if any modal dialog overlay is currently visible in DOM
         const openModalOverlay = document.querySelector('.modal-overlay');
         if (openModalOverlay) {
           const closeBtn = openModalOverlay.querySelector('button') as HTMLButtonElement | null;
@@ -35,7 +43,7 @@ const MainContent: React.FC = () => {
           }
         }
 
-        // If no modal is open, return to Dashboard
+        // Priority 3: If no active form/modal is open, navigate back to Dashboard
         if (activeModule !== 'dashboard') {
           setActiveModule('dashboard');
         }

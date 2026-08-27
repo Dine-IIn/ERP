@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
   User, Item, Customer, Vendor, JobworkChallan, 
   PurchaseOrder, GoodsReceivedNotice, WorkOrder, 
-  QCInspection, MachineAssembly, BOM, SalesOrder, Role 
+  QCInspection, MachineAssembly, BOM, SalesOrder, Role, Department, CustomRole 
 } from '../types/erp';
 import { 
   INITIAL_USERS, INITIAL_CUSTOMERS, INITIAL_VENDORS, INITIAL_ITEM_CATEGORIES, INITIAL_VENDOR_CATEGORIES, INITIAL_ITEMS, 
@@ -13,6 +13,8 @@ import {
 interface ERPContextType {
   currentUser: User | null;
   users: User[];
+  departments: Department[];
+  customRoles: CustomRole[];
   items: Item[];
   itemCategories: string[];
   customers: Customer[];
@@ -39,14 +41,24 @@ interface ERPContextType {
   signup: (username: string, password: string, fullName: string, role: Role) => { success: boolean; message: string };
   logout: () => void;
   addUser: (user: Omit<User, 'id'>) => { success: boolean; message: string };
+  updateUser: (user: User) => void;
   deleteUser: (id: string) => { success: boolean; message: string };
   updateUserRole: (id: string, role: Role) => { success: boolean; message: string };
+  addDepartment: (dept: Omit<Department, 'id'>) => void;
+  updateDepartment: (dept: Department) => void;
+  deleteDepartment: (id: string) => void;
+  addRole: (role: Omit<CustomRole, 'id'>) => void;
+  updateRole: (role: CustomRole) => void;
+  deleteRole: (id: string) => void;
 
   // Item Master methods & Dynamic Categories
   addItem: (item: Omit<Item, 'id'>) => void;
   updateItem: (item: Item) => void;
   deleteItem: (id: string) => void;
   bulkAddItems: (itemsList: Omit<Item, 'id'>[]) => void;
+  bulkDeleteItems: (ids: string[]) => void;
+  updateItemCategory: (oldCat: string, newCat: string) => void;
+  removeAllOldItemCodes: () => void;
   addItemCategory: (cat: string) => void;
   deleteItemCategory: (cat: string) => void;
 
@@ -92,8 +104,11 @@ interface ERPContextType {
   addJobworkChallan: (challan: Omit<JobworkChallan, 'id' | 'pendingBalance' | 'status'>) => void;
   recordJobworkReturn: (challanId: string, receivedQty: number, scrapQty: number) => void;
 
-  addPurchaseOrder: (po: Omit<PurchaseOrder, 'id' | 'subtotal' | 'taxAmount' | 'totalAmount' | 'status'>) => void;
-  updatePOStatus: (poId: string, status: PurchaseOrder['status']) => void;
+  addPurchaseOrder: (po: Omit<PurchaseOrder, 'id' | 'status' | 'subtotal' | 'taxAmount' | 'totalAmount'>) => void;
+  updatePurchaseOrder: (po: PurchaseOrder) => void;
+  deletePurchaseOrder: (id: string) => void;
+  sendPODraftsForApproval: (ids: string[]) => void;
+  updatePOStatus: (id: string, status: PurchaseOrder['status']) => void;
 
   addGRN: (grn: Omit<GoodsReceivedNotice, 'id' | 'status'>) => void;
   approveGRN: (grnId: string) => void;
@@ -123,6 +138,12 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const [users, setUsers] = useState<User[]>(() => getStored('users', INITIAL_USERS));
+  const [departments, setDepartments] = useState<Department[]>(() => getStored('departments', [
+    { id: 'dept-1', code: 'PROD', name: 'Production', headName: 'Rajesh Sharma', description: 'Assembly & Machining' },
+    { id: 'dept-2', code: 'STORE', name: 'Store & Inventory', headName: 'Manish Patel', description: 'Material Storage' },
+    { id: 'dept-3', code: 'QC', name: 'Quality Control', headName: 'Vikram Singh', description: 'Inspection & Compliance' }
+  ]));
+  const [customRoles, setCustomRoles] = useState<CustomRole[]>(() => getStored('customRoles', []));
   const [currentUser, setCurrentUser] = useState<User | null>(() => getStored('currentUser', INITIAL_USERS[0]));
   const [items, setItems] = useState<Item[]>(() => getStored('items', INITIAL_ITEMS));
   const [itemCategories, setItemCategories] = useState<string[]>(() => getStored('itemCategories', INITIAL_ITEM_CATEGORIES));
@@ -304,6 +325,34 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true, message: 'User added successfully!' };
   };
 
+  const updateUser = (u: User) => {
+    setUsers(prev => prev.map(user => user.id === u.id ? u : user));
+  };
+
+  const addDepartment = (d: Omit<Department, 'id'>) => {
+    setDepartments(prev => [...prev, { ...d, id: `dept-${Date.now()}` }]);
+  };
+
+  const updateDepartment = (d: Department) => {
+    setDepartments(prev => prev.map(dept => dept.id === d.id ? d : dept));
+  };
+
+  const deleteDepartment = (id: string) => {
+    setDepartments(prev => prev.filter(dept => dept.id !== id));
+  };
+
+  const addRole = (r: Omit<CustomRole, 'id'>) => {
+    setCustomRoles(prev => [...prev, { ...r, id: `role-${Date.now()}` }]);
+  };
+
+  const updateRole = (r: CustomRole) => {
+    setCustomRoles(prev => prev.map(role => role.id === r.id ? r : role));
+  };
+
+  const deleteRole = (id: string) => {
+    setCustomRoles(prev => prev.filter(role => role.id !== id));
+  };
+
   const deleteUser = (targetUserId: string): { success: boolean; message: string } => {
     if (!currentUser || currentUser.role !== 'Admin') {
       return { success: false, message: 'Permission denied. Only Admins can remove users.' };
@@ -349,13 +398,32 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Item Management
   const addItem = (itemData: Omit<Item, 'id'>) => {
-    setItems(prev => [{ ...itemData, id: `itm-${Date.now()}` }, ...prev]);
+    const newItem: Item = {
+      ...itemData,
+      id: `itm-${Date.now()}`
+    };
+    setItems(prev => [newItem, ...prev]);
   };
-  const updateItem = (updated: Item) => {
-    setItems(prev => prev.map(i => i.id === updated.id ? updated : i));
+
+  const updateItem = (updatedItem: Item) => {
+    setItems(prev => prev.map(item => item.id === updatedItem.id ? updatedItem : item));
   };
+
   const deleteItem = (id: string) => {
-    setItems(prev => prev.filter(i => i.id !== id));
+    setItems(prev => prev.filter(item => item.id !== id));
+  };
+
+  const bulkDeleteItems = (ids: string[]) => {
+    const idSet = new Set(ids);
+    setItems(prev => prev.filter(item => !idSet.has(item.id)));
+  };
+
+  const updateItemCategory = (oldCat: string, newCat: string) => {
+    setItems(prev => prev.map(i => i.category === oldCat ? { ...i, category: newCat } : i));
+  };
+
+  const removeAllOldItemCodes = () => {
+    setItems(prev => prev.map(i => ({ ...i, oldItemCode: '' })));
   };
   const bulkAddItems = (newItems: Omit<Item, 'id'>[]) => {
     const formatted = newItems.map((item, idx) => ({ ...item, id: `itm-bulk-${Date.now()}-${idx}` }));
@@ -584,6 +652,18 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, ...prev]);
   };
 
+  const updatePurchaseOrder = (updatedPO: PurchaseOrder) => {
+    setPurchaseOrders(prev => prev.map(po => po.id === updatedPO.id ? updatedPO : po));
+  };
+
+  const deletePurchaseOrder = (id: string) => {
+    setPurchaseOrders(prev => prev.filter(po => po.id !== id));
+  };
+
+  const sendPODraftsForApproval = (ids: string[]) => {
+    setPurchaseOrders(prev => prev.map(po => ids.includes(po.id) ? { ...po, status: 'WAITING_FOR_APPROVAL' as const } : po));
+  };
+
   const updatePOStatus = (poId: string, status: PurchaseOrder['status']) => {
     setPurchaseOrders(prev => prev.map(p => p.id === poId ? { ...p, status } : p));
   };
@@ -663,6 +743,8 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     <ERPContext.Provider value={{
       currentUser,
       users,
+      departments,
+      customRoles,
       items,
       itemCategories,
       customers,
@@ -687,12 +769,22 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       signup,
       logout,
       addUser,
+      updateUser,
       deleteUser,
       updateUserRole,
+      addDepartment,
+      updateDepartment,
+      deleteDepartment,
+      addRole,
+      updateRole,
+      deleteRole,
       addItem,
       updateItem,
       deleteItem,
       bulkAddItems,
+      bulkDeleteItems,
+      updateItemCategory,
+      removeAllOldItemCodes,
       addItemCategory,
       deleteItemCategory,
       addQCInspection,
@@ -722,6 +814,9 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addJobworkChallan,
       recordJobworkReturn,
       addPurchaseOrder,
+      updatePurchaseOrder,
+      deletePurchaseOrder,
+      sendPODraftsForApproval,
       updatePOStatus,
       addGRN,
       approveGRN,

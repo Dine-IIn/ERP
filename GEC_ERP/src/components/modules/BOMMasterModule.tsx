@@ -1,74 +1,191 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useERP } from '../../context/ERPContext';
-import { Modal } from '../common/Modal';
 import { PrintDocumentModal } from '../common/PrintDocumentModal';
 import { BOMUploadModal } from '../common/BOMUploadModal';
-import { Plus, Trash2, Edit2, Search, Printer, FileSpreadsheet, Clock, Upload } from 'lucide-react';
-import { BOM, BOMComponent } from '../../types/erp';
+import { Plus, Trash2, Edit2, Search, Printer, FileSpreadsheet, Upload, ArrowUpDown, ArrowUp, ArrowDown, Layers, Filter, Eye, Zap, ArrowLeft, X } from 'lucide-react';
+import { BOM, BOMComponent, Item } from '../../types/erp';
 import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
+import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
+import { isCircularDependency, getExplodedBOMSummary } from '../../utils/nestedBOMHelper';
+
+type SortField = 'bomCode' | 'machineModel' | 'version';
 
 export const BOMMasterModule: React.FC = () => {
-  const { boms, items, addBOM, updateBOM, deleteBOM, bulkAddBOMs, searchTerm, setSearchTerm } = useERP();
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const { boms, items, itemCategories, addBOM, updateBOM, deleteBOM, bulkAddBOMs, searchTerm, setSearchTerm } = useERP();
+  
+  // Navigation & Screen View State
+  const [isFormOpen, setIsFormOpen] = useState(false); // Controls Inline Create/Edit Form Screen
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [editingBOM, setEditingBOM] = useState<BOM | null>(null);
 
+  // Inline BOM Inspection View state (Opened directly on screen below search bar)
+  const [selectedBOM, setSelectedBOM] = useState<BOM | null>(null);
+  const [bomHistoryStack, setBomHistoryStack] = useState<BOM[]>([]); // Navigation History Stack for Nested BOMs
+  const [isExplodedView, setIsExplodedView] = useState(false);
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('ALL');
+
+  // Print Document state
   const [printModalOpen, setPrintModalOpen] = useState(false);
   const [printData, setPrintData] = useState<any>(null);
 
+  // Single Column Sorting State
+  const [sortField, setSortField] = useState<SortField>('bomCode');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  // Form State
   const [bomForm, setBomForm] = useState({
     bomCode: '',
-    machineModel: 'GEC-250T Servo Hydraulic Injection Moulding Machine',
+    machineModel: '',
     version: 'Rev 1.0',
     description: ''
   });
 
+  // Parent Item Search & Component Search State in Form Screen
+  const [parentItemSearch, setParentItemSearch] = useState('');
+  const [showParentDropdown, setShowParentDropdown] = useState(false);
+
+  const [componentItemSearch, setComponentItemSearch] = useState('');
+  const [componentSearchDisplay, setComponentSearchDisplay] = useState('');
+  const [showComponentDropdown, setShowComponentDropdown] = useState(false);
+
   const [components, setComponents] = useState<BOMComponent[]>([]);
   const [selectedItemId, setSelectedItemId] = useState('');
   const [qtyPerMachine, setQtyPerMachine] = useState(1);
-  const [estimatedHours, setEstimatedHours] = useState(4);
   const [subAssemblyTag, setSubAssemblyTag] = useState<BOMComponent['subAssemblyTag']>('Injection Unit');
 
-  const filteredBOMs = boms.filter(b =>
-    b.bomCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    b.machineModel.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    b.version.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Handle Multi-Level Back Navigation (ESC Key or Back Button)
+  const handleGoBack = () => {
+    if (isFormOpen) {
+      setIsFormOpen(false);
+      setEditingBOM(null);
+    } else if (bomHistoryStack.length > 0) {
+      const prevBOM = bomHistoryStack[bomHistoryStack.length - 1];
+      setBomHistoryStack(prev => prev.slice(0, prev.length - 1));
+      setSelectedBOM(prevBOM);
+    } else {
+      setSelectedBOM(null);
+    }
+  };
 
-  // Helper to calculate total dynamic production time from child components & nested BOMs
-  const calculateSmartBOMProductionHours = (compList: BOMComponent[]): number => {
+  // Open Top-Level BOM
+  const handleOpenTopLevelBOM = (b: BOM) => {
+    setSelectedBOM(b);
+    setBomHistoryStack([]);
+    setIsExplodedView(false);
+  };
+
+  // Open Child / Nested BOM (Pushes parent BOM to navigation stack)
+  const handleOpenNestedBOM = (childBOM: BOM) => {
+    if (selectedBOM) {
+      setBomHistoryStack(prev => [...prev, selectedBOM]);
+    }
+    setSelectedBOM(childBOM);
+    setIsExplodedView(false);
+  };
+
+  // Handle Global Keyboard Navigation (ESC to go back)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleGoBack();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFormOpen, selectedBOM, bomHistoryStack]);
+
+  const handleSortToggle = (field: SortField) => {
+    if (sortField === field) {
+      setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
+    }
+  };
+
+  // Price Calculation Helpers
+  const calculateBOMTotalCost = (compList: BOMComponent[]): number => {
     return compList.reduce((sum, c) => {
-      // Check if this component has its own child BOM (Nested BOM calculation!)
-      const childBOM = boms.find(b => b.machineModel.toLowerCase() === c.itemName.toLowerCase());
-      const childTime = childBOM ? calculateSmartBOMProductionHours(childBOM.components) : (c.estimatedHours || 4);
-      return sum + (c.qtyPerMachine * childTime);
+      const itemObj = items.find(i => i.id === c.itemId || i.itemCode === c.itemCode);
+      const price = itemObj ? itemObj.unitPrice : 0;
+      return sum + (c.qtyPerMachine * price);
     }, 0);
   };
 
-  const handleOpenAddModal = () => {
+  const filteredBOMs = boms
+    .filter(b => {
+      const q = searchTerm.trim().toLowerCase();
+      // Search term filter
+      const matchesSearch = !q || (
+        b.bomCode.toLowerCase().includes(q) ||
+        b.machineModel.toLowerCase().includes(q) ||
+        b.version.toLowerCase().includes(q) ||
+        b.components.some(c => 
+          c.itemCode.toLowerCase().includes(q) || 
+          c.itemName.toLowerCase().includes(q)
+        )
+      );
+
+      // Category filter
+      const matchesCategory = selectedCategoryFilter === 'ALL' || b.components.some(c => {
+        const itemObj = items.find(i => i.id === c.itemId || i.itemCode === c.itemCode);
+        return itemObj?.category === selectedCategoryFilter;
+      });
+
+      return matchesSearch && matchesCategory;
+    })
+    .sort((a, b) => {
+      let valA: any = a[sortField] || '';
+      let valB: any = b[sortField] || '';
+
+      if (typeof valA === 'string') valA = valA.toLowerCase();
+      if (typeof valB === 'string') valB = valB.toLowerCase();
+
+      if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+      if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+  // Table Keyboard Navigation
+  const { selectedIndex, setSelectedIndex } = useTableKeyboardNav(filteredBOMs, (b) => {
+    handleOpenTopLevelBOM(b);
+    setIsFormOpen(false);
+  });
+
+  const handleOpenAddFormScreen = () => {
     setEditingBOM(null);
+    setSelectedBOM(null);
+    setBomHistoryStack([]);
     setBomForm({
       bomCode: `BOM-GEC-2026-${String(boms.length + 1).padStart(2, '0')}`,
-      machineModel: 'GEC-250T Servo Hydraulic Injection Moulding Machine',
+      machineModel: items.length > 0 ? items[0].name : 'GEC-250T Servo Hydraulic Injection Moulding Machine',
       version: 'Rev 1.0',
       description: ''
     });
+    setParentItemSearch('');
+    setComponentItemSearch('');
+    setComponentSearchDisplay('');
     setComponents([]);
     if (items.length > 0) setSelectedItemId(items[0].id);
-    setIsModalOpen(true);
+    setIsFormOpen(true);
   };
 
-  const handleOpenEditModal = (b: BOM) => {
+  const handleOpenEditFormScreen = (b: BOM) => {
     setEditingBOM(b);
+    setSelectedBOM(null);
+    setBomHistoryStack([]);
     setBomForm({
       bomCode: b.bomCode,
       machineModel: b.machineModel,
       version: b.version,
       description: b.description || ''
     });
+    setParentItemSearch('');
+    setComponentItemSearch('');
+    setComponentSearchDisplay('');
     setComponents(b.components);
     if (items.length > 0) setSelectedItemId(items[0].id);
-    setIsModalOpen(true);
+    setIsFormOpen(true);
   };
 
   const handlePrintBOM = (b: BOM) => {
@@ -76,22 +193,26 @@ export const BOMMasterModule: React.FC = () => {
     setPrintModalOpen(true);
   };
 
-  // Open Live Sheet for INDIVIDUAL BOM Card!
+  // Open Live Sheet for BOM
   const handleOpenIndividualBOMSheet = (b: BOM) => {
     const sanitizedModelName = b.machineModel.replace(/[^a-zA-Z0-9]/g, '_');
-    const flatData = b.components.map(c => ({
-      bomCode: b.bomCode,
-      machineModel: b.machineModel,
-      version: b.version,
-      itemCode: c.itemCode,
-      itemName: c.itemName,
-      subAssemblyTag: c.subAssemblyTag,
-      qtyPerMachine: c.qtyPerMachine,
-      unit: c.unit,
-      estimatedHours: c.estimatedHours || 4,
-      totalHoursForQty: c.qtyPerMachine * (c.estimatedHours || 4),
-      lastUpdated: b.lastUpdated
-    }));
+    const flatData = b.components.map(c => {
+      const itemObj = items.find(i => i.id === c.itemId || i.itemCode === c.itemCode);
+      const unitPrice = itemObj ? itemObj.unitPrice : 0;
+      return {
+        bomCode: b.bomCode,
+        machineModel: b.machineModel,
+        version: b.version,
+        itemCode: c.itemCode,
+        itemName: c.itemName,
+        subAssemblyTag: c.subAssemblyTag,
+        qtyPerMachine: c.qtyPerMachine,
+        unit: c.unit,
+        unitPrice,
+        totalItemCost: c.qtyPerMachine * unitPrice,
+        lastUpdated: b.lastUpdated
+      };
+    });
 
     openLiveModuleSheet('BOM', `BOM_${sanitizedModelName}_Live`, flatData, [
       { key: 'bomCode', label: 'BOM Code' },
@@ -102,8 +223,8 @@ export const BOMMasterModule: React.FC = () => {
       { key: 'subAssemblyTag', label: 'Sub Assembly' },
       { key: 'qtyPerMachine', label: 'Qty Per Machine' },
       { key: 'unit', label: 'Unit' },
-      { key: 'estimatedHours', label: 'Est Production Hours / Unit' },
-      { key: 'totalHoursForQty', label: 'Total Component Hours' },
+      { key: 'unitPrice', label: 'Unit Price (INR)' },
+      { key: 'totalItemCost', label: 'Total Cost (INR)' },
       { key: 'lastUpdated', label: 'Last Updated' }
     ]);
   };
@@ -112,12 +233,17 @@ export const BOMMasterModule: React.FC = () => {
     const itemObj = items.find(i => i.id === selectedItemId);
     if (!itemObj) return;
 
+    // Cycle detection & loop prevention
+    if (isCircularDependency(bomForm.machineModel, itemObj.name, boms)) {
+      alert(`🛑 Circular Dependency Blocked!\n\nCannot add "${itemObj.name}" into "${bomForm.machineModel}" because it creates an infinite nested loop cycle.`);
+      return;
+    }
+
     const existing = components.find(c => c.itemId === selectedItemId);
     if (existing) {
       setComponents(components.map(c => c.itemId === selectedItemId ? { 
         ...c, 
-        qtyPerMachine: c.qtyPerMachine + Number(qtyPerMachine),
-        estimatedHours: Number(estimatedHours)
+        qtyPerMachine: c.qtyPerMachine + Number(qtyPerMachine)
       } : c));
     } else {
       setComponents([...components, {
@@ -127,8 +253,7 @@ export const BOMMasterModule: React.FC = () => {
         qtyPerMachine: Number(qtyPerMachine),
         unit: itemObj.unit,
         subAssemblyTag,
-        scrapPercent: 0,
-        estimatedHours: Number(estimatedHours)
+        scrapPercent: 0
       }]);
     }
   };
@@ -144,220 +269,689 @@ export const BOMMasterModule: React.FC = () => {
       return;
     }
 
-    const calculatedHours = calculateSmartBOMProductionHours(components);
-
     if (editingBOM) {
       updateBOM({
         ...editingBOM,
         ...bomForm,
-        components,
-        estimatedProductionHours: calculatedHours
+        components
       });
     } else {
       addBOM({
         ...bomForm,
-        components,
-        estimatedProductionHours: calculatedHours
+        components
       });
     }
+    setIsFormOpen(false);
+    setEditingBOM(null);
+  };
 
-    setIsModalOpen(false);
+  // Helper to check if a component has a sub-BOM in the system
+  const getSubBOMForComponent = (compName: string): BOM | undefined => {
+    return boms.find(b => b.machineModel.trim().toLowerCase() === compName.trim().toLowerCase());
+  };
+
+  // Filter items matching search (matches itemCode, partCode, oldItemCode, name)
+  const filterItemsByMultiSearch = (itemList: Item[], query: string) => {
+    const q = query.trim().toLowerCase();
+    if (!q) return itemList;
+    return itemList.filter(i => 
+      i.itemCode.toLowerCase().includes(q) ||
+      (i.partCode && i.partCode.toLowerCase().includes(q)) ||
+      (i.oldItemCode && i.oldItemCode.toLowerCase().includes(q)) ||
+      i.name.toLowerCase().includes(q) ||
+      (i.partNo && i.partNo.toLowerCase().includes(q))
+    );
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-        <div>
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0 }}>Bill of Materials (BOM) Master</h2>
+      
+      {/* Top Action Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          {(selectedBOM || isFormOpen) && (
+            <button className="btn btn-outline" style={{ padding: '0.35rem 0.65rem', gap: '0.35rem', fontWeight: 600 }} onClick={handleGoBack}>
+              <ArrowLeft size={16} /> {bomHistoryStack.length > 0 ? `Back to ${bomHistoryStack[bomHistoryStack.length - 1].bomCode}` : 'Back to All BOMs List'} <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>(ESC)</span>
+            </button>
+          )}
+          <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-secondary)' }}>
+            {isFormOpen ? (editingBOM ? `Editing BOM: ${editingBOM.bomCode}` : `Creating New Machine BOM`) : (selectedBOM ? `Viewing BOM: ${selectedBOM.bomCode}` : `All Bills of Materials (${filteredBOMs.length})`)}
+          </span>
         </div>
+
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
           <button className="btn btn-outline" onClick={() => setIsUploadModalOpen(true)}>
             <Upload size={16} /> Import BOM Sheets (Bulk/Single)
           </button>
-          <button className="btn btn-primary" onClick={handleOpenAddModal}>
-            <Plus size={16} /> Create New Machine BOM
-          </button>
+          {!isFormOpen && (
+            <button className="btn btn-primary" onClick={handleOpenAddFormScreen}>
+              <Plus size={16} /> Create New Machine BOM
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Inline Search Bar */}
-      <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', backgroundColor: 'var(--bg-card)' }}>
-        <div style={{ position: 'relative', width: '360px', maxWidth: '100%' }}>
-          <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-          <input
-            type="text"
-            placeholder="Search BOM code, machine model, version, revision..."
-            className="input-field"
-            style={{ paddingLeft: '2.25rem' }}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-      </div>
+      {/* Render either INLINE CREATE/EDIT FORM SCREEN, INLINE INSPECTION VIEW, OR MAIN BOM TABLE */}
+      {isFormOpen ? (
+        /* INLINE CREATE / EDIT FORM SCREEN ON MAIN PAGE */
+        <div className="card" style={{ padding: '1.25rem', backgroundColor: 'var(--bg-card)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
+              {editingBOM ? `Edit Machine Bill of Materials (${editingBOM.bomCode})` : 'Create New Machine Bill of Materials'}
+            </h3>
+            <button className="btn btn-outline" style={{ padding: '0.25rem 0.5rem', fontSize: '0.78rem' }} onClick={handleGoBack}>
+              <X size={15} /> Close (ESC)
+            </button>
+          </div>
 
-      {/* BOM Cards Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.25rem' }}>
-        {filteredBOMs.map(b => {
-          const smartTotalHours = calculateSmartBOMProductionHours(b.components);
-          const estimatedDays = Math.ceil(smartTotalHours / 8);
-
-          return (
-            <div key={b.id} className="card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            
+            <div className="form-grid-2">
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.875rem', gap: '0.5rem' }}>
-                  <div>
-                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent-primary)', fontFamily: 'monospace' }}>
-                      {b.bomCode} ({b.version})
-                    </span>
-                    <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
-                      {b.machineModel}
-                    </h3>
+                <label>BOM Code</label>
+                <input type="text" required className="input-field" value={bomForm.bomCode} onChange={(e) => setBomForm({ ...bomForm, bomCode: e.target.value })} />
+              </div>
+              <div>
+                <label>Version / Revision</label>
+                <input type="text" required className="input-field" value={bomForm.version} onChange={(e) => setBomForm({ ...bomForm, version: e.target.value })} />
+              </div>
+            </div>
+
+            {/* Single Integrated Autocomplete Search Bar for Target Machine / Parent Item */}
+            <div style={{ padding: '0.875rem 1rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: '0.5rem', border: '1px solid var(--border-color)', position: 'relative' }}>
+              <label style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: '0.4rem', display: 'block' }}>
+                Target Machine / Parent Item:
+              </label>
+
+              <div style={{ position: 'relative' }}>
+                <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <input
+                  type="text"
+                  required
+                  className="input-field"
+                  style={{ paddingLeft: '2.25rem', height: '38px', fontSize: '0.85rem' }}
+                  placeholder="Type to search parent item (e.g. GEC000001, GEC-TIE-80, Tie Bar)..."
+                  value={bomForm.machineModel}
+                  onFocus={() => setShowParentDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowParentDropdown(false), 200)}
+                  onChange={(e) => {
+                    setBomForm({ ...bomForm, machineModel: e.target.value });
+                    setParentItemSearch(e.target.value);
+                    setShowParentDropdown(true);
+                  }}
+                />
+
+                {showParentDropdown && (
+                  <div 
+                    style={{
+                      position: 'absolute',
+                      top: 'calc(100% + 4px)',
+                      left: 0,
+                      right: 0,
+                      maxHeight: '220px',
+                      overflowY: 'auto',
+                      backgroundColor: 'var(--bg-card)',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '0.375rem',
+                      zIndex: 100,
+                      boxShadow: 'var(--shadow-md)'
+                    }}
+                  >
+                    {filterItemsByMultiSearch(items, parentItemSearch || bomForm.machineModel).length === 0 ? (
+                      <div style={{ padding: '0.65rem 0.875rem', fontSize: '0.82rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+                        No matching parent items found.
+                      </div>
+                    ) : (
+                      filterItemsByMultiSearch(items, parentItemSearch || bomForm.machineModel).map(i => {
+                        const codeLabel = i.oldItemCode ? `${i.oldItemCode} - ` : `${i.itemCode} - `;
+                        const isSelected = bomForm.machineModel === i.name;
+
+                        return (
+                          <div
+                            key={i.id}
+                            style={{
+                              padding: '0.55rem 0.85rem',
+                              cursor: 'pointer',
+                              fontSize: '0.83rem',
+                              borderBottom: '1px solid var(--border-color)',
+                              backgroundColor: isSelected ? 'var(--accent-light)' : 'transparent',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between'
+                            }}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              setBomForm({ ...bomForm, machineModel: i.name });
+                              setShowParentDropdown(false);
+                            }}
+                          >
+                            <div>
+                              <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)', marginRight: '0.5rem' }}>
+                                {codeLabel}
+                              </span>
+                              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{i.name}</span>
+                            </div>
+                            <span style={{ fontSize: '0.78rem', color: 'var(--success)', fontWeight: 700, fontFamily: 'monospace' }}>
+                              ₹{i.unitPrice.toLocaleString()}
+                            </span>
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
-                  <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
-                    <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem', color: 'var(--success)' }} title="Open Individual BOM Live Sheet" onClick={() => handleOpenIndividualBOMSheet(b)}>
-                      <FileSpreadsheet size={14} /> Open Sheet
-                    </button>
-                    <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem' }} title="Print BOM Sheet" onClick={() => handlePrintBOM(b)}>
-                      <Printer size={14} />
-                    </button>
-                    <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem' }} title="Edit BOM" onClick={() => handleOpenEditModal(b)}>
-                      <Edit2 size={14} />
-                    </button>
-                    <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem', color: 'var(--danger)' }} title="Delete BOM" onClick={() => deleteBOM(b.id)}>
-                      <Trash2 size={14} />
-                    </button>
+                )}
+              </div>
+            </div>
+
+            {/* Component Builder Panel */}
+            <div style={{ padding: '1rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: '0.5rem', border: '1px solid var(--border-color)' }}>
+              <h4 style={{ fontSize: '0.88rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--text-primary)' }}>Add BOM Components & Quantities</h4>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '2.5fr 1fr 1.2fr auto', gap: '0.6rem', alignItems: 'flex-end', marginBottom: '0.75rem' }}>
+                
+                {/* Integrated Autocomplete Component Search Bar */}
+                <div style={{ position: 'relative' }}>
+                  <label style={{ fontSize: '0.75rem' }}>Component Item (Search Code, Part Code, Name, Old Code):</label>
+                  <div style={{ position: 'relative' }}>
+                    <Search size={15} style={{ position: 'absolute', left: '0.65rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                    <input
+                      type="text"
+                      className="input-field"
+                      style={{ paddingLeft: '2.1rem', height: '36px', fontSize: '0.83rem' }}
+                      placeholder="Type to search component (e.g. GEC000001, GEC-TIE-80)..."
+                      value={componentSearchDisplay || (() => {
+                        const sel = items.find(i => i.id === selectedItemId);
+                        if (!sel) return '';
+                        return `${sel.oldItemCode ? sel.oldItemCode + ' - ' : sel.itemCode + ' - '}${sel.name}`;
+                      })()}
+                      onFocus={() => setShowComponentDropdown(true)}
+                      onBlur={() => setTimeout(() => setShowComponentDropdown(false), 200)}
+                      onChange={(e) => {
+                        setComponentItemSearch(e.target.value);
+                        setComponentSearchDisplay(e.target.value);
+                        setShowComponentDropdown(true);
+                      }}
+                    />
+
+                    {showComponentDropdown && (
+                      <div 
+                        style={{
+                          position: 'absolute',
+                          top: 'calc(100% + 4px)',
+                          left: 0,
+                          right: 0,
+                          maxHeight: '220px',
+                          overflowY: 'auto',
+                          backgroundColor: 'var(--bg-card)',
+                          border: '1px solid var(--border-color)',
+                          borderRadius: '0.375rem',
+                          zIndex: 100,
+                          boxShadow: 'var(--shadow-md)'
+                        }}
+                      >
+                        {(() => {
+                          const availableItems = items.filter(i => 
+                            i.name.trim().toLowerCase() !== bomForm.machineModel.trim().toLowerCase()
+                          );
+                          const matches = filterItemsByMultiSearch(availableItems, componentItemSearch);
+
+                          if (matches.length === 0) {
+                            return (
+                              <div style={{ padding: '0.65rem 0.875rem', fontSize: '0.82rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+                                No matching component items found.
+                              </div>
+                            );
+                          }
+
+                          return matches.map(i => {
+                            const codeLabel = i.oldItemCode ? `${i.oldItemCode} - ` : `${i.itemCode} - `;
+                            const isSelected = selectedItemId === i.id;
+
+                            return (
+                              <div
+                                key={i.id}
+                                style={{
+                                  padding: '0.55rem 0.85rem',
+                                  cursor: 'pointer',
+                                  fontSize: '0.83rem',
+                                  borderBottom: '1px solid var(--border-color)',
+                                  backgroundColor: isSelected ? 'var(--accent-light)' : 'transparent',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between'
+                                }}
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  setSelectedItemId(i.id);
+                                  setComponentSearchDisplay(`${codeLabel}${i.name}`);
+                                  setShowComponentDropdown(false);
+                                }}
+                              >
+                                <div>
+                                  <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)', marginRight: '0.5rem' }}>
+                                    {codeLabel}
+                                  </span>
+                                  <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{i.name}</span>
+                                </div>
+                                <span style={{ fontSize: '0.78rem', color: 'var(--success)', fontWeight: 700, fontFamily: 'monospace' }}>
+                                  ₹{i.unitPrice.toLocaleString()}
+                                </span>
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {/* Smart Production Time Banner */}
-                <div style={{ padding: '0.5rem 0.75rem', backgroundColor: 'var(--accent-light)', border: '1px solid var(--accent-primary)', borderRadius: '0.375rem', marginBottom: '0.875rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-primary)' }}>
-                    <Clock size={15} /> Smart Suggested Build Time:
-                  </div>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-                    {smartTotalHours} Hours <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>({estimatedDays} Shifts/Days)</span>
-                  </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem' }}>Qty / Unit</label>
+                  <input type="number" min="1" className="input-field" style={{ height: '36px', fontSize: '0.85rem' }} value={qtyPerMachine} onChange={(e) => setQtyPerMachine(Number(e.target.value))} />
                 </div>
 
-                {/* Component breakdown list */}
-                <div style={{ backgroundColor: 'var(--bg-tertiary)', borderRadius: '0.5rem', padding: '0.625rem', marginBottom: '0.875rem' }}>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
-                    BOM Components & Sub-Assemblies ({b.components.length}):
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', maxHeight: '160px', overflowY: 'auto' }}>
-                    {b.components.map((c, i) => (
-                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', padding: '0.25rem 0.4rem', backgroundColor: 'var(--bg-card)', borderRadius: '0.25rem' }}>
-                        <span>{c.itemName} ({c.subAssemblyTag})</span>
-                        <div style={{ display: 'flex', gap: '0.6rem' }}>
-                          <strong>{c.qtyPerMachine} {c.unit}</strong>
-                          <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>{c.estimatedHours || 4}h/unit</span>
+                <div>
+                  <label style={{ fontSize: '0.75rem' }}>Sub-Assembly</label>
+                  <select className="input-field" style={{ height: '36px', fontSize: '0.82rem' }} value={subAssemblyTag} onChange={(e) => setSubAssemblyTag(e.target.value as BOMComponent['subAssemblyTag'])}>
+                    <option value="Injection Unit">Injection Unit</option>
+                    <option value="Clamping Unit">Clamping Unit</option>
+                    <option value="Hydraulic Powerpack">Hydraulic Powerpack</option>
+                    <option value="Electrical Cabinet">Electrical Cabinet</option>
+                    <option value="Base Frame">Base Frame</option>
+                  </select>
+                </div>
+
+                <button type="button" className="btn btn-secondary" style={{ height: '36px' }} onClick={handleAddComponent}>
+                  <Plus size={16} /> Add
+                </button>
+              </div>
+
+              {/* Added Components List with Item Price & Total */}
+              {components.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: '220px', overflowY: 'auto' }}>
+                  {components.map(c => {
+                    const itemObj = items.find(i => i.id === c.itemId || i.itemCode === c.itemCode);
+                    const unitPrice = itemObj ? itemObj.unitPrice : 0;
+                    const totalCost = c.qtyPerMachine * unitPrice;
+
+                    return (
+                      <div key={c.itemId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-card)', padding: '0.45rem 0.65rem', borderRadius: '0.375rem' }}>
+                        <div>
+                          <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)', marginRight: '0.5rem' }}>{c.itemCode}</span>
+                          <span style={{ fontWeight: 600, fontSize: '0.82rem' }}>{c.itemName}</span>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>[{c.subAssemblyTag}]</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>₹{unitPrice.toLocaleString()} / unit</span>
+                          <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>{c.qtyPerMachine} {c.unit}</span>
+                          <span style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--success)' }}>₹{totalCost.toLocaleString()}</span>
+                          <button type="button" style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }} onClick={() => handleRemoveComponent(c.itemId)}>
+                            <Trash2 size={14} />
+                          </button>
                         </div>
                       </div>
-                    ))}
+                    );
+                  })}
+
+                  <div style={{ marginTop: '0.4rem', paddingTop: '0.4rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: '0.9rem' }}>
+                    <span>Total Estimated BOM Material Cost:</span>
+                    <span style={{ color: 'var(--success)' }}>₹{calculateBOMTotalCost(components).toLocaleString()}</span>
                   </div>
                 </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+              <button type="button" className="btn btn-secondary" onClick={handleGoBack}>
+                Cancel (ESC)
+              </button>
+              <button type="submit" className="btn btn-primary">Save Machine BOM</button>
+            </div>
+          </form>
+        </div>
+      ) : (
+        <>
+          {/* Common Filter & Search Bar */}
+          <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', backgroundColor: 'var(--bg-card)' }}>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem', flexWrap: 'wrap', flex: 1 }}>
+              {/* Search Input */}
+              <div style={{ position: 'relative', width: '360px', maxWidth: '100%' }}>
+                <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <input
+                  type="text"
+                  placeholder={selectedBOM ? "Search components in this BOM (code, name, part)..." : "Search BOM code, machine model, component item code..."}
+                  className="input-field"
+                  style={{ paddingLeft: '2.25rem' }}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
               </div>
 
-              <div style={{ paddingTop: '0.75rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Updated: {b.lastUpdated}</span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Add / Edit BOM Modal */}
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title={editingBOM ? 'Edit Machine Bill of Materials' : 'Create New Machine BOM'}
-      >
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div className="form-grid-2">
-            <div>
-              <label>BOM Code</label>
-              <input type="text" required className="input-field" value={bomForm.bomCode} onChange={(e) => setBomForm({ ...bomForm, bomCode: e.target.value })} />
-            </div>
-            <div>
-              <label>Version / Revision</label>
-              <input type="text" required className="input-field" value={bomForm.version} onChange={(e) => setBomForm({ ...bomForm, version: e.target.value })} />
-            </div>
-          </div>
-
-          <div>
-            <label>Target Moulding Machine Model</label>
-            <input type="text" required className="input-field" placeholder="e.g. GEC-250T Servo Hydraulic Injection Moulding Machine" value={bomForm.machineModel} onChange={(e) => setBomForm({ ...bomForm, machineModel: e.target.value })} />
-          </div>
-
-          {/* Component Builder Panel */}
-          <div style={{ padding: '1rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: '0.5rem', border: '1px solid var(--border-color)' }}>
-            <h4 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--text-primary)' }}>Add BOM Components & Estimated Production Hours</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.5rem', alignItems: 'flex-end', marginBottom: '0.75rem' }}>
-              <div style={{ gridColumn: 'span 2' }}>
-                <label style={{ fontSize: '0.75rem' }}>Component</label>
-                <select className="input-field" value={selectedItemId} onChange={(e) => setSelectedItemId(e.target.value)}>
-                  {items.map(i => (
-                    <option key={i.id} value={i.id}>{i.itemCode} - {i.name}</option>
+              {/* Common Category Filter Dropdown */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <Filter size={15} color="var(--text-muted)" />
+                <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>Category:</span>
+                <select
+                  className="input-field"
+                  style={{ padding: '0.3rem 0.65rem', fontSize: '0.82rem', width: '200px' }}
+                  value={selectedCategoryFilter}
+                  onChange={(e) => setSelectedCategoryFilter(e.target.value)}
+                >
+                  <option value="ALL">All Categories</option>
+                  {itemCategories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
                   ))}
                 </select>
               </div>
-              <div>
-                <label style={{ fontSize: '0.75rem' }}>Qty Per Machine</label>
-                <input type="number" min="1" className="input-field" value={qtyPerMachine} onChange={(e) => setQtyPerMachine(Number(e.target.value))} />
-              </div>
-              <div>
-                <label style={{ fontSize: '0.75rem' }}>Est Hours / Unit</label>
-                <input type="number" min="0.5" step="any" className="input-field" value={estimatedHours} onChange={(e) => setEstimatedHours(Number(e.target.value))} />
-              </div>
-              <div>
-                <label style={{ fontSize: '0.75rem' }}>Sub-Assembly</label>
-                <select className="input-field" value={subAssemblyTag} onChange={(e) => setSubAssemblyTag(e.target.value as BOMComponent['subAssemblyTag'])}>
-                  <option value="Injection Unit">Injection Unit</option>
-                  <option value="Clamping Unit">Clamping Unit</option>
-                  <option value="Hydraulic Powerpack">Hydraulic Powerpack</option>
-                  <option value="Electrical Cabinet">Electrical Cabinet</option>
-                  <option value="Base Frame">Base Frame</option>
-                </select>
-              </div>
-              <button type="button" className="btn btn-secondary" onClick={handleAddComponent}>
-                <Plus size={16} /> Add
-              </button>
             </div>
 
-            {/* Added List */}
-            {components.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                {components.map(c => (
-                  <div key={c.itemId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-card)', padding: '0.45rem 0.65rem', borderRadius: '0.375rem' }}>
-                    <div>
-                      <span style={{ fontWeight: 600, fontSize: '0.82rem' }}>{c.itemName}</span>
-                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>[{c.subAssemblyTag}]</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--accent-primary)', fontWeight: 600 }}>{c.estimatedHours || 4} hrs/unit</span>
-                      <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>{c.qtyPerMachine} {c.unit}</span>
-                      <button type="button" style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }} onClick={() => handleRemoveComponent(c.itemId)}>
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                
-                {/* Total Calculated Banner */}
-                <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: '0.85rem', color: 'var(--accent-primary)' }}>
-                  <span>Dynamic Total Suggested Production Time:</span>
-                  <span>{calculateSmartBOMProductionHours(components)} Hours</span>
-                </div>
+            {/* View Mode Toggle when a BOM is selected */}
+            {selectedBOM && (
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className={`btn ${!isExplodedView ? 'btn-primary' : 'btn-outline'}`}
+                  style={{ padding: '0.3rem 0.65rem', fontSize: '0.78rem' }}
+                  onClick={() => setIsExplodedView(false)}
+                >
+                  Direct Components View
+                </button>
+                <button
+                  type="button"
+                  className={`btn ${isExplodedView ? 'btn-primary' : 'btn-outline'}`}
+                  style={{ padding: '0.3rem 0.65rem', fontSize: '0.78rem', gap: '0.35rem' }}
+                  onClick={() => setIsExplodedView(true)}
+                  title="Flattens and displays all parts across all nested sub-BOM levels"
+                >
+                  <Zap size={14} /> ⚡ Explode BOM
+                </button>
               </div>
             )}
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
-            <button type="button" className="btn btn-secondary" onClick={() => setIsModalOpen(false)}>Cancel</button>
-            <button type="submit" className="btn btn-primary">Save Machine BOM</button>
-          </div>
-        </form>
-      </Modal>
+          {/* Either INLINE OPENED BOM DETAILS PANEL OR MAIN BOM TABLE */}
+          {selectedBOM ? (
+            /* INLINE BOM INSPECTION PANEL BELOW FILTER BAR */
+            <div className="card" style={{ padding: '1.25rem', backgroundColor: 'var(--bg-card)', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              
+              {/* Opened BOM Info Banner with Total Cost */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', padding: '0.875rem 1rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: '0.5rem', border: '1px solid var(--border-color)' }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent-primary)', fontFamily: 'monospace' }}>
+                      {selectedBOM.bomCode} ({selectedBOM.version})
+                    </span>
+                    <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>Last Updated: {selectedBOM.lastUpdated}</span>
+                    <span className="badge badge-warning" style={{ fontSize: '0.75rem', fontWeight: 800 }}>
+                      Total Material Cost: ₹{calculateBOMTotalCost(selectedBOM.components).toLocaleString()}
+                    </span>
+                  </div>
+                  <h3 style={{ fontSize: '1.15rem', fontWeight: 800, margin: '0.2rem 0 0 0', color: 'var(--text-primary)' }}>
+                    {selectedBOM.machineModel}
+                  </h3>
+                </div>
+
+                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                  <button className="btn btn-outline" style={{ color: 'var(--success)' }} title="Open Individual BOM Sheet" onClick={() => handleOpenIndividualBOMSheet(selectedBOM)}>
+                    <FileSpreadsheet size={15} /> Open Live Sheet
+                  </button>
+                  <button className="btn btn-outline" title="Print BOM Document" onClick={() => handlePrintBOM(selectedBOM)}>
+                    <Printer size={15} /> Print
+                  </button>
+                  <button className="btn btn-primary" title="Edit BOM" onClick={() => handleOpenEditFormScreen(selectedBOM)}>
+                    <Edit2 size={15} /> Edit BOM
+                  </button>
+                </div>
+              </div>
+
+              {/* Components View Table (Filtered by Search Term & Category Filter) */}
+              {!isExplodedView ? (
+                /* DIRECT COMPONENTS VIEW WITH PRICES */
+                <div className="table-container">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Item Code</th>
+                        <th>Part Code</th>
+                        <th>Item Description</th>
+                        <th>Category</th>
+                        <th>Sub-Assembly Tag</th>
+                        <th>Qty Per Unit</th>
+                        <th>Unit Price (₹)</th>
+                        <th>Total Cost (₹)</th>
+                        <th>Sub-BOM Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedBOM.components
+                        .filter(c => {
+                          const q = searchTerm.trim().toLowerCase();
+                          const itemObj = items.find(i => i.id === c.itemId || i.itemCode === c.itemCode);
+
+                          const matchesSearch = !q || (
+                            c.itemCode.toLowerCase().includes(q) ||
+                            c.itemName.toLowerCase().includes(q) ||
+                            (itemObj?.partCode && itemObj.partCode.toLowerCase().includes(q)) ||
+                            (itemObj?.oldItemCode && itemObj.oldItemCode.toLowerCase().includes(q))
+                          );
+
+                          const matchesCategory = selectedCategoryFilter === 'ALL' || itemObj?.category === selectedCategoryFilter;
+
+                          return matchesSearch && matchesCategory;
+                        })
+                        .map((c, i) => {
+                          const itemObj = items.find(it => it.id === c.itemId || it.itemCode === c.itemCode);
+                          const subBOM = getSubBOMForComponent(c.itemName);
+                          const unitPrice = itemObj ? itemObj.unitPrice : 0;
+                          const totalCost = c.qtyPerMachine * unitPrice;
+
+                          return (
+                            <tr key={i}>
+                              <td style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{i + 1}</td>
+                              <td style={{ fontWeight: 700, fontFamily: 'monospace', color: 'var(--accent-primary)' }}>
+                                {c.itemCode}
+                              </td>
+                              <td style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                                {itemObj?.partCode || '-'}
+                              </td>
+                              <td style={{ fontWeight: 600 }}>{c.itemName}</td>
+                              <td style={{ fontSize: '0.8rem' }}>{itemObj?.category || 'Machined Component'}</td>
+                              <td>
+                                <span className="badge badge-secondary" style={{ fontSize: '0.72rem' }}>{c.subAssemblyTag}</span>
+                              </td>
+                              <td style={{ fontWeight: 800 }}>{c.qtyPerMachine} {c.unit}</td>
+                              <td style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>₹{unitPrice.toLocaleString()}</td>
+                              <td style={{ fontWeight: 800, color: 'var(--success)' }}>₹{totalCost.toLocaleString()}</td>
+                              <td>
+                                {subBOM ? (
+                                  <button
+                                    type="button"
+                                    className="btn btn-outline"
+                                    style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', color: 'var(--accent-primary)', borderColor: 'var(--accent-primary)', gap: '0.3rem' }}
+                                    onClick={() => handleOpenNestedBOM(subBOM)}
+                                    title={`Click to open sub-assembly BOM inline (${subBOM.bomCode})`}
+                                  >
+                                    <Layers size={13} /> Open {subBOM.bomCode} ➔
+                                  </button>
+                                ) : (
+                                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Direct Part</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                /* EXPLODED BOM VIEW WITH PRICES */
+                <div>
+                  <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '0.5rem', fontWeight: 600 }}>
+                    ⚡ Exploded View: Flattened raw parts requirement across all nested sub-BOM levels:
+                  </div>
+                  <div className="table-container">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>#</th>
+                          <th>Item Code</th>
+                          <th>Part Code</th>
+                          <th>Item Description</th>
+                          <th>Category</th>
+                          <th>Sub-Assembly Tag</th>
+                          <th>Unit Price (₹)</th>
+                          <th>Total Exploded Qty</th>
+                          <th>Exploded Cost (₹)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {getExplodedBOMSummary(selectedBOM.components, boms)
+                          .filter(c => {
+                            const q = searchTerm.trim().toLowerCase();
+                            const itemObj = items.find(i => i.id === c.itemId || i.itemCode === c.itemCode);
+
+                            const matchesSearch = !q || (
+                              c.itemCode.toLowerCase().includes(q) ||
+                              c.itemName.toLowerCase().includes(q) ||
+                              (itemObj?.partCode && itemObj.partCode.toLowerCase().includes(q)) ||
+                              (itemObj?.oldItemCode && itemObj.oldItemCode.toLowerCase().includes(q))
+                            );
+
+                            const matchesCategory = selectedCategoryFilter === 'ALL' || itemObj?.category === selectedCategoryFilter;
+
+                            return matchesSearch && matchesCategory;
+                          })
+                          .map((c, i) => {
+                            const itemObj = items.find(it => it.id === c.itemId || it.itemCode === c.itemCode);
+                            const unitPrice = itemObj ? itemObj.unitPrice : 0;
+                            const totalCost = c.totalQty * unitPrice;
+
+                            return (
+                              <tr key={i}>
+                                <td style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{i + 1}</td>
+                                <td style={{ fontWeight: 700, fontFamily: 'monospace', color: 'var(--accent-primary)' }}>
+                                  {c.itemCode}
+                                </td>
+                                <td style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                                  {itemObj?.partCode || '-'}
+                                </td>
+                                <td style={{ fontWeight: 600 }}>{c.itemName}</td>
+                                <td style={{ fontSize: '0.8rem' }}>{itemObj?.category || 'Machined Component'}</td>
+                                <td>
+                                  <span className="badge badge-secondary" style={{ fontSize: '0.72rem' }}>{c.subAssemblyTag}</span>
+                                </td>
+                                <td style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>₹{unitPrice.toLocaleString()}</td>
+                                <td style={{ fontWeight: 800 }}>{c.totalQty} {c.unit}</td>
+                                <td style={{ fontWeight: 800, color: 'var(--success)' }}>₹{totalCost.toLocaleString()}</td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          ) : (
+            /* MAIN ROW-WISE BOM TABLE VIEW WITH TOTAL BOM PRICES */
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th onClick={() => handleSortToggle('bomCode')} style={{ cursor: 'pointer' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                        BOM Code {sortField === 'bomCode' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
+                      </div>
+                    </th>
+                    <th onClick={() => handleSortToggle('machineModel')} style={{ cursor: 'pointer' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                        Target Machine / Assembly Item {sortField === 'machineModel' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
+                      </div>
+                    </th>
+                    <th onClick={() => handleSortToggle('version')} style={{ cursor: 'pointer' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                        Version {sortField === 'version' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
+                      </div>
+                    </th>
+                    <th>Direct Components</th>
+                    <th>Total Material Cost</th>
+                    <th>Last Updated</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredBOMs.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                        No Bill of Materials found matching your search and category filter.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredBOMs.map((b, idx) => {
+                      const isNavSelected = selectedIndex === idx;
+                      const bomTotalCost = calculateBOMTotalCost(b.components);
+
+                      return (
+                        <tr
+                          key={b.id}
+                          onClick={() => {
+                            setSelectedIndex(idx);
+                            handleOpenTopLevelBOM(b);
+                          }}
+                          style={{
+                            backgroundColor: isNavSelected ? 'rgba(59, 130, 246, 0.18)' : 'transparent',
+                            cursor: 'pointer'
+                          }}
+                          title="Click row to open and inspect BOM components below filter bar"
+                        >
+                          <td style={{ fontWeight: 700, color: 'var(--accent-primary)', fontFamily: 'monospace' }}>
+                            {b.bomCode}
+                          </td>
+                          <td style={{ fontWeight: 600 }}>{b.machineModel}</td>
+                          <td>
+                            <span className="badge badge-primary" style={{ fontSize: '0.72rem' }}>{b.version}</span>
+                          </td>
+                          <td style={{ fontWeight: 700 }}>{b.components.length} Items</td>
+                          <td style={{ fontWeight: 800, color: 'var(--success)' }}>
+                            ₹{bomTotalCost.toLocaleString()}
+                          </td>
+                          <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{b.lastUpdated}</td>
+                          <td onClick={(e) => e.stopPropagation()}>
+                            <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                              <button className="btn btn-primary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', gap: '0.25rem' }} title="View Components" onClick={() => handleOpenTopLevelBOM(b)}>
+                                <Eye size={13} /> View
+                              </button>
+                              <button className="btn btn-outline" style={{ padding: '0.25rem 0.45rem', color: 'var(--success)' }} title="Open Individual BOM Sheet" onClick={() => handleOpenIndividualBOMSheet(b)}>
+                                <FileSpreadsheet size={13} />
+                              </button>
+                              <button className="btn btn-outline" style={{ padding: '0.25rem 0.45rem' }} title="Print BOM" onClick={() => handlePrintBOM(b)}>
+                                <Printer size={13} />
+                              </button>
+                              <button className="btn btn-outline" style={{ padding: '0.25rem 0.45rem' }} title="Edit BOM" onClick={() => handleOpenEditFormScreen(b)}>
+                                <Edit2 size={13} />
+                              </button>
+                              <button className="btn btn-outline" style={{ padding: '0.25rem 0.45rem', color: 'var(--danger)' }} title="Delete BOM" onClick={() => {
+                                if (window.confirm(`Are you sure you want to delete BOM ${b.bomCode}?`)) {
+                                  deleteBOM(b.id);
+                                }
+                              }}>
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
 
       {/* Upload BOM Modal */}
       <BOMUploadModal
