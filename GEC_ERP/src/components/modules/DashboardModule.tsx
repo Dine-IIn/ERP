@@ -46,9 +46,9 @@ export const DashboardModule: React.FC = () => {
           <button 
             className="btn btn-outline"
             style={{ borderColor: 'var(--warning)', color: 'var(--warning)' }}
-            onClick={() => setActiveModule('mrp-planning')}
+            onClick={() => setActiveModule('purchase-orders')}
           >
-            <span>Run MRP Check</span>
+            <span>View PO Shortages</span>
             <ArrowRight size={14} />
           </button>
         </div>

@@ -37,8 +37,7 @@ export const Sidebar: React.FC = () => {
     { key: 'purchase-orders', label: 'Purchase Orders (PO)', icon: <ShoppingCart size={16} />, badge: pendingPOCount > 0 ? pendingPOCount : undefined },
     { key: 'grn', label: 'Goods Received (GRN)', icon: <FileCheck size={16} /> },
     { key: 'quality-control', label: 'Quality Control (QC)', icon: <ShieldCheck size={16} /> },
-    { key: 'assembly', label: 'Machine Assembly', icon: <Layers size={16} /> },
-    { key: 'mrp-planning', label: 'MRP & Planning', icon: <Cpu size={16} /> },
+    { key: 'assembly', label: 'Machine Assembly', icon: <Layers size={16} /> }
   ];
 
   return (

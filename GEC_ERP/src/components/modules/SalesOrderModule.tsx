@@ -12,7 +12,7 @@ type SortField = 'soNumber' | 'customerName' | 'machineModel' | 'quantity' | 'or
 
 export const SalesOrderModule: React.FC = () => {
   const { 
-    salesOrders, customers, boms, addSalesOrder, generateWOFromSO, searchTerm, setSearchTerm 
+    salesOrders, customers, boms, items, addSalesOrder, generateWOFromSO, searchTerm, setSearchTerm 
   } = useERP();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -28,7 +28,7 @@ export const SalesOrderModule: React.FC = () => {
     soNumber: '',
     customerId: customers[0]?.id || '',
     customerName: customers[0]?.name || '',
-    machineModel: boms[0]?.machineModel || 'GEC-250T Servo Hydraulic Injection Moulding Machine',
+    machineModel: items[0]?.name || boms[0]?.machineModel || 'GEC-250T Servo Hydraulic Injection Moulding Machine',
     quantity: 1,
     orderDate: new Date().toISOString().split('T')[0],
     deliveryDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
@@ -41,21 +41,28 @@ export const SalesOrderModule: React.FC = () => {
     sublabel: `${c.customerCode} | ${c.city}`
   }));
 
-  const machineModelOptions: AutocompleteOption[] = Array.from(
-    new Set([
-      'GEC-250T Servo Hydraulic Injection Moulding Machine',
-      'GEC-180T Compact Servo Moulding Machine',
-      'GEC-350T High Tonnage Machine',
-      ...boms.map(b => b.machineModel)
-    ])
-  ).map(m => ({ value: m, label: m }));
+  // All Items + BOMs searchable for Ordered Machine Model / Item
+  const machineModelOptions: AutocompleteOption[] = [
+    ...items.map(i => ({
+      value: `${i.itemCode} - ${i.name}`,
+      label: `${i.itemCode} - ${i.name}`,
+      sublabel: `Category: ${i.category} | Stock: ${i.inHouseStock} ${i.unit} | ₹${(i.unitPrice || 0).toLocaleString()}`
+    })),
+    ...boms
+      .filter(b => !items.some(i => `${i.itemCode} - ${i.name}` === b.machineModel || i.name === b.machineModel))
+      .map(b => ({
+        value: b.machineModel,
+        label: `${b.bomCode} - ${b.machineModel}`,
+        sublabel: `BOM Version: ${b.version} | ${b.components.length} components`
+      }))
+  ];
 
   const handleOpenModal = () => {
     setSoForm({
       soNumber: `SO-GEC-${String(salesOrders.length + 1).padStart(3, '0')}`,
       customerId: customers[0]?.id || '',
       customerName: customers[0]?.name || '',
-      machineModel: boms[0]?.machineModel || 'GEC-250T Servo Hydraulic Injection Moulding Machine',
+      machineModel: items[0] ? `${items[0].itemCode} - ${items[0].name}` : (boms[0]?.machineModel || 'GEC-250T Servo Hydraulic Injection Moulding Machine'),
       quantity: 1,
       orderDate: new Date().toISOString().split('T')[0],
       deliveryDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],

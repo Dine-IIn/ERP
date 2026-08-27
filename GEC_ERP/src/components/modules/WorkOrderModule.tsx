@@ -11,7 +11,7 @@ import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 type SortField = 'workOrderNo' | 'machineModel' | 'quantity' | 'targetCompletionDate' | 'stage';
 
 export const WorkOrderModule: React.FC = () => {
-  const { workOrders, customers, boms, items, addWorkOrder, updateWorkOrderStage, updateWorkOrderComponents, searchTerm, setSearchTerm } = useERP();
+  const { workOrders, boms, items, addWorkOrder, updateWorkOrderStage, updateWorkOrderComponents, searchTerm, setSearchTerm } = useERP();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   const [isStageModalOpen, setIsStageModalOpen] = useState(false);
@@ -42,7 +42,6 @@ export const WorkOrderModule: React.FC = () => {
     .filter(wo => {
       const woNo = wo.workOrderNo || wo.woNumber || '';
       const lead = wo.assignedLead || wo.assignedSupervisor || '';
-      const custName = wo.customerName || '';
       const woStage = wo.stage || 'PLANNED';
       const start = wo.startDate || '';
       const targetDate = wo.targetCompletionDate || '';
@@ -50,7 +49,6 @@ export const WorkOrderModule: React.FC = () => {
       const matchesSearch = 
         woNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
         wo.machineModel.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        custName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         lead.toLowerCase().includes(searchTerm.toLowerCase());
 
       const matchesStage = selectedStageFilter === 'ALL' || woStage === selectedStageFilter;
@@ -74,40 +72,36 @@ export const WorkOrderModule: React.FC = () => {
   // Customize modal search filter
   const [compSearchTerm, setCompSearchTerm] = useState('');
 
+  const [selectedBomId, setSelectedBomId] = useState(boms[0]?.id || '');
   const [woForm, setWoForm] = useState({
     workOrderNo: '',
-    machineModel: 'GEC-250T Servo Hydraulic Injection Moulding Machine',
+    machineModel: boms[0]?.machineModel || 'GEC-250T Servo Hydraulic Injection Moulding Machine',
     quantity: 1,
     targetCompletionDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
     startDate: new Date().toISOString().split('T')[0],
     assignedLead: 'Suresh Patel (Production Lead)',
     stage: 'PLANNED' as WOStage,
     status: 'IN_PROGRESS' as WOStatus,
-    customerName: '',
     remarks: ''
   });
 
   const [newStage, setNewStage] = useState<string>('BASE_FABRICATION');
-
   const [customComponents, setCustomComponents] = useState<WOCustomComponent[]>([]);
   const [selectedItemId, setSelectedItemId] = useState('');
   const [extraQty, setExtraQty] = useState(1);
   const [subAssemblyTag, setSubAssemblyTag] = useState('Injection Unit');
 
-  const customerOptions: AutocompleteOption[] = customers.map(c => ({
-    value: c.name,
-    label: c.name,
-    sublabel: `${c.customerCode} | ${c.city}`
-  }));
-
-  const machineModelOptions: AutocompleteOption[] = Array.from(
-    new Set([
-      'GEC-250T Servo Hydraulic Injection Moulding Machine',
-      'GEC-180T Compact Servo Moulding Machine',
-      'GEC-350T High Tonnage Machine',
-      ...boms.map(b => b.machineModel)
-    ])
-  ).map(m => ({ value: m, label: m }));
+  // Items which have a BOM options
+  const bomOptions: AutocompleteOption[] = boms.map(b => {
+    const itemObj = items.find(i => i.name === b.machineModel || i.itemCode === b.bomCode || i.id === b.id);
+    const code = itemObj ? itemObj.itemCode : b.bomCode;
+    const name = itemObj ? itemObj.name : b.machineModel;
+    return {
+      value: b.id,
+      label: `${code} - ${name} (${b.components.length} components)`,
+      sublabel: `BOM Code: ${b.bomCode} | Version: ${b.version} | Est: ${b.estimatedProductionHours || 120} hrs`
+    };
+  });
 
   const itemOptions: AutocompleteOption[] = items.map(i => ({
     value: i.id,
@@ -116,20 +110,20 @@ export const WorkOrderModule: React.FC = () => {
   }));
 
   const handleOpenModal = () => {
+    const defaultBOM = boms[0];
+    setSelectedBomId(defaultBOM?.id || '');
     setWoForm({
       workOrderNo: `WO-GEC-${String(workOrders.length + 1).padStart(3, '0')}`,
-      machineModel: boms[0]?.machineModel || 'GEC-250T Servo Hydraulic Injection Moulding Machine',
+      machineModel: defaultBOM?.machineModel || 'GEC-250T Servo Hydraulic Injection Moulding Machine',
       quantity: 1,
       targetCompletionDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
       startDate: new Date().toISOString().split('T')[0],
       assignedLead: 'Suresh Patel (Production Lead)',
       stage: 'PLANNED',
       status: 'IN_PROGRESS',
-      customerName: customers[0]?.name || '',
       remarks: ''
     });
 
-    const defaultBOM = boms[0];
     if (defaultBOM) {
       setCustomComponents(defaultBOM.components.map(c => ({
         itemId: c.itemId || '',
@@ -149,10 +143,11 @@ export const WorkOrderModule: React.FC = () => {
     setIsStageModalOpen(false);
   };
 
-  const handleMachineModelChange = (modelName: string) => {
-    setWoForm(prev => ({ ...prev, machineModel: modelName }));
-    const linkedBOM = boms.find(b => b.machineModel === modelName);
+  const handleBOMChange = (bomId: string) => {
+    setSelectedBomId(bomId);
+    const linkedBOM = boms.find(b => b.id === bomId);
     if (linkedBOM) {
+      setWoForm(prev => ({ ...prev, machineModel: linkedBOM.machineModel }));
       setCustomComponents(linkedBOM.components.map(c => ({
         itemId: c.itemId || '',
         itemCode: c.itemCode || '',
@@ -238,11 +233,12 @@ export const WorkOrderModule: React.FC = () => {
 
   const handleSubmitWO = (e: React.FormEvent) => {
     e.preventDefault();
-    const linkedBOM = boms.find(b => b.machineModel === woForm.machineModel);
+    const linkedBOM = boms.find(b => b.id === selectedBomId) || boms.find(b => b.machineModel === woForm.machineModel);
 
     addWorkOrder({
       ...woForm,
       bomId: linkedBOM?.id || 'bom-001',
+      machineModel: linkedBOM?.machineModel || woForm.machineModel,
       woComponents: customComponents
     });
 
@@ -295,7 +291,7 @@ export const WorkOrderModule: React.FC = () => {
     setPrintData({
       workOrderNo: woNo,
       soNumber: wo.soNumber || 'SO-DIRECT-PROD',
-      customerName: wo.customerName || 'Internal Stock Production',
+      customerName: 'Internal Production',
       machineModel: wo.machineModel,
       quantity: buildQty,
       startDate: wo.startDate || new Date().toISOString().split('T')[0],
@@ -318,8 +314,7 @@ export const WorkOrderModule: React.FC = () => {
   const availableWOExportFields: FieldOption<WorkOrder>[] = [
     { key: 'workOrderNo', label: 'Work Order No' },
     { key: 'soNumber', label: 'SO Number' },
-    { key: 'customerName', label: 'Customer Name' },
-    { key: 'machineModel', label: 'Machine Model' },
+    { key: 'machineModel', label: 'Item / Machine Model' },
     { key: 'quantity', label: 'Build Quantity' },
     { key: 'startDate', label: 'Start Date' },
     { key: 'targetCompletionDate', label: 'Target Completion' },
@@ -374,14 +369,14 @@ export const WorkOrderModule: React.FC = () => {
           </div>
 
           <form onSubmit={handleSubmitWO} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1fr', gap: '1rem' }}>
               <div>
                 <label>Work Order No</label>
                 <input type="text" required className="input-field" value={woForm.workOrderNo} onChange={(e) => setWoForm({ ...woForm, workOrderNo: e.target.value })} />
               </div>
               <div>
-                <label>Machine Model</label>
-                <AutocompleteSelect options={machineModelOptions} value={woForm.machineModel} onChange={handleMachineModelChange} placeholder="Select machine model..." />
+                <label>Select Item (with BOM)</label>
+                <AutocompleteSelect options={bomOptions} value={selectedBomId} onChange={handleBOMChange} placeholder="Search item / machine model with BOM..." />
               </div>
               <div>
                 <label>Build Quantity</label>
@@ -404,15 +399,9 @@ export const WorkOrderModule: React.FC = () => {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              <div>
-                <label>Customer Name / Order Source</label>
-                <AutocompleteSelect options={customerOptions} value={woForm.customerName} onChange={(val) => setWoForm({ ...woForm, customerName: val })} placeholder="Type customer name..." />
-              </div>
-              <div>
-                <label>Production Notes & Instructions</label>
-                <input type="text" className="input-field" placeholder="e.g. Expedite assembly for exhibition delivery" value={woForm.remarks} onChange={(e) => setWoForm({ ...woForm, remarks: e.target.value })} />
-              </div>
+            <div>
+              <label>Production Notes & Instructions</label>
+              <input type="text" className="input-field" placeholder="e.g. Expedite assembly for scheduled batch delivery" value={woForm.remarks} onChange={(e) => setWoForm({ ...woForm, remarks: e.target.value })} />
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
@@ -518,14 +507,14 @@ export const WorkOrderModule: React.FC = () => {
             <div>
               <label>Current Production Stage</label>
               <select className="input-field" value={newStage} onChange={(e) => setNewStage(e.target.value)}>
-                <option value="PLANNED">1. PLANNED (Material Staging)</option>
-                <option value="BASE_FABRICATION">2. Base Frame Fabrication & Machining</option>
-                <option value="CLAMPING_ASSEMBLY">3. Clamping Unit Mechanical Assembly</option>
-                <option value="INJECTION_UNIT_BUILD">4. Injection Cylinder & Screw Assembly</option>
-                <option value="HYDRAULIC_POWERPACK">5. Hydraulic Piping & Powerpack Integration</option>
-                <option value="ELECTRICAL_CABINET">6. PLC Control Cabinet & Wiring</option>
-                <option value="FINAL_TESTING">7. Full Machine Dry Run & Calibration</option>
-                <option value="QUALITY_PASSED">8. QC Approved & Ready for Dispatch</option>
+                <option value="PLANNED">PLANNED (Material Pre-allocation)</option>
+                <option value="BASE_FABRICATION">Stage 1: Base Fabrication & Machining</option>
+                <option value="CLAMPING_ASSEMBLY">Stage 2: Clamping Unit & Platen Fitment</option>
+                <option value="INJECTION_UNIT_BUILD">Stage 3: Injection Unit & Screw Assembly</option>
+                <option value="HYDRAULIC_POWERPACK">Stage 4: Hydraulic Manifold & Valve Piping</option>
+                <option value="ELECTRICAL_CABINET">Stage 5: Electrical PLC & Wiring Harness</option>
+                <option value="FINAL_TESTING">Stage 6: Dry Run & Pressure Calibration</option>
+                <option value="QUALITY_PASSED">Stage 7: Final Quality Inspection Passed</option>
               </select>
             </div>
 
@@ -543,7 +532,7 @@ export const WorkOrderModule: React.FC = () => {
               <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
               <input
                 type="text"
-                placeholder="Search WO no, machine model, customer..."
+                placeholder="Search WO no, item model, production lead..."
                 className="input-field"
                 style={{ paddingLeft: '2.25rem' }}
                 value={searchTerm}
@@ -579,10 +568,9 @@ export const WorkOrderModule: React.FC = () => {
                   </th>
                   <th onClick={() => handleSortToggle('machineModel')} style={{ cursor: 'pointer' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                      Machine Model {sortField === 'machineModel' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
+                      Item / Model (BOM) {sortField === 'machineModel' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
                     </div>
                   </th>
-                  <th>Customer / Source</th>
                   <th onClick={() => handleSortToggle('quantity')} style={{ cursor: 'pointer' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                       Build Qty {sortField === 'quantity' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
@@ -604,7 +592,7 @@ export const WorkOrderModule: React.FC = () => {
               <tbody>
                 {filteredWOs.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                    <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
                       No work orders found matching search criteria.
                     </td>
                   </tr>
@@ -629,7 +617,6 @@ export const WorkOrderModule: React.FC = () => {
                           {woNo}
                         </td>
                         <td style={{ fontWeight: 600 }}>{wo.machineModel}</td>
-                        <td>{wo.customerName || 'Internal Stock'}</td>
                         <td style={{ fontWeight: 700 }}>{buildQty} Unit(s)</td>
                         <td>
                           <span className="badge badge-info" style={{ fontSize: '0.72rem' }}>
@@ -660,27 +647,27 @@ export const WorkOrderModule: React.FC = () => {
         </>
       )}
 
-      {/* Export Field Selector Modal */}
-      <ExportFieldSelectorModal<WorkOrder>
-        isOpen={isExportModalOpen}
-        onClose={() => setIsExportModalOpen(false)}
-        title="Custom Export Live Sheet Options"
-        subfolder="WorkOrders"
-        fileName="GEC_Filtered_WorkOrders_Live"
-        data={filteredWOs}
-        availableFields={availableWOExportFields}
-      />
-
-      {/* Print Document Modal */}
+      {/* Print WO Document Modal */}
       {printData && (
         <PrintDocumentModal
           isOpen={printModalOpen}
           onClose={() => setPrintModalOpen(false)}
-          title="Print Production Work Order"
+          title="Print Machine Production Work Order"
           documentType="WO"
           data={printData}
         />
       )}
+
+      {/* Custom Export Field Modal */}
+      <ExportFieldSelectorModal<WorkOrder>
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        title="Custom Export Work Orders Live Sheet"
+        subfolder="WorkOrders"
+        fileName="GEC_Filtered_Work_Orders_Live"
+        data={filteredWOs}
+        availableFields={availableWOExportFields}
+      />
     </div>
   );
 };

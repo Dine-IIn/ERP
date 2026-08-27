@@ -648,7 +648,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       subtotal,
       taxAmount,
       totalAmount,
-      status: 'ISSUED'
+      status: 'DRAFT'
     }, ...prev]);
   };
 

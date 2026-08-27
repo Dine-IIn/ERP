@@ -647,16 +647,32 @@ export const PurchaseOrderModule: React.FC = () => {
                             </button>
                           )}
                           {po.status === 'WAITING_FOR_APPROVAL' && (
-                            <button 
-                              className="btn btn-primary" 
-                              style={{ fontSize: '0.75rem', padding: '0.2rem 0.45rem' }}
-                              onClick={() => {
-                                updatePOStatus(po.id, 'APPROVED');
-                                alert(`PO ${po.poNumber} Approved!`);
-                              }}
-                            >
-                              Approve
-                            </button>
+                            <div style={{ display: 'flex', gap: '0.25rem' }}>
+                              <button 
+                                className="btn btn-primary" 
+                                style={{ fontSize: '0.75rem', padding: '0.2rem 0.45rem', backgroundColor: 'var(--success)', borderColor: 'var(--success)' }}
+                                title="Approve PO"
+                                onClick={() => {
+                                  updatePOStatus(po.id, 'APPROVED');
+                                  alert(`✅ PO ${po.poNumber} Approved!`);
+                                }}
+                              >
+                                Approve
+                              </button>
+                              <button 
+                                className="btn btn-outline" 
+                                style={{ fontSize: '0.75rem', padding: '0.2rem 0.45rem', color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                                title="Reject PO"
+                                onClick={() => {
+                                  if (window.confirm(`Reject PO ${po.poNumber}? It will be returned to Draft status for revisions.`)) {
+                                    updatePOStatus(po.id, 'DRAFT');
+                                    alert(`❌ PO ${po.poNumber} Rejected and returned to Draft.`);
+                                  }
+                                }}
+                              >
+                                Reject
+                              </button>
+                            </div>
                           )}
                         </div>
                       </td>

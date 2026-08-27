@@ -16,7 +16,6 @@ import { GRNModule } from './components/modules/GRNModule';
 import { WorkOrderModule } from './components/modules/WorkOrderModule';
 import { QualityControlModule } from './components/modules/QualityControlModule';
 import { AssemblyModule } from './components/modules/AssemblyModule';
-import { MRPPlanningModule } from './components/modules/MRPPlanningModule';
 
 const MainContent: React.FC = () => {
   const { currentUser, activeModule, setActiveModule } = useERP();
@@ -73,7 +72,6 @@ const MainContent: React.FC = () => {
       case 'work-orders': return <WorkOrderModule />;
       case 'quality-control': return <QualityControlModule />;
       case 'assembly': return <AssemblyModule />;
-      case 'mrp-planning': return <MRPPlanningModule />;
       default: return <DashboardModule />;
     }
   };
