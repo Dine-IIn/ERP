@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { Modal } from '../common/Modal';
-import { AutocompleteSelect, AutocompleteOption } from '../common/AutocompleteSelect';
 import { PrintDocumentModal } from '../common/PrintDocumentModal';
-import { ShoppingCart, Plus, Trash2, Edit2, Search, Printer, FileSpreadsheet, Send, AlertTriangle, CheckCircle2, XCircle, FileText, ArrowRight, ShieldCheck, ArrowUpDown, ArrowUp, ArrowDown, Percent, Hash, X } from 'lucide-react';
+import { ShoppingCart, Plus, Trash2, Edit2, Search, Printer, FileSpreadsheet, Send, AlertTriangle, CheckCircle2, XCircle, FileText, ArrowRight, ShieldCheck, ArrowUpDown, ArrowUp, ArrowDown, Percent, Hash, ArrowLeft, X, AlertCircle } from 'lucide-react';
 import { POLineItem, PurchaseOrder, Item, POStatus, ItemMappedVendor } from '../../types/erp';
 import { ExportFieldSelectorModal, FieldOption } from '../common/ExportFieldSelectorModal';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
@@ -16,12 +15,15 @@ export const PurchaseOrderModule: React.FC = () => {
     updatePOStatus, sendPODraftsForApproval, currentUser, searchTerm, setSearchTerm 
   } = useERP();
   
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [isShortageModalOpen, setIsShortageModalOpen] = useState(false);
+  const [selectedShortageItem, setSelectedShortageItem] = useState<Item | null>(null);
+
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [printModalOpen, setPrintModalOpen] = useState(false);
   const [printData, setPrintData] = useState<any>(null);
 
-  // Edit PO Modal state
+  // Edit PO state
   const [editingPO, setEditingPO] = useState<PurchaseOrder | null>(null);
   const [isEditPOModalOpen, setIsEditPOModalOpen] = useState(false);
 
@@ -29,14 +31,10 @@ export const PurchaseOrderModule: React.FC = () => {
   const [sortField, setSortField] = useState<POSortField>('poNumber');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
-  // Smart PO Creation Wizard State
-  const [wizardStep, setWizardStep] = useState<'SELECT_ITEM' | 'CONFIGURE_DISTRIBUTION'>('SELECT_ITEM');
-  const [selectedItemForPO, setSelectedItemForPO] = useState<Item | null>(null);
-  
-  // Selected Vendor IDs and distribution mapping
-  const [selectedVendorIds, setSelectedVendorIds] = useState<string[]>([]);
-  const [vendorQtyMap, setVendorQtyMap] = useState<Record<string, number>>({});
-  const [vendorDistributions, setVendorDistributions] = useState<Record<string, number>>({});
+  // Single Selected Vendor & Qty State for Shortage PO Popup
+  const [selectedVendorId, setSelectedVendorId] = useState<string>('');
+  const [selectedPOQty, setSelectedPOQty] = useState<number>(1);
+  const [wizardSearchTerm, setWizardSearchTerm] = useState('');
 
   // Calculate Net Effective Item Shortage
   const getItemEffectiveShortage = (item: Item) => {
@@ -59,7 +57,11 @@ export const PurchaseOrderModule: React.FC = () => {
     return netShortage;
   };
 
+  // ONLY items with net shortage > 0 can have PO created
   const shortageItems = items.filter(i => getItemEffectiveShortage(i) > 0);
+
+  // Filter Draft POs
+  const draftPOs = purchaseOrders.filter(po => po.status === 'DRAFT');
 
   // Inline Status & Date Filters
   const [selectedPOStatusFilter, setSelectedPOStatusFilter] = useState<string>('ACTIVE_ONLY');
@@ -117,89 +119,104 @@ export const PurchaseOrderModule: React.FC = () => {
       return 0;
     });
 
-  const handleOpenModal = () => {
-    setWizardStep('SELECT_ITEM');
-    setSelectedItemForPO(null);
-    setSelectedVendorIds([]);
-    setVendorQtyMap({});
-    setVendorDistributions({});
-    setIsModalOpen(true);
-  };
+  // Open Shortage PO Creation Modal for specific Item
+  const handleOpenShortagePOModal = (item: Item) => {
+    setSelectedShortageItem(item);
 
-  const handleSelectItemForPO = (item: Item) => {
-    setSelectedItemForPO(item);
-
-    const baseShortage = getItemEffectiveShortage(item);
-    const minOrder = item.minOrderQty || item.reorderLevel || 1;
-    const targetBaseQty = Math.max(baseShortage, minOrder);
+    const shortage = getItemEffectiveShortage(item);
+    const moq = item.minOrderQty || item.reorderLevel || 1;
+    const targetQty = Math.max(moq, shortage);
+    setSelectedPOQty(targetQty);
 
     const mapped = item.mappedVendors || [];
-    let initialVendorId = '';
     if (mapped.length > 0) {
       const sortedMapped = [...mapped].sort((a, b) => ((a.priorityOrder || a.priority || 0) - (b.priorityOrder || b.priority || 0)));
-      initialVendorId = sortedMapped[0].vendorId;
-    } else if (vendors.length > 0) {
-      initialVendorId = vendors[0].id;
+      // Select 1st Priority vendor by default
+      setSelectedVendorId(sortedMapped[0].vendorId);
+    } else {
+      setSelectedVendorId('');
     }
 
-    setSelectedVendorIds(initialVendorId ? [initialVendorId] : []);
-    setVendorQtyMap(initialVendorId ? { [initialVendorId]: targetBaseQty } : {});
-
-    setWizardStep('CONFIGURE_DISTRIBUTION');
-    setIsModalOpen(true);
+    setIsShortageModalOpen(true);
+    setIsWizardOpen(false);
   };
 
-  const rebalanceVendorAllocations = (vendorIds: string[], baseItem: Item) => {
-    if (vendorIds.length === 0) {
-      setVendorQtyMap({});
-      setVendorDistributions({});
+  // Generate PO with Automatic Draft Merging for same vendor in Draft stage
+  const handleGeneratePOFromShortageModal = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedShortageItem || !selectedVendorId) return;
+
+    const vendorObj = vendors.find(v => v.id === selectedVendorId);
+    if (!vendorObj) {
+      alert('Selected vendor was not found in system.');
       return;
     }
 
-    const baseShortage = getItemEffectiveShortage(baseItem);
-    const minOrder = baseItem.minOrderQty || baseItem.reorderLevel || 1;
-    const totalTargetQty = Math.max(baseShortage, minOrder);
+    const unitPrice = selectedShortageItem.unitPrice || 0;
+    const amount = selectedPOQty * unitPrice;
 
-    const equalQty = Math.max(1, Math.floor(totalTargetQty / vendorIds.length));
-    const equalPct = Number((100 / vendorIds.length).toFixed(1));
+    // Check if a DRAFT PO already exists for this vendor
+    const existingDraftPO = purchaseOrders.find(po => po.status === 'DRAFT' && po.vendorId === selectedVendorId);
 
-    const newQtyMap: Record<string, number> = {};
-    const newDistMap: Record<string, number> = {};
+    if (existingDraftPO) {
+      // Merge into existing DRAFT PO for this vendor
+      const itemExistsIndex = existingDraftPO.items.findIndex(l => l.itemId === selectedShortageItem.id);
+      let updatedItems = [...existingDraftPO.items];
 
-    vendorIds.forEach((vid, idx) => {
-      if (idx === vendorIds.length - 1) {
-        const sumPrevious = Object.values(newQtyMap).reduce((s, q) => s + q, 0);
-        newQtyMap[vid] = Math.max(1, totalTargetQty - sumPrevious);
+      if (itemExistsIndex >= 0) {
+        // Accumulate quantity if item is already in draft PO
+        const existingLine = updatedItems[itemExistsIndex];
+        const newQty = (existingLine.quantity || existingLine.orderedQty || 0) + selectedPOQty;
+        const newAmt = newQty * unitPrice;
 
-        const sumPreviousPct = Object.values(newDistMap).reduce((s, p) => s + p, 0);
-        newDistMap[vid] = Number((100 - sumPreviousPct).toFixed(1));
+        updatedItems[itemExistsIndex] = {
+          ...existingLine,
+          quantity: newQty,
+          orderedQty: newQty,
+          unitPrice: unitPrice,
+          amount: newAmt,
+          totalAmount: newAmt
+        };
       } else {
-        newQtyMap[vid] = equalQty;
-        newDistMap[vid] = equalPct;
+        // Add new line item to existing draft PO
+        updatedItems.push({
+          itemId: selectedShortageItem.id,
+          itemCode: selectedShortageItem.itemCode,
+          itemName: selectedShortageItem.name,
+          quantity: selectedPOQty,
+          orderedQty: selectedPOQty,
+          receivedQty: 0,
+          unit: selectedShortageItem.unit,
+          unitPrice: unitPrice,
+          totalAmount: amount,
+          amount: amount
+        });
       }
-    });
 
-    setVendorQtyMap(newQtyMap);
-    setVendorDistributions(newDistMap);
-  };
+      const subtotal = updatedItems.reduce((sum, i) => sum + ((i.quantity || i.orderedQty || 1) * (i.unitPrice || 0)), 0);
+      const taxAmount = Math.round(subtotal * 0.18);
+      const totalAmount = subtotal + taxAmount;
 
-  const handleGenerateDraftPOsFromWizard = () => {
-    if (!selectedItemForPO || selectedVendorIds.length === 0) {
-      alert('Please select at least one vendor to create Purchase Orders.');
-      return;
-    }
+      updatePurchaseOrder({
+        ...existingDraftPO,
+        items: updatedItems,
+        subtotal,
+        taxAmount,
+        totalAmount,
+        notes: `${existingDraftPO.notes || ''} | Merged ${selectedShortageItem.itemCode} (${selectedPOQty} ${selectedShortageItem.unit}).`
+      });
 
-    let createdCount = 0;
-    selectedVendorIds.forEach(vendorId => {
-      const vendorObj = vendors.find(v => v.id === vendorId);
-      if (!vendorObj) return;
-
-      const orderQty = Math.max(1, vendorQtyMap[vendorId] || selectedItemForPO.minOrderQty || 1);
-      const unitPrice = selectedItemForPO.unitPrice || 100;
-      const amount = orderQty * unitPrice;
-
-      const poNo = `PO-GEC-${String(purchaseOrders.length + createdCount + 1).padStart(3, '0')}`;
+      setIsShortageModalOpen(false);
+      setSelectedShortageItem(null);
+      alert(`✅ Merged ${selectedShortageItem.itemCode} (${selectedPOQty} ${selectedShortageItem.unit}) into existing Draft PO ${existingDraftPO.poNumber} for ${vendorObj.name}!`);
+    } else {
+      // Create new DRAFT PO for this vendor
+      const poNo = `PO-GEC-${String(purchaseOrders.length + 1).padStart(3, '0')}`;
       const createDateTime = new Date().toISOString();
+
+      const subtotal = amount;
+      const taxAmount = Math.round(subtotal * 0.18);
+      const totalAmount = subtotal + taxAmount;
 
       addPurchaseOrder({
         poNumber: poNo,
@@ -211,27 +228,27 @@ export const PurchaseOrderModule: React.FC = () => {
         poCreateDateTime: createDateTime,
         preparedBy: currentUser?.fullName || 'Store Manager',
         items: [{
-          itemId: selectedItemForPO.id,
-          itemCode: selectedItemForPO.itemCode,
-          itemName: selectedItemForPO.name,
-          quantity: orderQty,
-          orderedQty: orderQty,
+          itemId: selectedShortageItem.id,
+          itemCode: selectedShortageItem.itemCode,
+          itemName: selectedShortageItem.name,
+          quantity: selectedPOQty,
+          orderedQty: selectedPOQty,
           receivedQty: 0,
-          unit: selectedItemForPO.unit,
+          unit: selectedShortageItem.unit,
           unitPrice: unitPrice,
           totalAmount: amount,
           amount: amount
         }],
-        notes: `System generated PO via Smart Wizard for ${selectedItemForPO.itemCode}.`
+        notes: `Draft PO created for ${selectedShortageItem.itemCode} (${selectedPOQty} ${selectedShortageItem.unit}).`
       });
 
-      createdCount++;
-    });
-
-    setIsModalOpen(false);
-    alert(`Successfully generated ${createdCount} Purchase Order(s)!`);
+      setIsShortageModalOpen(false);
+      setSelectedShortageItem(null);
+      alert(`✅ Draft Purchase Order ${poNo} created successfully for ${vendorObj.name}!`);
+    }
   };
 
+  // Save edits on PO (If PO was APPROVED, require re-approval by setting status to WAITING_FOR_APPROVAL)
   const handleSaveEditPO = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingPO) return;
@@ -240,8 +257,13 @@ export const PurchaseOrderModule: React.FC = () => {
     const taxAmount = Math.round(subtotal * 0.18);
     const totalAmount = subtotal + taxAmount;
 
+    // Check if PO was approved
+    const wasApproved = editingPO.status === 'APPROVED';
+    const newStatus = wasApproved ? 'WAITING_FOR_APPROVAL' : editingPO.status;
+
     updatePurchaseOrder({
       ...editingPO,
+      status: newStatus,
       subtotal,
       taxAmount,
       totalAmount
@@ -249,6 +271,12 @@ export const PurchaseOrderModule: React.FC = () => {
 
     setIsEditPOModalOpen(false);
     setEditingPO(null);
+
+    if (wasApproved) {
+      alert(`⚠️ Approved PO ${editingPO.poNumber} was modified. It has been sent back for re-approval.`);
+    } else {
+      alert(`✅ PO ${editingPO.poNumber} updated successfully.`);
+    }
   };
 
   const handlePrintPO = (po: PurchaseOrder) => {
@@ -287,7 +315,6 @@ export const PurchaseOrderModule: React.FC = () => {
     setPrintModalOpen(true);
   };
 
-  // Keyboard Navigation Hook
   const { selectedIndex, setSelectedIndex } = useTableKeyboardNav(filteredPOs, handlePrintPO);
 
   const availablePOExportFields: FieldOption<PurchaseOrder>[] = [
@@ -301,323 +328,491 @@ export const PurchaseOrderModule: React.FC = () => {
     { key: 'status', label: 'PO Status' }
   ];
 
+  const wizardShortageItemsFiltered = shortageItems.filter(item => {
+    const term = wizardSearchTerm.trim().toLowerCase();
+    if (!term) return true;
+    return (
+      item.itemCode.toLowerCase().includes(term) ||
+      item.name.toLowerCase().includes(term) ||
+      item.category.toLowerCase().includes(term) ||
+      (item.partCode && item.partCode.toLowerCase().includes(term))
+    );
+  });
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
       
-      {/* Top Header */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-        <button className="btn btn-outline" onClick={() => setIsExportModalOpen(true)}>
-          <FileSpreadsheet size={16} /> Open Sheet ({filteredPOs.length} filtered)
-        </button>
-        <button id="btn-new-po" className="btn btn-primary" onClick={handleOpenModal}>
-          <Plus size={16} /> Create New PO (Smart Wizard)
-        </button>
-      </div>
-
-      {/* Shortage Items Alert Banner at Top */}
-      {shortageItems.length > 0 && (
-        <div className="card" style={{ padding: '0.875rem 1.25rem', backgroundColor: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '0.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <AlertTriangle size={20} color="var(--danger)" />
-              <div>
-                <span style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--danger)' }}>
-                  Shortage Alert: {shortageItems.length} Item(s) Below Minimum Stock Requirement!
-                </span>
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                  Click "Order Shortage" on any item below to trigger instant smart PO wizard popup.
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-              {shortageItems.slice(0, 3).map(item => {
-                const shortage = getItemEffectiveShortage(item);
-
-                return (
-                  <button
-                    key={item.id}
-                    className="btn btn-outline"
-                    style={{ fontSize: '0.72rem', padding: '0.2rem 0.5rem', color: 'var(--danger)', borderColor: 'var(--danger)' }}
-                    onClick={() => handleSelectItemForPO(item)}
-                  >
-                    {item.itemCode}: Order {shortage} {item.unit}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Filter Bar with Lifecycle Status Filter */}
-      <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', backgroundColor: 'var(--bg-card)' }}>
-        <div style={{ position: 'relative', width: '340px', maxWidth: '100%' }}>
-          <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-          <input
-            type="text"
-            placeholder="Search PO number, vendor... (use @ for history)"
-            className="input-field"
-            style={{ paddingLeft: '2.25rem' }}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+      {/* Top Action Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          {isWizardOpen && (
+            <button className="btn btn-outline" style={{ padding: '0.35rem 0.65rem', gap: '0.35rem', fontWeight: 600 }} onClick={() => setIsWizardOpen(false)}>
+              <ArrowLeft size={16} /> Back to PO List <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>(ESC)</span>
+            </button>
+          )}
+          <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-secondary)' }}>
+            {isWizardOpen ? 'Select Shortage Item to Generate Purchase Order' : `All Purchase Orders (${filteredPOs.length})`}
+          </span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <div>
-            <label style={{ fontSize: '0.72rem', margin: 0 }}>PO Lifecycle View</label>
-            <select className="input-field" style={{ padding: '0.35rem 0.6rem', fontSize: '0.8rem' }} value={selectedPOStatusFilter} onChange={(e) => setSelectedPOStatusFilter(e.target.value)}>
-              <option value="ACTIVE_ONLY">Active POs (Hides Goods Received)</option>
-              <option value="ALL">All Statuses (Including Goods Received)</option>
-              <option value="DRAFT">Drafts</option>
-              <option value="WAITING_FOR_APPROVAL">Waiting for Approval</option>
-              <option value="APPROVED">Approved</option>
-              <option value="SENT">Sent to Vendor</option>
-              <option value="GOODS_RECEIVED">Goods Received (History)</option>
-              <option value="CANCELLED">Cancelled</option>
-            </select>
-          </div>
-          <div>
-            <label style={{ fontSize: '0.72rem', margin: 0 }}>Start Date</label>
-            <input type="date" className="input-field" style={{ padding: '0.35rem 0.6rem', fontSize: '0.8rem' }} value={startDateFilter} onChange={(e) => setStartDateFilter(e.target.value)} />
-          </div>
-          <div>
-            <label style={{ fontSize: '0.72rem', margin: 0 }}>End Date</label>
-            <input type="date" className="input-field" style={{ padding: '0.35rem 0.6rem', fontSize: '0.8rem' }} value={endDateFilter} onChange={(e) => setEndDateFilter(e.target.value)} />
-          </div>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          {/* Send All Draft POs for Approval Button */}
+          {draftPOs.length > 0 && !isWizardOpen && (
+            <button 
+              className="btn btn-warning" 
+              style={{ fontWeight: 700, padding: '0.45rem 0.85rem', gap: '0.4rem', color: '#ffffff', backgroundColor: 'var(--warning)', border: 'none' }}
+              onClick={() => {
+                const ids = draftPOs.map(p => p.id);
+                sendPODraftsForApproval(ids);
+                alert(`✅ Successfully sent ${ids.length} Draft Purchase Order(s) for Approval!`);
+              }}
+            >
+              <Send size={16} /> Send All Draft POs for Approval ({draftPOs.length})
+            </button>
+          )}
+
+          <button className="btn btn-outline" onClick={() => setIsExportModalOpen(true)}>
+            <FileSpreadsheet size={16} /> Open Sheet ({filteredPOs.length} filtered)
+          </button>
+          {!isWizardOpen && (
+            <button id="btn-new-po" className="btn btn-primary" onClick={() => { setIsWizardOpen(true); setWizardSearchTerm(''); }}>
+              <Plus size={16} /> Create New PO (Smart Wizard)
+            </button>
+          )}
         </div>
       </div>
 
-      {/* PO Table */}
-      <div className="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th onClick={() => handleSortToggle('poNumber')} style={{ cursor: 'pointer' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                  PO Number {sortField === 'poNumber' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
-                </div>
-              </th>
-              <th onClick={() => handleSortToggle('vendorName')} style={{ cursor: 'pointer' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                  Vendor Name {sortField === 'vendorName' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
-                </div>
-              </th>
-              <th onClick={() => handleSortToggle('orderDate')} style={{ cursor: 'pointer' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                  Order Date {sortField === 'orderDate' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
-                </div>
-              </th>
-              <th onClick={() => handleSortToggle('deliveryDate')} style={{ cursor: 'pointer' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                  Expected Delivery {sortField === 'deliveryDate' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
-                </div>
-              </th>
-              <th onClick={() => handleSortToggle('poCreateDateTime')} style={{ cursor: 'pointer' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                  Created Date & Time {sortField === 'poCreateDateTime' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
-                </div>
-              </th>
-              <th>Prepared By</th>
-              <th onClick={() => handleSortToggle('totalAmount')} style={{ cursor: 'pointer' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                  Total Amount {sortField === 'totalAmount' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
-                </div>
-              </th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredPOs.map((po, idx) => {
-              const isNavSelected = selectedIndex === idx;
-              const statusClass = 
-                po.status === 'GOODS_RECEIVED' ? 'badge-success' :
-                po.status === 'APPROVED' ? 'badge-info' :
-                po.status === 'WAITING_FOR_APPROVAL' ? 'badge-warning' :
-                po.status === 'CANCELLED' ? 'badge-danger' : 'badge-neutral';
+      {/* Main View: Wizard Page Panel OR Standard PO List */}
+      {isWizardOpen ? (
+        /* In-Screen Panel: Select Shortage Item (Only Shortage Items Listed) */
+        <div className="card" style={{ padding: '1.25rem', backgroundColor: 'var(--bg-card)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
+              Select Shortage Item to Generate PO
+            </h3>
+            <button type="button" className="btn btn-outline" style={{ padding: '0.25rem 0.5rem', fontSize: '0.78rem' }} onClick={() => setIsWizardOpen(false)}>
+              <X size={15} /> Close (ESC)
+            </button>
+          </div>
 
-              const createdDisplay = po.poCreateDateTime 
-                ? new Date(po.poCreateDateTime).toLocaleString('en-IN', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })
-                : po.orderDate;
-
-              return (
-                <tr 
-                  key={po.id}
-                  onDoubleClick={() => handlePrintPO(po)}
-                  onClick={() => setSelectedIndex(idx)}
-                  style={{
-                    backgroundColor: isNavSelected ? 'rgba(59, 130, 246, 0.18)' : 'transparent',
-                    cursor: 'pointer'
-                  }}
-                  title="Double click or press Enter to view PO document"
-                >
-                  <td style={{ fontWeight: 700, color: 'var(--accent-primary)', fontFamily: 'monospace' }}>
-                    {po.poNumber}
-                  </td>
-                  <td style={{ fontWeight: 600 }}>{po.vendorName}</td>
-                  <td>{po.orderDate}</td>
-                  <td>{po.deliveryDate || po.expectedDeliveryDate}</td>
-                  <td style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>{createdDisplay}</td>
-                  <td style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>{po.preparedBy || 'System User'}</td>
-                  <td style={{ fontWeight: 800, color: 'var(--text-primary)' }}>
-                    ₹{(po.totalAmount || 0).toLocaleString()}
-                  </td>
-                  <td>
-                    <span className={`badge ${statusClass}`}>
-                      {po.status.replace(/_/g, ' ')}
-                    </span>
-                  </td>
-                  <td onClick={(e) => e.stopPropagation()}>
-                    <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
-                      <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem' }} title="Print PO Document" onClick={() => handlePrintPO(po)}>
-                        <Printer size={14} />
-                      </button>
-                      <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem' }} title="Edit PO" onClick={() => { setEditingPO({ ...po }); setIsEditPOModalOpen(true); }}>
-                        <Edit2 size={14} />
-                      </button>
-                      <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem', color: 'var(--danger)' }} title="Delete PO" onClick={() => {
-                        if (window.confirm(`Are you sure you want to delete PO ${po.poNumber}? Any associated item shortage will reappear.`)) {
-                          deletePurchaseOrder(po.id);
-                        }
-                      }}>
-                        <Trash2 size={14} />
-                      </button>
-                      {po.status === 'DRAFT' && (
-                        <button 
-                          className="btn btn-outline" 
-                          style={{ fontSize: '0.75rem', padding: '0.2rem 0.4rem', color: 'var(--warning)', borderColor: 'var(--warning)' }}
-                          onClick={() => {
-                            updatePOStatus(po.id, 'WAITING_FOR_APPROVAL');
-                            alert(`PO ${po.poNumber} sent for approval!`);
-                          }}
-                        >
-                          Send for Approval
-                        </button>
-                      )}
-                      {po.status === 'WAITING_FOR_APPROVAL' && (
-                        <button 
-                          className="btn btn-primary" 
-                          style={{ fontSize: '0.75rem', padding: '0.2rem 0.45rem' }}
-                          onClick={() => {
-                            updatePOStatus(po.id, 'APPROVED');
-                            alert(`PO ${po.poNumber} Approved!`);
-                          }}
-                        >
-                          Approve
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Modal: Smart PO Creation Wizard Popup */}
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title={wizardStep === 'SELECT_ITEM' ? 'Smart PO Creation Wizard - Step 1: Select Item' : `Smart PO Wizard - Step 2: Order Split & Vendor Allocation (${selectedItemForPO?.itemCode})`}
-      >
-        {wizardStep === 'SELECT_ITEM' ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-              Select an item below to view Min Stock, Min Order Qty, Net Effective Shortage, and vendor priority allocation options:
+            {/* Search Bar for Shortage Items */}
+            <div style={{ position: 'relative', width: '100%' }}>
+              <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input
+                type="text"
+                placeholder="Search shortage item code, description, category..."
+                className="input-field"
+                style={{ paddingLeft: '2.25rem' }}
+                value={wizardSearchTerm}
+                onChange={(e) => setWizardSearchTerm(e.target.value)}
+              />
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '360px', overflowY: 'auto' }}>
-              {items.map(item => {
-                const shortage = getItemEffectiveShortage(item);
-
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="btn btn-outline"
-                    style={{ justifyContent: 'space-between', padding: '0.75rem 1rem', textAlign: 'left', display: 'flex', alignItems: 'center' }}
-                    onClick={() => handleSelectItemForPO(item)}
-                  >
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
-                        {item.itemCode} - {item.name}
-                      </div>
-                      <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                        In-House: {item.inHouseStock} | External: {item.externalStock} | Min Stock: {item.minStockQty || item.reorderLevel} {item.unit}
-                      </div>
-                    </div>
-                    <span className={`badge ${shortage > 0 ? 'badge-danger' : 'badge-neutral'}`} style={{ fontSize: '0.75rem' }}>
-                      Shortage: {shortage} {item.unit}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ) : (
-          selectedItemForPO && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div style={{ padding: '0.75rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800 }}>{selectedItemForPO.name} ({selectedItemForPO.itemCode})</h4>
-                  <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Unit Price: ₹{selectedItemForPO.unitPrice} | Unit: {selectedItemForPO.unit}</span>
+            {shortageItems.length === 0 ? (
+              <div style={{ padding: '2rem', textAlign: 'center', backgroundColor: 'var(--bg-tertiary)', borderRadius: '0.5rem', color: 'var(--success)' }}>
+                <CheckCircle2 size={32} style={{ marginBottom: '0.5rem' }} />
+                <div style={{ fontWeight: 700, fontSize: '1rem' }}>All items have sufficient stock levels!</div>
+                <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                  No material shortages currently exist. PO creation is restricted to shortage items only.
                 </div>
-                <button type="button" className="btn btn-outline" style={{ fontSize: '0.75rem' }} onClick={() => setWizardStep('SELECT_ITEM')}>
-                  Change Item
-                </button>
               </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '420px', overflowY: 'auto' }}>
+                {wizardShortageItemsFiltered.map(item => {
+                  const shortage = getItemEffectiveShortage(item);
 
-              {/* Vendor Allocation Selection */}
-              <div>
-                <label style={{ fontWeight: 700, fontSize: '0.85rem' }}>Select Target Vendor(s)</label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem', maxHeight: '250px', overflowY: 'auto' }}>
-                  {vendors.map(v => {
-                    const isSelected = selectedVendorIds.includes(v.id);
-                    return (
-                      <div
-                        key={v.id}
-                        style={{
-                          padding: '0.625rem 0.875rem',
-                          borderRadius: '0.375rem',
-                          border: `1px solid ${isSelected ? 'var(--accent-primary)' : 'var(--border-color)'}`,
-                          backgroundColor: isSelected ? 'rgba(59, 130, 246, 0.1)' : 'var(--bg-card)',
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          cursor: 'pointer'
-                        }}
-                        onClick={() => {
-                          const newIds = isSelected ? selectedVendorIds.filter(id => id !== v.id) : [...selectedVendorIds, v.id];
-                          setSelectedVendorIds(newIds);
-                          rebalanceVendorAllocations(newIds, selectedItemForPO);
-                        }}
-                      >
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: '0.88rem' }}>{v.name} ({v.vendorCode})</div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{v.city} | GSTIN: {v.gstin}</div>
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className="btn btn-outline"
+                      style={{ justifyContent: 'space-between', padding: '0.875rem 1.25rem', textAlign: 'left', display: 'flex', alignItems: 'center' }}
+                      onClick={() => handleOpenShortagePOModal(item)}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
+                          {item.itemCode} - {item.name}
                         </div>
-                        <input type="checkbox" checked={isSelected} onChange={() => {}} />
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                          In-House: {item.inHouseStock} | External: {item.externalStock} | Min Stock: {item.minStockQty || 5} {item.unit} | MOQ: {item.minOrderQty || 5} {item.unit}
+                        </div>
                       </div>
+                      <span className="badge badge-danger" style={{ fontSize: '0.82rem', padding: '0.35rem 0.65rem', fontWeight: 800 }}>
+                        Shortage: {shortage} {item.unit}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Red Shortage Items Alert Banner at Top */}
+          {shortageItems.length > 0 && (
+            <div className="card" style={{ padding: '0.875rem 1.25rem', backgroundColor: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <AlertTriangle size={20} color="var(--danger)" />
+                  <div>
+                    <span style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--danger)' }}>
+                      Shortage Alert: {shortageItems.length} Item(s) Below Minimum Stock Requirement!
+                    </span>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                      Click on any red item button below to open shortage details and generate PO.
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                  {shortageItems.map(item => {
+                    const shortage = getItemEffectiveShortage(item);
+
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className="btn"
+                        style={{ 
+                          fontSize: '0.78rem', 
+                          padding: '0.35rem 0.75rem', 
+                          backgroundColor: 'var(--danger)', 
+                          color: '#ffffff', 
+                          fontWeight: 700,
+                          border: 'none',
+                          borderRadius: '0.375rem',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.35rem'
+                        }}
+                        onClick={() => handleOpenShortagePOModal(item)}
+                      >
+                        {item.itemCode}: Order {shortage} {item.unit}
+                      </button>
                     );
                   })}
                 </div>
               </div>
+            </div>
+          )}
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setWizardStep('SELECT_ITEM')}>Back</button>
-                <button type="button" className="btn btn-primary" onClick={handleGenerateDraftPOsFromWizard}>
-                  Generate Draft Purchase Order(s)
-                </button>
+          {/* Filter Bar with Lifecycle Status Filter */}
+          <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', backgroundColor: 'var(--bg-card)' }}>
+            <div style={{ position: 'relative', width: '340px', maxWidth: '100%' }}>
+              <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input
+                type="text"
+                placeholder="Search PO number, vendor... (use @ for history)"
+                className="input-field"
+                style={{ paddingLeft: '2.25rem' }}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <div>
+                <label style={{ fontSize: '0.72rem', margin: 0 }}>PO Lifecycle View</label>
+                <select className="input-field" style={{ padding: '0.35rem 0.6rem', fontSize: '0.8rem' }} value={selectedPOStatusFilter} onChange={(e) => setSelectedPOStatusFilter(e.target.value)}>
+                  <option value="ACTIVE_ONLY">Active POs (Hides Goods Received)</option>
+                  <option value="ALL">All Statuses (Including Goods Received)</option>
+                  <option value="DRAFT">Drafts ({draftPOs.length})</option>
+                  <option value="WAITING_FOR_APPROVAL">Waiting for Approval</option>
+                  <option value="APPROVED">Approved</option>
+                  <option value="SENT">Sent to Vendor</option>
+                  <option value="GOODS_RECEIVED">Goods Received (History)</option>
+                  <option value="CANCELLED">Cancelled</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '0.72rem', margin: 0 }}>Start Date</label>
+                <input type="date" className="input-field" style={{ padding: '0.35rem 0.6rem', fontSize: '0.8rem' }} value={startDateFilter} onChange={(e) => setStartDateFilter(e.target.value)} />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.72rem', margin: 0 }}>End Date</label>
+                <input type="date" className="input-field" style={{ padding: '0.35rem 0.6rem', fontSize: '0.8rem' }} value={endDateFilter} onChange={(e) => setEndDateFilter(e.target.value)} />
               </div>
             </div>
-          )
-        )}
-      </Modal>
+          </div>
 
-      {/* Modal: Edit Existing PO Popup */}
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th onClick={() => handleSortToggle('poNumber')} style={{ cursor: 'pointer' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      PO Number {sortField === 'poNumber' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
+                    </div>
+                  </th>
+                  <th onClick={() => handleSortToggle('vendorName')} style={{ cursor: 'pointer' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      Vendor Name {sortField === 'vendorName' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
+                    </div>
+                  </th>
+                  <th onClick={() => handleSortToggle('orderDate')} style={{ cursor: 'pointer' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      Order Date {sortField === 'orderDate' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
+                    </div>
+                  </th>
+                  <th onClick={() => handleSortToggle('deliveryDate')} style={{ cursor: 'pointer' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      Expected Delivery {sortField === 'deliveryDate' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
+                    </div>
+                  </th>
+                  <th onClick={() => handleSortToggle('poCreateDateTime')} style={{ cursor: 'pointer' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      Created Date & Time {sortField === 'poCreateDateTime' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
+                    </div>
+                  </th>
+                  <th>Prepared By</th>
+                  <th onClick={() => handleSortToggle('totalAmount')} style={{ cursor: 'pointer' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      Total Amount {sortField === 'totalAmount' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
+                    </div>
+                  </th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredPOs.map((po, idx) => {
+                  const isNavSelected = selectedIndex === idx;
+                  const statusClass = 
+                    po.status === 'GOODS_RECEIVED' ? 'badge-success' :
+                    po.status === 'APPROVED' ? 'badge-info' :
+                    po.status === 'WAITING_FOR_APPROVAL' ? 'badge-warning' :
+                    po.status === 'DRAFT' ? 'badge-neutral' :
+                    po.status === 'CANCELLED' ? 'badge-danger' : 'badge-neutral';
+
+                  const createdDisplay = po.poCreateDateTime 
+                    ? new Date(po.poCreateDateTime).toLocaleString('en-IN', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+                    : po.orderDate;
+
+                  return (
+                    <tr 
+                      key={po.id}
+                      onDoubleClick={() => handlePrintPO(po)}
+                      onClick={() => setSelectedIndex(idx)}
+                      style={{
+                        backgroundColor: isNavSelected ? 'rgba(59, 130, 246, 0.18)' : 'transparent',
+                        cursor: 'pointer'
+                      }}
+                      title="Double click or press Enter to view PO document"
+                    >
+                      <td style={{ fontWeight: 700, color: 'var(--accent-primary)', fontFamily: 'monospace' }}>
+                        {po.poNumber}
+                        {po.status === 'DRAFT' && <span className="badge badge-warning" style={{ fontSize: '0.65rem', marginLeft: '0.4rem' }}>DRAFT</span>}
+                      </td>
+                      <td style={{ fontWeight: 600 }}>{po.vendorName}</td>
+                      <td>{po.orderDate}</td>
+                      <td>{po.deliveryDate || po.expectedDeliveryDate}</td>
+                      <td style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>{createdDisplay}</td>
+                      <td style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>{po.preparedBy || 'System User'}</td>
+                      <td style={{ fontWeight: 800, color: 'var(--text-primary)' }}>
+                        ₹{(po.totalAmount || 0).toLocaleString()}
+                      </td>
+                      <td>
+                        <span className={`badge ${statusClass}`}>
+                          {po.status.replace(/_/g, ' ')}
+                        </span>
+                      </td>
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                          <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem' }} title="Print PO Document" onClick={() => handlePrintPO(po)}>
+                            <Printer size={14} />
+                          </button>
+                          <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem' }} title="Edit PO" onClick={() => { setEditingPO({ ...po }); setIsEditPOModalOpen(true); }}>
+                            <Edit2 size={14} />
+                          </button>
+                          <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem', color: 'var(--danger)' }} title="Delete PO" onClick={() => {
+                            if (window.confirm(`Are you sure you want to delete PO ${po.poNumber}? Any associated item shortage will reappear.`)) {
+                              deletePurchaseOrder(po.id);
+                            }
+                          }}>
+                            <Trash2 size={14} />
+                          </button>
+                          {po.status === 'DRAFT' && (
+                            <button 
+                              className="btn btn-outline" 
+                              style={{ fontSize: '0.75rem', padding: '0.2rem 0.4rem', color: 'var(--warning)', borderColor: 'var(--warning)' }}
+                              onClick={() => {
+                                updatePOStatus(po.id, 'WAITING_FOR_APPROVAL');
+                                alert(`PO ${po.poNumber} sent for approval!`);
+                              }}
+                            >
+                              Send for Approval
+                            </button>
+                          )}
+                          {po.status === 'WAITING_FOR_APPROVAL' && (
+                            <button 
+                              className="btn btn-primary" 
+                              style={{ fontSize: '0.75rem', padding: '0.2rem 0.45rem' }}
+                              onClick={() => {
+                                updatePOStatus(po.id, 'APPROVED');
+                                alert(`PO ${po.poNumber} Approved!`);
+                              }}
+                            >
+                              Approve
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {/* POPUP MODAL: Shortage PO Generation & Vendor Priority Selector */}
+      {selectedShortageItem && (
+        <Modal
+          isOpen={isShortageModalOpen}
+          onClose={() => setIsShortageModalOpen(false)}
+          title={`Generate Draft Purchase Order - ${selectedShortageItem.itemCode}`}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            {/* Grid of Item Shortage Details */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.75rem', padding: '0.875rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: '0.5rem', border: '1px solid var(--border-color)' }}>
+              <div>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Item Name</span>
+                <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{selectedShortageItem.name}</div>
+              </div>
+              <div>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Min Stock</span>
+                <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{selectedShortageItem.minStockQty || 5} {selectedShortageItem.unit}</div>
+              </div>
+              <div>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>MOQ (Min Order Qty)</span>
+                <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{selectedShortageItem.minOrderQty || 5} {selectedShortageItem.unit}</div>
+              </div>
+              <div>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Current Inventory</span>
+                <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{selectedShortageItem.inHouseStock + selectedShortageItem.externalStock} {selectedShortageItem.unit}</div>
+              </div>
+              <div>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Net Shortage</span>
+                <div style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--danger)' }}>{getItemEffectiveShortage(selectedShortageItem)} {selectedShortageItem.unit}</div>
+              </div>
+              <div>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Unit Price</span>
+                <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>₹{selectedShortageItem.unitPrice}</div>
+              </div>
+            </div>
+
+            {/* Fixed PO Order Qty (Max of MOQ & Shortage) & PO Calculated Price */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', alignItems: 'center', padding: '0.75rem 1rem', backgroundColor: 'rgba(59, 130, 246, 0.08)', borderRadius: '0.5rem', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+              <div>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Fixed PO Order Quantity (Max of MOQ & Shortage)</span>
+                <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-primary)', marginTop: '0.15rem' }}>
+                  {selectedPOQty} {selectedShortageItem.unit}
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Calculated Total PO Price (excl GST)</span>
+                <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--accent-primary)', marginTop: '0.15rem' }}>
+                  ₹{(selectedPOQty * (selectedShortageItem.unitPrice || 0)).toLocaleString()}
+                </div>
+              </div>
+            </div>
+
+            {/* Vendor Priority Selection Section */}
+            <div>
+              <label style={{ fontSize: '0.85rem', fontWeight: 800, display: 'block', marginBottom: '0.5rem' }}>
+                Mapped Vendor Priority Selection
+              </label>
+
+              {(!selectedShortageItem.mappedVendors || selectedShortageItem.mappedVendors.length === 0) ? (
+                /* WARNING IF NO VENDOR IS MAPPED IN ITEM MASTER */
+                <div style={{ padding: '0.875rem 1rem', backgroundColor: 'rgba(239, 68, 68, 0.12)', border: '1.5px solid var(--danger)', borderRadius: '0.5rem', color: 'var(--danger)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800, fontSize: '0.9rem' }}>
+                    <AlertTriangle size={18} /> ⚠️ Warning: No vendor is mapped for this item in Item Master!
+                  </div>
+                  <div style={{ fontSize: '0.8rem', marginTop: '0.35rem', color: 'var(--text-primary)' }}>
+                    PO cannot be generated for <strong>{selectedShortageItem.itemCode}</strong> because no vendor is assigned to it. Please go to <strong>Item Master → Edit Item → Preferred Vendors</strong> to map a vendor first.
+                  </div>
+                </div>
+              ) : (
+                /* List Mapped Vendors Only (Single Vendor Select via Radio Button) */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {selectedShortageItem.mappedVendors
+                    .sort((a, b) => ((a.priorityOrder || a.priority || 0) - (b.priorityOrder || b.priority || 0)))
+                    .map((mv, idx) => {
+                      const vendorObj = vendors.find(v => v.id === mv.vendorId);
+                      const isSelected = selectedVendorId === mv.vendorId;
+
+                      return (
+                        <div
+                          key={mv.vendorId}
+                          style={{
+                            padding: '0.75rem 1rem',
+                            borderRadius: '0.5rem',
+                            border: `2px solid ${isSelected ? 'var(--accent-primary)' : 'var(--border-color)'}`,
+                            backgroundColor: isSelected ? 'rgba(59, 130, 246, 0.12)' : 'var(--bg-card)',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            cursor: 'pointer'
+                          }}
+                          onClick={() => setSelectedVendorId(mv.vendorId)}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                            <input 
+                              type="radio" 
+                              name="selectedVendorRadio" 
+                              checked={isSelected} 
+                              onChange={() => setSelectedVendorId(mv.vendorId)} 
+                              style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                            />
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <span className="badge badge-info" style={{ fontWeight: 800, padding: '0.2rem 0.45rem' }}>
+                                  Priority #{idx + 1}
+                                </span>
+                                <strong style={{ fontSize: '0.92rem' }}>{mv.vendorName || vendorObj?.name}</strong>
+                              </div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                                GSTIN: {vendorObj?.gstin || 'N/A'} | City: {vendorObj?.city || 'Local'}
+                              </div>
+                            </div>
+                          </div>
+
+                          {isSelected && (
+                            <span className="badge badge-success" style={{ fontWeight: 700 }}>
+                              Selected
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Action Buttons - Completely Hide Generate PO button if no mapped vendor */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '0.875rem' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setIsShortageModalOpen(false)}>Cancel (ESC)</button>
+              {selectedShortageItem.mappedVendors && selectedShortageItem.mappedVendors.length > 0 && selectedVendorId && (
+                <button 
+                  type="button" 
+                  className="btn btn-primary"
+                  onClick={handleGeneratePOFromShortageModal}
+                  style={{ fontWeight: 700, padding: '0.5rem 1.25rem' }}
+                >
+                  Create Draft Purchase Order ({selectedPOQty} {selectedShortageItem.unit})
+                </button>
+              )}
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Edit Existing PO Modal Overlay */}
       {editingPO && (
         <Modal
           isOpen={isEditPOModalOpen}
@@ -712,7 +907,7 @@ export const PurchaseOrderModule: React.FC = () => {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
-              <button type="button" className="btn btn-secondary" onClick={() => { setIsEditPOModalOpen(false); setEditingPO(null); }}>Cancel</button>
+              <button type="button" className="btn btn-secondary" onClick={() => { setIsEditPOModalOpen(false); setEditingPO(null); }}>Cancel (ESC)</button>
               <button type="submit" className="btn btn-primary">Save PO Changes</button>
             </div>
           </form>
