@@ -64,7 +64,8 @@ export const ItemMasterModule: React.FC = () => {
     processType: 'In-house' as MaterialProcessType,
     weightKg: 0,
     testReportRequired: false,
-    qcTrigger: 'ON_GRN' as QCTrigger
+    qcTrigger: 'ON_GRN' as QCTrigger,
+    isDirectJobworkShipment: false
   });
 
   const handleSortColumnClick = (col: 'itemCode' | 'name' | 'partNo' | 'unitPrice') => {
@@ -148,7 +149,8 @@ export const ItemMasterModule: React.FC = () => {
       processType: item.processType || 'In-house',
       weightKg: item.weightKg || 0,
       testReportRequired: item.testReportRequired || false,
-      qcTrigger: item.qcTrigger || 'ON_GRN'
+      qcTrigger: item.qcTrigger || 'ON_GRN',
+      isDirectJobworkShipment: item.isDirectJobworkShipment || false
     });
     setSelectedVendorToAdd('');
     setIsModalOpen(true);
@@ -179,7 +181,8 @@ export const ItemMasterModule: React.FC = () => {
       processType: 'In-house',
       weightKg: 0,
       testReportRequired: false,
-      qcTrigger: 'ON_GRN'
+      qcTrigger: 'ON_GRN',
+      isDirectJobworkShipment: false
     });
     setSelectedVendorToAdd('');
     setIsModalOpen(true);
@@ -503,6 +506,20 @@ export const ItemMasterModule: React.FC = () => {
               )}
             </div>
 
+            {/* Direct Jobwork Shipment Option */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.75rem 1rem', backgroundColor: 'rgba(245, 158, 11, 0.08)', borderRadius: '0.5rem', border: '1px solid rgba(245, 158, 11, 0.3)' }}>
+              <input 
+                type="checkbox" 
+                id="directJobworkCheck" 
+                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                checked={formData.isDirectJobworkShipment || false} 
+                onChange={(e) => setFormData({ ...formData, isDirectJobworkShipment: e.target.checked })} 
+              />
+              <label htmlFor="directJobworkCheck" style={{ margin: 0, cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                Direct Shipped for External Jobwork <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>(Item bypasses in-house store GRN; requires direct Jobwork Challan upon arrival from vendor)</span>
+              </label>
+            </div>
+
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
               <button type="button" className="btn btn-secondary" onClick={() => setIsModalOpen(false)}>Cancel (ESC)</button>
               <button type="submit" className="btn btn-primary">{editingItem ? 'Save Item Changes' : 'Register Item Master'}</button>
@@ -576,7 +593,14 @@ export const ItemMasterModule: React.FC = () => {
                       <td style={{ fontFamily: 'monospace', fontSize: '0.82rem' }}>{item.partCode || '-'}</td>
                       <td style={{ fontFamily: 'monospace', fontSize: '0.82rem', color: item.oldItemCode ? 'var(--warning)' : 'var(--text-muted)' }}>{item.oldItemCode || '-'}</td>
                       <td>
-                        <div style={{ fontWeight: 600 }}>{item.name}</div>
+                        <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                          {item.name}
+                          {item.isDirectJobworkShipment && (
+                            <span className="badge badge-warning" style={{ fontSize: '0.68rem', padding: '0.15rem 0.4rem' }}>
+                              Direct Jobwork
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td>
                         <span className="badge badge-info">{item.processType || 'In-house'}</span>

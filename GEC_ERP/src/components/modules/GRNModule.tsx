@@ -11,11 +11,14 @@ import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 type SortField = 'grnNumber' | 'poNumber' | 'vendorName' | 'invoiceNo' | 'receivedDate';
 
 export const GRNModule: React.FC = () => {
-  const { grns, purchaseOrders, jobworks, currentUser, addGRN, approveGRN, searchTerm, setSearchTerm } = useERP();
+  const { grns, purchaseOrders, jobworks, items, setActiveModule, currentUser, addGRN, approveGRN, searchTerm, setSearchTerm } = useERP();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [printModalOpen, setPrintModalOpen] = useState(false);
   const [printData, setPrintData] = useState<any>(null);
+
+  // Direct Jobwork Warning Item State
+  const [directJobworkBlockedItem, setDirectJobworkBlockedItem] = useState<{ itemCode: string; itemName: string } | null>(null);
 
   // Single Column Sorting State
   const [sortField, setSortField] = useState<SortField>('grnNumber');
@@ -87,25 +90,46 @@ export const GRNModule: React.FC = () => {
       receivedDate: new Date().toISOString().split('T')[0]
     });
     setSelectedSourceId('');
+    setDirectJobworkBlockedItem(null);
     setGrnItems([]);
     setIsModalOpen(true);
   };
 
   const handleSourceSelect = (id: string) => {
     setSelectedSourceId(id);
+    setDirectJobworkBlockedItem(null);
+
     if (inwardSourceType === 'PO') {
       const targetPO = purchaseOrders.find(po => po.id === id);
       if (targetPO) {
-        setGrnItems(targetPO.items.map(item => ({
-          itemId: item.itemId,
-          itemCode: item.itemCode,
-          itemName: item.itemName,
-          orderedQty: item.quantity || item.orderedQty || 1,
-          receivedQty: item.quantity || item.orderedQty || 1,
-          acceptedQty: item.quantity || item.orderedQty || 1,
-          rejectedQty: 0,
-          remarks: 'Inspected OK at store receiving bay'
-        })));
+        // Check for direct jobwork shipment items
+        const directJobItem = targetPO.items.find(pi => {
+          const matchedItem = items.find(i => i.id === pi.itemId || i.itemCode === pi.itemCode);
+          return matchedItem?.isDirectJobworkShipment;
+        });
+
+        if (directJobItem) {
+          setDirectJobworkBlockedItem({
+            itemCode: directJobItem.itemCode || 'Direct Item',
+            itemName: directJobItem.itemName || 'Direct Jobwork Item'
+          });
+        }
+
+        setGrnItems(targetPO.items.map(item => {
+          const matchedItem = items.find(i => i.id === item.itemId || i.itemCode === item.itemCode);
+          const isDirect = !!matchedItem?.isDirectJobworkShipment;
+          return {
+            itemId: item.itemId,
+            itemCode: item.itemCode,
+            itemName: item.itemName,
+            orderedQty: item.quantity || item.orderedQty || 1,
+            receivedQty: item.quantity || item.orderedQty || 1,
+            acceptedQty: isDirect ? 0 : (item.quantity || item.orderedQty || 1),
+            rejectedQty: 0,
+            isDirectJobwork: isDirect,
+            remarks: isDirect ? 'Direct Jobwork Shipment - In-house GRN Bypassed' : 'Inspected OK at store receiving bay'
+          };
+        }));
       }
     } else {
       const targetJob = jobworks.find(j => j.id === id);
@@ -327,9 +351,38 @@ export const GRNModule: React.FC = () => {
               </div>
             )}
 
+            {/* Direct Jobwork Warning & Redirection Action */}
+            {directJobworkBlockedItem && (
+              <div style={{ padding: '0.875rem 1rem', backgroundColor: 'rgba(239, 68, 68, 0.12)', border: '1.5px solid var(--danger)', borderRadius: '0.5rem', color: 'var(--danger)' }}>
+                <div style={{ fontWeight: 800, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  ⚠️ Item Direct Jobwork Shipment Notification
+                </div>
+                <div style={{ fontSize: '0.82rem', marginTop: '0.35rem', color: 'var(--text-primary)', lineHeight: 1.4 }}>
+                  Item <strong>{directJobworkBlockedItem.itemCode}</strong> ({directJobworkBlockedItem.itemName}) is configured as <em>Direct Shipped for External Jobwork</em>. Standard in-house store GRN is blocked for this item. You must create an <strong>External Jobwork Challan</strong> to ship it directly to the vendor for processing.
+                </div>
+                <button 
+                  type="button" 
+                  className="btn btn-warning" 
+                  style={{ marginTop: '0.65rem', fontWeight: 700, fontSize: '0.8rem', padding: '0.35rem 0.75rem', gap: '0.35rem', color: '#ffffff', backgroundColor: 'var(--warning)', border: 'none' }}
+                  onClick={() => {
+                    setIsModalOpen(false);
+                    setActiveModule('external-inventory');
+                  }}
+                >
+                  <Truck size={14} /> Go to External Jobwork to Create Challan
+                </button>
+              </div>
+            )}
+
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
               <button type="button" className="btn btn-secondary" onClick={() => setIsModalOpen(false)}>Cancel (ESC)</button>
-              <button type="submit" className="btn btn-primary">Approve Goods Receipt & Credit In-House Stock</button>
+              <button 
+                type="submit" 
+                className="btn btn-primary"
+                disabled={grnItems.every(i => i.isDirectJobwork)}
+              >
+                Approve Goods Receipt & Credit In-House Stock
+              </button>
             </div>
           </form>
         </div>

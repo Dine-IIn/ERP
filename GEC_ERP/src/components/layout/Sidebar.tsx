@@ -2,7 +2,7 @@ import React from 'react';
 import { useERP } from '../../context/ERPContext';
 import { 
   LayoutDashboard, Package, Users, Contact, Warehouse, Truck, 
-  ShoppingCart, FileCheck, Wrench, ShieldCheck, Layers, Cpu, LogOut, Sun, Moon, FileText, ShoppingBag 
+  ShoppingCart, FileCheck, Wrench, ShieldCheck, Layers, Shield, Cpu, LogOut, Sun, Moon, FileText, ShoppingBag 
 } from 'lucide-react';
 
 interface NavItem {
@@ -10,6 +10,7 @@ interface NavItem {
   label: string;
   icon: React.ReactNode;
   badge?: number;
+  adminOnly?: boolean;
 }
 
 export const Sidebar: React.FC = () => {
@@ -18,7 +19,7 @@ export const Sidebar: React.FC = () => {
     items, jobworks, purchaseOrders, workOrders, salesOrders
   } = useERP();
 
-  const lowStockCount = items.filter(i => i.inHouseStock <= i.reorderLevel).length;
+  const lowStockCount = items.filter(i => i.inHouseStock <= (i.reorderLevel || i.minStockQty || 5)).length;
   const activeJobworkCount = jobworks.filter(j => j.status !== 'COMPLETED').length;
   const pendingPOCount = purchaseOrders.filter(p => p.status === 'ISSUED' || p.status === 'PARTIALLY_RECEIVED').length;
   const activeWOCount = workOrders.filter(w => w.status === 'IN_PROGRESS').length;
@@ -37,7 +38,8 @@ export const Sidebar: React.FC = () => {
     { key: 'purchase-orders', label: 'Purchase Orders (PO)', icon: <ShoppingCart size={16} />, badge: pendingPOCount > 0 ? pendingPOCount : undefined },
     { key: 'grn', label: 'Goods Received (GRN)', icon: <FileCheck size={16} /> },
     { key: 'quality-control', label: 'Quality Control (QC)', icon: <ShieldCheck size={16} /> },
-    { key: 'assembly', label: 'Machine Assembly', icon: <Layers size={16} /> }
+    { key: 'assembly', label: 'Machine Assembly', icon: <Layers size={16} /> },
+    ...(currentUser?.role === 'Admin' ? [{ key: 'user-management', label: 'Security & RBAC', icon: <Shield size={16} /> }] : [])
   ];
 
   return (

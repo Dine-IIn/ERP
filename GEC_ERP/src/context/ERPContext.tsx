@@ -201,11 +201,17 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSearchTerm('');
   };
 
-  // Configurable Inactivity Auto-Logout (15 minutes by default via VITE_INACTIVITY_TIMEOUT_MINUTES)
+  // Configurable Inactivity Auto-Logout: 15 minutes for Web/Desktop; 30 days for Mobile
   useEffect(() => {
     if (!currentUser) return;
 
-    const timeoutMinutes = Number((import.meta as any).env?.VITE_INACTIVITY_TIMEOUT_MINUTES) || 15;
+    const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+    if (isMobile) {
+      // Mobile session persists for 30 days
+      return;
+    }
+
+    const timeoutMinutes = 15;
     const timeoutMs = timeoutMinutes * 60 * 1000;
 
     let timer: any;
@@ -215,6 +221,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       timer = setTimeout(() => {
         alert(`You have been logged out due to ${timeoutMinutes} minutes of inactivity.`);
         setCurrentUser(null);
+        localStorage.removeItem('gec_erp_currentUser');
       }, timeoutMs);
     };
 
@@ -228,12 +235,13 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [currentUser]);
 
-  // Auth Methods with Concurrent Device Session Control & Super Admin Protection
+  // Auth Methods with Strict Role Access & Super Admin Protection
   const login = (username: string, password: string) => {
-    const found = users.find(u => u.username.toLowerCase() === username.trim().toLowerCase());
+    const cleanUser = username.trim().toLowerCase();
+    const found = users.find(u => u.username.toLowerCase() === cleanUser);
     
     // Superadmin credential verification
-    if (username.trim().toLowerCase() === 'superadmin') {
+    if (cleanUser === 'superadmin') {
       if (password === 'GEC_SuperAdmin#2026!Secured$' || password === 'password' || password.length >= 4) {
         const deviceType = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? 'mobile' : 'desktop';
         const newSessionId = `sess-${Date.now()}-${Math.random()}`;
@@ -272,22 +280,10 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: true, message: 'Logged in successfully' };
     }
 
-    if (!found && username.trim().length > 0) {
-      const deviceType = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? 'mobile' : 'desktop';
-      const newSessionId = `sess-${Date.now()}-${Math.random()}`;
-      const newUser: User = {
-        id: `usr-${Date.now()}`,
-        username: username.trim(),
-        fullName: `${username.trim().toUpperCase()} (User)`,
-        role: 'Production Manager',
-        email: `${username.trim()}@gecmachines.com`,
-        ...(deviceType === 'desktop' ? { desktopSessionId: newSessionId } : { mobileSessionId: newSessionId })
-      };
-      setUsers(prev => [...prev, newUser]);
-      setCurrentUser(newUser);
-      return { success: true, message: 'New account created!' };
-    }
-    return { success: false, message: 'Invalid credentials' };
+    return { 
+      success: false, 
+      message: 'Invalid username or password. User accounts must be created by a System Administrator.' 
+    };
   };
 
   const signup = (username: string, password: string, fullName: string, role: Role) => {

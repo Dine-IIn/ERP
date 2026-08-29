@@ -87,10 +87,31 @@ export interface Item {
   qcTrigger?: QCTrigger;
   testReportRequired?: boolean;
   note?: string;
-  materialProcessType?: MaterialProcessType;
-  processType?: MaterialProcessType;
   mappedVendors?: ItemMappedVendor[];
   specification?: string;
+  isDirectJobworkShipment?: boolean;
+}
+
+export interface UserActivityLog {
+  id: string;
+  userId?: string;
+  username: string;
+  role: string;
+  action: string;
+  module: string;
+  details: string;
+  ipAddress?: string;
+  timestamp: string;
+}
+
+export interface BackupRecord {
+  id: string;
+  fileName: string;
+  filePath: string;
+  fileSizeKb: number;
+  backupType: 'MANUAL' | 'SCHEDULED';
+  createdAt: string;
+  status: 'SUCCESS' | 'FAILED';
 }
 
 export interface Customer {
