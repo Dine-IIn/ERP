@@ -1,0 +1,21 @@
+{
+  "users": [
+    {
+      "id": "usr-superadmin",
+      "username": "superadmin",
+      "full_name": "GEC System Super Admin",
+      "role": "Admin",
+      "email": "superadmin@gecmachines.com",
+      "is_super_admin": true,
+      "is_admin": true
+    }
+  ],
+  "activityLogs": [],
+  "backups": [],
+  "settings": {
+    "backupIntervalDays": 2,
+    "lastBackupDate": null,
+    "storageLocation": "D:\\ERP\\GEC_ERP\\storage",
+    "backupLocation": "D:\\ERP\\GEC_ERP\\backups"
+  }
+}

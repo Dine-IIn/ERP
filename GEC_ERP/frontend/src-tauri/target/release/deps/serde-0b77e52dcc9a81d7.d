@@ -1,0 +1,14 @@
+D:\ERP\GEC_ERP\frontend\src-tauri\target\release\deps\serde-0b77e52dcc9a81d7.d: C:\Users\MANAV\ KALOLA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\lib.rs C:\Users\MANAV\ KALOLA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\integer128.rs C:\Users\MANAV\ KALOLA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\private\mod.rs C:\Users\MANAV\ KALOLA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\private\de.rs C:\Users\MANAV\ KALOLA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\private\ser.rs D:\ERP\GEC_ERP\frontend\src-tauri\target\release\build\serde-caf90ae49a2dc10f\out/private.rs
+
+D:\ERP\GEC_ERP\frontend\src-tauri\target\release\deps\libserde-0b77e52dcc9a81d7.rlib: C:\Users\MANAV\ KALOLA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\lib.rs C:\Users\MANAV\ KALOLA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\integer128.rs C:\Users\MANAV\ KALOLA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\private\mod.rs C:\Users\MANAV\ KALOLA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\private\de.rs C:\Users\MANAV\ KALOLA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\private\ser.rs D:\ERP\GEC_ERP\frontend\src-tauri\target\release\build\serde-caf90ae49a2dc10f\out/private.rs
+
+D:\ERP\GEC_ERP\frontend\src-tauri\target\release\deps\libserde-0b77e52dcc9a81d7.rmeta: C:\Users\MANAV\ KALOLA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\lib.rs C:\Users\MANAV\ KALOLA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\integer128.rs C:\Users\MANAV\ KALOLA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\private\mod.rs C:\Users\MANAV\ KALOLA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\private\de.rs C:\Users\MANAV\ KALOLA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\private\ser.rs D:\ERP\GEC_ERP\frontend\src-tauri\target\release\build\serde-caf90ae49a2dc10f\out/private.rs
+
+C:\Users\MANAV\ KALOLA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\lib.rs:
+C:\Users\MANAV\ KALOLA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\integer128.rs:
+C:\Users\MANAV\ KALOLA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\private\mod.rs:
+C:\Users\MANAV\ KALOLA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\private\de.rs:
+C:\Users\MANAV\ KALOLA\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.229\src\private\ser.rs:
+D:\ERP\GEC_ERP\frontend\src-tauri\target\release\build\serde-caf90ae49a2dc10f\out/private.rs:
+
+# env-dep:OUT_DIR=D:\\ERP\\GEC_ERP\\frontend\\src-tauri\\target\\release\\build\\serde-caf90ae49a2dc10f\\out
