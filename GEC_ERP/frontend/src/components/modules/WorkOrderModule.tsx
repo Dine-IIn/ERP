@@ -1,17 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { AutocompleteSelect, AutocompleteOption } from '../common/AutocompleteSelect';
 import { PrintDocumentModal } from '../common/PrintDocumentModal';
-import { Wrench, Plus, Trash2, Sliders, CheckCircle, Search, Printer, FileSpreadsheet, ArrowLeft, X } from 'lucide-react';
-import { WorkOrder, WOStage, WOStatus, WOCustomComponent } from '../../types/erp';
+import { Wrench, Plus, Trash2, Sliders, CheckCircle, Search, Printer, FileSpreadsheet, ArrowLeft, X, Package, Filter, Zap, Layers, FolderTree, FolderPlus, ChevronRight, ChevronDown, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { WorkOrder, WOStage, WOStatus, WOCustomComponent, BOM, BOMComponent } from '../../types/erp';
 import { ExportFieldSelectorModal, FieldOption } from '../common/ExportFieldSelectorModal';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
-import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { getExplodedBOMSummary } from '../../utils/nestedBOMHelper';
 
 type SortField = 'workOrderNo' | 'machineModel' | 'quantity' | 'targetCompletionDate' | 'stage';
 
 export const WorkOrderModule: React.FC = () => {
-  const { workOrders, boms, items, addWorkOrder, updateWorkOrderStage, updateWorkOrderComponents, searchTerm, setSearchTerm } = useERP();
+  const { 
+    workOrders, boms, items, itemCategories, addWorkOrder, updateWorkOrderStage, updateWorkOrderComponents, 
+    searchTerm, setSearchTerm, selectedWOIdForEdit, setSelectedWOIdForEdit 
+  } = useERP();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   const [isStageModalOpen, setIsStageModalOpen] = useState(false);
@@ -91,6 +94,81 @@ export const WorkOrderModule: React.FC = () => {
   const [extraQty, setExtraQty] = useState(1);
   const [subAssemblyTag, setSubAssemblyTag] = useState('Injection Unit');
 
+  // Additional Products specific state (without accessory tag/type)
+  const [selectedAddlItemId, setSelectedAddlItemId] = useState('');
+  const [addlQty, setAddlQty] = useState(1);
+
+  // BOM View States & Nested Sub-BOM Navigation Stack
+  const [isExplodedView, setIsExplodedView] = useState(false);
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('ALL');
+  const [currentDrilldownBOM, setCurrentDrilldownBOM] = useState<BOM | null>(null);
+  const [bomHistoryStack, setBomHistoryStack] = useState<BOM[]>([]);
+  const [customSubBOMs, setCustomSubBOMs] = useState<Record<string, BOMComponent[]>>({});
+  const [showAddComponentPicker, setShowAddComponentPicker] = useState(false);
+
+  // Sub-BOM Helper
+  const getSubBOMForComponent = (itemName: string) => {
+    if (!itemName) return undefined;
+    const norm = itemName.trim().toLowerCase();
+    return boms.find(b => 
+      b.machineModel.trim().toLowerCase() === norm ||
+      b.bomCode.trim().toLowerCase() === norm ||
+      (b.machineModel && (b.machineModel.toLowerCase().includes(norm) || norm.includes(b.machineModel.toLowerCase())))
+    );
+  };
+
+  const handleOpenNestedBOM = (subBOM: BOM) => {
+    if (currentDrilldownBOM) {
+      setBomHistoryStack(prev => [...prev, currentDrilldownBOM]);
+    } else if (selectedWO) {
+      const linkedBOM = boms.find(b => b.machineModel === selectedWO.machineModel) || {
+        id: 'wo-top-bom',
+        bomCode: selectedWO.workOrderNo || selectedWO.woNumber || 'WO-BOM',
+        machineModel: selectedWO.machineModel,
+        version: '1.0',
+        components: [],
+        lastUpdated: ''
+      };
+      setBomHistoryStack([linkedBOM as BOM]);
+    }
+
+    if (!customSubBOMs[subBOM.bomCode]) {
+      setCustomSubBOMs(prev => ({
+        ...prev,
+        [subBOM.bomCode]: subBOM.components.map(c => ({ ...c }))
+      }));
+    }
+
+    setCurrentDrilldownBOM(subBOM);
+    setIsExplodedView(false);
+  };
+
+  const handleGoBackInBOMStack = () => {
+    if (bomHistoryStack.length > 0) {
+      const nextStack = [...bomHistoryStack];
+      const prevBOM = nextStack.pop();
+      setBomHistoryStack(nextStack);
+      if (nextStack.length === 0) {
+        setCurrentDrilldownBOM(null);
+      } else {
+        setCurrentDrilldownBOM(prevBOM || null);
+      }
+    } else {
+      setCurrentDrilldownBOM(null);
+    }
+  };
+
+  // Auto-open specific Work Order when navigated from SO status
+  useEffect(() => {
+    if (selectedWOIdForEdit) {
+      const targetWO = workOrders.find(w => w.id === selectedWOIdForEdit);
+      if (targetWO) {
+        handleOpenCustomModal(targetWO);
+      }
+      setSelectedWOIdForEdit(null);
+    }
+  }, [selectedWOIdForEdit, workOrders]);
+
   // Items which have a BOM options
   const bomOptions: AutocompleteOption[] = boms.map(b => {
     const itemObj = items.find(i => i.name === b.machineModel || i.itemCode === b.bomCode || i.id === b.id);
@@ -162,31 +240,50 @@ export const WorkOrderModule: React.FC = () => {
 
   const handleOpenCustomModal = (wo: WorkOrder) => {
     setSelectedWO(wo);
+    setCurrentDrilldownBOM(null);
+    setBomHistoryStack([]);
+    setIsExplodedView(false);
+    setSelectedCategoryFilter('ALL');
+    setCompSearchTerm('');
+    setShowAddComponentPicker(false);
+
     let initialComps: WOCustomComponent[] = [];
     if (wo.woComponents && wo.woComponents.length > 0) {
       initialComps = wo.woComponents.map(c => ({
         itemId: c.itemId || '',
         itemCode: c.itemCode || '',
         itemName: c.itemName || '',
-        qtyRequired: c.qtyRequired || c.qty || 1,
+        qtyRequired: c.qtyRequired || (c as any).qty || (c as any).qtyPerMachine || 1,
         unit: c.unit || 'Pcs',
         subAssemblyTag: c.subAssemblyTag || 'Base Frame',
         isCustomExtra: c.isCustomExtra || false
       }));
-    } else {
-      const linkedBOM = boms.find(b => b.machineModel === wo.machineModel);
+    }
+
+    // If no components in work order, find linked Master BOM with multi-strategy resolution
+    if (initialComps.length === 0) {
+      const normModel = (wo.machineModel || '').trim().toLowerCase();
+      const linkedBOM = boms.find(b => 
+        b.id === wo.bomId || 
+        (wo.bomId && b.bomCode.toLowerCase() === wo.bomId.toLowerCase()) ||
+        b.machineModel.trim().toLowerCase() === normModel ||
+        b.bomCode.trim().toLowerCase() === normModel ||
+        (b.machineModel && normModel && (b.machineModel.toLowerCase().includes(normModel) || normModel.includes(b.machineModel.toLowerCase())))
+      ) || boms[0];
+
       if (linkedBOM) {
         initialComps = linkedBOM.components.map(c => ({
           itemId: c.itemId || '',
           itemCode: c.itemCode || '',
           itemName: c.itemName || '',
           qtyRequired: c.qtyPerMachine * (wo.quantity || wo.targetQuantity || 1),
-          unit: c.unit,
-          subAssemblyTag: c.subAssemblyTag,
+          unit: c.unit || 'Pcs',
+          subAssemblyTag: c.subAssemblyTag || 'Base Frame',
           isCustomExtra: false
         }));
       }
     }
+
     setCustomComponents(initialComps);
     setIsCustomModalOpen(true);
     setIsModalOpen(false);
@@ -197,38 +294,95 @@ export const WorkOrderModule: React.FC = () => {
     const itemObj = items.find(i => i.id === selectedItemId);
     if (!itemObj) return;
 
-    const linkedBOM = selectedWO ? boms.find(b => b.machineModel === selectedWO.machineModel) : null;
-    const isInMasterBOM = linkedBOM?.components.some(c => c.itemId === itemObj.id);
-    const existingIndex = customComponents.findIndex(c => c.itemId === itemObj.id);
-
-    if (existingIndex >= 0) {
-      const updated = [...customComponents];
-      updated[existingIndex].qtyRequired = (updated[existingIndex].qtyRequired || 1) + Number(extraQty);
-      setCustomComponents(updated);
-    } else {
-      setCustomComponents([
-        ...customComponents,
-        {
+    if (currentDrilldownBOM) {
+      // Adding into current sub-BOM
+      const currentList = customSubBOMs[currentDrilldownBOM.bomCode] || [...currentDrilldownBOM.components];
+      const existingIdx = currentList.findIndex(c => c.itemId === itemObj.id);
+      if (existingIdx >= 0) {
+        const updated = [...currentList];
+        updated[existingIdx].qtyPerMachine += Number(extraQty) || 1;
+        setCustomSubBOMs(prev => ({ ...prev, [currentDrilldownBOM.bomCode]: updated }));
+      } else {
+        const newComp: BOMComponent = {
           itemId: itemObj.id,
           itemCode: itemObj.itemCode,
-          itemName: isInMasterBOM ? itemObj.name : `${itemObj.name} (Custom Extra Non-BOM Item)`,
-          qtyRequired: Number(extraQty),
-          unit: itemObj.unit,
-          subAssemblyTag,
-          isCustomExtra: !isInMasterBOM
-        }
-      ]);
+          itemName: itemObj.name,
+          qtyPerMachine: Number(extraQty) || 1,
+          unit: itemObj.unit || 'Pcs',
+          subAssemblyTag: subAssemblyTag as any,
+          scrapPercent: 0
+        };
+        setCustomSubBOMs(prev => ({ ...prev, [currentDrilldownBOM.bomCode]: [...currentList, newComp] }));
+      }
+    } else {
+      // Adding into top level WO components
+      const existingIndex = customComponents.findIndex(c => c.itemId === itemObj.id && c.subAssemblyTag === subAssemblyTag);
+      if (existingIndex >= 0) {
+        const updated = [...customComponents];
+        updated[existingIndex].qtyRequired = (updated[existingIndex].qtyRequired || 1) + Number(extraQty);
+        setCustomComponents(updated);
+      } else {
+        setCustomComponents([
+          ...customComponents,
+          {
+            itemId: itemObj.id,
+            itemCode: itemObj.itemCode,
+            itemName: itemObj.name,
+            qtyRequired: Number(extraQty),
+            unit: itemObj.unit,
+            subAssemblyTag,
+            isCustomExtra: false
+          }
+        ]);
+      }
     }
   };
 
+  const handleAddAdditionalProduct = () => {
+    const itemObj = items.find(i => i.id === selectedAddlItemId);
+    if (!itemObj) return;
+
+    setCustomComponents(prev => [
+      ...prev,
+      {
+        itemId: itemObj.id,
+        itemCode: itemObj.itemCode,
+        itemName: itemObj.name,
+        qtyRequired: Number(addlQty) || 1,
+        unit: itemObj.unit || 'Pcs',
+        subAssemblyTag: 'Additional Product',
+        isCustomExtra: true
+      }
+    ]);
+    setSelectedAddlItemId('');
+    setAddlQty(1);
+  };
+
   const handleRemoveCustomComp = (index: number) => {
-    setCustomComponents(customComponents.filter((_, i) => i !== index));
+    if (currentDrilldownBOM) {
+      const currentList = customSubBOMs[currentDrilldownBOM.bomCode] || [...currentDrilldownBOM.components];
+      const updated = currentList.filter((_, i) => i !== index);
+      setCustomSubBOMs(prev => ({ ...prev, [currentDrilldownBOM.bomCode]: updated }));
+    } else {
+      setCustomComponents(customComponents.filter((_, i) => i !== index));
+    }
   };
 
   const handleUpdateQty = (index: number, newQty: number) => {
-    const updated = [...customComponents];
-    updated[index].qtyRequired = Math.max(1, newQty);
-    setCustomComponents(updated);
+    if (currentDrilldownBOM) {
+      const currentList = customSubBOMs[currentDrilldownBOM.bomCode] || [...currentDrilldownBOM.components];
+      const updated = [...currentList];
+      if (updated[index]) {
+        updated[index].qtyPerMachine = Math.max(1, newQty);
+        setCustomSubBOMs(prev => ({ ...prev, [currentDrilldownBOM.bomCode]: updated }));
+      }
+    } else {
+      const updated = [...customComponents];
+      if (updated[index]) {
+        updated[index].qtyRequired = Math.max(1, newQty);
+        setCustomComponents(updated);
+      }
+    }
   };
 
   const handleSubmitWO = (e: React.FormEvent) => {
@@ -357,10 +511,12 @@ export const WorkOrderModule: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Table OR In-Screen Page Panel */}
-      {isModalOpen ? (
-        /* In-Screen Panel: Create Work Order */
-        <div className="card" style={{ padding: '1.25rem', backgroundColor: 'var(--bg-card)' }}>
+      {/* Scrollable Content Container for Panels and Tables */}
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingRight: '0.25rem' }}>
+        {/* Main Table OR In-Screen Page Panel */}
+        {isModalOpen ? (
+          /* In-Screen Panel: Create Work Order */
+          <div className="card" style={{ padding: '1.25rem', backgroundColor: 'var(--bg-card)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
             <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>Create Production Work Order</h3>
             <button type="button" className="btn btn-outline" style={{ padding: '0.25rem 0.5rem', fontSize: '0.78rem' }} onClick={() => setIsModalOpen(false)}>
@@ -404,6 +560,61 @@ export const WorkOrderModule: React.FC = () => {
               <input type="text" className="input-field" placeholder="e.g. Expedite assembly for scheduled batch delivery" value={woForm.remarks} onChange={(e) => setWoForm({ ...woForm, remarks: e.target.value })} />
             </div>
 
+            {/* Additional Products / Custom Extras Section */}
+            <div style={{ border: '1px solid var(--border-color)', borderRadius: '0.5rem', padding: '1rem', backgroundColor: 'var(--bg-tertiary)' }}>
+              <h4 style={{ fontSize: '0.88rem', fontWeight: 800, margin: '0 0 0.75rem 0', display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-primary)' }}>
+                <Package size={16} color="var(--accent-primary)" />
+                Additional Products & Custom Accessories (Optional)
+              </h4>
+              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+                <div style={{ flex: 2, minWidth: '220px' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>Choose Additional Product / Item</label>
+                  <AutocompleteSelect options={itemOptions} value={selectedItemId} onChange={setSelectedItemId} placeholder="Search item from Item Master..." />
+                </div>
+                <div style={{ width: '140px' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>Category / Tag</label>
+                  <select className="input-field" value={subAssemblyTag} onChange={(e) => setSubAssemblyTag(e.target.value)}>
+                    <option value="Additional Accessory">Additional Accessory</option>
+                    <option value="Spare Part Kit">Spare Part Kit</option>
+                    <option value="Injection Unit">Injection Unit</option>
+                    <option value="Clamping Unit">Clamping Unit</option>
+                    <option value="Hydraulic Powerpack">Hydraulic Powerpack</option>
+                    <option value="Electrical Cabinet">Electrical Cabinet</option>
+                    <option value="Base Frame">Base Frame</option>
+                  </select>
+                </div>
+                <div style={{ width: '90px' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>Quantity</label>
+                  <input type="number" min="1" className="input-field" value={extraQty} onChange={(e) => setExtraQty(Number(e.target.value))} />
+                </div>
+                <button type="button" className="btn btn-primary" style={{ padding: '0.45rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }} onClick={handleAddItemToWO}>
+                  <Plus size={14} /> Add Product
+                </button>
+              </div>
+
+              {/* List of custom / extra added products */}
+              {customComponents.filter(c => c.isCustomExtra).length > 0 && (
+                <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Added Extra Products ({customComponents.filter(c => c.isCustomExtra).length}):</span>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                    {customComponents.map((comp, cIdx) => {
+                      if (!comp.isCustomExtra) return null;
+                      return (
+                        <div key={cIdx} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', backgroundColor: 'var(--bg-card)', border: '1px solid var(--accent-primary)', padding: '0.25rem 0.5rem', borderRadius: '0.375rem', fontSize: '0.78rem' }}>
+                          <span style={{ fontWeight: 700, color: 'var(--accent-primary)' }}>{comp.itemCode}</span>
+                          <span>{comp.itemName}</span>
+                          <span className="badge badge-info" style={{ fontSize: '0.68rem' }}>{comp.qtyRequired} {comp.unit}</span>
+                          <button type="button" style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', padding: 0 }} onClick={() => handleRemoveCustomComp(cIdx)}>
+                            <X size={13} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
               <button type="button" className="btn btn-secondary" onClick={() => setIsModalOpen(false)}>Cancel (ESC)</button>
               <button type="submit" className="btn btn-primary">Create Work Order</button>
@@ -411,84 +622,529 @@ export const WorkOrderModule: React.FC = () => {
           </form>
         </div>
       ) : isCustomModalOpen ? (
-        /* In-Screen Panel: Customize Assembly Components */
-        <div className="card" style={{ padding: '1.25rem', backgroundColor: 'var(--bg-card)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
-              Customize Components for WO ({selectedWO?.workOrderNo || selectedWO?.woNumber})
-            </h3>
-            <button type="button" className="btn btn-outline" style={{ padding: '0.25rem 0.5rem', fontSize: '0.78rem' }} onClick={() => setIsCustomModalOpen(false)}>
-              <X size={15} /> Close (ESC)
+        /* In-Screen Panel: BOM Customization with Double-Click Sub-BOM Drilldown Navigation */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {/* Header Card */}
+          <div className="card" style={{ padding: '1.25rem', backgroundColor: 'var(--bg-card)', borderLeft: '4px solid var(--accent-primary)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                  {bomHistoryStack.length > 0 ? (
+                    <button 
+                      type="button" 
+                      className="btn btn-outline" 
+                      style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', gap: '0.25rem' }}
+                      onClick={handleGoBackInBOMStack}
+                    >
+                      <ArrowLeft size={14} /> Back to {bomHistoryStack[bomHistoryStack.length - 1].bomCode || 'Parent BOM'}
+                    </button>
+                  ) : (
+                    <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--accent-primary)', fontFamily: 'monospace' }}>
+                      {selectedWO?.workOrderNo || selectedWO?.woNumber}
+                    </span>
+                  )}
+                  {selectedWO?.soNumber && (
+                    <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>
+                      Linked SO: {selectedWO.soNumber}
+                    </span>
+                  )}
+                  <span className="badge badge-primary" style={{ fontSize: '0.7rem' }}>
+                    {selectedWO?.stage || 'PLANNED'}
+                  </span>
+                </div>
+                <h3 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
+                  {currentDrilldownBOM ? currentDrilldownBOM.machineModel : selectedWO?.machineModel}
+                </h3>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                  {currentDrilldownBOM ? (
+                    <>Sub-BOM Code: <strong>{currentDrilldownBOM.bomCode}</strong> | Version: <strong>{currentDrilldownBOM.version}</strong></>
+                  ) : (
+                    <>Build Quantity: <strong>{selectedWO?.quantity || selectedWO?.targetQuantity || 1} units</strong> | Target Date: <strong>{selectedWO?.targetCompletionDate || '-'}</strong></>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button 
+                  type="button" 
+                  className="btn btn-primary" 
+                  style={{ fontSize: '0.8rem', gap: '0.35rem' }}
+                  onClick={() => setShowAddComponentPicker(prev => !prev)}
+                >
+                  <Plus size={15} /> + Add Component to BOM
+                </button>
+                <button type="button" className="btn btn-outline" style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem' }} onClick={() => setIsCustomModalOpen(false)}>
+                  <X size={15} /> Close (ESC)
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Add Component to BOM Picker */}
+          {showAddComponentPicker && (
+            <div className="card" style={{ padding: '1rem', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--accent-primary)' }}>
+              <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--accent-primary)', marginBottom: '0.5rem' }}>
+                ➕ Add Component to {currentDrilldownBOM ? currentDrilldownBOM.machineModel : 'this Work Order BOM'}:
+              </div>
+              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                <div style={{ flex: 2, minWidth: '240px' }}>
+                  <label style={{ fontSize: '0.72rem', fontWeight: 600 }}>Select Component Item</label>
+                  <AutocompleteSelect options={itemOptions} value={selectedItemId} onChange={setSelectedItemId} placeholder="Search item by code or name..." />
+                </div>
+                <div style={{ width: '100px' }}>
+                  <label style={{ fontSize: '0.72rem', fontWeight: 600 }}>Qty / Unit</label>
+                  <input type="number" min="1" className="input-field" value={extraQty} onChange={(e) => setExtraQty(Number(e.target.value))} />
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ padding: '0.45rem 0.85rem', fontSize: '0.82rem' }}
+                  onClick={() => {
+                    handleAddItemToWO();
+                    setSelectedItemId('');
+                    setShowAddComponentPicker(false);
+                  }}
+                >
+                  Add to BOM
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ padding: '0.45rem 0.75rem', fontSize: '0.82rem' }}
+                  onClick={() => setShowAddComponentPicker(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Filter & View Mode Toolbar */}
+          <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', backgroundColor: 'var(--bg-card)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem', flexWrap: 'wrap', flex: 1 }}>
+              {/* Search Input */}
+              <div style={{ position: 'relative', width: '320px', maxWidth: '100%' }}>
+                <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <input
+                  type="text"
+                  placeholder="Search components in this BOM (code, name, part)..."
+                  className="input-field"
+                  style={{ paddingLeft: '2.25rem' }}
+                  value={compSearchTerm}
+                  onChange={(e) => setCompSearchTerm(e.target.value)}
+                />
+              </div>
+
+              {/* Category Filter Dropdown */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <Filter size={15} color="var(--text-muted)" />
+                <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>Category:</span>
+                <select
+                  className="input-field"
+                  style={{ padding: '0.3rem 0.65rem', fontSize: '0.82rem', width: '180px' }}
+                  value={selectedCategoryFilter}
+                  onChange={(e) => setSelectedCategoryFilter(e.target.value)}
+                >
+                  <option value="ALL">All Categories</option>
+                  {itemCategories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* View Mode Toggle (Direct vs Exploded) */}
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <button
+                type="button"
+                className={`btn ${!isExplodedView ? 'btn-primary' : 'btn-outline'}`}
+                style={{ padding: '0.3rem 0.65rem', fontSize: '0.78rem' }}
+                onClick={() => setIsExplodedView(false)}
+              >
+                Direct Components View
+              </button>
+              <button
+                type="button"
+                className={`btn ${isExplodedView ? 'btn-primary' : 'btn-outline'}`}
+                style={{ padding: '0.3rem 0.65rem', fontSize: '0.78rem', gap: '0.35rem' }}
+                onClick={() => setIsExplodedView(true)}
+                title="Flattens and displays all parts across all nested sub-BOM levels"
+              >
+                <Zap size={14} /> ⚡ Explode BOM
+              </button>
+            </div>
+          </div>
+
+          {/* MAIN BOM COMPONENTS TABLE (Matching BOM Master Module Table Structure) */}
+          <div className="card" style={{ padding: '0.75rem', backgroundColor: 'var(--bg-card)' }}>
+            {!isExplodedView ? (
+              /* DIRECT COMPONENTS TABLE WITH DOUBLE CLICK DRILLDOWN */
+              <div className="table-container" style={{ maxHeight: '420px', overflowY: 'auto' }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th style={{ width: '40px' }}>#</th>
+                      <th>Item Code</th>
+                      <th>Part Code</th>
+                      <th>Old Code</th>
+                      <th>Item Description</th>
+                      <th>Class</th>
+                      <th>Process Source</th>
+                      <th style={{ width: '110px' }}>Qty / Machine</th>
+                      <th>UOM</th>
+                      <th style={{ width: '60px', textAlign: 'center' }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      // Determine components list
+                      let rawList: { comp: WOCustomComponent | BOMComponent; actualIdx: number }[] = [];
+
+                      if (currentDrilldownBOM) {
+                        const subList = customSubBOMs[currentDrilldownBOM.bomCode] || currentDrilldownBOM.components;
+                        rawList = subList.map((c, i) => ({ comp: c as any, actualIdx: i }));
+                      } else {
+                        // Use standard non-extra components, or all components if none are explicitly tagged
+                        const standardComps = customComponents.filter(item => !item.isCustomExtra);
+                        const compsToUse = standardComps.length > 0 ? standardComps : customComponents;
+
+                        rawList = compsToUse.map((c, i) => {
+                          const actualIdx = customComponents.indexOf(c);
+                          return { comp: c, actualIdx: actualIdx >= 0 ? actualIdx : i };
+                        });
+                      }
+
+                      const filtered = rawList.filter(({ comp }) => {
+                        const q = compSearchTerm.trim().toLowerCase();
+                        const itemObj = items.find(i => i.id === comp.itemId || i.itemCode === comp.itemCode);
+
+                        const matchesSearch = !q || (
+                          (comp.itemCode || '').toLowerCase().includes(q) ||
+                          (comp.itemName || '').toLowerCase().includes(q) ||
+                          (itemObj?.partCode && itemObj.partCode.toLowerCase().includes(q)) ||
+                          (itemObj?.oldItemCode && itemObj.oldItemCode.toLowerCase().includes(q)) ||
+                          (itemObj?.category && itemObj.category.toLowerCase().includes(q))
+                        );
+
+                        const matchesCategory = selectedCategoryFilter === 'ALL' || (itemObj ? itemObj.category === selectedCategoryFilter : true);
+                        return matchesSearch && matchesCategory;
+                      });
+
+                      if (filtered.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={10} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                              No components found matching current filters.
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      return filtered.map(({ comp, actualIdx }, i) => {
+                        const itemObj = items.find(it => it.id === comp.itemId || it.itemCode === comp.itemCode);
+                        const subBOM = getSubBOMForComponent(comp.itemName);
+                        const qtyVal = (comp as any).qtyRequired || (comp as any).qtyPerMachine || 1;
+
+                        return (
+                          <tr 
+                            key={i}
+                            onDoubleClick={() => {
+                              if (subBOM) handleOpenNestedBOM(subBOM);
+                            }}
+                            style={{ 
+                              cursor: subBOM ? 'pointer' : 'default',
+                              backgroundColor: subBOM ? 'rgba(59, 130, 246, 0.05)' : 'transparent'
+                            }}
+                            title={subBOM ? `Sub-BOM: ${subBOM.bomCode} (Double-click to open)` : undefined}
+                          >
+                            <td style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{i + 1}</td>
+                            <td style={{ fontWeight: 700, fontFamily: 'monospace', color: 'var(--accent-primary)' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                {comp.itemCode}
+                                {subBOM && (
+                                  <span 
+                                    className="badge badge-info" 
+                                    style={{ fontSize: '0.68rem', padding: '0.1rem 0.35rem', fontWeight: 800, cursor: 'pointer' }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenNestedBOM(subBOM);
+                                    }}
+                                    title={`Click to open Sub-BOM ${subBOM.bomCode}`}
+                                  >
+                                    BOM ➔
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                              {itemObj?.partCode || '-'}
+                            </td>
+                            <td style={{ fontSize: '0.82rem', color: itemObj?.oldItemCode ? 'var(--warning)' : 'var(--text-muted)', fontFamily: 'monospace' }}>
+                              {itemObj?.oldItemCode || '-'}
+                            </td>
+                            <td style={{ fontWeight: 600 }}>
+                              {comp.itemName}
+                            </td>
+                            <td>
+                              <span className="badge badge-info" style={{ fontSize: '0.72rem' }}>
+                                {itemObj?.category || 'MC'}
+                              </span>
+                            </td>
+                            <td>
+                              <span className={`badge ${
+                                itemObj?.processType === 'Brought out' ? 'badge-primary' :
+                                itemObj?.processType === 'In-house' ? 'badge-success' :
+                                itemObj?.processType === 'Job work' ? 'badge-warning' : 'badge-neutral'
+                              }`} style={{ fontSize: '0.72rem' }}>
+                                {itemObj?.processType || '-'}
+                              </span>
+                            </td>
+                            <td onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="number"
+                                min="1"
+                                className="input-field"
+                                style={{ width: '70px', padding: '0.2rem 0.4rem', fontSize: '0.82rem', fontWeight: 700 }}
+                                value={qtyVal}
+                                onChange={(e) => handleUpdateQty(actualIdx, Number(e.target.value))}
+                              />
+                            </td>
+                            <td style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>{comp.unit || itemObj?.unit || 'PCS'}</td>
+                            <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+                              <button
+                                type="button"
+                                className="btn btn-outline"
+                                style={{ color: 'var(--danger)', padding: '0.2rem 0.4rem' }}
+                                title="Remove component from this Work Order BOM"
+                                onClick={() => handleRemoveCustomComp(actualIdx)}
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              /* EXPLODED BOM VIEW (Matching BOM Master Module) */
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                  ⚡ Exploded View: Flattened raw parts requirement across all nested sub-BOM levels:
+                </div>
+                <div className="table-container" style={{ maxHeight: '420px', overflowY: 'auto' }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th style={{ width: '40px' }}>#</th>
+                        <th>Item Code</th>
+                        <th>Part Code</th>
+                        <th>Old Code</th>
+                        <th>Item Description</th>
+                        <th>Class</th>
+                        <th>Process Source</th>
+                        <th>Total Exploded Qty</th>
+                        <th>UOM</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        const bomCompList: BOMComponent[] = customComponents
+                          .filter(c => !c.isCustomExtra)
+                          .map(c => ({
+                            itemId: c.itemId,
+                            itemCode: c.itemCode,
+                            itemName: c.itemName,
+                            qtyPerMachine: c.qtyRequired || 1,
+                            unit: c.unit || 'Pcs',
+                            scrapPercent: 0,
+                            subAssemblyTag: c.subAssemblyTag || 'Base Frame'
+                          }));
+
+                        return getExplodedBOMSummary(bomCompList, boms)
+                          .filter(c => {
+                            const q = compSearchTerm.trim().toLowerCase();
+                            const itemObj = items.find(i => i.id === c.itemId || i.itemCode === c.itemCode);
+
+                            const matchesSearch = !q || (
+                              c.itemCode.toLowerCase().includes(q) ||
+                              c.itemName.toLowerCase().includes(q) ||
+                              (itemObj?.partCode && itemObj.partCode.toLowerCase().includes(q)) ||
+                              (itemObj?.oldItemCode && itemObj.oldItemCode.toLowerCase().includes(q))
+                            );
+
+                            const matchesCategory = selectedCategoryFilter === 'ALL' || itemObj?.category === selectedCategoryFilter;
+                            return matchesSearch && matchesCategory;
+                          })
+                          .map((c, i) => {
+                            const itemObj = items.find(it => it.id === c.itemId || it.itemCode === c.itemCode);
+
+                            return (
+                              <tr key={i}>
+                                <td style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{i + 1}</td>
+                                <td style={{ fontWeight: 700, fontFamily: 'monospace', color: 'var(--accent-primary)' }}>
+                                  {c.itemCode}
+                                </td>
+                                <td style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                                  {itemObj?.partCode || '-'}
+                                </td>
+                                <td style={{ fontSize: '0.82rem', color: itemObj?.oldItemCode ? 'var(--warning)' : 'var(--text-muted)', fontFamily: 'monospace' }}>
+                                  {itemObj?.oldItemCode || '-'}
+                                </td>
+                                <td style={{ fontWeight: 600 }}>{c.itemName}</td>
+                                <td>
+                                  <span className="badge badge-info" style={{ fontSize: '0.72rem' }}>
+                                    {itemObj?.category || 'MC'}
+                                  </span>
+                                </td>
+                                <td>
+                                  <span className={`badge ${
+                                    itemObj?.processType === 'Brought out' ? 'badge-primary' :
+                                    itemObj?.processType === 'In-house' ? 'badge-success' :
+                                    itemObj?.processType === 'Job work' ? 'badge-warning' : 'badge-neutral'
+                                  }`} style={{ fontSize: '0.72rem' }}>
+                                    {itemObj?.processType || '-'}
+                                  </span>
+                                </td>
+                                <td style={{ fontWeight: 800 }}>{c.totalQty}</td>
+                                <td style={{ fontSize: '0.82rem' }}>{c.unit || itemObj?.unit || 'PCS'}</td>
+                              </tr>
+                            );
+                          });
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* DEDICATED SEPARATE SECTION: ADDITIONAL PRODUCTS */}
+          <div className="card" style={{ padding: '1.25rem', backgroundColor: 'var(--bg-card)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Package size={20} color="#8b5cf6" />
+                <h4 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
+                  Additional Products
+                </h4>
+              </div>
+
+              <span className="badge" style={{ backgroundColor: '#8b5cf6', color: '#fff', fontSize: '0.75rem', fontWeight: 700 }}>
+                {customComponents.filter(c => c.isCustomExtra).length} Items
+              </span>
+            </div>
+
+            {/* Add Additional Product Form (No Accessory Tag/Type) */}
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap', padding: '0.875rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: '0.5rem', marginBottom: '1rem' }}>
+              <div style={{ flex: 2, minWidth: '240px' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>Select Additional Item</label>
+                <AutocompleteSelect options={itemOptions} value={selectedAddlItemId} onChange={setSelectedAddlItemId} placeholder="Search item from Item Master..." />
+              </div>
+              <div style={{ width: '100px' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>Quantity</label>
+                <input type="number" min="1" className="input-field" value={addlQty} onChange={(e) => setAddlQty(Number(e.target.value))} />
+              </div>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ padding: '0.45rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.3rem', backgroundColor: '#8b5cf6' }}
+                onClick={handleAddAdditionalProduct}
+              >
+                <Plus size={14} /> Add Product
+              </button>
+            </div>
+
+            {/* Additional Products Table */}
+            {customComponents.filter(c => c.isCustomExtra).length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '1.25rem', color: 'var(--text-muted)', fontSize: '0.85rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: '0.375rem' }}>
+                No additional products added yet for this Work Order.
+              </div>
+            ) : (
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th style={{ width: '40px' }}>#</th>
+                      <th>Item Code</th>
+                      <th>Part Code</th>
+                      <th>Item Description</th>
+                      <th>Class</th>
+                      <th>Process Source</th>
+                      <th style={{ width: '110px' }}>Quantity</th>
+                      <th>UOM</th>
+                      <th style={{ width: '60px', textAlign: 'center' }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {customComponents.map((comp, idx) => {
+                      if (!comp.isCustomExtra) return null;
+                      const itemObj = items.find(i => i.id === comp.itemId || i.itemCode === comp.itemCode);
+
+                      return (
+                        <tr key={idx} style={{ backgroundColor: 'rgba(139, 92, 246, 0.04)' }}>
+                          <td style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>•</td>
+                          <td style={{ fontFamily: 'monospace', fontWeight: 700, color: '#8b5cf6' }}>
+                            {comp.itemCode}
+                          </td>
+                          <td style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                            {itemObj?.partCode || '-'}
+                          </td>
+                          <td style={{ fontWeight: 600 }}>{comp.itemName}</td>
+                          <td>
+                            <span className="badge badge-info" style={{ fontSize: '0.72rem' }}>
+                              {itemObj?.category || 'MC'}
+                            </span>
+                          </td>
+                          <td>
+                            <span className={`badge ${
+                              itemObj?.processType === 'Brought out' ? 'badge-primary' :
+                              itemObj?.processType === 'In-house' ? 'badge-success' :
+                              itemObj?.processType === 'Job work' ? 'badge-warning' : 'badge-neutral'
+                            }`} style={{ fontSize: '0.72rem' }}>
+                              {itemObj?.processType || '-'}
+                            </span>
+                          </td>
+                          <td>
+                            <input
+                              type="number"
+                              min="1"
+                              className="input-field"
+                              style={{ width: '70px', padding: '0.2rem 0.4rem', fontSize: '0.82rem', fontWeight: 700 }}
+                              value={comp.qtyRequired || 1}
+                              onChange={(e) => handleUpdateQty(idx, Number(e.target.value))}
+                            />
+                          </td>
+                          <td style={{ color: 'var(--text-muted)' }}>{comp.unit || 'Pcs'}</td>
+                          <td style={{ textAlign: 'center' }}>
+                            <button
+                              type="button"
+                              className="btn btn-outline"
+                              style={{ color: 'var(--danger)', padding: '0.2rem 0.4rem' }}
+                              title="Remove additional product"
+                              onClick={() => handleRemoveCustomComp(idx)}
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Action Footer */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', padding: '1rem', backgroundColor: 'var(--bg-card)', borderRadius: '0.5rem', border: '1px solid var(--border-color)' }}>
+            <button type="button" className="btn btn-secondary" onClick={() => setIsCustomModalOpen(false)}>
+              Cancel (ESC)
             </button>
-          </div>
-
-          {/* Add extra component picker */}
-          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', marginBottom: '1rem', backgroundColor: 'var(--bg-tertiary)', padding: '0.75rem', borderRadius: '0.5rem' }}>
-            <div style={{ flex: 2 }}>
-              <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>Select Component Item</label>
-              <AutocompleteSelect options={itemOptions} value={selectedItemId} onChange={setSelectedItemId} placeholder="Search item by code or name..." />
-            </div>
-            <div style={{ width: '120px' }}>
-              <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>Sub-Assembly</label>
-              <select className="input-field" value={subAssemblyTag} onChange={(e) => setSubAssemblyTag(e.target.value)}>
-                <option value="Injection Unit">Injection Unit</option>
-                <option value="Clamping Unit">Clamping Unit</option>
-                <option value="Hydraulic Powerpack">Hydraulic Powerpack</option>
-                <option value="Electrical Cabinet">Electrical Cabinet</option>
-                <option value="Base Frame">Base Frame</option>
-              </select>
-            </div>
-            <div style={{ width: '90px' }}>
-              <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>Qty / Unit</label>
-              <input type="number" min="1" className="input-field" value={extraQty} onChange={(e) => setExtraQty(Number(e.target.value))} />
-            </div>
-            <button type="button" className="btn btn-primary" onClick={handleAddItemToWO}>
-              <Plus size={14} /> Add Item
+            <button type="button" className="btn btn-primary" onClick={handleSaveCustomBOMSubmit}>
+              Save Custom Work Order BOM
             </button>
-          </div>
-
-          {/* Search in Custom Components List */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-            <input type="text" placeholder="Filter component items..." className="input-field" style={{ width: '280px' }} value={compSearchTerm} onChange={(e) => setCompSearchTerm(e.target.value)} />
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Total Items: {filteredCustomComponents.length}</span>
-          </div>
-
-          <div className="table-container" style={{ maxHeight: '350px', overflowY: 'auto' }}>
-            <table>
-              <thead>
-                <tr>
-                  <th>Item Code</th>
-                  <th>Item Name</th>
-                  <th>Sub-Assembly</th>
-                  <th>Qty Required</th>
-                  <th>Unit</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredCustomComponents.map((comp, idx) => (
-                  <tr key={idx} style={{ backgroundColor: comp.isCustomExtra ? 'rgba(234, 179, 8, 0.08)' : 'transparent' }}>
-                    <td style={{ fontFamily: 'monospace', fontWeight: 700 }}>{comp.itemCode}</td>
-                    <td>{comp.itemName}</td>
-                    <td><span className="badge badge-secondary">{comp.subAssemblyTag}</span></td>
-                    <td>
-                      <input type="number" min="1" className="input-field" style={{ width: '70px', padding: '0.2rem' }} value={comp.qtyRequired || 1} onChange={(e) => handleUpdateQty(idx, Number(e.target.value))} />
-                    </td>
-                    <td>{comp.unit}</td>
-                    <td>
-                      <button type="button" className="btn btn-outline" style={{ color: 'var(--danger)', padding: '0.2rem 0.4rem' }} onClick={() => handleRemoveCustomComp(idx)}>
-                        <Trash2 size={13} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
-            <button type="button" className="btn btn-secondary" onClick={() => setIsCustomModalOpen(false)}>Cancel (ESC)</button>
-            <button type="button" className="btn btn-primary" onClick={handleSaveCustomBOMSubmit}>Save Custom Work Order BOM</button>
           </div>
         </div>
       ) : isStageModalOpen ? (
@@ -646,6 +1302,7 @@ export const WorkOrderModule: React.FC = () => {
           </div>
         </>
       )}
+      </div>
 
       {/* Print WO Document Modal */}
       {printData && (

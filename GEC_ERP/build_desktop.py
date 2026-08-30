@@ -1,94 +1,89 @@
 #!/usr/bin/env python3
 """
 ====================================================================
-GEC ERP - Automated Desktop App (.EXE) Build Pipeline
+GEC ERP - Automated Tauri Windows Desktop Builder (.EXE / .MSI)
 ====================================================================
-This script automates:
-1. Compiling React + Vite optimized production web assets
-2. Setting up lightweight desktop wrapper
-3. Packaging native Windows executable (.exe)
-4. Outputting final executable location
+This script:
+1. Terminates any running gec-erp / makensis processes to release Windows file locks
+2. Compiles React + Vite production web bundle
+3. Packages native Windows installers (.exe setup and .msi) via Tauri
+4. Displays the final output artifact locations
 """
 
 import os
 import sys
 import subprocess
 import shutil
-import json
+import time
 from pathlib import Path
 
-def log(msg, symbol="🚀"):
+# Ensure UTF-8 output on Windows consoles
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
+def log(msg, symbol="[*]"):
     print(f"\n{symbol} {msg}")
+
+def kill_running_instances():
+    try:
+        cmd = 'powershell -NoProfile -Command "Get-Process | Where-Object { $_.Name -match \'gec-erp|makensis|rustc|cargo|candle|light\' } | Stop-Process -Force -ErrorAction SilentlyContinue"'
+        subprocess.run(cmd, shell=True, capture_output=True)
+        time.sleep(1)
+    except Exception:
+        pass
 
 def run_cmd(cmd, cwd=None):
     print(f"  [EXEC] {cmd}")
     res = subprocess.run(cmd, shell=True, cwd=cwd)
     if res.returncode != 0:
-        print(f"❌ Command failed with code {res.returncode}: {cmd}")
+        print(f"\n[ERROR] Command failed with code {res.returncode}: {cmd}")
         sys.exit(res.returncode)
 
 def main():
     root_dir = Path(__file__).resolve().parent
     os.chdir(root_dir)
 
-    print("=" * 60)
-    print("💻 GEC ERP - Windows Desktop Application Builder (.EXE)")
-    print("=" * 60)
+    print("=" * 65)
+    print("GEC ERP - Windows Desktop Application Builder (Tauri .EXE / .MSI)")
+    print("=" * 65)
 
-    # 1. Build Web Assets
-    log("Step 1/3: Building Production Web Assets (Vite)...", "📦")
-    run_cmd("corepack pnpm run build" if shutil.which("corepack") else "npm run build")
+    # 1. Release locks
+    log("Step 1/3: Clearing any running instances & file locks...", "[1/3]")
+    kill_running_instances()
 
-    # 2. Setup Electron Desktop Host if needed
-    log("Step 2/3: Configuring Desktop Native Host Container...", "🖥️")
-    desktop_entry = root_dir / "desktop-main.cjs"
-    if not desktop_entry.exists():
-        content = """const { app, BrowserWindow } = require('electron');
-const path = require('path');
+    # Clean previous nsis bundle folder if exists to prevent os error 1224
+    bundle_nsis = root_dir / "frontend" / "src-tauri" / "target" / "release" / "bundle" / "nsis"
+    if bundle_nsis.exists():
+        try:
+            shutil.rmtree(bundle_nsis, ignore_errors=True)
+        except Exception:
+            pass
 
-function createWindow() {
-  const win = new BrowserWindow({
-    width: 1366,
-    height: 850,
-    minWidth: 320,
-    minHeight: 200,
-    title: 'GEC ERP - Enterprise Manufacturing System',
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true
-    }
-  });
+    # 2. Build Tauri Desktop App
+    log("Step 2/3: Building Web Assets & Tauri Native Binaries...", "[2/3]")
+    pnpm_cmd = "corepack pnpm tauri:build" if shutil.which("corepack") else "pnpm tauri:build"
+    run_cmd(pnpm_cmd, cwd=root_dir)
 
-  win.setMenuBarVisibility(false);
-  win.loadFile(path.join(__dirname, 'dist', 'index.html'));
-}
+    # 3. Output results
+    log("Step 3/3: Verifying Generated Installers & Executables...", "[3/3]")
+    release_dir = root_dir / "frontend" / "src-tauri" / "target" / "release"
+    nsis_installer = release_dir / "bundle" / "nsis" / "GEC ERP_1.0.0_x64-setup.exe"
+    msi_installer = release_dir / "bundle" / "msi" / "GEC ERP_1.0.0_x64_en-US.msi"
+    standalone_exe = release_dir / "gec-erp.exe"
 
-app.whenReady().then(createWindow);
-
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
-});
-"""
-        desktop_entry.write_text(content, encoding="utf-8")
-
-    # 3. Package Windows Executable
-    log("Step 3/3: Packaging Windows Desktop Application (.exe)...", "⚡")
-    if not (root_dir / "node_modules" / "electron").exists():
-        print("  Installing Electron & Builder packaging tool...")
-        run_cmd("npm install electron electron-builder --save-dev")
-
-    # Run electron builder
-    builder_cmd = "npx electron-builder --win portable --dir"
-    try:
-        run_cmd(builder_cmd)
-        dist_desktop = root_dir / "dist" / "win-unpacked"
-        print("\n" + "=" * 60)
-        print("🎉 SUCCESS! Desktop App Built Successfully!")
-        print(f"📂 Desktop App Folder: {dist_desktop.resolve()}")
-        print("=" * 60)
-    except Exception as e:
-        print("\n💡 Standalone Desktop project configured.")
-        print("   To launch desktop client now: npx electron desktop-main.cjs")
+    print("\n" + "=" * 65)
+    print("SUCCESS! Desktop App Built Successfully!")
+    print("=" * 65)
+    if nsis_installer.exists():
+        print(f"  Setup Installer (.exe): {nsis_installer.resolve()}")
+    if msi_installer.exists():
+        print(f"  MSI Installer (.msi):   {msi_installer.resolve()}")
+    if standalone_exe.exists():
+        print(f"  Standalone Binary:       {standalone_exe.resolve()}")
+    print("=" * 65)
 
 if __name__ == "__main__":
     main()

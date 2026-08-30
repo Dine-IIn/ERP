@@ -13,7 +13,7 @@ type SortField = 'soNumber' | 'customerName' | 'machineModel' | 'quantity' | 'or
 
 export const SalesOrderModule: React.FC = () => {
   const { 
-    salesOrders, customers, boms, items, workOrders, setActiveModule, 
+    salesOrders, customers, boms, items, workOrders, setActiveModule, openWOInEditor,
     addSalesOrder, updateSalesOrder, deleteSalesOrder, generateWOFromSO, searchTerm, setSearchTerm 
   } = useERP();
 
@@ -333,7 +333,8 @@ export const SalesOrderModule: React.FC = () => {
                         }`}>
                           {so.status.replace('_', ' ')}
                         </span>
-                        {/* Multiple Matching Work Orders (Linked or 100% Matching BOM Tree and Total Items) */}
+
+                        {/* Multi-Tier Work Order Identification: Original WO + 100% Exact Matching Active WOs */}
                         {(() => {
                           const soItemSpec = so.machineModel.trim().toLowerCase();
                           const soBOM = boms.find(b => 
@@ -342,71 +343,115 @@ export const SalesOrderModule: React.FC = () => {
                             b.machineModel.toLowerCase().trim() === soItemSpec
                           );
 
-                          const matchedWOs = workOrders.filter(w => {
-                            // Explicit link check
-                            if (w.soId === so.id || w.soNumber === so.soNumber) return true;
+                          // 1. Find Original Directly Generated WO
+                          const originalWO = workOrders.find(w => w.soId === so.id || (so.soNumber && w.soNumber === so.soNumber));
 
-                            // 100% exact match across all levels of the tree
+                          // Determine expected SO component list
+                          const soComponents = (originalWO?.woComponents && originalWO.woComponents.length > 0)
+                            ? originalWO.woComponents
+                            : (soBOM ? soBOM.components : []);
+
+                          // 2. Scan for Other Active Exact Match WOs
+                          const exactMatchWOs = workOrders.filter(w => {
+                            // Exclude original WO
+                            if (originalWO && w.id === originalWO.id) return false;
+
+                            // Filter ONLY Active WOs (not completed, closed, or dispatched)
+                            const isWOActive = w.status !== 'COMPLETED' && w.stage !== 'COMPLETED' && w.stage !== 'QUALITY_PASSED';
+                            if (!isWOActive) return false;
+
+                            // Step 1: Main Item Check (Must match main item of SO)
                             const woSpec = w.machineModel.trim().toLowerCase();
+                            const isMainItemMatch = woSpec === soItemSpec || 
+                                                    (soBOM && woSpec.includes(soBOM.machineModel.toLowerCase().trim())) ||
+                                                    (soBOM && woSpec.includes(soBOM.bomCode.toLowerCase().trim()));
+                            if (!isMainItemMatch) return false;
+
+                            // Step 2: 100% Exact Component Tree & Total Items Check
                             const woBOM = boms.find(b => 
                               woSpec.includes(b.machineModel.toLowerCase().trim()) || 
                               woSpec.includes(b.bomCode.toLowerCase().trim()) ||
                               b.machineModel.toLowerCase().trim() === woSpec
                             );
 
-                            if (soBOM && woBOM) {
-                              const soComponents = soBOM.components;
-                              const woComponents = (w.woComponents && w.woComponents.length > 0)
-                                ? w.woComponents
-                                : woBOM.components;
+                            const woComponents = (w.woComponents && w.woComponents.length > 0)
+                              ? w.woComponents
+                              : (woBOM ? woBOM.components : []);
 
-                              if (soComponents.length !== woComponents.length) return false;
+                            if (soComponents.length === 0 && woComponents.length === 0) return true;
+                            if (soComponents.length !== woComponents.length) return false;
 
-                              for (const sc of soComponents) {
-                                const found = woComponents.find(wc => 
-                                  (wc.itemCode && wc.itemCode === sc.itemCode) ||
-                                  (wc.itemId && wc.itemId === sc.itemId) ||
-                                  (wc.itemName && wc.itemName.toLowerCase().trim() === sc.itemName.toLowerCase().trim())
-                                );
-                                if (!found) return false;
+                            for (const sc of soComponents) {
+                              const found = woComponents.find(wc => 
+                                (wc.itemCode && wc.itemCode === sc.itemCode) ||
+                                (wc.itemId && wc.itemId === sc.itemId) ||
+                                (wc.itemName && wc.itemName.toLowerCase().trim() === sc.itemName.toLowerCase().trim())
+                              );
+                              if (!found) return false;
 
-                                const wcQty = (found as any).qtyRequired || (found as any).qtyPerMachine || 1;
-                                const scQty = sc.qtyPerMachine || 1;
-                                if (wcQty !== scQty) return false;
-                              }
-
-                              return true;
+                              const wcQty = (found as any).qtyRequired || (found as any).qtyPerMachine || (found as any).qty || 1;
+                              const scQty = (sc as any).qtyRequired || (sc as any).qtyPerMachine || (sc as any).qty || 1;
+                              if (wcQty !== scQty) return false;
                             }
 
-                            // If no BOM registered for either, match exact string
-                            return soItemSpec === woSpec;
+                            return true;
                           });
 
-                          if (matchedWOs.length === 0) return null;
+                          if (!originalWO && exactMatchWOs.length === 0) return null;
 
                           return (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                              {matchedWOs.map(linkedWO => (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginTop: '0.25rem' }}>
+                              {/* Original Direct WO (Primary Blue Badge) */}
+                              {originalWO && (
                                 <button
-                                  key={linkedWO.id}
                                   className="badge badge-primary"
                                   style={{ 
                                     cursor: 'pointer', 
                                     border: 'none', 
-                                    padding: '0.2rem 0.4rem', 
-                                    fontSize: '0.72rem',
+                                    padding: '0.22rem 0.5rem', 
+                                    fontSize: '0.74rem',
                                     display: 'inline-flex',
                                     alignItems: 'center',
-                                    gap: '0.25rem',
-                                    textAlign: 'left'
+                                    justifyContent: 'center',
+                                    textAlign: 'center',
+                                    fontWeight: 700,
+                                    borderRadius: '0.25rem'
                                   }}
-                                  title={`100% Match: Work Order ${linkedWO.workOrderNo || linkedWO.woNumber} (${linkedWO.stage || linkedWO.status})`}
+                                  title={`Directly Generated Work Order (Click to open): ${originalWO.workOrderNo || originalWO.woNumber}`}
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setActiveModule('work-orders');
+                                    openWOInEditor(originalWO.id);
                                   }}
                                 >
-                                  🛠️ {linkedWO.workOrderNo || linkedWO.woNumber} <span style={{ opacity: 0.8, fontSize: '0.65rem' }}>({linkedWO.stage || linkedWO.status})</span>
+                                  {originalWO.workOrderNo || originalWO.woNumber}
+                                </button>
+                              )}
+
+                              {/* Exact Matching Active WOs (Purple / Violet Badges) */}
+                              {exactMatchWOs.map(matchWO => (
+                                <button
+                                  key={matchWO.id}
+                                  style={{ 
+                                    cursor: 'pointer', 
+                                    border: 'none', 
+                                    padding: '0.22rem 0.5rem', 
+                                    fontSize: '0.74rem',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    textAlign: 'center',
+                                    backgroundColor: '#7c3aed',
+                                    color: '#ffffff',
+                                    borderRadius: '0.25rem',
+                                    fontWeight: 700
+                                  }}
+                                  title={`100% Exact Match Active Work Order (Click to open): ${matchWO.workOrderNo || matchWO.woNumber}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openWOInEditor(matchWO.id);
+                                  }}
+                                >
+                                  {matchWO.workOrderNo || matchWO.woNumber}
                                 </button>
                               ))}
                             </div>

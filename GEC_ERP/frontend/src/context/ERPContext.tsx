@@ -45,6 +45,9 @@ interface ERPContextType {
   activeModule: string;
   theme: 'dark' | 'light';
   searchTerm: string;
+  selectedWOIdForEdit: string | null;
+  setSelectedWOIdForEdit: (id: string | null) => void;
+  openWOInEditor: (woId: string) => void;
   setSearchTerm: (term: string) => void;
   setActiveModule: (moduleKey: string) => void;
   toggleTheme: () => void;
@@ -263,6 +266,12 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeModule, setActiveModuleState] = useState<string>('dashboard');
   const [theme, setTheme] = useState<'dark' | 'light'>(() => getStored('theme', 'dark'));
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [selectedWOIdForEdit, setSelectedWOIdForEdit] = useState<string | null>(null);
+
+  const openWOInEditor = (woId: string) => {
+    setSelectedWOIdForEdit(woId);
+    setActiveModuleState('work-orders');
+  };
 
   useEffect(() => setStored('users', users), [users]);
   useEffect(() => setStored('departments', departments), [departments]);
@@ -662,7 +671,14 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const targetSO = salesOrders.find(s => s.id === soId);
     if (!targetSO) return;
 
-    const linkedBOM = boms.find(b => b.machineModel === targetSO.machineModel || b.id === targetSO.bomId) || boms[0];
+    const normSOModel = (targetSO.machineModel || '').trim().toLowerCase();
+    const linkedBOM = boms.find(b => 
+      b.id === targetSO.bomId || 
+      b.machineModel.trim().toLowerCase() === normSOModel || 
+      b.bomCode.trim().toLowerCase() === normSOModel ||
+      (b.machineModel && normSOModel && (b.machineModel.toLowerCase().includes(normSOModel) || normSOModel.includes(b.machineModel.toLowerCase())))
+    ) || boms[0];
+
     const newWO: WorkOrder = {
       id: `wo-${Date.now()}`,
       workOrderNo: `WO-GEC-${String(workOrders.length + 1).padStart(3, '0')}`,
@@ -683,8 +699,8 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         itemCode: c.itemCode,
         itemName: c.itemName,
         qtyRequired: c.qtyPerMachine * (targetSO.quantity || 1),
-        unit: c.unit,
-        subAssemblyTag: c.subAssemblyTag,
+        unit: c.unit || 'Pcs',
+        subAssemblyTag: c.subAssemblyTag || 'Base Frame',
         isCustomExtra: false
       })) : []
     };
@@ -1258,6 +1274,9 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       activeModule,
       theme,
       searchTerm,
+      selectedWOIdForEdit,
+      setSelectedWOIdForEdit,
+      openWOInEditor,
       setSearchTerm,
       setActiveModule,
       toggleTheme,
