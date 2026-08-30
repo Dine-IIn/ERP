@@ -629,14 +629,14 @@ export const WorkOrderModule: React.FC = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                  {bomHistoryStack.length > 0 ? (
+                  {currentDrilldownBOM ? (
                     <button 
                       type="button" 
-                      className="btn btn-outline" 
-                      style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', gap: '0.25rem' }}
+                      className="btn btn-primary" 
+                      style={{ padding: '0.3rem 0.65rem', fontSize: '0.78rem', gap: '0.35rem', fontWeight: 700 }}
                       onClick={handleGoBackInBOMStack}
                     >
-                      <ArrowLeft size={14} /> Back to {bomHistoryStack[bomHistoryStack.length - 1].bomCode || 'Parent BOM'}
+                      <ArrowLeft size={15} /> ← Back to {bomHistoryStack.length > 0 ? (bomHistoryStack[bomHistoryStack.length - 1].bomCode || bomHistoryStack[bomHistoryStack.length - 1].machineModel) : 'Main BOM'}
                     </button>
                   ) : (
                     <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--accent-primary)', fontFamily: 'monospace' }}>
@@ -657,7 +657,7 @@ export const WorkOrderModule: React.FC = () => {
                 </h3>
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
                   {currentDrilldownBOM ? (
-                    <>Sub-BOM Code: <strong>{currentDrilldownBOM.bomCode}</strong> | Version: <strong>{currentDrilldownBOM.version}</strong></>
+                    <>Sub-BOM Code: <strong>{currentDrilldownBOM.bomCode}</strong> | Version: <strong>{currentDrilldownBOM.version}</strong> (Changes are saved automatically at this level)</>
                   ) : (
                     <>Build Quantity: <strong>{selectedWO?.quantity || selectedWO?.targetQuantity || 1} units</strong> | Target Date: <strong>{selectedWO?.targetCompletionDate || '-'}</strong></>
                   )}
@@ -679,6 +679,62 @@ export const WorkOrderModule: React.FC = () => {
               </div>
             </div>
           </div>
+
+          {/* Sub-BOM Breadcrumbs & Back Navigation Bar */}
+          {currentDrilldownBOM && (
+            <div className="card" style={{ padding: '0.65rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--accent-primary)', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button 
+                  type="button" 
+                  className="btn btn-primary" 
+                  style={{ padding: '0.35rem 0.75rem', fontSize: '0.82rem', gap: '0.4rem', fontWeight: 700 }}
+                  onClick={handleGoBackInBOMStack}
+                >
+                  <ArrowLeft size={15} /> ← Back to {bomHistoryStack.length > 0 ? (bomHistoryStack[bomHistoryStack.length - 1].bomCode || bomHistoryStack[bomHistoryStack.length - 1].machineModel) : 'Main BOM'}
+                </button>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                  <span 
+                    style={{ cursor: 'pointer', color: 'var(--accent-primary)', fontWeight: 700, textDecoration: 'underline' }}
+                    onClick={() => {
+                      setBomHistoryStack([]);
+                      setCurrentDrilldownBOM(null);
+                    }}
+                    title="Jump to Top-Level Work Order BOM"
+                  >
+                    {selectedWO?.workOrderNo || selectedWO?.woNumber || 'Root WO'}
+                  </span>
+                  {bomHistoryStack.map((b, idx) => (
+                    <React.Fragment key={idx}>
+                      <span>➔</span>
+                      <span 
+                        style={{ cursor: 'pointer', color: 'var(--accent-primary)', fontWeight: 600, textDecoration: 'underline' }}
+                        onClick={() => {
+                          const newStack = bomHistoryStack.slice(0, idx);
+                          setBomHistoryStack(newStack);
+                          if (b.id === 'wo-top-bom') {
+                            setCurrentDrilldownBOM(null);
+                          } else {
+                            setCurrentDrilldownBOM(b);
+                          }
+                        }}
+                      >
+                        {b.bomCode}
+                      </span>
+                    </React.Fragment>
+                  ))}
+                  <span>➔</span>
+                  <span style={{ fontWeight: 800, color: 'var(--text-primary)' }}>
+                    📂 {currentDrilldownBOM.bomCode} ({currentDrilldownBOM.machineModel})
+                  </span>
+                </div>
+              </div>
+
+              <span className="badge badge-info" style={{ fontSize: '0.72rem' }}>
+                Level {bomHistoryStack.length + 1} Sub-Assembly
+              </span>
+            </div>
+          )}
 
           {/* Add Component to BOM Picker */}
           {showAddComponentPicker && (
