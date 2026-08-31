@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { Modal } from '../common/Modal';
+import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
+import { SingleDispatchPrintView, DispatchListPrintView } from '../printTemplates/JobCardPrintTemplates';
+import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
 import { 
   Truck, PackageCheck, Send, RotateCcw, AlertTriangle, 
-  CheckCircle, Search, Printer, User, FileText, ArrowRight, ShieldCheck 
+  CheckCircle, Search, Printer, User, FileText, ArrowRight, ShieldCheck, RefreshCw 
 } from 'lucide-react';
 import { SalesOrder, FinishedGoodUnit, DispatchRecord } from '../../types/erp';
 
@@ -16,6 +19,10 @@ export const DispatchModule: React.FC = () => {
   const [isDispatchModalOpen, setIsDispatchModalOpen] = useState(false);
   const [selectedFG, setSelectedFG] = useState<FinishedGoodUnit | null>(null);
   const [targetSOId, setTargetSOId] = useState('');
+
+  const [printModalOpen, setPrintModalOpen] = useState(false);
+  const [printDocType, setPrintDocType] = useState<'SINGLE_DISPATCH' | 'DISPATCH_LIST'>('DISPATCH_LIST');
+  const [selectedPrintDispatch, setSelectedPrintDispatch] = useState<DispatchRecord | null>(null);
 
   // Dispatch Form
   const [transporterName, setTransporterName] = useState('V-Trans Express Logistics');
@@ -100,12 +107,58 @@ export const DispatchModule: React.FC = () => {
     reallocateFinishedGood(fgId, soId);
   };
 
+  // Universal @history search handling
+  const isHistorySearch = searchQuery.toLowerCase().includes('@history');
+  const cleanSearchTerm = searchQuery.replace(/@history/gi, '').trim().toLowerCase();
+
   const filteredDispatchHistory = dispatchRecords.filter(d =>
-    d.dispatchNo.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    d.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    d.serialNo.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    d.soNumber.toLowerCase().includes(searchQuery.toLowerCase())
+    !cleanSearchTerm ||
+    d.dispatchNo.toLowerCase().includes(cleanSearchTerm) ||
+    d.customerName.toLowerCase().includes(cleanSearchTerm) ||
+    d.serialNo.toLowerCase().includes(cleanSearchTerm) ||
+    d.soNumber.toLowerCase().includes(cleanSearchTerm)
   );
+
+  const handlePrintSingleDispatch = (d: DispatchRecord) => {
+    setSelectedPrintDispatch(d);
+    setPrintDocType('SINGLE_DISPATCH');
+    setPrintModalOpen(true);
+  };
+
+  const handlePrintDispatchList = () => {
+    setPrintDocType('DISPATCH_LIST');
+    setPrintModalOpen(true);
+  };
+
+  const handleRefreshLiveSheet = () => {
+    const data = filteredDispatchHistory.map(d => ({
+      dispatchNo: d.dispatchNo,
+      serialNo: d.serialNo,
+      machineModel: d.machineModel,
+      customerName: d.customerName,
+      soNumber: d.soNumber,
+      transporterName: d.transporterName || '-',
+      vehicleNo: d.vehicleNo || '-',
+      docketNo: d.docketNo || '-',
+      dispatchDate: d.dispatchDate,
+      notes: d.notes || ''
+    }));
+
+    const headers: { key: keyof typeof data[0]; label: string }[] = [
+      { key: 'dispatchNo', label: 'Dispatch No' },
+      { key: 'serialNo', label: 'Machine Serial No' },
+      { key: 'machineModel', label: 'Machine Model' },
+      { key: 'customerName', label: 'Customer Name' },
+      { key: 'soNumber', label: 'Sales Order Ref' },
+      { key: 'transporterName', label: 'Transporter' },
+      { key: 'vehicleNo', label: 'Vehicle No' },
+      { key: 'docketNo', label: 'LR / Docket No' },
+      { key: 'dispatchDate', label: 'Dispatch Date' },
+      { key: 'notes', label: 'Dispatch Notes' }
+    ];
+
+    openLiveModuleSheet('Dispatch', 'GEC_ERP_Dispatch_Register_Live', data, headers);
+  };
 
   return (
     <div className="module-layout-container">
@@ -120,6 +173,15 @@ export const DispatchModule: React.FC = () => {
           <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
             Automated BOM/spec comparison &bull; Urgent customer stock re-allocation &bull; Gate Pass & Logistics Tracking
           </span>
+        </div>
+
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-outline" onClick={handleRefreshLiveSheet} title="Sync and maintain live CSV sheet">
+            <RefreshCw size={14} /> Live Sheet
+          </button>
+          <button type="button" className="btn btn-outline" onClick={handlePrintDispatchList} title="Print filtered dispatch register report">
+            <Printer size={14} /> Print Report
+          </button>
         </div>
       </div>
 
@@ -239,16 +301,24 @@ export const DispatchModule: React.FC = () => {
             Completed Dispatch Records & Gate Pass History
           </h3>
 
-          <div style={{ position: 'relative', width: '280px' }}>
-            <Search size={14} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-            <input 
-              type="text" 
-              placeholder="Search dispatch no, customer, serial..." 
-              className="input-field" 
-              style={{ paddingLeft: '2.25rem', fontSize: '0.78rem' }}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative', width: '300px' }}>
+              <Search size={14} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input 
+                type="text" 
+                placeholder="Search dispatch no, customer, serial... (type @history)" 
+                className="input-field" 
+                style={{ paddingLeft: '2.25rem', fontSize: '0.78rem' }}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+
+            {isHistorySearch && (
+              <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#ffffff', fontSize: '0.75rem', fontWeight: 700 }}>
+                📜 History Active
+              </span>
+            )}
           </div>
         </div>
 
@@ -287,7 +357,8 @@ export const DispatchModule: React.FC = () => {
                     <button 
                       className="btn btn-outline" 
                       style={{ padding: '0.2rem 0.45rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
-                      onClick={() => alert(`🖨️ Printing Gate Pass & Delivery Challan for ${d.dispatchNo}...`)}
+                      title="Print Outward Gate Pass & Dispatch Challan"
+                      onClick={() => handlePrintSingleDispatch(d)}
                     >
                       <Printer size={13} />
                       <span>Gate Pass</span>
@@ -399,6 +470,19 @@ export const DispatchModule: React.FC = () => {
         </Modal>
       )}
 
+      {/* Feature-Wise Modular Print Manager Modal */}
+      <PrintManagerModal
+        isOpen={printModalOpen}
+        onClose={() => { setPrintModalOpen(false); setSelectedPrintDispatch(null); }}
+        title={printDocType === 'SINGLE_DISPATCH' ? `Print Dispatch Gate Pass (${selectedPrintDispatch?.dispatchNo})` : 'Print Dispatch History Register'}
+        documentRefNumber={printDocType === 'SINGLE_DISPATCH' ? selectedPrintDispatch?.dispatchNo : 'DISPATCH-REPORT'}
+      >
+        {printDocType === 'SINGLE_DISPATCH' && selectedPrintDispatch ? (
+          <SingleDispatchPrintView dispatch={selectedPrintDispatch} />
+        ) : (
+          <DispatchListPrintView records={filteredDispatchHistory} filterLabel={isHistorySearch ? 'All Historical Dispatch Register' : 'Recent Dispatch Records'} />
+        )}
+      </PrintManagerModal>
     </div>
   );
 };

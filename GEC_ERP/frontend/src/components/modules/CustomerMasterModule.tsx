@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { BulkUploadModal } from '../common/BulkUploadModal';
-import { Contact, Plus, Edit2, Trash2, Upload, Search, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown, ArrowLeft, X } from 'lucide-react';
+import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
+import { CustomerListPrintView } from '../printTemplates/ItemMasterPrintTemplates';
+import { Contact, Plus, Edit2, Trash2, Upload, Search, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown, ArrowLeft, X, Printer, RefreshCw } from 'lucide-react';
 import { Customer } from '../../types/erp';
 import { parseCustomersSheet } from '../../utils/csvParser';
 import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
@@ -15,6 +17,7 @@ export const CustomerMasterModule: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [printModalOpen, setPrintModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
 
   // Single Column Sorting State
@@ -46,13 +49,18 @@ export const CustomerMasterModule: React.FC = () => {
     }
   };
 
+  // Universal @history search handling
+  const isHistorySearch = searchTerm.toLowerCase().includes('@history');
+  const cleanSearchTerm = searchTerm.replace(/@history/gi, '').trim().toLowerCase();
+
   const filteredCustomers = customers
     .filter(c =>
-      c.customerCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.contactPerson.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.gstin.toLowerCase().includes(searchTerm.toLowerCase())
+      !cleanSearchTerm ||
+      c.customerCode.toLowerCase().includes(cleanSearchTerm) ||
+      c.name.toLowerCase().includes(cleanSearchTerm) ||
+      c.contactPerson.toLowerCase().includes(cleanSearchTerm) ||
+      c.city.toLowerCase().includes(cleanSearchTerm) ||
+      c.gstin.toLowerCase().includes(cleanSearchTerm)
     )
     .sort((a, b) => {
       let valA: any = a[sortField] || '';
@@ -152,8 +160,11 @@ export const CustomerMasterModule: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <button className="btn btn-outline" onClick={handleOpenSheet}>
-            <FileSpreadsheet size={16} /> Open Sheet
+          <button className="btn btn-outline" onClick={handleOpenSheet} title="Sync and maintain live CSV sheet">
+            <RefreshCw size={14} /> Live Sheet
+          </button>
+          <button type="button" className="btn btn-outline" onClick={() => setPrintModalOpen(true)} title="Print filtered customers catalog report">
+            <Printer size={14} /> Print Report
           </button>
           <button className="btn btn-outline" onClick={() => setIsBulkModalOpen(true)}>
             <Upload size={16} /> Bulk Upload Sheet
@@ -261,16 +272,24 @@ export const CustomerMasterModule: React.FC = () => {
         <>
           {/* Inline Search Bar */}
           <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', backgroundColor: 'var(--bg-card)' }}>
-            <div style={{ position: 'relative', width: '360px' }}>
-              <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-              <input
-                type="text"
-                placeholder="Search customer code, name, city, GSTIN..."
-                className="input-field"
-                style={{ paddingLeft: '2.25rem' }}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <div style={{ position: 'relative', width: '380px' }}>
+                <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <input
+                  type="text"
+                  placeholder="Search customer code, name, city, GSTIN... (type @history)"
+                  className="input-field"
+                  style={{ paddingLeft: '2.25rem' }}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+
+              {isHistorySearch && (
+                <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#ffffff', fontSize: '0.75rem', fontWeight: 700 }}>
+                  📜 History Search Active
+                </span>
+              )}
             </div>
           </div>
 
@@ -328,6 +347,16 @@ export const CustomerMasterModule: React.FC = () => {
         onParse={(text) => parseCustomersSheet(text, customers)}
         onConfirmImport={(newRows) => bulkAddCustomers(newRows)}
       />
+
+      {/* Feature-Wise Modular Print Manager Modal */}
+      <PrintManagerModal
+        isOpen={printModalOpen}
+        onClose={() => setPrintModalOpen(false)}
+        title="Print Customer Master Directory"
+        documentRefNumber="CUST-DIRECTORY"
+      >
+        <CustomerListPrintView customers={filteredCustomers} filterLabel={isHistorySearch ? 'All Active & Historical Client Accounts' : 'Active Customer Master Accounts'} />
+      </PrintManagerModal>
     </div>
   );
 };

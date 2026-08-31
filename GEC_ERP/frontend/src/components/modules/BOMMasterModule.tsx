@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useERP } from '../../context/ERPContext';
-import { PrintDocumentModal } from '../common/PrintDocumentModal';
+import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
+import { SingleBOMPrintView, BOMListPrintView } from '../printTemplates/BOMPrintTemplates';
 import { BOMUploadModal } from '../common/BOMUploadModal';
-import { Plus, Trash2, Edit2, Search, Printer, FileSpreadsheet, Upload, ArrowUpDown, ArrowUp, ArrowDown, Layers, Filter, Eye, Zap, ArrowLeft, X } from 'lucide-react';
+import { Plus, Trash2, Edit2, Search, Printer, FileSpreadsheet, Upload, ArrowUpDown, ArrowUp, ArrowDown, Layers, Filter, Eye, Zap, ArrowLeft, X, RefreshCw } from 'lucide-react';
 import { BOM, BOMComponent, Item } from '../../types/erp';
 import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
@@ -26,7 +27,8 @@ export const BOMMasterModule: React.FC = () => {
 
   // Print Document state
   const [printModalOpen, setPrintModalOpen] = useState(false);
-  const [printData, setPrintData] = useState<any>(null);
+  const [printDocType, setPrintDocType] = useState<'SINGLE_BOM' | 'BOM_LIST'>('BOM_LIST');
+  const [selectedPrintBOM, setSelectedPrintBOM] = useState<BOM | null>(null);
 
   // Single Column Sorting State
   const [sortField, setSortField] = useState<SortField>('bomCode');
@@ -112,17 +114,26 @@ export const BOMMasterModule: React.FC = () => {
     }, 0);
   };
 
+  // Universal @history search handling
+  const isHistorySearch = searchTerm.toLowerCase().includes('@history');
+  const cleanSearchTerm = searchTerm.replace(/@history/gi, '').trim().toLowerCase();
+
   const filteredBOMs = boms
     .filter(b => {
-      const q = searchTerm.trim().toLowerCase();
+      const q = cleanSearchTerm;
+      const isArchived = (b as any).isArchived || b.version.toLowerCase().includes('obsolete');
+      if (!isHistorySearch && isArchived) {
+        return false;
+      }
+
       // Search term filter
       const matchesSearch = !q || (
         b.bomCode.toLowerCase().includes(q) ||
         b.machineModel.toLowerCase().includes(q) ||
         b.version.toLowerCase().includes(q) ||
         b.components.some(c => 
-          c.itemCode.toLowerCase().includes(q) || 
-          c.itemName.toLowerCase().includes(q)
+          (c.itemCode || '').toLowerCase().includes(q) || 
+          (c.itemName || '').toLowerCase().includes(q)
         )
       );
 
@@ -188,9 +199,37 @@ export const BOMMasterModule: React.FC = () => {
     setIsFormOpen(true);
   };
 
-  const handlePrintBOM = (b: BOM) => {
-    setPrintData(b);
+  const handlePrintSingleBOM = (b: BOM) => {
+    setSelectedPrintBOM(b);
+    setPrintDocType('SINGLE_BOM');
     setPrintModalOpen(true);
+  };
+
+  const handlePrintBOMList = () => {
+    setPrintDocType('BOM_LIST');
+    setPrintModalOpen(true);
+  };
+
+  const handleRefreshLiveSheet = () => {
+    const data = filteredBOMs.map(b => ({
+      bomCode: b.bomCode,
+      machineModel: b.machineModel,
+      version: b.version,
+      componentsCount: b.components?.length || 0,
+      estimatedProductionHours: b.estimatedProductionHours || 120,
+      lastUpdated: b.lastUpdated || ''
+    }));
+
+    const headers: { key: keyof typeof data[0]; label: string }[] = [
+      { key: 'bomCode', label: 'BOM Code' },
+      { key: 'machineModel', label: 'Machine Model / Parent Item' },
+      { key: 'version', label: 'BOM Revision' },
+      { key: 'componentsCount', label: 'Total Components' },
+      { key: 'estimatedProductionHours', label: 'Est Production Hours' },
+      { key: 'lastUpdated', label: 'Last Revision Date' }
+    ];
+
+    openLiveModuleSheet('BOM', 'GEC_ERP_BOM_Catalog_Live', data, headers);
   };
 
   // Open Live Sheet for BOM
@@ -203,8 +242,8 @@ export const BOMMasterModule: React.FC = () => {
         bomCode: b.bomCode,
         machineModel: b.machineModel,
         version: b.version,
-        itemCode: c.itemCode,
-        itemName: c.itemName,
+        itemCode: c.itemCode || '',
+        itemName: c.itemName || '',
         subAssemblyTag: c.subAssemblyTag,
         qtyPerMachine: c.qtyPerMachine,
         unit: c.unit,
@@ -214,19 +253,20 @@ export const BOMMasterModule: React.FC = () => {
       };
     });
 
-    openLiveModuleSheet('BOM', `BOM_${sanitizedModelName}_Live`, flatData, [
+    const headers: { key: keyof typeof flatData[0]; label: string }[] = [
       { key: 'bomCode', label: 'BOM Code' },
       { key: 'machineModel', label: 'Machine Model' },
       { key: 'version', label: 'Version' },
-      { key: 'itemCode', label: 'Component Code' },
+      { key: 'itemCode', label: 'Item Code' },
       { key: 'itemName', label: 'Component Name' },
-      { key: 'subAssemblyTag', label: 'Sub Assembly' },
       { key: 'qtyPerMachine', label: 'Qty Per Machine' },
       { key: 'unit', label: 'Unit' },
       { key: 'unitPrice', label: 'Unit Price (INR)' },
       { key: 'totalItemCost', label: 'Total Cost (INR)' },
       { key: 'lastUpdated', label: 'Last Updated' }
-    ]);
+    ];
+
+    openLiveModuleSheet('BOM', 'GEC_ERP_BOM_Master_Live', flatData, headers);
   };
 
   const handleAddComponent = () => {
@@ -319,8 +359,14 @@ export const BOMMasterModule: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-outline" onClick={handleRefreshLiveSheet} title="Sync and maintain live CSV sheet">
+            <RefreshCw size={14} /> Live Sheet
+          </button>
+          <button type="button" className="btn btn-outline" onClick={handlePrintBOMList} title="Print filtered BOM catalog report">
+            <Printer size={14} /> Print Report
+          </button>
           <button className="btn btn-outline" onClick={() => setIsUploadModalOpen(true)}>
-            <Upload size={16} /> Import BOM Sheets (Bulk/Single)
+            <Upload size={14} /> Import BOM Sheets (Bulk/Single)
           </button>
           {!isFormOpen && (
             <button className="btn btn-primary" onClick={handleOpenAddFormScreen}>
@@ -615,17 +661,23 @@ export const BOMMasterModule: React.FC = () => {
             
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem', flexWrap: 'wrap', flex: 1 }}>
               {/* Search Input */}
-              <div style={{ position: 'relative', width: '360px', maxWidth: '100%' }}>
+              <div style={{ position: 'relative', width: '380px', maxWidth: '100%' }}>
                 <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                 <input
                   type="text"
-                  placeholder={selectedBOM ? "Search components in this BOM (code, name, part)..." : "Search BOM code, machine model, component item code..."}
+                  placeholder={selectedBOM ? "Search components in this BOM..." : "Search BOM code, model, part... (type @history to search completed)"}
                   className="input-field"
                   style={{ paddingLeft: '2.25rem' }}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
+
+              {isHistorySearch && (
+                <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#ffffff', fontSize: '0.75rem', fontWeight: 700 }}>
+                  📜 History Search Active
+                </span>
+              )}
 
               {/* Common Category Filter Dropdown */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -695,7 +747,7 @@ export const BOMMasterModule: React.FC = () => {
                   <button className="btn btn-outline" style={{ color: 'var(--success)' }} title="Open Individual BOM Sheet" onClick={() => handleOpenIndividualBOMSheet(selectedBOM)}>
                     <FileSpreadsheet size={15} /> Open Live Sheet
                   </button>
-                  <button className="btn btn-outline" title="Print BOM Document" onClick={() => handlePrintBOM(selectedBOM)}>
+                  <button className="btn btn-outline" title="Print BOM Document" onClick={() => handlePrintSingleBOM(selectedBOM)}>
                     <Printer size={15} /> Print
                   </button>
                   <button className="btn btn-primary" title="Edit BOM" onClick={() => handleOpenEditFormScreen(selectedBOM)}>
@@ -940,6 +992,9 @@ export const BOMMasterModule: React.FC = () => {
                           <td style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>{b.lastUpdated || '2026-08-29'}</td>
                           <td onClick={(e) => e.stopPropagation()}>
                             <div style={{ display: 'flex', gap: '0.35rem' }}>
+                              <button className="btn btn-outline" style={{ padding: '0.25rem 0.45rem' }} title="Print BOM Specification Sheet" onClick={() => handlePrintSingleBOM(b)}>
+                                <Printer size={14} />
+                              </button>
                               <button className="btn btn-outline" style={{ padding: '0.25rem 0.45rem' }} title="Edit BOM" onClick={() => handleOpenEditFormScreen(b)}>
                                 <Edit2 size={14} />
                               </button>
@@ -966,15 +1021,19 @@ export const BOMMasterModule: React.FC = () => {
         onConfirmImport={(newBOMs) => bulkAddBOMs(newBOMs)}
       />
 
-      {/* Print Document Modal */}
-      <PrintDocumentModal
+      {/* Feature-Wise Modular Print Manager Modal */}
+      <PrintManagerModal
         isOpen={printModalOpen}
-        onClose={() => setPrintModalOpen(false)}
-        title="Print Bill of Materials (BOM)"
-        documentType="BOM"
-        data={printData}
-      />
-
+        onClose={() => { setPrintModalOpen(false); setSelectedPrintBOM(null); }}
+        title={printDocType === 'SINGLE_BOM' ? `Print BOM Specification (${selectedPrintBOM?.bomCode})` : 'Print BOM Master Catalog'}
+        documentRefNumber={printDocType === 'SINGLE_BOM' ? selectedPrintBOM?.bomCode : 'BOM-REPORT'}
+      >
+        {printDocType === 'SINGLE_BOM' && selectedPrintBOM ? (
+          <SingleBOMPrintView bom={selectedPrintBOM} isExploded={isExplodedView} />
+        ) : (
+          <BOMListPrintView boms={filteredBOMs} filterLabel={isHistorySearch ? 'All Active & Archived BOM Specifications' : 'Active BOM Specifications'} />
+        )}
+      </PrintManagerModal>
     </div>
   );
 };

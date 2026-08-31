@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
-import { ShieldCheck, Plus, Edit2, CheckCircle, XCircle, AlertCircle, Search, ArrowLeft, X } from 'lucide-react';
+import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
+import { SingleQCPrintView, QCListPrintView } from '../printTemplates/QCPrintTemplates';
+import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
+import { ShieldCheck, Plus, Edit2, CheckCircle, XCircle, AlertCircle, Search, ArrowLeft, X, Printer, RefreshCw } from 'lucide-react';
 import { QCDisposition, QCInspection, QCType } from '../../types/erp';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
 
@@ -8,6 +11,10 @@ export const QualityControlModule: React.FC = () => {
   const { qcInspections, items, currentUser, addQCInspection, updateQCInspection, searchTerm, setSearchTerm } = useERP();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingQC, setEditingQC] = useState<QCInspection | null>(null);
+
+  const [printModalOpen, setPrintModalOpen] = useState(false);
+  const [printDocType, setPrintDocType] = useState<'SINGLE_QC' | 'QC_LIST'>('QC_LIST');
+  const [selectedPrintQC, setSelectedPrintQC] = useState<QCInspection | null>(null);
 
   const [qcForm, setQcForm] = useState({
     qcNumber: '',
@@ -23,6 +30,10 @@ export const QualityControlModule: React.FC = () => {
 
   const [selectedQCDispositionFilter, setSelectedQCDispositionFilter] = useState<string>('ALL');
 
+  // Universal @history search handling
+  const isHistorySearch = searchTerm.toLowerCase().includes('@history');
+  const cleanSearchTerm = searchTerm.replace(/@history/gi, '').trim().toLowerCase();
+
   const filteredQCs = qcInspections.filter(q => {
     const reportNo = q.qcNumber || q.inspectionNo || '';
     const itemCode = q.itemCode || '';
@@ -31,17 +42,61 @@ export const QualityControlModule: React.FC = () => {
     const inspector = q.inspectorName || '';
     const disp = q.disposition || q.status || 'PASSED';
 
-    const matchesSearch = 
-      reportNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      itemName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      itemCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      refNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      inspector.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = !cleanSearchTerm || (
+      reportNo.toLowerCase().includes(cleanSearchTerm) ||
+      itemName.toLowerCase().includes(cleanSearchTerm) ||
+      itemCode.toLowerCase().includes(cleanSearchTerm) ||
+      refNo.toLowerCase().includes(cleanSearchTerm) ||
+      inspector.toLowerCase().includes(cleanSearchTerm)
+    );
 
     const matchesDisposition = selectedQCDispositionFilter === 'ALL' || disp === selectedQCDispositionFilter;
 
     return matchesSearch && matchesDisposition;
   });
+
+  const handlePrintSingleQC = (q: QCInspection) => {
+    setSelectedPrintQC(q);
+    setPrintDocType('SINGLE_QC');
+    setPrintModalOpen(true);
+  };
+
+  const handlePrintQCList = () => {
+    setPrintDocType('QC_LIST');
+    setPrintModalOpen(true);
+  };
+
+  const handleRefreshLiveSheet = () => {
+    const data = filteredQCs.map(q => ({
+      qcNumber: q.qcNumber || q.inspectionNo || '',
+      type: q.type || q.referenceType || 'INCOMING_PO',
+      referenceNo: q.referenceNo || '',
+      itemCode: q.itemCode || '',
+      itemName: q.itemName || '',
+      inspectedQty: q.inspectedQuantity || q.inspectedQty || 1,
+      passedQty: q.passedQuantity || q.approvedQty || 1,
+      failedQty: q.failedQuantity || q.rejectedQty || 0,
+      disposition: q.disposition || q.status || 'PASSED',
+      inspectorName: q.inspectorName || 'QC Officer',
+      defectReason: q.defectReason || q.remarks || ''
+    }));
+
+    const headers: { key: keyof typeof data[0]; label: string }[] = [
+      { key: 'qcNumber', label: 'QC Report No' },
+      { key: 'type', label: 'Inspection Type' },
+      { key: 'referenceNo', label: 'Ref Challan / GRN' },
+      { key: 'itemCode', label: 'Item Code' },
+      { key: 'itemName', label: 'Component Name' },
+      { key: 'inspectedQty', label: 'Inspected Qty' },
+      { key: 'passedQty', label: 'Passed Qty' },
+      { key: 'failedQty', label: 'Failed Qty' },
+      { key: 'disposition', label: 'Disposition Status' },
+      { key: 'inspectorName', label: 'Inspector' },
+      { key: 'defectReason', label: 'Defect Notes / Params' }
+    ];
+
+    openLiveModuleSheet('QC', 'GEC_ERP_QC_Audits_Live', data, headers);
+  };
 
   const { selectedIndex, setSelectedIndex } = useTableKeyboardNav(filteredQCs, (q) => handleOpenEditModal(q));
 
@@ -141,7 +196,13 @@ export const QualityControlModule: React.FC = () => {
           </span>
         </div>
 
-        <div>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-outline" onClick={handleRefreshLiveSheet} title="Sync and maintain live CSV sheet">
+            <RefreshCw size={14} /> Live Sheet
+          </button>
+          <button type="button" className="btn btn-outline" onClick={handlePrintQCList} title="Print filtered QC inspection report">
+            <Printer size={14} /> Print Report
+          </button>
           {!isModalOpen && (
             <button className="btn btn-primary" onClick={handleOpenAddModal}>
               <Plus size={16} /> Log Quality Inspection
@@ -233,16 +294,24 @@ export const QualityControlModule: React.FC = () => {
         <>
           {/* Filter Bar */}
           <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', backgroundColor: 'var(--bg-card)' }}>
-            <div style={{ position: 'relative', width: '340px', maxWidth: '100%' }}>
-              <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-              <input
-                type="text"
-                placeholder="Search QC number, ref no, component, inspector..."
-                className="input-field"
-                style={{ paddingLeft: '2.25rem' }}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <div style={{ position: 'relative', width: '380px', maxWidth: '100%' }}>
+                <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <input
+                  type="text"
+                  placeholder="Search QC number, ref, item, inspector... (type @history)"
+                  className="input-field"
+                  style={{ paddingLeft: '2.25rem' }}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+
+              {isHistorySearch && (
+                <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#ffffff', fontSize: '0.75rem', fontWeight: 700 }}>
+                  📜 History Search Active
+                </span>
+              )}
             </div>
 
             <div>
@@ -320,13 +389,23 @@ export const QualityControlModule: React.FC = () => {
                       </td>
                       <td style={{ fontSize: '0.85rem' }}>{inspector}</td>
                       <td onClick={(e) => e.stopPropagation()}>
-                        <button 
-                          className="btn btn-outline" 
-                          style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
-                          onClick={() => handleOpenEditModal(q)}
-                        >
-                          <Edit2 size={14} /> Edit QC
-                        </button>
+                        <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                          <button 
+                            className="btn btn-outline" 
+                            style={{ padding: '0.25rem 0.45rem' }}
+                            title="Print QC Certificate"
+                            onClick={() => handlePrintSingleQC(q)}
+                          >
+                            <Printer size={14} />
+                          </button>
+                          <button 
+                            className="btn btn-outline" 
+                            style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+                            onClick={() => handleOpenEditModal(q)}
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -336,6 +415,20 @@ export const QualityControlModule: React.FC = () => {
           </div>
         </>
       )}
+
+      {/* Feature-Wise Modular Print Manager Modal */}
+      <PrintManagerModal
+        isOpen={printModalOpen}
+        onClose={() => { setPrintModalOpen(false); setSelectedPrintQC(null); }}
+        title={printDocType === 'SINGLE_QC' ? `Print QC Certificate (${selectedPrintQC?.qcNumber || selectedPrintQC?.inspectionNo})` : 'Print QC Audit Inspection Log'}
+        documentRefNumber={printDocType === 'SINGLE_QC' ? (selectedPrintQC?.qcNumber || selectedPrintQC?.inspectionNo) : 'QC-REPORT'}
+      >
+        {printDocType === 'SINGLE_QC' && selectedPrintQC ? (
+          <SingleQCPrintView inspection={selectedPrintQC} />
+        ) : (
+          <QCListPrintView inspections={filteredQCs} filterLabel={isHistorySearch ? 'All Active & Historical QC Inspections' : 'Active QC Inspections'} />
+        )}
+      </PrintManagerModal>
     </div>
   );
 };

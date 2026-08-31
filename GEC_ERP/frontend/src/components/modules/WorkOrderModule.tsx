@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { AutocompleteSelect, AutocompleteOption } from '../common/AutocompleteSelect';
-import { PrintDocumentModal } from '../common/PrintDocumentModal';
-import { Wrench, Plus, Trash2, Sliders, CheckCircle, Search, Printer, FileSpreadsheet, ArrowLeft, X, Package, Filter, Zap, Layers, FolderTree, FolderPlus, ChevronRight, ChevronDown, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
+import { SingleWOPrintView, WOListPrintView } from '../printTemplates/WOPrintTemplates';
+import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
+import { Wrench, Plus, Trash2, Sliders, CheckCircle, Search, Printer, FileSpreadsheet, ArrowLeft, X, Package, Filter, Zap, Layers, FolderTree, FolderPlus, ChevronRight, ChevronDown, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw } from 'lucide-react';
 import { WorkOrder, WOStage, WOStatus, WOCustomComponent, BOM, BOMComponent } from '../../types/erp';
 import { ExportFieldSelectorModal, FieldOption } from '../common/ExportFieldSelectorModal';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
@@ -41,18 +43,32 @@ export const WorkOrderModule: React.FC = () => {
     }
   };
 
+  // Universal @history search handling
+  const isHistorySearch = searchTerm.toLowerCase().includes('@history');
+  const cleanSearchTerm = searchTerm.replace(/@history/gi, '').trim().toLowerCase();
+
   const filteredWOs = workOrders
     .filter(wo => {
       const woNo = wo.workOrderNo || wo.woNumber || '';
-      const lead = wo.assignedLead || wo.assignedSupervisor || '';
+      const lead = wo.assignedLead || '';
       const woStage = wo.stage || 'PLANNED';
+      const woStatus = wo.status || 'IN_PROGRESS';
       const start = wo.startDate || '';
       const targetDate = wo.targetCompletionDate || '';
 
-      const matchesSearch = 
-        woNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        wo.machineModel.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        lead.toLowerCase().includes(searchTerm.toLowerCase());
+      const isCompletedOrClosed = woStage === 'DISPATCHED' || (woStage === 'FINAL_TESTING' && woStatus === 'COMPLETED') || (woStatus as string) === 'CLOSED' || (wo as any).isArchived;
+
+      // By default show only active records unless @history is typed
+      if (!isHistorySearch && isCompletedOrClosed) {
+        return false;
+      }
+
+      const matchesSearch = !cleanSearchTerm || (
+        woNo.toLowerCase().includes(cleanSearchTerm) ||
+        wo.machineModel.toLowerCase().includes(cleanSearchTerm) ||
+        lead.toLowerCase().includes(cleanSearchTerm) ||
+        (wo.soNumber && wo.soNumber.toLowerCase().includes(cleanSearchTerm))
+      );
 
       const matchesStage = selectedStageFilter === 'ALL' || woStage === selectedStageFilter;
       const matchesStart = !startDateFilter || start >= startDateFilter;
@@ -421,42 +437,48 @@ export const WorkOrderModule: React.FC = () => {
     setIsStageModalOpen(false);
   };
 
-  const handlePrintWO = (wo: WorkOrder) => {
-    const woNo = wo.workOrderNo || wo.woNumber || 'WO-GEC-001';
-    const linkedBOM = boms.find(b => b.machineModel === wo.machineModel);
-    const buildQty = wo.quantity || wo.targetQuantity || 1;
+  const [printDocType, setPrintDocType] = useState<'SINGLE_WO' | 'WO_LIST'>('WO_LIST');
+  const [selectedPrintWO, setSelectedPrintWO] = useState<WorkOrder | null>(null);
 
-    let componentsList = wo.woComponents && wo.woComponents.length > 0
-      ? wo.woComponents.map(c => ({
-          itemCode: c.itemCode || '',
-          itemName: c.itemName || '',
-          subAssemblyTag: c.subAssemblyTag || 'Assembly',
-          qtyRequired: (c.qtyRequired || c.qty || 1) * buildQty,
-          unit: c.unit || 'Pcs'
-        }))
-      : (linkedBOM ? linkedBOM.components.map(c => ({
-          itemCode: c.itemCode || '',
-          itemName: c.itemName || '',
-          subAssemblyTag: c.subAssemblyTag || 'Assembly',
-          qtyRequired: c.qtyPerMachine * buildQty,
-          unit: c.unit
-        })) : []);
-
-    setPrintData({
-      workOrderNo: woNo,
-      soNumber: wo.soNumber || 'SO-DIRECT-PROD',
-      customerName: 'Internal Production',
-      machineModel: wo.machineModel,
-      quantity: buildQty,
-      startDate: wo.startDate || new Date().toISOString().split('T')[0],
-      targetCompletionDate: wo.targetCompletionDate || new Date().toISOString().split('T')[0],
-      assignedLead: wo.assignedLead || wo.assignedSupervisor || 'Suresh Patel',
-      stage: wo.stage || 'PLANNING',
-      status: wo.status,
-      remarks: wo.remarks || wo.notes || 'Strict adherence to QC parameters required.',
-      components: componentsList
-    });
+  const handlePrintSingleWO = (wo: WorkOrder) => {
+    setSelectedPrintWO(wo);
+    setPrintDocType('SINGLE_WO');
     setPrintModalOpen(true);
+  };
+
+  const handlePrintWOList = () => {
+    setPrintDocType('WO_LIST');
+    setPrintModalOpen(true);
+  };
+
+  const handleRefreshLiveSheet = () => {
+    const data = filteredWOs.map(w => ({
+      workOrderNo: w.workOrderNo || w.woNumber || '',
+      soNumber: w.soNumber || '-',
+      machineModel: w.machineModel,
+      quantity: w.quantity || w.targetQuantity || 1,
+      stage: w.stage || 'PLANNED',
+      status: w.status || 'IN_PROGRESS',
+      assignedLead: w.assignedLead || '',
+      startDate: w.startDate || '',
+      targetCompletionDate: w.targetCompletionDate || '',
+      remarks: w.remarks || ''
+    }));
+
+    const headers: { key: keyof typeof data[0]; label: string }[] = [
+      { key: 'workOrderNo', label: 'Work Order No' },
+      { key: 'soNumber', label: 'Linked SO No' },
+      { key: 'machineModel', label: 'Machine Model' },
+      { key: 'quantity', label: 'Build Quantity' },
+      { key: 'stage', label: 'Assembly Stage' },
+      { key: 'status', label: 'Status' },
+      { key: 'assignedLead', label: 'Assigned Lead' },
+      { key: 'startDate', label: 'Start Date' },
+      { key: 'targetCompletionDate', label: 'Target Date' },
+      { key: 'remarks', label: 'Remarks / Notes' }
+    ];
+
+    openLiveModuleSheet('WorkOrders', 'GEC_ERP_Work_Orders_Live', data, headers);
   };
 
   const filteredCustomComponents = customComponents.filter(c =>
@@ -479,7 +501,7 @@ export const WorkOrderModule: React.FC = () => {
   // Table Keyboard Navigation
   const { selectedIndex, setSelectedIndex } = useTableKeyboardNav(
     filteredWOs,
-    (wo) => handlePrintWO(wo)
+    (wo) => handlePrintSingleWO(wo)
   );
 
   const activePanelOpen = isModalOpen || isCustomModalOpen || isStageModalOpen;
@@ -500,8 +522,14 @@ export const WorkOrderModule: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-outline" onClick={handleRefreshLiveSheet} title="Sync and maintain live CSV sheet">
+            <RefreshCw size={14} /> Live Sheet
+          </button>
+          <button type="button" className="btn btn-outline" onClick={handlePrintWOList} title="Print filtered work orders list report">
+            <Printer size={14} /> Print Report
+          </button>
           <button className="btn btn-outline" onClick={() => setIsExportModalOpen(true)}>
-            <FileSpreadsheet size={16} /> Open Sheet ({filteredWOs.length} filtered)
+            <FileSpreadsheet size={14} /> Export Custom
           </button>
           {!activePanelOpen && (
             <button className="btn btn-primary" onClick={handleOpenModal}>
@@ -1240,17 +1268,23 @@ export const WorkOrderModule: React.FC = () => {
         <>
           {/* Module Filter Toolbar */}
           <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: '1rem', backgroundColor: 'var(--bg-card)', flexWrap: 'wrap' }}>
-            <div style={{ position: 'relative', width: '320px', maxWidth: '100%' }}>
+            <div style={{ position: 'relative', width: '360px', maxWidth: '100%' }}>
               <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
               <input
                 type="text"
-                placeholder="Search WO no, item model, production lead..."
+                placeholder="Search WO no, model, lead... (type @history to search completed)"
                 className="input-field"
                 style={{ paddingLeft: '2.25rem' }}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
+
+            {isHistorySearch && (
+              <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#ffffff', fontSize: '0.75rem', fontWeight: 700 }}>
+                📜 History Search Active
+              </span>
+            )}
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Stage:</span>
@@ -1314,31 +1348,41 @@ export const WorkOrderModule: React.FC = () => {
                     const woNo = wo.workOrderNo || wo.woNumber || 'WO-GEC-001';
                     const buildQty = wo.quantity || wo.targetQuantity || 1;
                     const stageText = wo.stage || 'PLANNED';
+                    const isCompleted = wo.stage === 'DISPATCHED' || (wo.status as string) === 'CLOSED' || (wo.stage === 'FINAL_TESTING' && wo.status === 'COMPLETED');
 
                     return (
                       <tr
                         key={wo.id}
-                        onDoubleClick={() => handlePrintWO(wo)}
+                        onDoubleClick={() => handlePrintSingleWO(wo)}
                         onClick={() => setSelectedIndex(idx)}
                         style={{
                           backgroundColor: isNavSelected ? 'rgba(59, 130, 246, 0.18)' : 'transparent',
                           cursor: 'pointer'
                         }}
                       >
-                        <td style={{ fontWeight: 700, color: 'var(--accent-primary)', fontFamily: 'monospace' }}>
-                          {woNo}
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <span style={{ fontWeight: 700, color: 'var(--accent-primary)', fontFamily: 'monospace' }}>
+                              {woNo}
+                            </span>
+                            {isCompleted && (
+                              <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#fff', fontSize: '0.65rem', padding: '0.1rem 0.35rem' }}>
+                                📜 HISTORY
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td style={{ fontWeight: 600 }}>{wo.machineModel}</td>
                         <td style={{ fontWeight: 700 }}>{buildQty} Unit(s)</td>
                         <td>
-                          <span className="badge badge-info" style={{ fontSize: '0.72rem' }}>
+                          <span className={`badge ${isCompleted ? 'badge-neutral' : 'badge-info'}`} style={{ fontSize: '0.72rem' }}>
                             {stageText.replace(/_/g, ' ')}
                           </span>
                         </td>
                         <td style={{ fontSize: '0.85rem' }}>{wo.targetCompletionDate || wo.startDate}</td>
                         <td onClick={(e) => e.stopPropagation()}>
                           <div style={{ display: 'flex', gap: '0.35rem' }}>
-                            <button className="btn btn-outline" style={{ padding: '0.25rem 0.45rem' }} title="Print WO Sheet" onClick={() => handlePrintWO(wo)}>
+                            <button className="btn btn-outline" style={{ padding: '0.25rem 0.45rem' }} title="Print WO Job Card / Traveller" onClick={() => handlePrintSingleWO(wo)}>
                               <Printer size={13} />
                             </button>
                             <button className="btn btn-outline" style={{ padding: '0.25rem 0.45rem' }} title="Customize Components" onClick={() => handleOpenCustomModal(wo)}>
@@ -1360,16 +1404,19 @@ export const WorkOrderModule: React.FC = () => {
       )}
       </div>
 
-      {/* Print WO Document Modal */}
-      {printData && (
-        <PrintDocumentModal
-          isOpen={printModalOpen}
-          onClose={() => setPrintModalOpen(false)}
-          title="Print Machine Production Work Order"
-          documentType="WO"
-          data={printData}
-        />
-      )}
+      {/* Feature-Wise Modular Print Manager Modal */}
+      <PrintManagerModal
+        isOpen={printModalOpen}
+        onClose={() => { setPrintModalOpen(false); setSelectedPrintWO(null); }}
+        title={printDocType === 'SINGLE_WO' ? `Print Work Order Job Card (${selectedPrintWO?.workOrderNo || selectedPrintWO?.woNumber})` : `Print Work Orders Summary Report`}
+        documentRefNumber={printDocType === 'SINGLE_WO' ? (selectedPrintWO?.workOrderNo || selectedPrintWO?.woNumber) : 'WO-REPORT'}
+      >
+        {printDocType === 'SINGLE_WO' && selectedPrintWO ? (
+          <SingleWOPrintView wo={selectedPrintWO} />
+        ) : (
+          <WOListPrintView workOrders={filteredWOs} filterLabel={isHistorySearch ? 'All Active & Historical Work Orders' : (selectedStageFilter !== 'ALL' ? `Stage: ${selectedStageFilter}` : 'Active Work Orders')} />
+        )}
+      </PrintManagerModal>
 
       {/* Custom Export Field Modal */}
       <ExportFieldSelectorModal<WorkOrder>

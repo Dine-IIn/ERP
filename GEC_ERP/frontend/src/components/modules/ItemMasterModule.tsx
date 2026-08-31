@@ -3,8 +3,10 @@ import { useERP } from '../../context/ERPContext';
 import { Modal } from '../common/Modal';
 import { BulkUploadModal } from '../common/BulkUploadModal';
 import { ExportFieldSelectorModal, FieldOption } from '../common/ExportFieldSelectorModal';
+import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
+import { ItemMasterListPrintView } from '../printTemplates/ItemMasterPrintTemplates';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
-import { Plus, Edit2, Trash2, Upload, Search, FileSpreadsheet, Settings, Filter, Edit3, ArrowUp, ArrowDown, ArrowUpDown, ArrowLeft, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, Upload, Search, FileSpreadsheet, Settings, Filter, Edit3, ArrowUp, ArrowDown, ArrowUpDown, ArrowLeft, X, Printer, RefreshCw } from 'lucide-react';
 import { Item, ItemCategory, QCTrigger, MaterialProcessType, ItemMappedVendor, FIXED_ITEM_CLASSES } from '../../types/erp';
 import { parseItemsSheet } from '../../utils/csvParser';
 import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
@@ -21,6 +23,7 @@ export const ItemMasterModule: React.FC = () => {
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [isCatModalOpen, setIsCatModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [printModalOpen, setPrintModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
 
   const [editingCategoryName, setEditingCategoryName] = useState<string | null>(null);
@@ -322,6 +325,42 @@ export const ItemMasterModule: React.FC = () => {
           >
             <Trash2 size={16} /> Remove All Old Codes
           </button>
+          <button type="button" className="btn btn-outline" onClick={() => {
+            const data = filteredItems.map(item => ({
+              itemCode: item.itemCode,
+              partCode: item.partCode || '',
+              oldItemCode: item.oldItemCode || '',
+              name: item.name,
+              category: item.category || '',
+              processType: item.processType || '',
+              inHouseStock: item.inHouseStock,
+              externalStock: item.externalStock || 0,
+              unit: item.unit,
+              unitPrice: item.unitPrice || 0,
+              location: item.location || ''
+            }));
+
+            const headers: { key: keyof typeof data[0]; label: string }[] = [
+              { key: 'itemCode', label: 'Item Code' },
+              { key: 'partCode', label: 'Part Code' },
+              { key: 'oldItemCode', label: 'Old Code' },
+              { key: 'name', label: 'Description' },
+              { key: 'category', label: 'Category' },
+              { key: 'processType', label: 'Process Type' },
+              { key: 'inHouseStock', label: 'In-House Stock' },
+              { key: 'externalStock', label: 'External Stock' },
+              { key: 'unit', label: 'UOM' },
+              { key: 'unitPrice', label: 'Unit Price (₹)' },
+              { key: 'location', label: 'Store Location' }
+            ];
+
+            openLiveModuleSheet('ItemMaster', 'GEC_ERP_Item_Master_Live', data, headers);
+          }} title="Sync and maintain live CSV sheet">
+            <RefreshCw size={14} /> Live Sheet
+          </button>
+          <button type="button" className="btn btn-outline" onClick={() => setPrintModalOpen(true)} title="Print filtered items catalog report">
+            <Printer size={14} /> Print Report
+          </button>
           <button className="btn btn-outline" onClick={() => setIsExportModalOpen(true)}>
             <FileSpreadsheet size={16} /> Open Sheet ({filteredItems.length} filtered)
           </button>
@@ -543,16 +582,24 @@ export const ItemMasterModule: React.FC = () => {
         <>
           {/* Search & Filter Bar - Fixed */}
           <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', backgroundColor: 'var(--bg-card)' }}>
-            <div style={{ position: 'relative', width: '360px', maxWidth: '100%' }}>
-              <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-              <input
-                type="text"
-                placeholder="Search item code, description, part code..."
-                className="input-field"
-                style={{ paddingLeft: '2.25rem' }}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <div style={{ position: 'relative', width: '380px', maxWidth: '100%' }}>
+                <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <input
+                  type="text"
+                  placeholder="Search item code, description, part code... (type @history)"
+                  className="input-field"
+                  style={{ paddingLeft: '2.25rem' }}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+
+              {isHistorySearch && (
+                <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#ffffff', fontSize: '0.75rem', fontWeight: 700 }}>
+                  📜 History Search Active
+                </span>
+              )}
             </div>
           </div>
 
@@ -800,6 +847,16 @@ export const ItemMasterModule: React.FC = () => {
         data={filteredItems}
         availableFields={availableExportFields}
       />
+
+      {/* Feature-Wise Modular Print Manager Modal */}
+      <PrintManagerModal
+        isOpen={printModalOpen}
+        onClose={() => setPrintModalOpen(false)}
+        title="Print Items & Raw Materials Catalog"
+        documentRefNumber="ITEM-CATALOG"
+      >
+        <ItemMasterListPrintView items={filteredItems} filterLabel={isHistorySearch ? 'All Active & Historical Master Catalog Items' : 'Active Master Catalog Items'} />
+      </PrintManagerModal>
     </div>
   );
 };

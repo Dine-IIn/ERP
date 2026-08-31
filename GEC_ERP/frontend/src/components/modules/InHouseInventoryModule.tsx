@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
-import { Warehouse, AlertTriangle, Search, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
+import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
+import { ItemMasterListPrintView } from '../printTemplates/ItemMasterPrintTemplates';
+import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
+import { Warehouse, AlertTriangle, Search, ArrowUp, ArrowDown, ArrowUpDown, Printer, RefreshCw } from 'lucide-react';
 
 type StockSortKey = 'itemCode' | 'name' | 'category' | 'location' | 'inHouseStock' | 'reorderLevel' | 'unitPrice' | 'totalValuation';
 
@@ -9,6 +12,7 @@ export const InHouseInventoryModule: React.FC = () => {
 
   const [sortField, setSortField] = useState<StockSortKey>('itemCode');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [printModalOpen, setPrintModalOpen] = useState(false);
 
   const handleSort = (field: StockSortKey) => {
     if (sortField === field) {
@@ -19,12 +23,17 @@ export const InHouseInventoryModule: React.FC = () => {
     }
   };
 
+  // Universal @history search handling
+  const isHistorySearch = searchTerm.toLowerCase().includes('@history');
+  const cleanSearchTerm = searchTerm.replace(/@history/gi, '').trim().toLowerCase();
+
   const filteredItems = items
     .filter(item =>
-      item.itemCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.location.toLowerCase().includes(searchTerm.toLowerCase())
+      !cleanSearchTerm ||
+      item.itemCode.toLowerCase().includes(cleanSearchTerm) ||
+      item.name.toLowerCase().includes(cleanSearchTerm) ||
+      item.category.toLowerCase().includes(cleanSearchTerm) ||
+      (item.location && item.location.toLowerCase().includes(cleanSearchTerm))
     )
     .sort((a, b) => {
       let valA: any = (a as any)[sortField] ?? '';
@@ -46,6 +55,34 @@ export const InHouseInventoryModule: React.FC = () => {
   const totalStockValue = items.reduce((sum, item) => sum + (item.inHouseStock * (item.unitPrice || 0)), 0);
   const lowStockCount = items.filter(i => i.inHouseStock <= (i.reorderLevel || 0)).length;
 
+  const handleRefreshLiveSheet = () => {
+    const data = filteredItems.map(item => ({
+      itemCode: item.itemCode,
+      name: item.name,
+      category: item.category,
+      location: item.location || '',
+      inHouseStock: `${item.inHouseStock} ${item.unit}`,
+      reorderLevel: `${item.reorderLevel || 0} ${item.unit}`,
+      unitPrice: `₹${(item.unitPrice || 0).toLocaleString()}`,
+      totalValuation: `₹${(item.inHouseStock * (item.unitPrice || 0)).toLocaleString()}`,
+      status: item.inHouseStock <= (item.reorderLevel || 0) ? 'LOW_STOCK' : 'NORMAL'
+    }));
+
+    const headers: { key: keyof typeof data[0]; label: string }[] = [
+      { key: 'itemCode', label: 'Item Code' },
+      { key: 'name', label: 'Component & Spec' },
+      { key: 'category', label: 'Category' },
+      { key: 'location', label: 'Location Rack' },
+      { key: 'inHouseStock', label: 'In-House Stock' },
+      { key: 'reorderLevel', label: 'Safety Level' },
+      { key: 'unitPrice', label: 'Unit Valuation' },
+      { key: 'totalValuation', label: 'Total Valuation' },
+      { key: 'status', label: 'Stock Status' }
+    ];
+
+    openLiveModuleSheet('InHouseStock', 'GEC_ERP_Store_Inventory_Live', data, headers);
+  };
+
   return (
     <div className="module-layout-container">
       <div className="sticky-module-header">
@@ -55,7 +92,13 @@ export const InHouseInventoryModule: React.FC = () => {
             Real-time stock ledger &bull; Reorder warnings &bull; Inventory valuation
           </span>
         </div>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-outline" onClick={handleRefreshLiveSheet} title="Sync and maintain live CSV sheet">
+            <RefreshCw size={14} /> Live Sheet
+          </button>
+          <button type="button" className="btn btn-outline" onClick={() => setPrintModalOpen(true)} title="Print filtered inventory valuation report">
+            <Printer size={14} /> Print Report
+          </button>
           <div className="card" style={{ padding: '0.4rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
             <Warehouse size={18} style={{ color: 'var(--accent-primary)' }} />
             <div>
@@ -68,16 +111,24 @@ export const InHouseInventoryModule: React.FC = () => {
 
       {/* Inline Search Bar */}
       <div className="card" style={{ padding: '0.65rem 1rem', display: 'flex', alignItems: 'center', backgroundColor: 'var(--bg-card)', flexShrink: 0 }}>
-        <div style={{ position: 'relative', width: '360px', maxWidth: '100%' }}>
-          <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-          <input
-            type="text"
-            placeholder="Search item code, component name, store location..."
-            className="input-field"
-            style={{ paddingLeft: '2.25rem' }}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative', width: '380px', maxWidth: '100%' }}>
+            <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+            <input
+              type="text"
+              placeholder="Search item code, component, location... (type @history)"
+              className="input-field"
+              style={{ paddingLeft: '2.25rem' }}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+
+          {isHistorySearch && (
+            <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#ffffff', fontSize: '0.75rem', fontWeight: 700 }}>
+              📜 History Search Active
+            </span>
+          )}
         </div>
       </div>
 
@@ -176,7 +227,15 @@ export const InHouseInventoryModule: React.FC = () => {
           </tbody>
         </table>
       </div>
-
+      {/* Feature-Wise Modular Print Manager Modal */}
+      <PrintManagerModal
+        isOpen={printModalOpen}
+        onClose={() => setPrintModalOpen(false)}
+        title="Print Store Inventory Valuation Ledger"
+        documentRefNumber="STORE-VALUATION"
+      >
+        <ItemMasterListPrintView items={filteredItems} filterLabel={isHistorySearch ? 'All Historical Store Inventory Ledgers' : 'Current In-House Store Inventory'} />
+      </PrintManagerModal>
     </div>
   );
 };

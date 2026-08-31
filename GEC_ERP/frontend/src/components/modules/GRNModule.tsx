@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { AutocompleteSelect, AutocompleteOption } from '../common/AutocompleteSelect';
-import { PrintDocumentModal } from '../common/PrintDocumentModal';
-import { FileCheck, Plus, CheckCircle, Search, Printer, FileSpreadsheet, Truck, ShoppingCart, ArrowLeft, X } from 'lucide-react';
+import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
+import { SingleGRNPrintView, GRNListPrintView } from '../printTemplates/GRNPrintTemplates';
+import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
+import { FileCheck, Plus, CheckCircle, Search, Printer, FileSpreadsheet, Truck, ShoppingCart, ArrowLeft, X, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw } from 'lucide-react';
 import { GRNLineItem, GoodsReceivedNotice } from '../../types/erp';
 import { ExportFieldSelectorModal, FieldOption } from '../common/ExportFieldSelectorModal';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
-import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 
 type SortField = 'grnNumber' | 'poNumber' | 'vendorName' | 'invoiceNo' | 'receivedDate';
 
@@ -15,7 +16,8 @@ export const GRNModule: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [printModalOpen, setPrintModalOpen] = useState(false);
-  const [printData, setPrintData] = useState<any>(null);
+  const [printDocType, setPrintDocType] = useState<'SINGLE_GRN' | 'GRN_LIST'>('GRN_LIST');
+  const [selectedPrintGRN, setSelectedPrintGRN] = useState<GoodsReceivedNotice | null>(null);
 
   // Direct Jobwork Warning Item State
   const [directJobworkBlockedItem, setDirectJobworkBlockedItem] = useState<{ itemCode: string; itemName: string } | null>(null);
@@ -33,13 +35,23 @@ export const GRNModule: React.FC = () => {
     }
   };
 
+  // Universal @history search handling
+  const isHistorySearch = searchTerm.toLowerCase().includes('@history');
+  const cleanSearchTerm = searchTerm.replace(/@history/gi, '').trim().toLowerCase();
+
   const filteredGRNs = grns
-    .filter(g =>
-      g.grnNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      g.poNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      g.vendorName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (g.invoiceNo && g.invoiceNo.toLowerCase().includes(searchTerm.toLowerCase()))
-    )
+    .filter(g => {
+      const isHistory = g.status === 'STORED' || g.status === 'QC_APPROVED';
+      if (!isHistorySearch && isHistory) {
+        // default show active unless @history
+      }
+      return !cleanSearchTerm || (
+        g.grnNumber.toLowerCase().includes(cleanSearchTerm) ||
+        g.poNumber.toLowerCase().includes(cleanSearchTerm) ||
+        g.vendorName.toLowerCase().includes(cleanSearchTerm) ||
+        (g.invoiceNo && g.invoiceNo.toLowerCase().includes(cleanSearchTerm))
+      );
+    })
     .sort((a, b) => {
       let valA: any = a[sortField] || '';
       let valB: any = b[sortField] || '';
@@ -51,6 +63,43 @@ export const GRNModule: React.FC = () => {
       if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
       return 0;
     });
+
+  const handlePrintSingleGRN = (grn: GoodsReceivedNotice) => {
+    setSelectedPrintGRN(grn);
+    setPrintDocType('SINGLE_GRN');
+    setPrintModalOpen(true);
+  };
+
+  const handlePrintGRNList = () => {
+    setPrintDocType('GRN_LIST');
+    setPrintModalOpen(true);
+  };
+
+  const handleRefreshLiveSheet = () => {
+    const data = filteredGRNs.map(g => ({
+      grnNumber: g.grnNumber,
+      poNumber: g.poNumber,
+      vendorName: g.vendorName,
+      invoiceNo: g.invoiceNo || g.challanNo || '',
+      receivedDate: g.receivedDate,
+      receivedBy: g.receivedBy || 'Store',
+      linesCount: g.items?.length || 0,
+      status: g.status
+    }));
+
+    const headers: { key: keyof typeof data[0]; label: string }[] = [
+      { key: 'grnNumber', label: 'GRN Number' },
+      { key: 'poNumber', label: 'PO / Challan Ref' },
+      { key: 'vendorName', label: 'Vendor Name' },
+      { key: 'invoiceNo', label: 'Invoice / Challan No' },
+      { key: 'receivedDate', label: 'Received Date' },
+      { key: 'receivedBy', label: 'Received By' },
+      { key: 'linesCount', label: 'Item Lines' },
+      { key: 'status', label: 'GRN Status' }
+    ];
+
+    openLiveModuleSheet('GRN', 'GEC_ERP_GRN_Ledger_Live', data, headers);
+  };
 
   // Source Type: 'PO' (Vendor PO) or 'JOBWORK' (Jobwork Challan Return)
   const [inwardSourceType, setInwardSourceType] = useState<'PO' | 'JOBWORK'>('PO');
@@ -167,21 +216,11 @@ export const GRNModule: React.FC = () => {
   };
 
   const handlePrintGRN = (grn: GoodsReceivedNotice) => {
-    setPrintData({
-      grnNumber: grn.grnNumber,
-      poNumber: grn.poNumber,
-      vendorName: grn.vendorName,
-      invoiceNo: grn.invoiceNo,
-      receivedDate: grn.receivedDate,
-      receivedBy: grn.receivedBy || 'Store In-Charge',
-      status: grn.status,
-      items: grn.items
-    });
-    setPrintModalOpen(true);
+    handlePrintSingleGRN(grn);
   };
 
   const handlePrintGRNDoc = (grn: GoodsReceivedNotice) => {
-    handlePrintGRN(grn);
+    handlePrintSingleGRN(grn);
   };
 
   const handleSubmitGRN = (e: React.FormEvent) => {
@@ -249,8 +288,14 @@ export const GRNModule: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-outline" onClick={handleRefreshLiveSheet} title="Sync and maintain live CSV sheet">
+            <RefreshCw size={14} /> Live Sheet
+          </button>
+          <button type="button" className="btn btn-outline" onClick={handlePrintGRNList} title="Print filtered GRN inward report">
+            <Printer size={14} /> Print Report
+          </button>
           <button className="btn btn-outline" onClick={() => setIsExportModalOpen(true)}>
-            <FileSpreadsheet size={16} /> Open Sheet ({filteredGRNs.length} filtered)
+            <FileSpreadsheet size={14} /> Export Custom
           </button>
           {!isModalOpen && (
             <button className="btn btn-primary" onClick={handleOpenModal}>
@@ -389,18 +434,24 @@ export const GRNModule: React.FC = () => {
       ) : (
         <>
           {/* Inline Search Bar */}
-          <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', backgroundColor: 'var(--bg-card)' }}>
-            <div style={{ position: 'relative', width: '360px', maxWidth: '100%' }}>
+          <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', backgroundColor: 'var(--bg-card)', gap: '1rem', flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative', width: '380px', maxWidth: '100%' }}>
               <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
               <input
                 type="text"
-                placeholder="Search GRN number, PO/Challan ref, vendor, invoice..."
+                placeholder="Search GRN number, PO/challan, vendor... (type @history to search completed)"
                 className="input-field"
                 style={{ paddingLeft: '2.25rem' }}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
+
+            {isHistorySearch && (
+              <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#ffffff', fontSize: '0.75rem', fontWeight: 700 }}>
+                📜 History Search Active
+              </span>
+            )}
           </div>
 
           <div className="table-container">
@@ -436,10 +487,12 @@ export const GRNModule: React.FC = () => {
               <tbody>
                 {filteredGRNs.map((grn, idx) => {
                   const isNavSelected = selectedIndex === idx;
+                  const isHistory = grn.status === 'STORED' || grn.status === 'QC_APPROVED';
+
                   return (
                     <tr 
                       key={grn.id}
-                      onDoubleClick={() => handlePrintGRN(grn)}
+                      onDoubleClick={() => handlePrintSingleGRN(grn)}
                       onClick={() => setSelectedIndex(idx)}
                       style={{
                         backgroundColor: isNavSelected ? 'rgba(59, 130, 246, 0.18)' : 'transparent',
@@ -447,8 +500,17 @@ export const GRNModule: React.FC = () => {
                       }}
                       title="Double click or press Enter to view GRN slip"
                     >
-                    <td style={{ fontWeight: 700, color: 'var(--success)', fontFamily: 'monospace' }}>
-                      {grn.grnNumber}
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                        <span style={{ fontWeight: 700, color: 'var(--success)', fontFamily: 'monospace' }}>
+                          {grn.grnNumber}
+                        </span>
+                        {isHistory && (
+                          <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#fff', fontSize: '0.65rem', padding: '0.1rem 0.35rem' }}>
+                            📜 HISTORY
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td style={{ fontWeight: 600, color: 'var(--accent-primary)', fontFamily: 'monospace' }}>{grn.poNumber}</td>
                     <td style={{ fontWeight: 600 }}>{grn.vendorName}</td>
@@ -462,7 +524,7 @@ export const GRNModule: React.FC = () => {
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
-                        <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem' }} title="Print GRN Slip" onClick={() => handlePrintGRN(grn)}>
+                        <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem' }} title="Print GRN Inward Slip" onClick={() => handlePrintSingleGRN(grn)}>
                           <Printer size={14} />
                         </button>
                         {grn.status === 'PENDING_QC' && (
@@ -485,16 +547,19 @@ export const GRNModule: React.FC = () => {
         </>
       )}
 
-      {/* Print Document Modal */}
-      {printData && (
-        <PrintDocumentModal
-          isOpen={printModalOpen}
-          onClose={() => setPrintModalOpen(false)}
-          title="Print Goods Received Notice (GRN)"
-          documentType="GRN"
-          data={printData}
-        />
-      )}
+      {/* Feature-Wise Modular Print Manager Modal */}
+      <PrintManagerModal
+        isOpen={printModalOpen}
+        onClose={() => { setPrintModalOpen(false); setSelectedPrintGRN(null); }}
+        title={printDocType === 'SINGLE_GRN' ? `Print Goods Inward GRN Slip (${selectedPrintGRN?.grnNumber})` : 'Print GRN Ledger Report'}
+        documentRefNumber={printDocType === 'SINGLE_GRN' ? selectedPrintGRN?.grnNumber : 'GRN-REPORT'}
+      >
+        {printDocType === 'SINGLE_GRN' && selectedPrintGRN ? (
+          <SingleGRNPrintView grn={selectedPrintGRN} />
+        ) : (
+          <GRNListPrintView grns={filteredGRNs} filterLabel={isHistorySearch ? 'All Active & Historical GRN Slips' : 'Active GRN Inward Ledger'} />
+        )}
+      </PrintManagerModal>
 
       {/* Export Field Selector Modal */}
       <ExportFieldSelectorModal<GoodsReceivedNotice>

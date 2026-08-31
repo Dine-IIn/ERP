@@ -1,4 +1,4 @@
-// Dedicated ERP Central Storage & Live Sheet Folder Manager
+// Dedicated ERP Central Storage & High-Fidelity Live Sheet Manager
 
 export function openLiveModuleSheet<T extends Record<string, any>>(
   subfolder: string,
@@ -7,7 +7,7 @@ export function openLiveModuleSheet<T extends Record<string, any>>(
   headers: { key: keyof T; label: string }[]
 ) {
   if (!data || data.length === 0) {
-    alert('No live data available to open in sheet!');
+    alert('No data available to sync into Live Sheet!');
     return;
   }
 
@@ -15,21 +15,27 @@ export function openLiveModuleSheet<T extends Record<string, any>>(
   const timestampHeader = `"SYNC_TIMESTAMP","${new Date().toLocaleString()}"`;
   const headerString = headers.map(h => `"${String(h.label).replace(/"/g, '""')}"`).join(',');
 
-  // Format data rows
+  // Format data rows with clean column separation and proper escaping
   const rowStrings = data.map(row => {
     return headers
       .map(h => {
         const val = row[h.key];
         if (val === null || val === undefined) return '""';
+        if (typeof val === 'number') return `${val}`;
+        if (typeof val === 'boolean') return `"${val ? 'YES' : 'NO'}"`;
         if (typeof val === 'object') return `"${JSON.stringify(val).replace(/"/g, '""')}"`;
-        return `"${String(val).replace(/"/g, '""')}"`;
+        
+        // Escape quotes and ensure clean multi-column separation
+        const strVal = String(val).replace(/"/g, '""');
+        return `"${strVal}"`;
       })
       .join(',');
   });
 
   const folderPath = `ERP/${subfolder}`;
   const fullFilePath = `${folderPath}/${fileName}.csv`;
-  const csvContent = [timestampHeader, headerString, ...rowStrings].join('\n');
+  // Add BOM (Byte Order Mark) \uFEFF so Excel & Spreadsheet tools open UTF-8 columns with proper widths & encoding
+  const csvContent = '\uFEFF' + [timestampHeader, headerString, ...rowStrings].join('\r\n');
 
   // Trigger live sheet blob open/download
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -42,6 +48,5 @@ export function openLiveModuleSheet<T extends Record<string, any>>(
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 
-  // Show clear user confirmation with folder path
-  console.log(`[ERP Folder Manager] Live sheet synced to ${fullFilePath}`);
+  console.log(`[ERP Folder Manager] Live sheet synced: ${fullFilePath} (${data.length} rows)`);
 }

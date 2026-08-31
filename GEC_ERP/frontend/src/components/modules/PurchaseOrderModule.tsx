@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { Modal } from '../common/Modal';
-import { PrintDocumentModal } from '../common/PrintDocumentModal';
-import { ShoppingCart, Plus, Trash2, Edit2, Search, Printer, FileSpreadsheet, Send, AlertTriangle, CheckCircle2, XCircle, FileText, ArrowRight, ShieldCheck, ArrowUpDown, ArrowUp, ArrowDown, Percent, Hash, ArrowLeft, X, AlertCircle } from 'lucide-react';
+import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
+import { SinglePOPrintView, POListPrintView } from '../printTemplates/POPrintTemplates';
+import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
+import { ShoppingCart, Plus, Trash2, Edit2, Search, Printer, FileSpreadsheet, Send, AlertTriangle, CheckCircle2, XCircle, FileText, ArrowRight, ShieldCheck, ArrowUpDown, ArrowUp, ArrowDown, Percent, Hash, ArrowLeft, X, AlertCircle, RefreshCw } from 'lucide-react';
 import { POLineItem, PurchaseOrder, Item, POStatus, ItemMappedVendor } from '../../types/erp';
 import { ExportFieldSelectorModal, FieldOption } from '../common/ExportFieldSelectorModal';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
@@ -21,7 +23,8 @@ export const PurchaseOrderModule: React.FC = () => {
 
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [printModalOpen, setPrintModalOpen] = useState(false);
-  const [printData, setPrintData] = useState<any>(null);
+  const [printDocType, setPrintDocType] = useState<'SINGLE_PO' | 'PO_LIST'>('PO_LIST');
+  const [selectedPrintPO, setSelectedPrintPO] = useState<PurchaseOrder | null>(null);
 
   // Edit PO state
   const [editingPO, setEditingPO] = useState<PurchaseOrder | null>(null);
@@ -91,22 +94,29 @@ export const PurchaseOrderModule: React.FC = () => {
     }
   };
 
+  // Universal @history search handling
+  const isHistorySearch = searchTerm.toLowerCase().includes('@history') || searchTerm.trim().startsWith('@');
+  const cleanSearchTerm = searchTerm.replace(/@history/gi, '').replace(/^@/g, '').trim().toLowerCase();
+
   const filteredPOs = purchaseOrders
     .filter(po => {
-      const isSearchTermHistory = searchTerm.trim().startsWith('@');
-      const cleanSearchTerm = isSearchTermHistory ? searchTerm.trim().substring(1).trim().toLowerCase() : searchTerm.trim().toLowerCase();
+      const isCompleted = po.status === 'GOODS_RECEIVED' || (po.status as string) === 'RECEIVED' || po.status === 'CANCELLED' || (po as any).isArchived;
 
-      const matchesSearch = 
+      // By default show active unless @history is typed
+      if (!isHistorySearch && isCompleted) {
+        return false;
+      }
+
+      const matchesSearch = !cleanSearchTerm || (
         po.poNumber.toLowerCase().includes(cleanSearchTerm) ||
         po.vendorName.toLowerCase().includes(cleanSearchTerm) ||
-        po.items.some(i => (i.itemName || '').toLowerCase().includes(cleanSearchTerm) || (i.itemCode || '').toLowerCase().includes(cleanSearchTerm));
+        po.items.some(i => (i.itemName || '').toLowerCase().includes(cleanSearchTerm) || (i.itemCode || '').toLowerCase().includes(cleanSearchTerm))
+      );
 
       let matchesStatus = true;
-      if (isSearchTermHistory) {
+      if (isHistorySearch || selectedPOStatusFilter === 'ALL' || selectedPOStatusFilter === 'ACTIVE_ONLY') {
         matchesStatus = true;
-      } else if (selectedPOStatusFilter === 'ACTIVE_ONLY') {
-        matchesStatus = po.status !== 'GOODS_RECEIVED';
-      } else if (selectedPOStatusFilter !== 'ALL') {
+      } else {
         matchesStatus = po.status === selectedPOStatusFilter;
       }
 
@@ -132,6 +142,43 @@ export const PurchaseOrderModule: React.FC = () => {
       if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
       return 0;
     });
+
+  const handlePrintSinglePO = (po: PurchaseOrder) => {
+    setSelectedPrintPO(po);
+    setPrintDocType('SINGLE_PO');
+    setPrintModalOpen(true);
+  };
+
+  const handlePrintPOList = () => {
+    setPrintDocType('PO_LIST');
+    setPrintModalOpen(true);
+  };
+
+  const handleRefreshLiveSheet = () => {
+    const data = filteredPOs.map(po => ({
+      poNumber: po.poNumber,
+      vendorName: po.vendorName,
+      orderDate: po.orderDate,
+      expectedDeliveryDate: po.expectedDeliveryDate || po.deliveryDate || '',
+      itemsCount: po.items?.length || 0,
+      totalAmount: po.totalAmount || 0,
+      status: po.status,
+      notes: po.notes || ''
+    }));
+
+    const headers: { key: keyof typeof data[0]; label: string }[] = [
+      { key: 'poNumber', label: 'PO Number' },
+      { key: 'vendorName', label: 'Vendor Name' },
+      { key: 'orderDate', label: 'Order Date' },
+      { key: 'expectedDeliveryDate', label: 'Delivery Date' },
+      { key: 'itemsCount', label: 'Line Items' },
+      { key: 'totalAmount', label: 'Total Value (₹)' },
+      { key: 'status', label: 'PO Status' },
+      { key: 'notes', label: 'Purchase Notes' }
+    ];
+
+    openLiveModuleSheet('PurchaseOrders', 'GEC_ERP_Purchase_Orders_Live', data, headers);
+  };
 
   // Open Shortage PO Creation Modal for specific Item
   const handleOpenShortagePOModal = (item: Item) => {
@@ -380,39 +427,7 @@ export const PurchaseOrderModule: React.FC = () => {
   };
 
   const handlePrintPO = (po: PurchaseOrder) => {
-    const v = vendors.find(v => v.id === po.vendorId) || {
-      name: po.vendorName,
-      address: 'Plot 45, GIDC Vatva Phase II',
-      city: 'Ahmedabad',
-      gstin: '24AAAPV9876K1Z3',
-      contactPerson: 'Sales Manager',
-      phone: '+91 98250 99887'
-    };
-
-    setPrintData({
-      poNumber: po.poNumber,
-      orderDate: po.orderDate,
-      deliveryDate: po.deliveryDate || po.expectedDeliveryDate,
-      vendorName: v.name,
-      vendorAddress: v.address,
-      vendorCity: v.city,
-      vendorGstin: v.gstin,
-      contactPerson: v.contactPerson,
-      phone: v.phone,
-      items: po.items.map(i => ({
-        itemCode: i.itemCode || '',
-        itemName: i.itemName || '',
-        quantity: i.quantity || i.orderedQty || 1,
-        unit: i.unit || 'PCS',
-        unitPrice: i.unitPrice || 0,
-        amount: (i.quantity || i.orderedQty || 1) * (i.unitPrice || 0)
-      })),
-      subtotal: po.subtotal || 0,
-      taxAmount: po.taxAmount || 0,
-      totalAmount: po.totalAmount || 0,
-      notes: po.notes || 'Please acknowledge receipt of PO. Quality parameters strictly as per drawing specs.'
-    });
-    setPrintModalOpen(true);
+    handlePrintSinglePO(po);
   };
 
   const { selectedIndex, setSelectedIndex } = useTableKeyboardNav(filteredPOs, handlePrintPO);
@@ -471,13 +486,19 @@ export const PurchaseOrderModule: React.FC = () => {
             </button>
           )}
 
+          <button type="button" className="btn btn-outline" onClick={handleRefreshLiveSheet} title="Sync and maintain live CSV sheet">
+            <RefreshCw size={14} /> Live Sheet
+          </button>
+          <button type="button" className="btn btn-outline" onClick={handlePrintPOList} title="Print filtered purchase orders report">
+            <Printer size={14} /> Print Report
+          </button>
           <button className="btn btn-outline" onClick={() => setIsExportModalOpen(true)}>
-            <FileSpreadsheet size={16} /> Open Sheet ({filteredPOs.length} filtered)
+            <FileSpreadsheet size={14} /> Export Custom
           </button>
           {!isWizardOpen && (
             <>
               <button className="btn btn-outline" onClick={() => { setIsWizardOpen(true); setWizardSearchTerm(''); }}>
-                <AlertTriangle size={16} color="var(--warning)" /> Shortage PO Wizard
+                <AlertTriangle size={14} color="var(--warning)" /> Shortage PO Wizard
               </button>
               <button id="btn-new-po" className="btn btn-primary" onClick={handleOpenManualPOModal}>
                 <Plus size={16} /> Create Manual PO
@@ -606,16 +627,24 @@ export const PurchaseOrderModule: React.FC = () => {
 
           {/* Filter Bar with Lifecycle Status Filter */}
           <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', backgroundColor: 'var(--bg-card)' }}>
-            <div style={{ position: 'relative', width: '340px', maxWidth: '100%' }}>
-              <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-              <input
-                type="text"
-                placeholder="Search PO number, vendor... (use @ for history)"
-                className="input-field"
-                style={{ paddingLeft: '2.25rem' }}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <div style={{ position: 'relative', width: '360px', maxWidth: '100%' }}>
+                <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <input
+                  type="text"
+                  placeholder="Search PO, vendor, item... (type @history to search completed)"
+                  className="input-field"
+                  style={{ paddingLeft: '2.25rem' }}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+
+              {isHistorySearch && (
+                <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#ffffff', fontSize: '0.75rem', fontWeight: 700 }}>
+                  📜 History Search Active
+                </span>
+              )}
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
@@ -700,7 +729,7 @@ export const PurchaseOrderModule: React.FC = () => {
                   return (
                     <tr 
                       key={po.id}
-                      onDoubleClick={() => handlePrintPO(po)}
+                      onDoubleClick={() => handlePrintSinglePO(po)}
                       onClick={() => setSelectedIndex(idx)}
                       style={{
                         backgroundColor: isNavSelected ? 'rgba(59, 130, 246, 0.18)' : 'transparent',
@@ -708,9 +737,18 @@ export const PurchaseOrderModule: React.FC = () => {
                       }}
                       title="Double click or press Enter to view PO document"
                     >
-                      <td style={{ fontWeight: 700, color: 'var(--accent-primary)', fontFamily: 'monospace' }}>
-                        {po.poNumber}
-                        {po.status === 'DRAFT' && <span className="badge badge-warning" style={{ fontSize: '0.65rem', marginLeft: '0.4rem' }}>DRAFT</span>}
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                          <span style={{ fontWeight: 700, color: 'var(--accent-primary)', fontFamily: 'monospace' }}>
+                            {po.poNumber}
+                          </span>
+                          {po.status === 'DRAFT' && <span className="badge badge-warning" style={{ fontSize: '0.65rem' }}>DRAFT</span>}
+                          {(po.status === 'GOODS_RECEIVED' || (po.status as string) === 'RECEIVED' || po.status === 'CANCELLED') && (
+                            <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#fff', fontSize: '0.65rem', padding: '0.1rem 0.35rem' }}>
+                              📜 HISTORY
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td style={{ fontWeight: 600 }}>{po.vendorName}</td>
                       <td>{po.orderDate}</td>
@@ -748,7 +786,7 @@ export const PurchaseOrderModule: React.FC = () => {
                       </td>
                       <td onClick={(e) => e.stopPropagation()}>
                         <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
-                          <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem' }} title="Print PO Document" onClick={() => handlePrintPO(po)}>
+                          <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem' }} title="Print Vendor Purchase Order" onClick={() => handlePrintSinglePO(po)}>
                             <Printer size={14} />
                           </button>
                           <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem' }} title="Edit PO" onClick={() => { setEditingPO({ ...po }); setIsEditPOModalOpen(true); }}>
@@ -1231,16 +1269,19 @@ export const PurchaseOrderModule: React.FC = () => {
         );
       })()}
 
-      {/* Print Document Modal */}
-      {printData && (
-        <PrintDocumentModal
-          isOpen={printModalOpen}
-          onClose={() => setPrintModalOpen(false)}
-          title="Print Vendor Purchase Order"
-          documentType="PO"
-          data={printData}
-        />
-      )}
+      {/* Feature-Wise Modular Print Manager Modal */}
+      <PrintManagerModal
+        isOpen={printModalOpen}
+        onClose={() => { setPrintModalOpen(false); setSelectedPrintPO(null); }}
+        title={printDocType === 'SINGLE_PO' ? `Print Purchase Order (${selectedPrintPO?.poNumber})` : 'Print Purchase Orders Report'}
+        documentRefNumber={printDocType === 'SINGLE_PO' ? selectedPrintPO?.poNumber : 'PO-REPORT'}
+      >
+        {printDocType === 'SINGLE_PO' && selectedPrintPO ? (
+          <SinglePOPrintView po={selectedPrintPO} vendorDetails={vendors.find(v => v.id === selectedPrintPO.vendorId)} />
+        ) : (
+          <POListPrintView purchaseOrders={filteredPOs} filterLabel={isHistorySearch ? 'All Active & Historical Purchase Orders' : 'Active Purchase Orders'} />
+        )}
+      </PrintManagerModal>
 
       {/* Export Field Selector Modal */}
       <ExportFieldSelectorModal<PurchaseOrder>

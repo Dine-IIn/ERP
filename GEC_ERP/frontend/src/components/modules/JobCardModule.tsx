@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { Modal } from '../common/Modal';
+import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
+import { SingleJobCardPrintView, JobCardListPrintView } from '../printTemplates/JobCardPrintTemplates';
+import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
 import { 
-  ClipboardList, Plus, CheckCircle, Search, ArrowUp, ArrowDown, ArrowUpDown, Package 
+  ClipboardList, Plus, CheckCircle, Search, ArrowUp, ArrowDown, ArrowUpDown, Package, Printer, RefreshCw 
 } from 'lucide-react';
 import { JobCard, Item } from '../../types/erp';
 
@@ -18,6 +21,10 @@ export const JobCardModule: React.FC = () => {
   const [progressQtyInput, setProgressQtyInput] = useState<number>(1);
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+
+  const [printModalOpen, setPrintModalOpen] = useState(false);
+  const [printDocType, setPrintDocType] = useState<'SINGLE_JC' | 'JC_LIST'>('JC_LIST');
+  const [selectedPrintJC, setSelectedPrintJC] = useState<JobCard | null>(null);
 
   const [sortField, setSortField] = useState<JCSortKey>('jobCardNo');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -141,15 +148,18 @@ export const JobCardModule: React.FC = () => {
     if (!window.confirm(`Are you sure you want to close Job Card ${jc.jobCardNo}? Consumed components will be deducted from store and ${jc.targetQuantity} finished units will be credited to In-House Stock.`)) return;
     closeJobCard(jc.id);
   };
+  // Universal @history search handling
+  const isHistorySearch = searchQuery.toLowerCase().includes('@history');
+  const cleanSearchTerm = searchQuery.replace(/@history/gi, '').trim().toLowerCase();
 
   const filteredJobCards = jobCards
     .filter(jc => {
       const matchesStatus = statusFilter === 'ALL' || jc.status === statusFilter;
-      const matchesSearch = !searchQuery || 
-        jc.jobCardNo.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        jc.itemName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (jc.woNumber && jc.woNumber.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (jc.assignedOperator && jc.assignedOperator.toLowerCase().includes(searchQuery.toLowerCase()));
+      const matchesSearch = !cleanSearchTerm || 
+        jc.jobCardNo.toLowerCase().includes(cleanSearchTerm) ||
+        jc.itemName.toLowerCase().includes(cleanSearchTerm) ||
+        (jc.woNumber && jc.woNumber.toLowerCase().includes(cleanSearchTerm)) ||
+        (jc.assignedOperator && jc.assignedOperator.toLowerCase().includes(cleanSearchTerm));
 
       return matchesStatus && matchesSearch;
     })
@@ -164,6 +174,45 @@ export const JobCardModule: React.FC = () => {
       if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
       return 0;
     });
+
+  const handlePrintSingleJC = (jc: JobCard) => {
+    setSelectedPrintJC(jc);
+    setPrintDocType('SINGLE_JC');
+    setPrintModalOpen(true);
+  };
+
+  const handlePrintJCList = () => {
+    setPrintDocType('JC_LIST');
+    setPrintModalOpen(true);
+  };
+
+  const handleRefreshLiveSheet = () => {
+    const data = filteredJobCards.map(jc => ({
+      jobCardNo: jc.jobCardNo,
+      woNumber: jc.woNumber || '-',
+      itemCode: jc.itemCode,
+      itemName: jc.itemName,
+      targetQuantity: jc.targetQuantity,
+      completedQuantity: jc.completedQuantity,
+      assignedOperator: jc.assignedOperator || 'Technician',
+      stationName: jc.stationName || 'Assembly Bay',
+      status: jc.status
+    }));
+
+    const headers: { key: keyof typeof data[0]; label: string }[] = [
+      { key: 'jobCardNo', label: 'Job Card No' },
+      { key: 'woNumber', label: 'Work Order Ref' },
+      { key: 'itemCode', label: 'Item Code' },
+      { key: 'itemName', label: 'Component / Machine' },
+      { key: 'targetQuantity', label: 'Target Qty' },
+      { key: 'completedQuantity', label: 'Completed Qty' },
+      { key: 'assignedOperator', label: 'Operator / Lead' },
+      { key: 'stationName', label: 'Station Bay' },
+      { key: 'status', label: 'Status' }
+    ];
+
+    openLiveModuleSheet('JobCards', 'GEC_ERP_Job_Cards_Live', data, headers);
+  };
 
   return (
     <div className="module-layout-container">
@@ -180,24 +229,40 @@ export const JobCardModule: React.FC = () => {
           </span>
         </div>
 
-        <button className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 1rem' }} onClick={handleOpenCreateModal}>
-          <Plus size={16} />
-          <span>Create Manual Job Card</span>
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-outline" onClick={handleRefreshLiveSheet} title="Sync and maintain live CSV sheet">
+            <RefreshCw size={14} /> Live Sheet
+          </button>
+          <button type="button" className="btn btn-outline" onClick={handlePrintJCList} title="Print filtered job cards report">
+            <Printer size={14} /> Print Report
+          </button>
+          <button className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 1rem' }} onClick={handleOpenCreateModal}>
+            <Plus size={16} />
+            <span>Create Manual Job Card</span>
+          </button>
+        </div>
       </div>
 
       {/* Toolbar & Filters */}
       <div className="card" style={{ padding: '0.65rem 1rem', backgroundColor: 'var(--bg-card)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', flexShrink: 0 }}>
-        <div style={{ position: 'relative', width: '320px', maxWidth: '100%' }}>
-          <Search size={15} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-          <input 
-            type="text" 
-            placeholder="Search Job Card No, item name, WO..."
-            className="input-field"
-            style={{ paddingLeft: '2.25rem', fontSize: '0.82rem' }}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative', width: '340px', maxWidth: '100%' }}>
+            <Search size={15} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+            <input 
+              type="text" 
+              placeholder="Search Job Card No, item, WO... (type @history)"
+              className="input-field"
+              style={{ paddingLeft: '2.25rem', fontSize: '0.82rem' }}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+
+          {isHistorySearch && (
+            <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#ffffff', fontSize: '0.75rem', fontWeight: 700 }}>
+              📜 History Search Active
+            </span>
+          )}
         </div>
 
         <div style={{ display: 'flex', gap: '0.35rem' }}>
@@ -269,13 +334,22 @@ export const JobCardModule: React.FC = () => {
 
               return (
                 <tr key={jc.id} style={{ backgroundColor: isExchange ? 'rgba(245, 158, 11, 0.05)' : 'transparent' }}>
-                  <td style={{ fontWeight: 700, fontFamily: 'monospace', color: 'var(--accent-primary)' }}>
-                    {jc.jobCardNo}
-                    {isExchange && (
-                      <span className="badge badge-warning" style={{ fontSize: '0.65rem', marginLeft: '0.4rem' }}>
-                        EXCHANGE
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <span style={{ fontWeight: 700, fontFamily: 'monospace', color: 'var(--accent-primary)' }}>
+                        {jc.jobCardNo}
                       </span>
-                    )}
+                      {isExchange && (
+                        <span className="badge badge-warning" style={{ fontSize: '0.65rem' }}>
+                          EXCHANGE
+                        </span>
+                      )}
+                      {isComplete && (
+                        <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#fff', fontSize: '0.65rem', padding: '0.1rem 0.35rem' }}>
+                          📜 HISTORY
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td>
                     <span className={`badge ${jc.itemType === 'ASSEMBLY' ? 'badge-success' : 'badge-info'}`}>
@@ -327,6 +401,14 @@ export const JobCardModule: React.FC = () => {
                   </td>
                   <td>
                     <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                      <button 
+                        className="btn btn-outline" 
+                        style={{ padding: '0.2rem 0.45rem' }} 
+                        title="Print Single Job Card Traveller" 
+                        onClick={() => handlePrintSingleJC(jc)}
+                      >
+                        <Printer size={14} />
+                      </button>
                       {!isComplete && (
                         <>
                           <button 
@@ -483,6 +565,19 @@ export const JobCardModule: React.FC = () => {
         </Modal>
       )}
 
+      {/* Feature-Wise Modular Print Manager Modal */}
+      <PrintManagerModal
+        isOpen={printModalOpen}
+        onClose={() => { setPrintModalOpen(false); setSelectedPrintJC(null); }}
+        title={printDocType === 'SINGLE_JC' ? `Print Job Card Traveller (${selectedPrintJC?.jobCardNo})` : 'Print Shopfloor Job Cards Report'}
+        documentRefNumber={printDocType === 'SINGLE_JC' ? selectedPrintJC?.jobCardNo : 'JC-REPORT'}
+      >
+        {printDocType === 'SINGLE_JC' && selectedPrintJC ? (
+          <SingleJobCardPrintView jobCard={selectedPrintJC} />
+        ) : (
+          <JobCardListPrintView jobCards={filteredJobCards} filterLabel={isHistorySearch ? 'All Active & Completed Job Cards' : 'Active Shopfloor Job Cards'} />
+        )}
+      </PrintManagerModal>
     </div>
   );
 };

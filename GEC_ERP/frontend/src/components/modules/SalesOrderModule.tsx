@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { AutocompleteSelect, AutocompleteOption } from '../common/AutocompleteSelect';
-import { PrintDocumentModal } from '../common/PrintDocumentModal';
-import { ShoppingBag, Plus, ArrowRight, CheckCircle2, Search, Printer, FileSpreadsheet, ArrowLeft, X, Edit2, Trash2 } from 'lucide-react';
+import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
+import { SingleSOPrintView, SOListPrintView } from '../printTemplates/SOPrintTemplates';
+import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
+import { ShoppingBag, Plus, ArrowRight, CheckCircle2, Search, Printer, FileSpreadsheet, ArrowLeft, X, Edit2, Trash2, RefreshCw } from 'lucide-react';
 import { SalesOrder } from '../../types/erp';
 import { ExportFieldSelectorModal, FieldOption } from '../common/ExportFieldSelectorModal';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
@@ -20,7 +22,8 @@ export const SalesOrderModule: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [printModalOpen, setPrintModalOpen] = useState(false);
-  const [printData, setPrintData] = useState<any>(null);
+  const [printDocType, setPrintDocType] = useState<'SINGLE_SO' | 'SO_LIST'>('SO_LIST');
+  const [selectedPrintSO, setSelectedPrintSO] = useState<SalesOrder | null>(null);
   
   // Single Column Sorting State - Default sort by Order Date (latest first)
   const [sortField, setSortField] = useState<SortField>('orderDate');
@@ -90,33 +93,41 @@ export const SalesOrderModule: React.FC = () => {
     setIsModalOpen(false);
   };
 
-  const handlePrintSO = (so: SalesOrder) => {
-    const cust = customers.find(c => c.id === so.customerId) || {
-      name: so.customerName,
-      address: 'GIDC Phase II, Vatva Industrial Estate',
-      city: 'Ahmedabad',
-      gstin: '24AAACG1234F1Z9',
-      contactPerson: 'Purchasing Head',
-      phone: '+91 98765 43210'
-    };
+  const handlePrintSingleSO = (so: SalesOrder) => {
+    setSelectedPrintSO(so);
+    setPrintDocType('SINGLE_SO');
+    setPrintModalOpen(true);
+  };
 
-    setPrintData({
+  const handlePrintSOList = () => {
+    setPrintDocType('SO_LIST');
+    setPrintModalOpen(true);
+  };
+
+  const handleRefreshLiveSheet = () => {
+    const data = filteredSOs.map(so => ({
       soNumber: so.soNumber,
+      customerName: so.customerName,
+      machineModel: so.machineModel,
+      quantity: so.quantity || 1,
       orderDate: so.orderDate,
       deliveryDate: so.deliveryDate,
-      customerName: cust.name,
-      customerAddress: cust.address,
-      customerCity: cust.city,
-      customerGstin: cust.gstin,
-      contactPerson: cust.contactPerson,
-      phone: cust.phone,
-      machineModel: so.machineModel,
-      quantity: so.quantity,
-      unitPrice: 1850000,
-      totalAmount: so.quantity * 1850000,
-      notes: so.notes || 'Standard warranty terms apply. Delivery schedule subjected to QC approval.'
-    });
-    setPrintModalOpen(true);
+      status: so.status,
+      customNotes: so.customNotes || ''
+    }));
+
+    const headers: { key: keyof typeof data[0]; label: string }[] = [
+      { key: 'soNumber', label: 'SO Number' },
+      { key: 'customerName', label: 'Customer Name' },
+      { key: 'machineModel', label: 'Item Description' },
+      { key: 'quantity', label: 'Order Quantity' },
+      { key: 'orderDate', label: 'Order Date' },
+      { key: 'deliveryDate', label: 'Target Delivery' },
+      { key: 'status', label: 'Order Status' },
+      { key: 'customNotes', label: 'Custom Notes' }
+    ];
+
+    openLiveModuleSheet('SalesOrders', 'GEC_ERP_Sales_Orders_Live', data, headers);
   };
 
   const handleSortToggle = (field: SortField) => {
@@ -128,12 +139,25 @@ export const SalesOrderModule: React.FC = () => {
     }
   };
 
+  // Universal @history search handling
+  const isHistorySearch = searchTerm.toLowerCase().includes('@history');
+  const cleanSearchTerm = searchTerm.replace(/@history/gi, '').trim().toLowerCase();
+
   const filteredSOs = salesOrders
-    .filter(so => 
-      so.soNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      so.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      so.machineModel.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+    .filter(so => {
+      const isCompleted = so.status === 'COMPLETED' || (so.status as string) === 'DELIVERED' || so.status === 'CANCELLED' || (so as any).isArchived;
+
+      // By default show only active unless @history is typed
+      if (!isHistorySearch && isCompleted) {
+        return false;
+      }
+
+      return !cleanSearchTerm || (
+        so.soNumber.toLowerCase().includes(cleanSearchTerm) ||
+        so.customerName.toLowerCase().includes(cleanSearchTerm) ||
+        so.machineModel.toLowerCase().includes(cleanSearchTerm)
+      );
+    })
     .sort((a, b) => {
       let valA: any = a[sortField] || '';
       let valB: any = b[sortField] || '';
@@ -149,7 +173,7 @@ export const SalesOrderModule: React.FC = () => {
   // Keyboard navigation hook for live table row focus
   const { selectedIndex, setSelectedIndex } = useTableKeyboardNav(
     filteredSOs, 
-    (so) => handlePrintSO(so)
+    (so) => handlePrintSingleSO(so)
   );
 
   // Custom Export Field Definitions
@@ -179,12 +203,18 @@ export const SalesOrderModule: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-outline" onClick={handleRefreshLiveSheet} title="Sync and maintain live CSV sheet">
+            <RefreshCw size={14} /> Live Sheet
+          </button>
+          <button type="button" className="btn btn-outline" onClick={handlePrintSOList} title="Print filtered sales orders report">
+            <Printer size={14} /> Print Report
+          </button>
           <button className="btn btn-outline" onClick={() => setIsExportModalOpen(true)}>
-            <FileSpreadsheet size={16} /> Open Sheet ({filteredSOs.length} filtered)
+            <FileSpreadsheet size={14} /> Export Custom
           </button>
           {!isModalOpen && (
             <button className="btn btn-primary" onClick={handleOpenModal}>
-              <Plus size={16} /> Create Client Sales Order
+              <Plus size={16} /> Create Sales Order
             </button>
           )}
         </div>
@@ -255,18 +285,23 @@ export const SalesOrderModule: React.FC = () => {
       ) : (
         <>
           {/* Inline Search Bar */}
-          <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', backgroundColor: 'var(--bg-card)' }}>
-            <div style={{ position: 'relative', width: '360px' }}>
+          <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: '1rem', backgroundColor: 'var(--bg-card)', flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative', width: '360px', maxWidth: '100%' }}>
               <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
               <input
                 type="text"
-                placeholder="Search SO number, customer name, machine model..."
+                placeholder="Search SO, customer, model... (type @history to search completed)"
                 className="input-field"
                 style={{ paddingLeft: '2.25rem' }}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
+            {isHistorySearch && (
+              <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#ffffff', fontSize: '0.75rem', fontWeight: 700 }}>
+                📜 History Search Active
+              </span>
+            )}
           </div>
 
           <div className="table-container">
@@ -306,10 +341,12 @@ export const SalesOrderModule: React.FC = () => {
               <tbody>
                 {filteredSOs.map((so, idx) => {
                   const isNavSelected = selectedIndex === idx;
+                  const isCompleted = so.status === 'COMPLETED' || (so.status as string) === 'DELIVERED' || so.status === 'CANCELLED' || (so as any).isArchived;
+
                   return (
                     <tr 
                       key={so.id}
-                      onDoubleClick={() => handlePrintSO(so)}
+                      onDoubleClick={() => handlePrintSingleSO(so)}
                       onClick={() => setSelectedIndex(idx)}
                       style={{
                         backgroundColor: isNavSelected ? 'rgba(59, 130, 246, 0.18)' : 'transparent',
@@ -317,8 +354,17 @@ export const SalesOrderModule: React.FC = () => {
                       }}
                       title="Double click or press Enter to view SO document"
                     >
-                    <td style={{ fontWeight: 700, color: 'var(--accent-primary)', fontFamily: 'monospace' }}>
-                      {so.soNumber}
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <span style={{ fontWeight: 700, color: 'var(--accent-primary)', fontFamily: 'monospace' }}>
+                          {so.soNumber}
+                        </span>
+                        {isCompleted && (
+                          <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#fff', fontSize: '0.65rem', padding: '0.1rem 0.35rem' }}>
+                            📜 HISTORY
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td style={{ fontWeight: 600 }}>{so.customerName}</td>
                     <td>{so.machineModel}</td>
@@ -334,7 +380,6 @@ export const SalesOrderModule: React.FC = () => {
                           {so.status.replace('_', ' ')}
                         </span>
 
-                        {/* Multi-Tier Work Order Identification: Original WO + 100% Exact Matching Active WOs */}
                         {(() => {
                           const soItemSpec = so.machineModel.trim().toLowerCase();
                           const soBOM = boms.find(b => 
@@ -343,43 +388,23 @@ export const SalesOrderModule: React.FC = () => {
                             b.machineModel.toLowerCase().trim() === soItemSpec
                           );
 
-                          // 1. Find Original Directly Generated WO
                           const originalWO = workOrders.find(w => w.soId === so.id || (so.soNumber && w.soNumber === so.soNumber));
-
-                          // Determine expected SO component list
                           const soComponents = (originalWO?.woComponents && originalWO.woComponents.length > 0)
                             ? originalWO.woComponents
                             : (soBOM ? soBOM.components : []);
 
-                          // 2. Scan for Other Active Exact Match WOs
                           const exactMatchWOs = workOrders.filter(w => {
-                            // Exclude original WO
                             if (originalWO && w.id === originalWO.id) return false;
-
-                            // Filter ONLY Active WOs (not completed, closed, or dispatched)
                             const isWOActive = w.status !== 'COMPLETED' && w.stage !== 'COMPLETED' && w.stage !== 'QUALITY_PASSED';
                             if (!isWOActive) return false;
 
-                            // Step 1: Main Item Check (Must match main item of SO)
-                            const woSpec = w.machineModel.trim().toLowerCase();
-                            const isMainItemMatch = woSpec === soItemSpec || 
-                                                    (soBOM && woSpec.includes(soBOM.machineModel.toLowerCase().trim())) ||
-                                                    (soBOM && woSpec.includes(soBOM.bomCode.toLowerCase().trim()));
-                            if (!isMainItemMatch) return false;
+                            const woModel = (w.machineModel || '').toLowerCase().trim();
+                            if (woModel !== soItemSpec && !(soBOM && woModel.includes(soBOM.machineModel.toLowerCase().trim()))) {
+                              return false;
+                            }
 
-                            // Step 2: 100% Exact Component Tree & Total Items Check
-                            const woBOM = boms.find(b => 
-                              woSpec.includes(b.machineModel.toLowerCase().trim()) || 
-                              woSpec.includes(b.bomCode.toLowerCase().trim()) ||
-                              b.machineModel.toLowerCase().trim() === woSpec
-                            );
-
-                            const woComponents = (w.woComponents && w.woComponents.length > 0)
-                              ? w.woComponents
-                              : (woBOM ? woBOM.components : []);
-
-                            if (soComponents.length === 0 && woComponents.length === 0) return true;
-                            if (soComponents.length !== woComponents.length) return false;
+                            const woComponents = w.woComponents || [];
+                            if (soComponents.length > 0 && woComponents.length !== soComponents.length) return false;
 
                             for (const sc of soComponents) {
                               const found = woComponents.find(wc => 
@@ -388,12 +413,7 @@ export const SalesOrderModule: React.FC = () => {
                                 (wc.itemName && wc.itemName.toLowerCase().trim() === sc.itemName.toLowerCase().trim())
                               );
                               if (!found) return false;
-
-                              const wcQty = (found as any).qtyRequired || (found as any).qtyPerMachine || (found as any).qty || 1;
-                              const scQty = (sc as any).qtyRequired || (sc as any).qtyPerMachine || (sc as any).qty || 1;
-                              if (wcQty !== scQty) return false;
                             }
-
                             return true;
                           });
 
@@ -401,7 +421,6 @@ export const SalesOrderModule: React.FC = () => {
 
                           return (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginTop: '0.25rem' }}>
-                              {/* Original Direct WO (Primary Blue Badge) */}
                               {originalWO && (
                                 <button
                                   className="badge badge-primary"
@@ -423,49 +442,25 @@ export const SalesOrderModule: React.FC = () => {
                                     openWOInEditor(originalWO.id);
                                   }}
                                 >
-                                  {originalWO.workOrderNo || originalWO.woNumber}
+                                  {originalWO.workOrderNo || originalWO.woNumber} (Direct WO)
                                 </button>
                               )}
-
-                              {/* Exact Matching Active WOs (Purple / Violet Badges) */}
-                              {exactMatchWOs.map(matchWO => (
-                                <button
-                                  key={matchWO.id}
-                                  style={{ 
-                                    cursor: 'pointer', 
-                                    border: 'none', 
-                                    padding: '0.22rem 0.5rem', 
-                                    fontSize: '0.74rem',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    textAlign: 'center',
-                                    backgroundColor: '#7c3aed',
-                                    color: '#ffffff',
-                                    borderRadius: '0.25rem',
-                                    fontWeight: 700
-                                  }}
-                                  title={`100% Exact Match Active Work Order (Click to open): ${matchWO.workOrderNo || matchWO.woNumber}`}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    openWOInEditor(matchWO.id);
-                                  }}
-                                >
-                                  {matchWO.workOrderNo || matchWO.woNumber}
-                                </button>
-                              ))}
                             </div>
                           );
                         })()}
                       </div>
                     </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
-                        <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem' }} title="Print SO" onClick={() => handlePrintSO(so)}>
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <div style={{ display: 'flex', gap: '0.35rem' }}>
+                        <button 
+                          className="btn btn-outline" 
+                          style={{ padding: '0.3rem 0.5rem' }} 
+                          title="Print Sales Order Confirmation" 
+                          onClick={() => handlePrintSingleSO(so)}
+                        >
                           <Printer size={14} />
                         </button>
-                        
-                        {so.status !== 'WO_GENERATED' ? (
+                        {so.status === 'DRAFT' || so.status === 'CONFIRMED' ? (
                           <>
                             <button 
                               className="btn btn-outline" 
@@ -515,36 +510,33 @@ export const SalesOrderModule: React.FC = () => {
         </>
       )}
 
-      {/* Modal: Edit Sales Order (Only when WO is not generated) */}
+      {/* Modal: Edit Sales Order */}
       {editingSO && (
         <Modal
-          isOpen={!!editingSO}
+          isOpen={true}
           onClose={() => setEditingSO(null)}
-          title={`Edit Client Sales Order: ${editingSO.soNumber}`}
+          title={`Edit Sales Order: ${editingSO.soNumber}`}
         >
           <form onSubmit={(e) => {
             e.preventDefault();
             updateSalesOrder(editingSO);
             setEditingSO(null);
-            alert(`Sales Order ${editingSO.soNumber} updated successfully!`);
           }} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1rem' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '0.25rem' }}>SO Number</label>
-                <input type="text" required className="input-field" value={editingSO.soNumber} onChange={(e) => setEditingSO({ ...editingSO, soNumber: e.target.value })} />
+                <input type="text" disabled className="input-field" value={editingSO.soNumber} />
               </div>
-
               <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '0.25rem' }}>Search Customer</label>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '0.25rem' }}>Customer</label>
                 <AutocompleteSelect
                   options={customerOptions}
                   value={editingSO.customerId}
                   onChange={(val) => {
                     const cust = customers.find(c => c.id === val);
-                    setEditingSO({ ...editingSO, customerId: val, customerName: cust?.name || '' });
+                    setEditingSO({ ...editingSO, customerId: val, customerName: cust ? cust.name : '' });
                   }}
-                  placeholder="Type customer name..."
+                  placeholder="Select customer..."
                 />
               </div>
             </div>
@@ -594,16 +586,19 @@ export const SalesOrderModule: React.FC = () => {
         availableFields={availableExportFields}
       />
 
-      {/* Print SO Modal */}
-      {printData && (
-        <PrintDocumentModal
-          isOpen={printModalOpen}
-          onClose={() => setPrintModalOpen(false)}
-          title="Print Client Sales Order"
-          documentType="SO"
-          data={printData}
-        />
-      )}
+      {/* Feature-Wise Modular Print Manager Modal */}
+      <PrintManagerModal
+        isOpen={printModalOpen}
+        onClose={() => { setPrintModalOpen(false); setSelectedPrintSO(null); }}
+        title={printDocType === 'SINGLE_SO' ? `Print Sales Order Confirmation (${selectedPrintSO?.soNumber})` : `Print Sales Orders Report`}
+        documentRefNumber={printDocType === 'SINGLE_SO' ? selectedPrintSO?.soNumber : 'SO-REPORT'}
+      >
+        {printDocType === 'SINGLE_SO' && selectedPrintSO ? (
+          <SingleSOPrintView so={selectedPrintSO} customerDetails={customers.find(c => c.id === selectedPrintSO.customerId)} />
+        ) : (
+          <SOListPrintView salesOrders={filteredSOs} filterLabel={isHistorySearch ? 'All Active & Historical Sales Orders' : 'Active Sales Orders'} />
+        )}
+      </PrintManagerModal>
     </div>
   );
 };

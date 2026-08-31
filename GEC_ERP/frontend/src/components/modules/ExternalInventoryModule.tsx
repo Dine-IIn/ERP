@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { Modal } from '../common/Modal';
 import { AutocompleteSelect, AutocompleteOption } from '../common/AutocompleteSelect';
-import { PrintDocumentModal } from '../common/PrintDocumentModal';
-import { Truck, Plus, ArrowRightLeft, CheckCircle, Search, Printer, FileSpreadsheet, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
+import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
+import { SingleJobworkPrintView, JobworkListPrintView } from '../printTemplates/JobworkPrintTemplates';
+import { Truck, Plus, ArrowRightLeft, CheckCircle, Search, Printer, FileSpreadsheet, ArrowUp, ArrowDown, ArrowUpDown, RefreshCw } from 'lucide-react';
 import { JobworkChallan } from '../../types/erp';
 import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
 
@@ -19,7 +20,8 @@ export const ExternalInventoryModule: React.FC = () => {
   const [selectedChallan, setSelectedChallan] = useState<JobworkChallan | null>(null);
 
   const [printModalOpen, setPrintModalOpen] = useState(false);
-  const [printData, setPrintData] = useState<any>(null);
+  const [printDocType, setPrintDocType] = useState<'SINGLE_CHALLAN' | 'CHALLAN_LIST'>('CHALLAN_LIST');
+  const [selectedPrintChallan, setSelectedPrintChallan] = useState<JobworkChallan | null>(null);
 
   const [sortField, setSortField] = useState<JWSortKey>('challanNo');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -62,13 +64,24 @@ export const ExternalInventoryModule: React.FC = () => {
     badge: i.category
   }));
 
+  // Universal @history search handling
+  const isHistorySearch = searchTerm.toLowerCase().includes('@history');
+  const cleanSearchTerm = searchTerm.replace(/@history/gi, '').trim().toLowerCase();
+
   const filteredJobworks = jobworks
-    .filter(j =>
-      j.challanNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      j.vendorName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      j.itemName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      j.processRequired.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+    .filter(j => {
+      const isCompleted = j.status === 'COMPLETED' || j.pendingBalance === 0;
+      if (!isHistorySearch && isCompleted) {
+        return false;
+      }
+      return !cleanSearchTerm || (
+        j.challanNo.toLowerCase().includes(cleanSearchTerm) ||
+        j.vendorName.toLowerCase().includes(cleanSearchTerm) ||
+        j.itemName.toLowerCase().includes(cleanSearchTerm) ||
+        j.itemCode.toLowerCase().includes(cleanSearchTerm) ||
+        j.processRequired.toLowerCase().includes(cleanSearchTerm)
+      );
+    })
     .sort((a, b) => {
       let valA: any = (a as any)[sortField] ?? '';
       let valB: any = (b as any)[sortField] ?? '';
@@ -102,13 +115,34 @@ export const ExternalInventoryModule: React.FC = () => {
     setIsIssueModalOpen(true);
   };
 
-  const handlePrintChallan = (j: JobworkChallan) => {
-    setPrintData(j);
+  const handlePrintSingleChallan = (j: JobworkChallan) => {
+    setSelectedPrintChallan(j);
+    setPrintDocType('SINGLE_CHALLAN');
     setPrintModalOpen(true);
   };
 
-  const handleOpenSheet = () => {
-    openLiveModuleSheet('Jobwork', 'GEC_Jobwork_Challans_Live', jobworks, [
+  const handlePrintChallanList = () => {
+    setPrintDocType('CHALLAN_LIST');
+    setPrintModalOpen(true);
+  };
+
+  const handleRefreshLiveSheet = () => {
+    const data = filteredJobworks.map(j => ({
+      challanNo: j.challanNo,
+      vendorName: j.vendorName,
+      itemCode: j.itemCode,
+      itemName: j.itemName,
+      processRequired: j.processRequired,
+      sentQuantity: j.sentQuantity,
+      receivedQuantity: j.receivedQuantity,
+      scrapQuantity: j.scrapQuantity,
+      pendingBalance: j.pendingBalance,
+      issueDate: j.issueDate,
+      expectedReturnDate: j.expectedReturnDate,
+      status: j.status
+    }));
+
+    const headers: { key: keyof typeof data[0]; label: string }[] = [
       { key: 'challanNo', label: 'Challan No' },
       { key: 'vendorName', label: 'Processing Vendor' },
       { key: 'itemCode', label: 'Component Code' },
@@ -121,7 +155,9 @@ export const ExternalInventoryModule: React.FC = () => {
       { key: 'issueDate', label: 'Issue Date' },
       { key: 'expectedReturnDate', label: 'Expected Return Date' },
       { key: 'status', label: 'Challan Status' }
-    ]);
+    ];
+
+    openLiveModuleSheet('Jobwork', 'GEC_Jobwork_Challans_Live', data, headers);
   };
 
   const handleOpenReturnModal = (challan: JobworkChallan) => {
@@ -193,9 +229,12 @@ export const ExternalInventoryModule: React.FC = () => {
             Track components sent out for heat treatment, machining, and surface coating
           </span>
         </div>
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <button className="btn btn-outline" onClick={handleOpenSheet}>
-            <FileSpreadsheet size={16} /> Open Sheet
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-outline" onClick={handleRefreshLiveSheet} title="Sync and maintain live CSV sheet">
+            <RefreshCw size={14} /> Live Sheet
+          </button>
+          <button type="button" className="btn btn-outline" onClick={handlePrintChallanList} title="Print filtered jobwork challans report">
+            <Printer size={14} /> Print Report
           </button>
           <button id="btn-new-jw" className="btn btn-primary" onClick={handleOpenIssueModal}>
             <Plus size={16} /> Create Manual Job Work Challan
@@ -224,18 +263,24 @@ export const ExternalInventoryModule: React.FC = () => {
       </div>
 
       {/* Inline Search Bar */}
-      <div className="card" style={{ padding: '0.65rem 1rem', display: 'flex', alignItems: 'center', backgroundColor: 'var(--bg-card)', flexShrink: 0 }}>
-        <div style={{ position: 'relative', width: '360px', maxWidth: '100%' }}>
+      <div className="card" style={{ padding: '0.65rem 1rem', display: 'flex', alignItems: 'center', backgroundColor: 'var(--bg-card)', flexShrink: 0, gap: '1rem', flexWrap: 'wrap' }}>
+        <div style={{ position: 'relative', width: '380px', maxWidth: '100%' }}>
           <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
           <input
             type="text"
-            placeholder="Search challan no, vendor name, component, process..."
+            placeholder="Search challan no, vendor, part... (type @history to search completed)"
             className="input-field"
             style={{ paddingLeft: '2.25rem' }}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
+
+        {isHistorySearch && (
+          <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#ffffff', fontSize: '0.75rem', fontWeight: 700 }}>
+            📜 History Search Active
+          </span>
+        )}
       </div>
 
       {/* Jobwork Table with Sorting */}
@@ -297,55 +342,68 @@ export const ExternalInventoryModule: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {filteredJobworks.map(j => (
-              <tr key={j.id}>
-                <td style={{ fontWeight: 700, color: 'var(--warning)', fontFamily: 'monospace' }}>
-                  {j.challanNo}
-                </td>
-                <td style={{ fontWeight: 600 }}>{j.vendorName}</td>
-                <td>
-                  <div style={{ fontWeight: 600 }}>{j.itemName}</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{j.itemCode}</div>
-                </td>
-                <td style={{ fontSize: '0.85rem', color: 'var(--accent-primary)', fontWeight: 500 }}>
-                  {j.processRequired}
-                </td>
-                <td style={{ fontWeight: 700 }}>{j.sentQuantity} PCS</td>
-                <td style={{ color: 'var(--success)', fontWeight: 600 }}>{j.receivedQuantity} PCS</td>
-                <td style={{ color: j.scrapQuantity > 0 ? 'var(--danger)' : 'var(--text-muted)' }}>{j.scrapQuantity} PCS</td>
-                <td>
-                  <span style={{ fontSize: '0.95rem', fontWeight: 800, color: j.pendingBalance > 0 ? 'var(--warning)' : 'var(--success)' }}>
-                    {j.pendingBalance} PCS
-                  </span>
-                </td>
-                <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{j.expectedReturnDate}</td>
-                <td>
-                  <span className={`badge ${j.status === 'COMPLETED' ? 'badge-success' : 'badge-warning'}`}>
-                    {j.status.replace('_', ' ')}
-                  </span>
-                </td>
-                <td>
-                  <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
-                    <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem' }} title="Print Challan Gatepass" onClick={() => handlePrintChallan(j)}>
-                      <Printer size={14} />
-                    </button>
-                    {j.pendingBalance > 0 ? (
-                      <button 
-                        className="btn btn-outline" 
-                        style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem', color: 'var(--success)', borderColor: 'var(--success)' }}
-                        onClick={() => handleOpenReturnModal(j)}
-                      >
-                        <ArrowRightLeft size={14} /> Record Receipt
-                      </button>
-                    ) : (
-                      <span style={{ fontSize: '0.75rem', color: 'var(--success)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
-                        <CheckCircle size={14} /> Complete
+            {filteredJobworks.map(j => {
+              const isHistory = j.status === 'COMPLETED' || j.pendingBalance === 0;
+
+              return (
+                <tr key={j.id}>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <span style={{ fontWeight: 700, color: 'var(--warning)', fontFamily: 'monospace' }}>
+                        {j.challanNo}
                       </span>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
+                      {isHistory && (
+                        <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#fff', fontSize: '0.65rem', padding: '0.1rem 0.35rem' }}>
+                          📜 HISTORY
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td style={{ fontWeight: 600 }}>{j.vendorName}</td>
+                  <td>
+                    <div style={{ fontWeight: 600 }}>{j.itemName}</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{j.itemCode}</div>
+                  </td>
+                  <td style={{ fontSize: '0.85rem', color: 'var(--accent-primary)', fontWeight: 500 }}>
+                    {j.processRequired}
+                  </td>
+                  <td style={{ fontWeight: 700 }}>{j.sentQuantity} PCS</td>
+                  <td style={{ color: 'var(--success)', fontWeight: 600 }}>{j.receivedQuantity} PCS</td>
+                  <td style={{ color: j.scrapQuantity > 0 ? 'var(--danger)' : 'var(--text-muted)' }}>{j.scrapQuantity} PCS</td>
+                  <td>
+                    <span style={{ fontSize: '0.95rem', fontWeight: 800, color: j.pendingBalance > 0 ? 'var(--warning)' : 'var(--success)' }}>
+                      {j.pendingBalance} PCS
+                    </span>
+                  </td>
+                  <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{j.expectedReturnDate}</td>
+                  <td>
+                    <span className={`badge ${j.status === 'COMPLETED' ? 'badge-success' : 'badge-warning'}`}>
+                      {j.status.replace('_', ' ')}
+                    </span>
+                  </td>
+                  <td>
+                    <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                      <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem' }} title="Print Challan Gatepass" onClick={() => handlePrintSingleChallan(j)}>
+                        <Printer size={14} />
+                      </button>
+                      {j.pendingBalance > 0 ? (
+                        <button 
+                          className="btn btn-outline" 
+                          style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem', color: 'var(--success)', borderColor: 'var(--success)' }}
+                          onClick={() => handleOpenReturnModal(j)}
+                        >
+                          <ArrowRightLeft size={14} /> Record Receipt
+                        </button>
+                      ) : (
+                        <span style={{ fontSize: '0.75rem', color: 'var(--success)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                          <CheckCircle size={14} /> Complete
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -553,15 +611,19 @@ export const ExternalInventoryModule: React.FC = () => {
         </form>
       </Modal>
 
-      {/* Print Document Modal */}
-      <PrintDocumentModal
+      {/* Feature-Wise Modular Print Manager Modal */}
+      <PrintManagerModal
         isOpen={printModalOpen}
-        onClose={() => setPrintModalOpen(false)}
-        title="Print Outward Jobwork Gatepass Challan"
-        documentType="CHALLAN"
-        data={printData}
-      />
-
+        onClose={() => { setPrintModalOpen(false); setSelectedPrintChallan(null); }}
+        title={printDocType === 'SINGLE_CHALLAN' ? `Print Jobwork Challan Gatepass (${selectedPrintChallan?.challanNo})` : 'Print Jobwork Challans Ledger'}
+        documentRefNumber={printDocType === 'SINGLE_CHALLAN' ? selectedPrintChallan?.challanNo : 'JW-REPORT'}
+      >
+        {printDocType === 'SINGLE_CHALLAN' && selectedPrintChallan ? (
+          <SingleJobworkPrintView challan={selectedPrintChallan} />
+        ) : (
+          <JobworkListPrintView challans={filteredJobworks} filterLabel={isHistorySearch ? 'All Active & Completed Jobwork Challans' : 'Active External Challans'} />
+        )}
+      </PrintManagerModal>
     </div>
   );
 };

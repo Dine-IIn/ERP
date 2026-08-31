@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { Modal } from '../common/Modal';
+import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
+import { AssemblyListPrintView } from '../printTemplates/AssemblyPrintTemplates';
+import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
 import { 
   Layers, Clock, AlertTriangle, CheckCircle, ArrowRight, 
-  MoveRight, Wrench, Package, Sparkles, User, ShieldCheck, Factory, Plus, Edit2, Trash2 
+  MoveRight, Wrench, Package, Sparkles, User, ShieldCheck, Factory, Plus, Edit2, Trash2, Printer, RefreshCw 
 } from 'lucide-react';
 import { WorkOrder, FloorStation, FinishedGoodUnit } from '../../types/erp';
 
@@ -17,6 +20,7 @@ export const FloorPlanningModule: React.FC = () => {
   const [selectedWOForCompletion, setSelectedWOForCompletion] = useState<WorkOrder | null>(null);
   const [serialNoInput, setSerialNoInput] = useState('');
   const [configNotesInput, setConfigNotesInput] = useState('');
+  const [printModalOpen, setPrintModalOpen] = useState(false);
 
   // Station Modal State (Create / Edit)
   const [isStationModalOpen, setIsStationModalOpen] = useState(false);
@@ -182,6 +186,38 @@ export const FloorPlanningModule: React.FC = () => {
     alert(`🎉 Machine ${serialNoInput} successfully sent to Finished Goods Inventory!`);
   };
 
+  const handleRefreshLiveSheet = () => {
+    const data = activeWOs.map(wo => {
+      const pInfo = getWOPriorityInfo(wo);
+      const progressObj = calculateWOProgress(wo);
+      return {
+        woNumber: wo.woNumber,
+        soNumber: wo.soNumber || '-',
+        machineModel: wo.machineModel,
+        customerName: wo.customerName || 'General Stock',
+        targetCompletionDate: wo.targetCompletionDate,
+        leadDaysRemaining: pInfo.daysRemaining,
+        urgencyLevel: pInfo.urgencyLevel,
+        progressPercent: `${progressObj.percent}%`,
+        stageBreakdown: progressObj.breakdown
+      };
+    });
+
+    const headers: { key: keyof typeof data[0]; label: string }[] = [
+      { key: 'woNumber', label: 'Work Order No' },
+      { key: 'soNumber', label: 'Sales Order Ref' },
+      { key: 'machineModel', label: 'Machine Model' },
+      { key: 'customerName', label: 'Customer' },
+      { key: 'targetCompletionDate', label: 'Delivery Due Date' },
+      { key: 'leadDaysRemaining', label: 'Days Remaining' },
+      { key: 'urgencyLevel', label: 'Urgency Priority' },
+      { key: 'progressPercent', label: 'Progress (%)' },
+      { key: 'stageBreakdown', label: 'Stage Breakdown' }
+    ];
+
+    openLiveModuleSheet('FloorPlanning', 'GEC_ERP_Floor_Planning_Live', data, headers);
+  };
+
   return (
     <div className="module-layout-container">
       
@@ -197,9 +233,17 @@ export const FloorPlanningModule: React.FC = () => {
           </span>
         </div>
 
-        <button className="btn btn-primary" onClick={handleOpenAddStation} style={{ fontWeight: 700 }}>
-          <Plus size={15} /> Add Floor Station
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-outline" onClick={handleRefreshLiveSheet} title="Sync and maintain live CSV sheet">
+            <RefreshCw size={14} /> Live Sheet
+          </button>
+          <button type="button" className="btn btn-outline" onClick={() => setPrintModalOpen(true)} title="Print floor planning schedule report">
+            <Printer size={14} /> Print Report
+          </button>
+          <button className="btn btn-primary" onClick={handleOpenAddStation} style={{ fontWeight: 700 }}>
+            <Plus size={15} /> Add Floor Station
+          </button>
+        </div>
       </div>
 
       {/* Main Scrollable Content */}
@@ -564,6 +608,26 @@ export const FloorPlanningModule: React.FC = () => {
         </Modal>
       )}
 
+      {/* Feature-Wise Modular Print Manager Modal */}
+      <PrintManagerModal
+        isOpen={printModalOpen}
+        onClose={() => setPrintModalOpen(false)}
+        title="Print Production Floor Schedule & Station Allocation"
+        documentRefNumber="FLOOR-SCHEDULE"
+      >
+        <AssemblyListPrintView
+          assemblies={activeWOs.map(w => ({
+            id: w.id,
+            assemblyCode: w.woNumber,
+            workOrderNo: w.soNumber || '-',
+            machineModel: w.machineModel,
+            subAssemblyType: (w.stage || 'PLANNED').replace(/_/g, ' '),
+            progressPercentage: calculateWOProgress(w).percent,
+            status: w.status
+          }))}
+          filterLabel="Active Floor Production Schedule & Planning"
+        />
+      </PrintManagerModal>
     </div>
   );
 };

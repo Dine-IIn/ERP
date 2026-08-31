@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
-import { Layers, Plus, CheckCircle, Search, Settings, Trash2, ArrowLeft, X } from 'lucide-react';
+import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
+import { AssemblyListPrintView } from '../printTemplates/AssemblyPrintTemplates';
+import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
+import { Layers, Plus, CheckCircle, Search, Settings, Trash2, ArrowLeft, X, Printer, RefreshCw } from 'lucide-react';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
 
 export const AssemblyModule: React.FC = () => {
@@ -12,6 +15,7 @@ export const AssemblyModule: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isStageModalOpen, setIsStageModalOpen] = useState(false);
   const [newStageInput, setNewStageInput] = useState('');
+  const [printModalOpen, setPrintModalOpen] = useState(false);
 
   const [asmForm, setAsmForm] = useState({
     assemblyCode: '',
@@ -23,22 +27,49 @@ export const AssemblyModule: React.FC = () => {
 
   const [selectedStationFilter, setSelectedStationFilter] = useState<string>('ALL');
 
+  // Universal @history search handling
+  const isHistorySearch = searchTerm.toLowerCase().includes('@history');
+  const cleanSearchTerm = searchTerm.replace(/@history/gi, '').trim().toLowerCase();
+
   const filteredAssemblies = assemblies.filter(a => {
     const asmCode = a.assemblyCode || 'ASM-01';
     const model = a.machineModel || '';
     const subType = a.subAssemblyType || a.currentStage || '';
     const woNo = a.workOrderNo || a.woNumber || '';
 
-    const matchesSearch = 
-      asmCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      model.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      subType.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      woNo.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = !cleanSearchTerm || (
+      asmCode.toLowerCase().includes(cleanSearchTerm) ||
+      model.toLowerCase().includes(cleanSearchTerm) ||
+      subType.toLowerCase().includes(cleanSearchTerm) ||
+      woNo.toLowerCase().includes(cleanSearchTerm)
+    );
 
     const matchesStation = selectedStationFilter === 'ALL' || subType === selectedStationFilter;
 
     return matchesSearch && matchesStation;
   });
+
+  const handleRefreshLiveSheet = () => {
+    const data = filteredAssemblies.map(a => ({
+      assemblyCode: a.assemblyCode || 'ASM-01',
+      workOrderNo: a.workOrderNo || a.woNumber || 'WO-GEC-001',
+      machineModel: a.machineModel || '',
+      subAssemblyType: a.subAssemblyType || a.currentStage || '',
+      progressPercentage: `${a.progressPercentage || 50}%`,
+      status: a.status || (a.progressPercentage === 100 ? 'TESTED_READY' : 'IN_PROGRESS')
+    }));
+
+    const headers: { key: keyof typeof data[0]; label: string }[] = [
+      { key: 'assemblyCode', label: 'Assembly Code' },
+      { key: 'workOrderNo', label: 'Work Order Ref' },
+      { key: 'machineModel', label: 'Machine Model' },
+      { key: 'subAssemblyType', label: 'Station / Sub-Assembly' },
+      { key: 'progressPercentage', label: 'Progress (%)' },
+      { key: 'status', label: 'Assembly Status' }
+    ];
+
+    openLiveModuleSheet('Assembly', 'GEC_ERP_Assembly_Floor_Live', data, headers);
+  };
 
   const { selectedIndex, setSelectedIndex } = useTableKeyboardNav(filteredAssemblies, (a) => {
     const nextProg = Math.min(100, (a.progressPercentage || 50) + 25);
@@ -103,6 +134,12 @@ export const AssemblyModule: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-outline" onClick={handleRefreshLiveSheet} title="Sync and maintain live CSV sheet">
+            <RefreshCw size={14} /> Live Sheet
+          </button>
+          <button type="button" className="btn btn-outline" onClick={() => setPrintModalOpen(true)} title="Print assembly floor tracking report">
+            <Printer size={14} /> Print Report
+          </button>
           <button className="btn btn-outline" onClick={() => setIsStageModalOpen(!isStageModalOpen)}>
             <Settings size={16} /> Manage Assembly Stages
           </button>
@@ -212,16 +249,24 @@ export const AssemblyModule: React.FC = () => {
         <>
           {/* Filter Bar */}
           <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', backgroundColor: 'var(--bg-card)' }}>
-            <div style={{ position: 'relative', width: '340px', maxWidth: '100%' }}>
-              <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-              <input
-                type="text"
-                placeholder="Search assembly code, model, sub-assembly..."
-                className="input-field"
-                style={{ paddingLeft: '2.25rem' }}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <div style={{ position: 'relative', width: '380px', maxWidth: '100%' }}>
+                <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <input
+                  type="text"
+                  placeholder="Search assembly code, model, station... (type @history)"
+                  className="input-field"
+                  style={{ paddingLeft: '2.25rem' }}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+
+              {isHistorySearch && (
+                <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#ffffff', fontSize: '0.75rem', fontWeight: 700 }}>
+                  📜 History Search Active
+                </span>
+              )}
             </div>
 
             <div>
@@ -267,8 +312,17 @@ export const AssemblyModule: React.FC = () => {
                         cursor: 'pointer'
                       }}
                     >
-                      <td style={{ fontWeight: 700, color: 'var(--accent-primary)', fontFamily: 'monospace' }}>
-                        {asmCode}
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                          <span style={{ fontWeight: 700, color: 'var(--accent-primary)', fontFamily: 'monospace' }}>
+                            {asmCode}
+                          </span>
+                          {prog === 100 && (
+                            <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#fff', fontSize: '0.65rem', padding: '0.1rem 0.35rem' }}>
+                              📜 READY
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td style={{ fontWeight: 600 }}>{woNo}</td>
                       <td>{a.machineModel}</td>
@@ -320,6 +374,16 @@ export const AssemblyModule: React.FC = () => {
           </div>
         </>
       )}
+
+      {/* Feature-Wise Modular Print Manager Modal */}
+      <PrintManagerModal
+        isOpen={printModalOpen}
+        onClose={() => setPrintModalOpen(false)}
+        title="Print Assembly Floor Station Tracking Report"
+        documentRefNumber="ASM-FLOOR-REPORT"
+      >
+        <AssemblyListPrintView assemblies={filteredAssemblies} filterLabel={isHistorySearch ? 'All Active & Completed Assembly Stations' : 'Active Assembly Floor Stations'} />
+      </PrintManagerModal>
     </div>
   );
 };

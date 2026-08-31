@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { BulkUploadModal } from '../common/BulkUploadModal';
-import { Users, Plus, Edit2, Trash2, Upload, Search, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown, ArrowLeft, X } from 'lucide-react';
+import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
+import { VendorListPrintView } from '../printTemplates/ItemMasterPrintTemplates';
+import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
+import { Users, Plus, Edit2, Trash2, Upload, Search, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown, ArrowLeft, X, Printer, RefreshCw } from 'lucide-react';
 import { Vendor } from '../../types/erp';
 import { parseVendorsSheet } from '../../utils/csvParser';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
@@ -20,6 +23,7 @@ export const VendorMasterModule: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [printModalOpen, setPrintModalOpen] = useState(false);
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
 
   // Single Column Sorting State
@@ -50,13 +54,18 @@ export const VendorMasterModule: React.FC = () => {
     }
   };
 
+  // Universal @history search handling
+  const isHistorySearch = searchTerm.toLowerCase().includes('@history');
+  const cleanSearchTerm = searchTerm.replace(/@history/gi, '').trim().toLowerCase();
+
   const filteredVendors = vendors
     .filter(v =>
-      v.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      v.vendorCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      v.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      v.contactPerson.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      v.gstin.toLowerCase().includes(searchTerm.toLowerCase())
+      !cleanSearchTerm ||
+      v.name.toLowerCase().includes(cleanSearchTerm) ||
+      v.vendorCode.toLowerCase().includes(cleanSearchTerm) ||
+      v.city.toLowerCase().includes(cleanSearchTerm) ||
+      v.contactPerson.toLowerCase().includes(cleanSearchTerm) ||
+      v.gstin.toLowerCase().includes(cleanSearchTerm)
     )
     .sort((a, b) => {
       let valA: any = a[sortField] || '';
@@ -157,6 +166,44 @@ export const VendorMasterModule: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-outline" onClick={() => {
+            const data = filteredVendors.map(v => ({
+              vendorCode: v.vendorCode,
+              name: v.name,
+              category: v.category || '',
+              contactPerson: v.contactPerson,
+              phone: v.phone,
+              email: v.email,
+              city: v.city,
+              gstin: v.gstin,
+              pan: v.pan || '',
+              bankName: v.bankName || '',
+              accountNumber: v.accountNumber || '',
+              ifscCode: v.ifscCode || ''
+            }));
+
+            const headers: { key: keyof typeof data[0]; label: string }[] = [
+              { key: 'vendorCode', label: 'Vendor Code' },
+              { key: 'name', label: 'Vendor Name' },
+              { key: 'category', label: 'Category' },
+              { key: 'contactPerson', label: 'Contact Person' },
+              { key: 'phone', label: 'Phone' },
+              { key: 'email', label: 'Email' },
+              { key: 'city', label: 'City' },
+              { key: 'gstin', label: 'GSTIN' },
+              { key: 'pan', label: 'PAN' },
+              { key: 'bankName', label: 'Bank Name' },
+              { key: 'accountNumber', label: 'Account Number' },
+              { key: 'ifscCode', label: 'IFSC Code' }
+            ];
+
+            openLiveModuleSheet('Vendors', 'GEC_Vendors_Live', data, headers);
+          }} title="Sync and maintain live CSV sheet">
+            <RefreshCw size={14} /> Live Sheet
+          </button>
+          <button type="button" className="btn btn-outline" onClick={() => setPrintModalOpen(true)} title="Print filtered vendors directory report">
+            <Printer size={14} /> Print Report
+          </button>
           <button className="btn btn-outline" onClick={() => setIsExportModalOpen(true)}>
             <FileSpreadsheet size={16} /> Open Sheet ({filteredVendors.length} filtered)
           </button>
@@ -266,16 +313,24 @@ export const VendorMasterModule: React.FC = () => {
         <>
           {/* Module Search Input */}
           <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: '1rem', backgroundColor: 'var(--bg-card)' }}>
-            <div style={{ position: 'relative', width: '360px', maxWidth: '100%' }}>
-              <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-              <input
-                type="text"
-                placeholder="Search vendor code, name, city, GSTIN..."
-                className="input-field"
-                style={{ paddingLeft: '2.25rem' }}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <div style={{ position: 'relative', width: '380px', maxWidth: '100%' }}>
+                <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <input
+                  type="text"
+                  placeholder="Search vendor code, name, city, GSTIN... (type @history)"
+                  className="input-field"
+                  style={{ paddingLeft: '2.25rem' }}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+
+              {isHistorySearch && (
+                <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#ffffff', fontSize: '0.75rem', fontWeight: 700 }}>
+                  📜 History Search Active
+                </span>
+              )}
             </div>
           </div>
 
@@ -384,6 +439,15 @@ export const VendorMasterModule: React.FC = () => {
         availableFields={availableExportFields}
       />
 
+      {/* Feature-Wise Modular Print Manager Modal */}
+      <PrintManagerModal
+        isOpen={printModalOpen}
+        onClose={() => setPrintModalOpen(false)}
+        title="Print Vendor Master Directory"
+        documentRefNumber="VENDOR-DIRECTORY"
+      >
+        <VendorListPrintView vendors={filteredVendors} filterLabel={isHistorySearch ? 'All Active & Historical Vendor Partners' : 'Active Approved Vendor Directory'} />
+      </PrintManagerModal>
     </div>
   );
 };

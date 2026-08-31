@@ -1,0 +1,115 @@
+/* Professional Print & PDF Styles */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #printable-area, #printable-area * {
+    visibility: visible;
+  }
+  #printable-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 12mm 15mm;
+    background: #ffffff !important;
+    color: #111827 !important;
+  }
+  @page {
+    size: A4 portrait;
+    margin: 10mm;
+  }
+  .page-break {
+    page-break-before: always;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
+
+.print-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.75rem;
+  font-size: 0.82rem;
+}
+
+.print-table th {
+  background-color: #f3f4f6 !important;
+  color: #111827 !important;
+  font-weight: 700;
+  border: 1px solid #d1d5db;
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.print-table td {
+  border: 1px solid #e5e7eb;
+  padding: 5px 8px;
+  color: #1f2937;
+}
+
+.print-table tr:nth-child(even) td {
+  background-color: #fafafa;
+}
+
+.print-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 2px solid #1f2937;
+  padding-bottom: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.print-company-title {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #111827;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.print-company-subtitle {
+  font-size: 0.75rem;
+  color: #4b5563;
+  margin-top: 2px;
+}
+
+.print-doc-badge {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #2563eb;
+  text-align: right;
+  margin: 0;
+}
+
+.print-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.5rem;
+  background-color: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin-bottom: 1rem;
+  font-size: 0.8rem;
+}
+
+.print-signatory-section {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 2.5rem;
+  padding-top: 1rem;
+}
+
+.print-signatory-box {
+  width: 200px;
+  border-top: 1px dashed #6b7280;
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding-top: 4px;
+  color: #374151;
+}
