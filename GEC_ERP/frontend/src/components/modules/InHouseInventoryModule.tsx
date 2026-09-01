@@ -1,18 +1,51 @@
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
+import { Modal } from '../common/Modal';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { ItemMasterListPrintView } from '../printTemplates/ItemMasterPrintTemplates';
 import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
-import { Warehouse, AlertTriangle, Search, ArrowUp, ArrowDown, ArrowUpDown, Printer, RefreshCw } from 'lucide-react';
+import { Warehouse, AlertTriangle, Search, ArrowUp, ArrowDown, ArrowUpDown, Printer, RefreshCw, Edit2, CheckCircle } from 'lucide-react';
+import { Item } from '../../types/erp';
 
 type StockSortKey = 'itemCode' | 'name' | 'category' | 'location' | 'inHouseStock' | 'reorderLevel' | 'unitPrice' | 'totalValuation';
 
 export const InHouseInventoryModule: React.FC = () => {
-  const { items, searchTerm, setSearchTerm } = useERP();
+  const { items, searchTerm, setSearchTerm, adjustItemStock } = useERP();
 
   const [sortField, setSortField] = useState<StockSortKey>('itemCode');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [printModalOpen, setPrintModalOpen] = useState(false);
+
+  // Stock Adjustment Modal State
+  const [adjustingItem, setAdjustingItem] = useState<Item | null>(null);
+  const [adjustedStock, setAdjustedStock] = useState<number>(0);
+  const [adjustReason, setAdjustReason] = useState<string>('Physical Count Audit');
+  const [adjustLocation, setAdjustLocation] = useState<string>('');
+  const [adjustReorder, setAdjustReorder] = useState<number>(0);
+  const [adjustPrice, setAdjustPrice] = useState<number>(0);
+
+  const handleOpenAdjustModal = (item: Item) => {
+    setAdjustingItem(item);
+    setAdjustedStock(item.inHouseStock);
+    setAdjustReason('Physical Count Audit');
+    setAdjustLocation(item.location || '');
+    setAdjustReorder(item.reorderLevel || 0);
+    setAdjustPrice(item.unitPrice || 0);
+  };
+
+  const handleSaveStockAdjustment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adjustingItem) return;
+    adjustItemStock(
+      adjustingItem.id,
+      Number(adjustedStock),
+      adjustReason,
+      adjustLocation,
+      Number(adjustReorder),
+      Number(adjustPrice)
+    );
+    setAdjustingItem(null);
+  };
 
   const handleSort = (field: StockSortKey) => {
     if (sortField === field) {
@@ -178,14 +211,15 @@ export const InHouseInventoryModule: React.FC = () => {
                 </div>
               </th>
               <th>Stock Status</th>
+              <th style={{ width: '80px', textAlign: 'center' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredItems.map(item => {
-              const isLow = item.inHouseStock <= item.reorderLevel;
-              const val = item.inHouseStock * item.unitPrice;
+              const isLow = item.inHouseStock <= (item.reorderLevel || 0);
+              const val = item.inHouseStock * (item.unitPrice || 0);
               return (
-                <tr key={item.id}>
+                <tr key={item.id} onDoubleClick={() => handleOpenAdjustModal(item)} style={{ cursor: 'pointer' }} title="Double-click to adjust stock count">
                   <td style={{ fontWeight: 700, color: 'var(--accent-primary)' }}>
                     {item.itemCode}
                   </td>
@@ -196,16 +230,16 @@ export const InHouseInventoryModule: React.FC = () => {
                     <span className="badge badge-neutral">{item.category}</span>
                   </td>
                   <td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>
-                    {item.location}
+                    {item.location || '-'}
                   </td>
                   <td style={{ fontSize: '1rem', fontWeight: 800, color: isLow ? 'var(--danger)' : 'var(--success)' }}>
                     {item.inHouseStock} {item.unit}
                   </td>
                   <td style={{ color: 'var(--text-muted)' }}>
-                    {item.reorderLevel} {item.unit}
+                    {item.reorderLevel || 0} {item.unit}
                   </td>
                   <td style={{ fontWeight: 500 }}>
-                    ₹{item.unitPrice.toLocaleString()}
+                    ₹{(item.unitPrice || 0).toLocaleString()}
                   </td>
                   <td style={{ fontWeight: 700, color: 'var(--accent-primary)' }}>
                     ₹{val.toLocaleString()}
@@ -221,12 +255,105 @@ export const InHouseInventoryModule: React.FC = () => {
                       </span>
                     )}
                   </td>
+                  <td onClick={(e) => e.stopPropagation()} style={{ textAlign: 'center' }}>
+                    <button 
+                      className="btn btn-outline" 
+                      style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', gap: '0.25rem' }} 
+                      title="Adjust Inventory Count / Physical Stock"
+                      onClick={() => handleOpenAdjustModal(item)}
+                    >
+                      <Edit2 size={13} /> Edit Qty
+                    </button>
+                  </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
+
+      {/* Stock Adjustment Modal */}
+      {adjustingItem && (
+        <Modal
+          isOpen={Boolean(adjustingItem)}
+          onClose={() => setAdjustingItem(null)}
+          title={`Adjust Physical Stock: ${adjustingItem.itemCode} (${adjustingItem.name})`}
+        >
+          <form onSubmit={handleSaveStockAdjustment} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ padding: '0.75rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: '0.5rem', border: '1px solid var(--border-color)', fontSize: '0.85rem' }}>
+              <div><strong>Component:</strong> {adjustingItem.name}</div>
+              <div><strong>Item Code:</strong> <span style={{ color: 'var(--accent-primary)', fontFamily: 'monospace' }}>{adjustingItem.itemCode}</span> &bull; <strong>Class:</strong> {adjustingItem.category}</div>
+              <div><strong>Current System Stock:</strong> <span style={{ fontWeight: 800 }}>{adjustingItem.inHouseStock} {adjustingItem.unit}</span></div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div>
+                <label style={{ fontWeight: 700 }}>New Physical In-House Stock ({adjustingItem.unit}) *</label>
+                <input 
+                  type="number" 
+                  min="0" 
+                  required 
+                  className="input-field" 
+                  value={adjustedStock} 
+                  onChange={(e) => setAdjustedStock(Number(e.target.value))} 
+                />
+              </div>
+
+              <div>
+                <label style={{ fontWeight: 700 }}>Safety / Reorder Level ({adjustingItem.unit})</label>
+                <input 
+                  type="number" 
+                  min="0" 
+                  className="input-field" 
+                  value={adjustReorder} 
+                  onChange={(e) => setAdjustReorder(Number(e.target.value))} 
+                />
+              </div>
+
+              <div>
+                <label style={{ fontWeight: 700 }}>Location Rack / Bin</label>
+                <input 
+                  type="text" 
+                  className="input-field" 
+                  placeholder="e.g. Rack B-04"
+                  value={adjustLocation} 
+                  onChange={(e) => setAdjustLocation(e.target.value)} 
+                />
+              </div>
+
+              <div>
+                <label style={{ fontWeight: 700 }}>Unit Valuation (₹)</label>
+                <input 
+                  type="number" 
+                  min="0" 
+                  className="input-field" 
+                  value={adjustPrice} 
+                  onChange={(e) => setAdjustPrice(Number(e.target.value))} 
+                />
+              </div>
+            </div>
+
+            <div>
+              <label style={{ fontWeight: 700 }}>Adjustment Reason / Physical Audit Note</label>
+              <input 
+                type="text" 
+                className="input-field" 
+                placeholder="e.g. Physical stock take audit, Damaged scrap write-off, Found extra in store"
+                value={adjustReason} 
+                onChange={(e) => setAdjustReason(e.target.value)} 
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setAdjustingItem(null)}>Cancel</button>
+              <button type="submit" className="btn btn-primary">
+                <CheckCircle size={15} /> Save Stock Adjustment
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
       {/* Feature-Wise Modular Print Manager Modal */}
       <PrintManagerModal
         isOpen={printModalOpen}

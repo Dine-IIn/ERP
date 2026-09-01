@@ -2,7 +2,35 @@
 
 export type Role = 'Admin' | 'Production Manager' | 'Store Manager' | 'QC Officer' | string;
 
-export type PermissionLevel = 'FULL_ACCESS' | 'VIEW_EDIT' | 'VIEW_ONLY' | 'VIEW_ACCESS' | 'NO_ACCESS';
+export type PermissionLevel = 'FULL_ACCESS' | 'EDIT' | 'CREATE' | 'VIEW' | 'NO_ACCESS';
+
+export interface RBACFeatureDefinition {
+  key: string;
+  name: string;
+  category: string;
+  description: string;
+}
+
+export const RBAC_FEATURES: RBACFeatureDefinition[] = [
+  { key: 'item_master', name: 'Item Master Catalog', category: 'Masters', description: 'Components, raw materials, specs & vendor priority' },
+  { key: 'customer_master', name: 'Customer Master', category: 'Masters', description: 'Customer directory, shipping addresses & GSTIN' },
+  { key: 'vendor_master', name: 'Vendor / Supplier Master', category: 'Masters', description: 'Vendor partner directory & bank details' },
+  { key: 'bom_master', name: 'BOM Master (Bill of Materials)', category: 'Engineering', description: 'Multi-level machine structure & component costing' },
+  { key: 'sales_orders', name: 'Sales Orders', category: 'Commercial', description: 'Customer orders, dispatch targets & WO generation' },
+  { key: 'work_orders', name: 'Work Orders (Shopfloor Build)', category: 'Production', description: 'Machine build travellers & customized BOM components' },
+  { key: 'job_cards', name: 'Job Cards & Machine Operations', category: 'Production', description: 'Sub-component in-house machining & work logs' },
+  { key: 'floor_planning', name: 'Shopfloor Station Planning', category: 'Production', description: 'Station bay assignment & auto-progress scheduling' },
+  { key: 'inhouse_inventory', name: 'In-House Store Inventory', category: 'Inventory', description: 'Physical store counts, reorder warnings & stock adjustments' },
+  { key: 'external_jobwork', name: 'External Jobwork / Challans', category: 'Inventory', description: 'Outward jobwork challans & vendor return tracking' },
+  { key: 'purchase_orders', name: 'Purchase Orders', category: 'Procurement', description: 'PO creation for bought-out parts & approval cycle' },
+  { key: 'goods_receipt', name: 'Goods Received (GRN)', category: 'Procurement', description: 'Inward material inspection & store receipt' },
+  { key: 'quality_control', name: 'Quality Control (QC)', category: 'Quality', description: 'QC inspection audits, pass/reject certificates' },
+  { key: 'machine_assembly', name: 'Machine Assembly Tracking', category: 'Assembly', description: 'Sub-assembly progress & completion testing' },
+  { key: 'dispatch', name: 'Dispatch & Gate Pass', category: 'Logistics', description: 'Finished goods dispatch, delivery challans & gate pass' },
+  { key: 'shortage_planning', name: 'Shortage Planning Workbench', category: 'Planning', description: 'Item-wise & WO shortage analysis with max buildable qty' },
+  { key: 'user_management', name: 'User & Security Access Control', category: 'Administration', description: 'User accounts, custom roles & full RBAC matrix' },
+  { key: 'backups', name: 'Database Backup & Restore', category: 'Administration', description: 'Auto-backup cycles, restore points & JSON dumps' }
+];
 
 export interface ModulePermission {
   moduleKey: string;
@@ -16,7 +44,7 @@ export interface CustomRole {
   roleName?: string;
   description?: string;
   departmentId?: string;
-  permissions?: any;
+  permissions?: Record<string, PermissionLevel>;
   isSystemRole?: boolean;
 }
 
@@ -49,6 +77,7 @@ export interface ItemClassDefinition {
 }
 
 export const FIXED_ITEM_CLASSES: ItemClassDefinition[] = [
+  { code: 'FP', name: 'Final Product', description: 'Final Finished Machine / Product' },
   { code: 'AS', name: 'Assembly', description: 'Assembly' },
   { code: 'FAS', name: 'Fabrication Assembly', description: 'Fabrication Assembly' },
   { code: 'LC', name: 'Laser Cut', description: 'Laser Cut' },
@@ -101,6 +130,8 @@ export interface Item {
   mappedVendors?: ItemMappedVendor[];
   specification?: string;
   isDirectJobworkShipment?: boolean;
+  isBlocked?: boolean;
+  blockedAt?: string;
 }
 
 export interface UserActivityLog {

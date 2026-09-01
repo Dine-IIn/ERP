@@ -6,17 +6,17 @@ import { ExportFieldSelectorModal, FieldOption } from '../common/ExportFieldSele
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { ItemMasterListPrintView } from '../printTemplates/ItemMasterPrintTemplates';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
-import { Plus, Edit2, Trash2, Upload, Search, FileSpreadsheet, Settings, Filter, Edit3, ArrowUp, ArrowDown, ArrowUpDown, ArrowLeft, X, Printer, RefreshCw } from 'lucide-react';
+import { Plus, Edit2, Trash2, Upload, Search, FileSpreadsheet, Settings, Filter, Edit3, ArrowUp, ArrowDown, ArrowUpDown, ArrowLeft, X, Printer, RefreshCw, Layers, RotateCcw, ShieldAlert } from 'lucide-react';
 import { Item, ItemCategory, QCTrigger, MaterialProcessType, ItemMappedVendor, FIXED_ITEM_CLASSES } from '../../types/erp';
 import { parseItemsSheet } from '../../utils/csvParser';
 import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
 
-type ItemSortKey = 'itemCode' | 'partCode' | 'oldItemCode' | 'name' | 'category' | 'processType' | 'leadTimeDays' | 'unit' | 'inHouseStock' | 'externalStock' | 'unitPrice';
+type ItemSortKey = 'itemCode' | 'partCode' | 'oldItemCode' | 'name' | 'category' | 'location' | 'processType' | 'leadTimeDays' | 'unit' | 'inHouseStock' | 'externalStock' | 'unitPrice';
 
 export const ItemMasterModule: React.FC = () => {
   const { 
-    items, itemCategories, vendors, currentUser, addItem, updateItem, deleteItem, bulkDeleteItems, bulkAddItems, 
-    addItemCategory, updateItemCategory, deleteItemCategory, removeAllOldItemCodes, searchTerm, setSearchTerm 
+    items, itemCategories, vendors, boms, currentUser, addItem, updateItem, deleteItem, recoverItem, bulkDeleteItems, bulkRecoverItems, bulkAddItems, 
+    addItemCategory, updateItemCategory, deleteItemCategory, removeAllOldItemCodes, searchTerm, setSearchTerm, setActiveModule 
   } = useERP();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -82,10 +82,15 @@ export const ItemMasterModule: React.FC = () => {
     }
   };
 
-  const isHistorySearch = searchTerm.trim().startsWith('@');
-  const queryClean = isHistorySearch ? searchTerm.trim().slice(1).toLowerCase() : searchTerm.trim().toLowerCase();
+  const isHistorySearch = searchTerm.trim().startsWith('@') || searchTerm.toLowerCase().includes('@history');
+  const queryClean = searchTerm.replace(/@history/gi, '').replace(/^@/g, '').trim().toLowerCase();
 
   const filteredItems = items.filter(item => {
+    // If not in @ history search, exclude blocked items
+    if (!isHistorySearch && item.isBlocked) {
+      return false;
+    }
+
     const matchesSearch = !queryClean ||
       item.itemCode.toLowerCase().includes(queryClean) ||
       (item.partCode && item.partCode.toLowerCase().includes(queryClean)) ||
@@ -486,10 +491,22 @@ export const ItemMasterModule: React.FC = () => {
               </div>
             </div>
 
-            {/* Stock Levels Row */}
-            <div>
-              <label>Min Required Stock Level</label>
-              <input type="number" required className="input-field" placeholder="e.g. 5" value={formData.minStockQty} onChange={(e) => setFormData({ ...formData, minStockQty: Number(e.target.value) })} />
+            {/* Stock Levels & Store Location Row */}
+            <div className="form-grid-2">
+              <div>
+                <label>Min Required Stock Level</label>
+                <input type="number" required className="input-field" placeholder="e.g. 5" value={formData.minStockQty} onChange={(e) => setFormData({ ...formData, minStockQty: Number(e.target.value) })} />
+              </div>
+              <div>
+                <label style={{ fontWeight: 700 }}>Store Location (Rack / Shelf / Bin)</label>
+                <input 
+                  type="text" 
+                  className="input-field" 
+                  placeholder="e.g. Rack A-04, Shelf 2, Bin 12" 
+                  value={formData.location || ''} 
+                  onChange={(e) => setFormData({ ...formData, location: e.target.value })} 
+                />
+              </div>
             </div>
 
             {/* Dynamic Purchasing & Pricing Row */}
@@ -501,7 +518,7 @@ export const ItemMasterModule: React.FC = () => {
                     <input type="number" required className="input-field" value={formData.minOrderQty} onChange={(e) => setFormData({ ...formData, minOrderQty: Number(e.target.value) })} />
                   </div>
                 )}
-                {['Brought out', 'Job work', 'Job work + Brought out'].includes(formData.processType) && (
+                {['Brought out', 'Job work + Brought out'].includes(formData.processType) && (
                   <div>
                     <label>GRN Receiving Allowance %</label>
                     <input type="number" min="0" max="100" className="input-field" placeholder="e.g. 5 (+5% extra)" value={formData.grnAllowancePercent} onChange={(e) => setFormData({ ...formData, grnAllowancePercent: Number(e.target.value) })} />
@@ -633,6 +650,11 @@ export const ItemMasterModule: React.FC = () => {
                       Class {sortColumn === 'category' ? (sortDirection === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
                     </div>
                   </th>
+                  <th onClick={() => handleSortColumnClick('location')} style={{ cursor: 'pointer' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      Store Location {sortColumn === 'location' ? (sortDirection === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
+                    </div>
+                  </th>
                   <th onClick={() => handleSortColumnClick('processType')} style={{ cursor: 'pointer' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                       Process Source {sortColumn === 'processType' ? (sortDirection === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
@@ -672,71 +694,115 @@ export const ItemMasterModule: React.FC = () => {
                   const isLow = item.inHouseStock <= (item.minStockQty || 5);
                   const classObj = FIXED_ITEM_CLASSES.find(c => c.code === item.category);
 
-                  return (
-                    <tr 
-                      key={item.id} 
-                      onDoubleClick={() => handleOpenEditModal(item)}
-                      onClick={() => setSelectedIndex(idx)}
-                      style={{ 
-                        backgroundColor: isNavSelected ? 'rgba(59, 130, 246, 0.18)' : 'transparent',
-                        cursor: 'pointer'
-                      }}
-                      title="Double click or press Enter to edit item"
-                    >
-                      <td style={{ fontWeight: 700, color: 'var(--accent-primary)', fontFamily: 'monospace' }}>
-                        {item.itemCode}
-                      </td>
-                      <td style={{ fontFamily: 'monospace', fontSize: '0.82rem' }}>{item.partCode || '-'}</td>
-                      <td style={{ fontFamily: 'monospace', fontSize: '0.82rem', color: item.oldItemCode ? 'var(--warning)' : 'var(--text-muted)' }}>{item.oldItemCode || '-'}</td>
-                      <td>
-                        <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                          {item.name}
-                          {item.isDirectJobworkShipment && (
-                            <span className="badge badge-warning" style={{ fontSize: '0.68rem', padding: '0.15rem 0.4rem' }}>
-                              Direct Jobwork
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td>
-                        <span 
-                          className="badge badge-info" 
-                          style={{ cursor: 'help', fontWeight: 800 }}
-                          title={classObj ? `${classObj.code} - ${classObj.name}: ${classObj.description}` : item.category || 'Class'}
-                        >
-                          {item.category || '-'}
-                        </span>
-                      </td>
-                      <td>
-                        <span className={`badge ${
-                          item.processType === 'Brought out' ? 'badge-primary' :
-                          item.processType === 'In-house' ? 'badge-success' :
-                          item.processType === 'Job work' ? 'badge-warning' : 'badge-neutral'
-                        }`}>
-                          {item.processType || '-'}
-                        </span>
-                      </td>
-                      <td style={{ fontSize: '0.82rem', fontWeight: 600 }}>{item.leadTimeDays || 10} Days</td>
-                      <td>{item.unit}</td>
-                      <td style={{ fontWeight: 800, color: isLow ? 'var(--danger)' : 'var(--success)' }}>
-                        {item.inHouseStock} {item.unit}
-                      </td>
-                      <td style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>
-                        {item.externalStock || 0} {item.unit}
-                      </td>
-                      <td style={{ fontWeight: 700 }}>₹{(item.unitPrice || 0).toLocaleString()}</td>
-                      <td onClick={(e) => e.stopPropagation()}>
-                        <div style={{ display: 'flex', gap: '0.35rem' }}>
-                          <button className="btn btn-outline" style={{ padding: '0.25rem 0.45rem' }} onClick={() => handleOpenEditModal(item)}>
-                            <Edit2 size={14} />
-                          </button>
-                          <button className="btn btn-outline" style={{ padding: '0.25rem 0.45rem', color: 'var(--danger)' }} onClick={() => handleDelete(item.id)}>
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
+                    const matchingBOM = boms.find(b => 
+                      b.machineModel?.toLowerCase() === item.name.toLowerCase() || 
+                      b.bomCode?.toLowerCase() === item.itemCode.toLowerCase()
+                    );
+
+                    return (
+                      <tr 
+                        key={item.id} 
+                        onDoubleClick={() => handleOpenEditModal(item)}
+                        onClick={() => setSelectedIndex(idx)}
+                        style={{ 
+                          backgroundColor: isNavSelected 
+                            ? 'rgba(59, 130, 246, 0.18)' 
+                            : item.isBlocked 
+                              ? 'rgba(239, 68, 68, 0.08)' 
+                              : 'transparent',
+                          cursor: 'pointer',
+                          opacity: item.isBlocked ? 0.85 : 1
+                        }}
+                        title="Double click or press Enter to edit item"
+                      >
+                        <td style={{ fontWeight: 700, color: 'var(--accent-primary)', fontFamily: 'monospace' }}>
+                          {item.itemCode}
+                        </td>
+                        <td style={{ fontFamily: 'monospace', fontSize: '0.82rem' }}>{item.partCode || '-'}</td>
+                        <td style={{ fontFamily: 'monospace', fontSize: '0.82rem', color: item.oldItemCode ? 'var(--warning)' : 'var(--text-muted)' }}>{item.oldItemCode || '-'}</td>
+                        <td>
+                          <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                            {item.name}
+                            {item.isBlocked && (
+                              <span className="badge badge-danger" style={{ fontSize: '0.68rem', padding: '0.15rem 0.4rem' }}>
+                                🚫 BLOCKED / HISTORY
+                              </span>
+                            )}
+                            {item.isDirectJobworkShipment && (
+                              <span className="badge badge-warning" style={{ fontSize: '0.68rem', padding: '0.15rem 0.4rem' }}>
+                                Direct Jobwork
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td>
+                          <span 
+                            className="badge badge-info" 
+                            style={{ cursor: 'help', fontWeight: 800 }}
+                            title={classObj ? `${classObj.code} - ${classObj.name}: ${classObj.description}` : item.category || 'Class'}
+                          >
+                            {item.category || '-'}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                          {item.location || '-'}
+                        </td>
+                        <td>
+                          <span className={`badge ${
+                            item.processType === 'Brought out' ? 'badge-primary' :
+                            item.processType === 'In-house' ? 'badge-success' :
+                            item.processType === 'Job work' ? 'badge-warning' : 'badge-neutral'
+                          }`}>
+                            {item.processType || '-'}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: '0.82rem', fontWeight: 600 }}>{item.leadTimeDays || 10} Days</td>
+                        <td>{item.unit}</td>
+                        <td style={{ fontWeight: 800, color: isLow ? 'var(--danger)' : 'var(--success)' }}>
+                          {item.inHouseStock} {item.unit}
+                        </td>
+                        <td style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>
+                          {item.externalStock || 0} {item.unit}
+                        </td>
+                        <td style={{ fontWeight: 700 }}>₹{(item.unitPrice || 0).toLocaleString()}</td>
+                        <td onClick={(e) => e.stopPropagation()}>
+                          <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                            {matchingBOM && (
+                              <button 
+                                className="btn btn-outline" 
+                                style={{ padding: '0.25rem 0.45rem', color: '#2563eb', borderColor: '#2563eb' }} 
+                                title={`Open Bill of Materials (BOM) for ${item.name}`}
+                                onClick={() => setActiveModule('bom-master')}
+                              >
+                                <Layers size={13} />
+                              </button>
+                            )}
+                            <button className="btn btn-outline" style={{ padding: '0.25rem 0.45rem' }} title="Edit Item" onClick={() => handleOpenEditModal(item)}>
+                              <Edit2 size={13} />
+                            </button>
+                            {item.isBlocked ? (
+                              <button 
+                                className="btn btn-outline" 
+                                style={{ padding: '0.25rem 0.45rem', color: 'var(--success)', borderColor: 'var(--success)' }} 
+                                title="Recover / Restore this item to active inventory"
+                                onClick={() => recoverItem(item.id)}
+                              >
+                                <RotateCcw size={13} />
+                              </button>
+                            ) : (
+                              <button 
+                                className="btn btn-outline" 
+                                style={{ padding: '0.25rem 0.45rem', color: 'var(--danger)' }} 
+                                title="Move to Blocked / History (Soft-Delete)"
+                                onClick={() => handleDelete(item.id)}
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
                 })}
               </tbody>
             </table>

@@ -3,7 +3,7 @@ import {
   User, Item, Customer, Vendor, JobworkChallan, 
   PurchaseOrder, GoodsReceivedNotice, WorkOrder, 
   QCInspection, MachineAssembly, BOM, SalesOrder, Role, Department, CustomRole,
-  JobCard, FloorStation, FinishedGoodUnit, DispatchRecord, UserActivityLog, BackupRecord
+  JobCard, FloorStation, FinishedGoodUnit, DispatchRecord, UserActivityLog, BackupRecord, RBAC_FEATURES 
 } from '../types/erp';
 import { 
   INITIAL_USERS, INITIAL_CUSTOMERS, INITIAL_VENDORS, INITIAL_ITEM_CATEGORIES, INITIAL_VENDOR_CATEGORIES, INITIAL_ITEMS, 
@@ -11,6 +11,101 @@ import {
   INITIAL_WORK_ORDERS, INITIAL_QC_INSPECTIONS, INITIAL_ASSEMBLIES, INITIAL_ASSEMBLY_STAGES,
   INITIAL_JOB_CARDS, INITIAL_FLOOR_STATIONS, INITIAL_FINISHED_GOODS, INITIAL_DISPATCH_RECORDS
 } from '../data/initialData';
+
+export const DEFAULT_UNIFIED_ROLES: CustomRole[] = [
+  {
+    id: 'role-admin',
+    name: 'Admin',
+    roleName: 'Admin',
+    description: 'System Administrator with complete access across all modules',
+    isSystemRole: false,
+    permissions: RBAC_FEATURES.reduce((acc, f) => ({ ...acc, [f.key]: 'FULL_ACCESS' }), {})
+  },
+  {
+    id: 'role-prod-mgr',
+    name: 'Production Manager',
+    roleName: 'Production Manager',
+    description: 'Production Lead managing Work Orders, Job Cards, Assembly & Floor Planning',
+    departmentId: 'dept-1',
+    isSystemRole: false,
+    permissions: {
+      item_master: 'VIEW',
+      customer_master: 'VIEW',
+      vendor_master: 'VIEW',
+      bom_master: 'FULL_ACCESS',
+      sales_orders: 'VIEW',
+      work_orders: 'FULL_ACCESS',
+      job_cards: 'FULL_ACCESS',
+      floor_planning: 'FULL_ACCESS',
+      inhouse_inventory: 'VIEW',
+      external_jobwork: 'EDIT',
+      purchase_orders: 'VIEW',
+      goods_receipt: 'VIEW',
+      quality_control: 'VIEW',
+      machine_assembly: 'FULL_ACCESS',
+      dispatch: 'EDIT',
+      shortage_planning: 'FULL_ACCESS',
+      user_management: 'NO_ACCESS',
+      backups: 'NO_ACCESS'
+    }
+  },
+  {
+    id: 'role-store-mgr',
+    name: 'Store Manager',
+    roleName: 'Store Manager',
+    description: 'Store Manager managing In-House Inventory, GRN Receipts, Purchase Orders & Jobwork',
+    departmentId: 'dept-2',
+    isSystemRole: false,
+    permissions: {
+      item_master: 'EDIT',
+      customer_master: 'VIEW',
+      vendor_master: 'EDIT',
+      bom_master: 'VIEW',
+      sales_orders: 'VIEW',
+      work_orders: 'VIEW',
+      job_cards: 'VIEW',
+      floor_planning: 'VIEW',
+      inhouse_inventory: 'FULL_ACCESS',
+      external_jobwork: 'FULL_ACCESS',
+      purchase_orders: 'FULL_ACCESS',
+      goods_receipt: 'FULL_ACCESS',
+      quality_control: 'VIEW',
+      machine_assembly: 'VIEW',
+      dispatch: 'FULL_ACCESS',
+      shortage_planning: 'FULL_ACCESS',
+      user_management: 'NO_ACCESS',
+      backups: 'NO_ACCESS'
+    }
+  },
+  {
+    id: 'role-qc-officer',
+    name: 'QC Officer',
+    roleName: 'QC Officer',
+    description: 'Quality Control Officer handling inward inspection, stage testing & audit certificates',
+    departmentId: 'dept-3',
+    isSystemRole: false,
+    permissions: {
+      item_master: 'VIEW',
+      customer_master: 'VIEW',
+      vendor_master: 'VIEW',
+      bom_master: 'VIEW',
+      sales_orders: 'VIEW',
+      work_orders: 'VIEW',
+      job_cards: 'VIEW',
+      floor_planning: 'VIEW',
+      inhouse_inventory: 'VIEW',
+      external_jobwork: 'VIEW',
+      purchase_orders: 'VIEW',
+      goods_receipt: 'EDIT',
+      quality_control: 'FULL_ACCESS',
+      machine_assembly: 'EDIT',
+      dispatch: 'VIEW',
+      shortage_planning: 'VIEW',
+      user_management: 'NO_ACCESS',
+      backups: 'NO_ACCESS'
+    }
+  }
+];
 
 export interface BackupSettings {
   cycleValue: number;
@@ -71,8 +166,11 @@ interface ERPContextType {
   addItem: (item: Omit<Item, 'id'>) => void;
   updateItem: (item: Item) => void;
   deleteItem: (id: string) => void;
+  recoverItem: (id: string) => void;
   bulkAddItems: (itemsList: Omit<Item, 'id'>[]) => void;
   bulkDeleteItems: (ids: string[]) => void;
+  bulkRecoverItems: (ids: string[]) => void;
+  adjustItemStock: (id: string, newInHouseStock: number, reason?: string, location?: string, reorderLevel?: number, unitPrice?: number) => void;
   updateItemCategory: (oldCat: string, newCat: string) => void;
   removeAllOldItemCodes: () => void;
   addItemCategory: (cat: string) => void;
@@ -145,6 +243,7 @@ interface ERPContextType {
   downloadBackup: (id: string) => void;
   restoreBackup: (backupData: any) => { success: boolean; message: string };
   updateBackupSettings: (settings: BackupSettings) => void;
+  resetOperationalData: () => { success: boolean; message: string };
 
   // Operational methods
   addJobworkChallan: (challan: Omit<JobworkChallan, 'id' | 'pendingBalance' | 'status'>) => void;
@@ -207,7 +306,13 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     { id: 'dept-2', code: 'STORE', name: 'Store & Inventory', headName: 'Manish Patel', description: 'Material Storage' },
     { id: 'dept-3', code: 'QC', name: 'Quality Control', headName: 'Vikram Singh', description: 'Inspection & Compliance' }
   ]));
-  const [customRoles, setCustomRoles] = useState<CustomRole[]>(() => getStored('customRoles', []));
+  const [customRoles, setCustomRoles] = useState<CustomRole[]>(() => {
+    const stored = getStored<CustomRole[]>('customRoles', []);
+    if (!stored || stored.length === 0) {
+      return DEFAULT_UNIFIED_ROLES;
+    }
+    return stored;
+  });
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [items, setItems] = useState<Item[]>(() => getStored('items', INITIAL_ITEMS));
   const [itemCategories, setItemCategories] = useState<string[]>(() => getStored('itemCategories', INITIAL_ITEM_CATEGORIES));
@@ -482,8 +587,14 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteItem = (id: string) => {
     const target = items.find(i => i.id === id);
-    setItems(prev => prev.filter(i => i.id !== id));
-    addAuditLog('DELETE_ITEM', 'Item Master', `Deleted item: ${target?.itemCode || id} (${target?.name || ''})`);
+    setItems(prev => prev.map(i => i.id === id ? { ...i, isBlocked: true, blockedAt: new Date().toISOString() } : i));
+    addAuditLog('BLOCK_ITEM', 'Item Master', `Moved item to blocked/history: ${target?.itemCode || id} (${target?.name || ''})`);
+  };
+
+  const recoverItem = (id: string) => {
+    const target = items.find(i => i.id === id);
+    setItems(prev => prev.map(i => i.id === id ? { ...i, isBlocked: false, blockedAt: undefined } : i));
+    addAuditLog('RECOVER_ITEM', 'Item Master', `Restored item from blocked/history: ${target?.itemCode || id} (${target?.name || ''})`);
   };
 
   const bulkAddItems = (itemsList: Omit<Item, 'id'>[]) => {
@@ -497,8 +608,31 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const bulkDeleteItems = (ids: string[]) => {
-    setItems(prev => prev.filter(i => !ids.includes(i.id)));
-    addAuditLog('BULK_DELETE_ITEMS', 'Item Master', `Bulk deleted ${ids.length} items`);
+    setItems(prev => prev.map(i => ids.includes(i.id) ? { ...i, isBlocked: true, blockedAt: new Date().toISOString() } : i));
+    addAuditLog('BULK_BLOCK_ITEMS', 'Item Master', `Moved ${ids.length} items to blocked/history`);
+  };
+
+  const bulkRecoverItems = (ids: string[]) => {
+    setItems(prev => prev.map(i => ids.includes(i.id) ? { ...i, isBlocked: false, blockedAt: undefined } : i));
+    addAuditLog('BULK_RECOVER_ITEMS', 'Item Master', `Restored ${ids.length} items from blocked/history`);
+  };
+
+  const adjustItemStock = (id: string, newInHouseStock: number, reason?: string, location?: string, reorderLevel?: number, unitPrice?: number) => {
+    const target = items.find(i => i.id === id);
+    const oldStock = target?.inHouseStock || 0;
+    setItems(prev => prev.map(i => {
+      if (i.id === id) {
+        return {
+          ...i,
+          inHouseStock: Math.max(0, newInHouseStock),
+          location: location !== undefined ? location : i.location,
+          reorderLevel: reorderLevel !== undefined ? reorderLevel : i.reorderLevel,
+          unitPrice: unitPrice !== undefined ? unitPrice : i.unitPrice
+        };
+      }
+      return i;
+    }));
+    addAuditLog('ADJUST_STOCK', 'In-House Inventory', `Adjusted stock for ${target?.itemCode || id}: ${oldStock} -> ${newInHouseStock} ${target?.unit || 'PCS'} (Reason: ${reason || 'Physical Inventory Count Adjustment'})`);
   };
 
   const updateItemCategory = (oldCat: string, newCat: string) => {
@@ -1093,6 +1227,59 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setBackupSettings(settings);
   };
 
+  const resetOperationalData = (): { success: boolean; message: string } => {
+    try {
+      // 1. Reset all operational / transactional records
+      setSalesOrders([]);
+      setWorkOrders([]);
+      setJobCards([]);
+      setFloorStations(INITIAL_FLOOR_STATIONS);
+      setJobworks([]);
+      setPurchaseOrders([]);
+      setGRNs([]);
+      setQCInspections([]);
+      setAssemblies([]);
+      setFinishedGoods([]);
+      setDispatchRecords([]);
+      setCustomers([]);
+      setVendors([]);
+
+      // 2. Preserve Item Master, BOMs, and Admin users only
+      const preservedAdmins = users.filter(u => 
+        u.role === 'Admin' || 
+        u.isSuperAdmin || 
+        u.username.toLowerCase() === 'admin' || 
+        u.username.toLowerCase() === 'superadmin'
+      );
+      const finalAdmins = preservedAdmins.length > 0 ? preservedAdmins : INITIAL_USERS.filter(u => u.role === 'Admin');
+      setUsers(finalAdmins);
+
+      // 3. Clear stored operational keys in localStorage
+      setStored('salesOrders', []);
+      setStored('workOrders', []);
+      setStored('jobCards', []);
+      setStored('floorStations', INITIAL_FLOOR_STATIONS);
+      setStored('jobworks', []);
+      setStored('purchaseOrders', []);
+      setStored('grns', []);
+      setStored('qcInspections', []);
+      setStored('assemblies', []);
+      setStored('finishedGoods', []);
+      setStored('dispatchRecords', []);
+      setStored('customers', []);
+      setStored('vendors', []);
+      setStored('users', finalAdmins);
+
+      addAuditLog('SYSTEM_RESET', 'System Administration', 'Operational reset executed. Item Master, BOMs, and Admin user accounts preserved.');
+      return { 
+        success: true, 
+        message: 'System Reset Complete: All operational transactions (Orders, Job Cards, POs, Challans, GRNs, Assembly & QC) have been reset. Item Master, BOMs, and Admin accounts are intact.' 
+      };
+    } catch (err: any) {
+      return { success: false, message: `System reset error: ${err?.message || 'Unknown error'}` };
+    }
+  };
+
   // Operational methods
   const addJobworkChallan = (challanData: Omit<JobworkChallan, 'id' | 'pendingBalance' | 'status'>) => {
     const newChallan: JobworkChallan = {
@@ -1296,8 +1483,11 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addItem,
       updateItem,
       deleteItem,
+      recoverItem,
       bulkAddItems,
       bulkDeleteItems,
+      bulkRecoverItems,
+      adjustItemStock,
       updateItemCategory,
       removeAllOldItemCodes,
       addItemCategory,
@@ -1348,6 +1538,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       downloadBackup,
       restoreBackup,
       updateBackupSettings,
+      resetOperationalData,
       addJobworkChallan,
       recordJobworkReturn,
       addPurchaseOrder,

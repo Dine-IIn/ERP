@@ -7,9 +7,11 @@ interface StatCardProps {
   icon: React.ReactNode;
   trend?: string;
   color?: 'blue' | 'green' | 'amber' | 'red' | 'purple';
+  onClick?: () => void;
+  onDoubleClick?: () => void;
 }
 
-export const StatCard: React.FC<StatCardProps> = ({ title, value, subtitle, icon, color = 'blue' }) => {
+export const StatCard: React.FC<StatCardProps> = ({ title, value, subtitle, icon, color = 'blue', onClick, onDoubleClick }) => {
   const getColorStyles = () => {
     switch (color) {
       case 'green': return { bg: 'rgba(16, 185, 129, 0.12)', text: 'var(--success)' };
@@ -21,9 +23,23 @@ export const StatCard: React.FC<StatCardProps> = ({ title, value, subtitle, icon
   };
 
   const style = getColorStyles();
+  const isInteractive = Boolean(onClick || onDoubleClick);
 
   return (
-    <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+    <div 
+      className="card" 
+      onClick={onClick}
+      onDoubleClick={onDoubleClick}
+      title={isInteractive ? `${title} (Double-click or click to open)` : title}
+      style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        gap: '1rem',
+        cursor: isInteractive ? 'pointer' : 'default',
+        userSelect: 'none',
+        transition: 'transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease'
+      }}
+    >
       <div style={{
         width: '48px',
         height: '48px',

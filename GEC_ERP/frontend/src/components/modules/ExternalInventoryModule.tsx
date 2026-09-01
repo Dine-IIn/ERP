@@ -4,8 +4,8 @@ import { Modal } from '../common/Modal';
 import { AutocompleteSelect, AutocompleteOption } from '../common/AutocompleteSelect';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { SingleJobworkPrintView, JobworkListPrintView } from '../printTemplates/JobworkPrintTemplates';
-import { Truck, Plus, ArrowRightLeft, CheckCircle, Search, Printer, FileSpreadsheet, ArrowUp, ArrowDown, ArrowUpDown, RefreshCw } from 'lucide-react';
-import { JobworkChallan } from '../../types/erp';
+import { Truck, Plus, ArrowRightLeft, CheckCircle, Search, Printer, FileSpreadsheet, ArrowUp, ArrowDown, ArrowUpDown, RefreshCw, AlertTriangle } from 'lucide-react';
+import { JobworkChallan, Item } from '../../types/erp';
 import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
 
 type JWSortKey = 'challanNo' | 'vendorName' | 'itemName' | 'processRequired' | 'sentQuantity' | 'receivedQuantity' | 'scrapQuantity' | 'pendingBalance' | 'expectedReturnDate' | 'status';
@@ -97,6 +97,47 @@ export const ExternalInventoryModule: React.FC = () => {
   const [isDirectGRNShip, setIsDirectGRNShip] = useState(false);
   const [selectedGRNId, setSelectedGRNId] = useState('');
   const [selectedGRNItemId, setSelectedGRNItemId] = useState('');
+
+  // Shortage Calculation for Jobwork Items
+  const isJobworkItem = (item: Item) => {
+    const p = (item.processType || (item as any).materialProcessType || '').toLowerCase();
+    return p.includes('job work') || p.includes('jobwork');
+  };
+
+  const getJobworkItemShortage = (item: Item) => {
+    const currentStock = (item.inHouseStock || 0) + (item.externalStock || 0);
+    const minReq = item.minStockQty || item.reorderLevel || 0;
+    const pendingJWQty = jobworks
+      .filter(jw => jw.status !== 'COMPLETED' && jw.status !== 'CANCELLED')
+      .reduce((sum, jw) => {
+        if (jw.itemId === item.id || jw.itemCode === item.itemCode) {
+          return sum + (jw.pendingBalance || 0);
+        }
+        return sum;
+      }, 0);
+    return Math.max(0, minReq - (currentStock + pendingJWQty));
+  };
+
+  const jwShortageItems = items.filter(i => isJobworkItem(i) && !i.isBlocked && getJobworkItemShortage(i) > 0);
+
+  const handleOpenShortageJWModal = (item: Item) => {
+    const shortage = getJobworkItemShortage(item);
+    const preferredVendorId = item.mappedVendors?.[0]?.vendorId || vendors[0]?.id || '';
+    setIssueData({
+      challanNo: `JW-GEC-2026-${String(jobworks.length + 1).padStart(3, '0')}`,
+      vendorId: preferredVendorId,
+      itemId: item.id,
+      sentQuantity: Math.max(1, shortage),
+      processRequired: 'External Machining & Heat Treatment',
+      issueDate: new Date().toISOString().split('T')[0],
+      expectedReturnDate: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+      notes: `Jobwork issued directly from inventory shortage requirement (${shortage} ${item.unit}).`
+    });
+    setIsDirectGRNShip(false);
+    setSelectedGRNId('');
+    setSelectedGRNItemId('');
+    setIsIssueModalOpen(true);
+  };
 
   const handleOpenIssueModal = () => {
     setIssueData({
@@ -241,6 +282,54 @@ export const ExternalInventoryModule: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Shortage Alert Banner */}
+      {jwShortageItems.length > 0 && (
+        <div className="card" style={{ padding: '0.875rem 1.25rem', backgroundColor: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '0.5rem', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <AlertTriangle size={20} color="var(--danger)" />
+              <div>
+                <span style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--danger)' }}>
+                  Jobwork Shortage Alert: {jwShortageItems.length} Item(s) Below Minimum Stock Requirement!
+                </span>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                  Click on any item button below to directly open pre-filled Job Work Challan issue modal.
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+              {jwShortageItems.map(item => {
+                const shortage = getJobworkItemShortage(item);
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="btn"
+                    style={{ 
+                      fontSize: '0.78rem', 
+                      padding: '0.35rem 0.75rem', 
+                      backgroundColor: 'var(--danger)', 
+                      color: '#ffffff', 
+                      fontWeight: 700,
+                      border: 'none',
+                      borderRadius: '0.375rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.35rem'
+                    }}
+                    onClick={() => handleOpenShortageJWModal(item)}
+                  >
+                    {item.itemCode}: Send {shortage} {item.unit}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Summary Stat Pill */}
       <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', gap: '2rem', alignItems: 'center', backgroundColor: 'var(--bg-card)', flexShrink: 0 }}>

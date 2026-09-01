@@ -74,8 +74,15 @@ export const PurchaseOrderModule: React.FC = () => {
     return netShortage;
   };
 
-  // ONLY items with net shortage > 0 can have PO created
-  const shortageItems = items.filter(i => getItemEffectiveShortage(i) > 0);
+  // Helper to test if item is Bought-Out
+  const isBoughtOutItem = (item: Item) => {
+    const p = (item.processType || (item as any).materialProcessType || '').toLowerCase();
+    const cat = (item.category || '').toUpperCase();
+    return p.includes('brought out') || p.includes('bought out') || p.includes('brought_out') || cat === 'BO';
+  };
+
+  // ONLY Bought-Out items with net shortage > 0 can have PO created
+  const shortageItems = items.filter(i => isBoughtOutItem(i) && !i.isBlocked && getItemEffectiveShortage(i) > 0);
 
   // Filter Draft POs
   const draftPOs = purchaseOrders.filter(po => po.status === 'DRAFT');

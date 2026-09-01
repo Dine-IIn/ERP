@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useERP } from '../../context/ERPContext';
-import { User, Role, Department, CustomRole, PermissionLevel, UserActivityLog, BackupRecord } from '../../types/erp';
-import { UserPlus, Shield, Trash2, Key, Lock, UserCheck, Building2, Plus, Edit2, Database, Activity, RefreshCw, Download, HardDrive, ShieldCheck, Search } from 'lucide-react';
+import { User, Role, Department, CustomRole, PermissionLevel, UserActivityLog, BackupRecord, RBAC_FEATURES, RBACFeatureDefinition } from '../../types/erp';
+import { UserPlus, Shield, Trash2, Key, Lock, UserCheck, Building2, Plus, Edit2, Database, Activity, RefreshCw, Download, HardDrive, ShieldCheck, Search, CheckCircle2, XCircle } from 'lucide-react';
 
 export const UserManagementModule: React.FC = () => {
   const { 
     users, currentUser, departments, customRoles, addUser, updateUser, deleteUser, updateUserRole,
     addDepartment, updateDepartment, deleteDepartment, addRole, updateRole, deleteRole,
-    auditLogs, addAuditLog, backups, createBackup, deleteBackup, downloadBackup, restoreBackup
+    auditLogs, addAuditLog, backups, createBackup, deleteBackup, downloadBackup, restoreBackup, resetOperationalData
   } = useERP();
 
   const [activeTab, setActiveTab] = useState<'USERS' | 'DEPARTMENTS' | 'ROLES' | 'AUDIT_LOGS' | 'BACKUPS'>('USERS');
@@ -30,25 +30,17 @@ export const UserManagementModule: React.FC = () => {
   const [editingRole, setEditingRole] = useState<CustomRole | null>(null);
   const [roleName, setRoleName] = useState('');
   const [roleDeptId, setRoleDeptId] = useState('');
-  const [rolePermissions, setRolePermissions] = useState<Record<string, PermissionLevel>>({
-    'item_master': 'VIEW_ACCESS',
-    'item_master.grn_allowance': 'VIEW_ACCESS',
-    'item_master.mapped_vendors': 'VIEW_ACCESS',
-    'item_master.direct_jobwork': 'VIEW_ACCESS',
-    'purchase_orders': 'VIEW_ACCESS',
-    'purchase_orders.approval': 'NO_ACCESS',
-    'work_orders': 'VIEW_ACCESS',
-    'inhouse_inventory': 'VIEW_ACCESS',
-    'external_jobwork': 'VIEW_ACCESS',
-    'goods_receipt': 'VIEW_ACCESS',
-    'quality_control': 'VIEW_ACCESS',
-    'machine_assembly': 'VIEW_ACCESS',
-    'bom_master': 'VIEW_ACCESS',
-    'customer_master': 'VIEW_ACCESS',
-    'vendor_master': 'VIEW_ACCESS',
-    'user_management': 'NO_ACCESS',
-    'backups': 'NO_ACCESS'
-  });
+
+  // Default permissions: Map all RBAC_FEATURES to 'VIEW'
+  const getDefaultPermissions = (level: PermissionLevel = 'VIEW'): Record<string, PermissionLevel> => {
+    const perms: Record<string, PermissionLevel> = {};
+    RBAC_FEATURES.forEach(f => {
+      perms[f.key] = level;
+    });
+    return perms;
+  };
+
+  const [rolePermissions, setRolePermissions] = useState<Record<string, PermissionLevel>>(getDefaultPermissions('VIEW'));
 
   const [auditSearch, setAuditSearch] = useState('');
   const [selectedAuditUser, setSelectedAuditUser] = useState<string>('ALL');
@@ -373,12 +365,35 @@ export const UserManagementModule: React.FC = () => {
                 <input type="email" placeholder="e.g. jigar@gecmachines.com" className="input-field" value={email} onChange={(e) => setEmail(e.target.value)} />
               </div>
               <div>
-                <label style={{ fontSize: '0.78rem', fontWeight: 600 }}>System Role</label>
-                <select className="input-field" value={role} onChange={(e) => setRole(e.target.value as Role)}>
-                  <option value="Admin">System Administrator</option>
-                  <option value="Production Manager">Production Manager</option>
-                  <option value="Store Manager">Store & Inventory Manager</option>
-                  <option value="QC Officer">QC / Quality Engineer</option>
+                <label style={{ fontSize: '0.78rem', fontWeight: 600 }}>Assigned Role *</label>
+                <select 
+                  className="input-field" 
+                  value={role} 
+                  onChange={(e) => {
+                    const chosenRoleName = e.target.value;
+                    setRole(chosenRoleName);
+                    const matchingRole = customRoles.find(r => (r.name || r.roleName) === chosenRoleName);
+                    if (matchingRole) {
+                      setSelectedRoleId(matchingRole.id);
+                      if (matchingRole.departmentId) {
+                        setSelectedDeptId(matchingRole.departmentId);
+                      }
+                    }
+                  }}
+                >
+                  {customRoles.map(r => (
+                    <option key={r.id} value={r.name || r.roleName}>
+                      {r.name || r.roleName}
+                    </option>
+                  ))}
+                  {customRoles.length === 0 && (
+                    <>
+                      <option value="Admin">Admin</option>
+                      <option value="Production Manager">Production Manager</option>
+                      <option value="Store Manager">Store Manager</option>
+                      <option value="QC Officer">QC Officer</option>
+                    </>
+                  )}
                 </select>
               </div>
               <div>
@@ -538,17 +553,72 @@ export const UserManagementModule: React.FC = () => {
       {activeTab === 'ROLES' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           <form onSubmit={handleSaveRoleSubmit} className="card" style={{ padding: '1.25rem', backgroundColor: 'var(--bg-card)' }}>
-            <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <Key size={16} /> {editingRole ? `Edit Role: ${editingRole.name}` : 'Create Custom RBAC Role Matrix'}
-            </h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-primary)' }}>
+                <ShieldCheck size={18} color="var(--accent-primary)" />
+                {editingRole ? `Edit Role: ${editingRole.name || editingRole.roleName}` : 'Create New Role & Permission Matrix'}
+              </h3>
+              
+              {/* Quick Bulk Presets */}
+              <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>Quick Presets:</span>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  style={{ padding: '0.2rem 0.5rem', fontSize: '0.72rem', color: '#059669', borderColor: '#059669' }}
+                  onClick={() => setRolePermissions(getDefaultPermissions('FULL_ACCESS'))}
+                >
+                  All Full Access
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  style={{ padding: '0.2rem 0.5rem', fontSize: '0.72rem', color: '#d97706', borderColor: '#d97706' }}
+                  onClick={() => setRolePermissions(getDefaultPermissions('EDIT'))}
+                >
+                  All Edit
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  style={{ padding: '0.2rem 0.5rem', fontSize: '0.72rem', color: '#2563eb', borderColor: '#2563eb' }}
+                  onClick={() => setRolePermissions(getDefaultPermissions('CREATE'))}
+                >
+                  All Create
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  style={{ padding: '0.2rem 0.5rem', fontSize: '0.72rem', color: '#7c3aed', borderColor: '#7c3aed' }}
+                  onClick={() => setRolePermissions(getDefaultPermissions('VIEW'))}
+                >
+                  All View Only
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  style={{ padding: '0.2rem 0.5rem', fontSize: '0.72rem', color: 'var(--danger)' }}
+                  onClick={() => setRolePermissions(getDefaultPermissions('NO_ACCESS'))}
+                >
+                  Reset (No Access)
+                </button>
+              </div>
+            </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 2fr', gap: '1rem', marginBottom: '1.25rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
               <div>
-                <label style={{ fontSize: '0.78rem', fontWeight: 600 }}>Role Name *</label>
-                <input type="text" required placeholder="e.g. Junior Production Supervisor" className="input-field" value={roleName} onChange={(e) => setRoleName(e.target.value)} />
+                <label style={{ fontSize: '0.8rem', fontWeight: 700 }}>Role Name *</label>
+                <input 
+                  type="text" 
+                  required 
+                  placeholder="e.g. Senior Production Supervisor, Store Officer, Quality Inspector" 
+                  className="input-field" 
+                  value={roleName} 
+                  onChange={(e) => setRoleName(e.target.value)} 
+                />
               </div>
               <div>
-                <label style={{ fontSize: '0.78rem', fontWeight: 600 }}>Department Association</label>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700 }}>Department Scope</label>
                 <select className="input-field" value={roleDeptId} onChange={(e) => setRoleDeptId(e.target.value)}>
                   <option value="">Global (All Departments)</option>
                   {departments.map(d => (
@@ -558,27 +628,142 @@ export const UserManagementModule: React.FC = () => {
               </div>
             </div>
 
-            <h4 style={{ fontSize: '0.85rem', fontWeight: 700, margin: '1rem 0 0.5rem 0' }}>Module Permissions & Granular Access Control</h4>
+            <div style={{ marginBottom: '0.5rem' }}>
+              <h4 style={{ fontSize: '0.9rem', fontWeight: 800, margin: '0 0 0.25rem 0' }}>Feature Access Permission Matrix</h4>
+              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: 0 }}>
+                Configure access levels for each module. Permissions dictate ability to create new records, edit existing records, view data, or delete/block items.
+              </p>
+            </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '0.75rem', maxHeight: '360px', overflowY: 'auto', padding: '0.5rem', border: '1px solid var(--border-color)', borderRadius: '0.375rem', backgroundColor: 'var(--bg-tertiary)' }}>
-              {permissionModulesList.map(mod => {
-                const currentLevel = rolePermissions[mod.key] || 'NO_ACCESS';
-                return (
-                  <div key={mod.key} style={{ padding: '0.6rem', backgroundColor: 'var(--bg-card)', borderRadius: '0.375rem', border: '1px solid var(--border-color)' }}>
-                    <div style={{ fontSize: '0.82rem', fontWeight: 600, marginBottom: '0.4rem', color: 'var(--text-primary)' }}>{mod.label}</div>
-                    <div style={{ display: 'flex', gap: '0.4rem' }}>
-                      <button type="button" style={{ padding: '0.2rem 0.5rem', fontSize: '0.72rem', flex: 1 }} className={`btn ${currentLevel === 'FULL_ACCESS' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setRolePermissions({ ...rolePermissions, [mod.key]: 'FULL_ACCESS' })}>Full Access</button>
-                      <button type="button" style={{ padding: '0.2rem 0.5rem', fontSize: '0.72rem', flex: 1 }} className={`btn ${currentLevel === 'VIEW_ACCESS' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setRolePermissions({ ...rolePermissions, [mod.key]: 'VIEW_ACCESS' })}>View Only</button>
-                      <button type="button" style={{ padding: '0.2rem 0.5rem', fontSize: '0.72rem', flex: 1 }} className={`btn ${currentLevel === 'NO_ACCESS' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setRolePermissions({ ...rolePermissions, [mod.key]: 'NO_ACCESS' })}>No Access</button>
-                    </div>
-                  </div>
-                );
-              })}
+            {/* RBAC Matrix Table */}
+            <div className="table-container" style={{ maxHeight: '420px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '0.5rem' }}>
+              <table>
+                <thead>
+                  <tr style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                    <th style={{ minWidth: '220px' }}>Feature / Module</th>
+                    <th style={{ width: '130px', textAlign: 'center', color: '#059669' }}>
+                      🟢 Full Access
+                      <div style={{ fontSize: '0.68rem', fontWeight: 500, color: 'var(--text-muted)' }}>Edit, Create, Delete, View</div>
+                    </th>
+                    <th style={{ width: '125px', textAlign: 'center', color: '#d97706' }}>
+                      🟡 Edit
+                      <div style={{ fontSize: '0.68rem', fontWeight: 500, color: 'var(--text-muted)' }}>Edit & View Only</div>
+                    </th>
+                    <th style={{ width: '125px', textAlign: 'center', color: '#2563eb' }}>
+                      🔵 Create
+                      <div style={{ fontSize: '0.68rem', fontWeight: 500, color: 'var(--text-muted)' }}>Create & View Only</div>
+                    </th>
+                    <th style={{ width: '120px', textAlign: 'center', color: '#7c3aed' }}>
+                      🟣 View
+                      <div style={{ fontSize: '0.68rem', fontWeight: 500, color: 'var(--text-muted)' }}>View Only (Read)</div>
+                    </th>
+                    <th style={{ width: '110px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                      ⚪ No Access
+                      <div style={{ fontSize: '0.68rem', fontWeight: 500, color: 'var(--text-muted)' }}>Hidden / Blocked</div>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {RBAC_FEATURES.map(feature => {
+                    const currentLevel = rolePermissions[feature.key] || 'NO_ACCESS';
+
+                    return (
+                      <tr key={feature.key}>
+                        <td>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                              <strong style={{ fontSize: '0.85rem' }}>{feature.name}</strong>
+                              <span className="badge badge-neutral" style={{ fontSize: '0.68rem' }}>{feature.category}</span>
+                            </div>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{feature.description}</div>
+                          </div>
+                        </td>
+
+                        {/* Full Access */}
+                        <td style={{ textAlign: 'center' }}>
+                          <label style={{ display: 'flex', justifyContent: 'center', cursor: 'pointer', margin: 0, padding: '0.4rem' }}>
+                            <input
+                              type="radio"
+                              name={`rbac_${feature.key}`}
+                              checked={currentLevel === 'FULL_ACCESS'}
+                              onChange={() => handlePermissionChange(feature.key, 'FULL_ACCESS')}
+                              style={{ width: '17px', height: '17px', cursor: 'pointer', accentColor: '#059669' }}
+                            />
+                          </label>
+                        </td>
+
+                        {/* Edit */}
+                        <td style={{ textAlign: 'center' }}>
+                          <label style={{ display: 'flex', justifyContent: 'center', cursor: 'pointer', margin: 0, padding: '0.4rem' }}>
+                            <input
+                              type="radio"
+                              name={`rbac_${feature.key}`}
+                              checked={currentLevel === 'EDIT'}
+                              onChange={() => handlePermissionChange(feature.key, 'EDIT')}
+                              style={{ width: '17px', height: '17px', cursor: 'pointer', accentColor: '#d97706' }}
+                            />
+                          </label>
+                        </td>
+
+                        {/* Create */}
+                        <td style={{ textAlign: 'center' }}>
+                          <label style={{ display: 'flex', justifyContent: 'center', cursor: 'pointer', margin: 0, padding: '0.4rem' }}>
+                            <input
+                              type="radio"
+                              name={`rbac_${feature.key}`}
+                              checked={currentLevel === 'CREATE'}
+                              onChange={() => handlePermissionChange(feature.key, 'CREATE')}
+                              style={{ width: '17px', height: '17px', cursor: 'pointer', accentColor: '#2563eb' }}
+                            />
+                          </label>
+                        </td>
+
+                        {/* View */}
+                        <td style={{ textAlign: 'center' }}>
+                          <label style={{ display: 'flex', justifyContent: 'center', cursor: 'pointer', margin: 0, padding: '0.4rem' }}>
+                            <input
+                              type="radio"
+                              name={`rbac_${feature.key}`}
+                              checked={currentLevel === 'VIEW'}
+                              onChange={() => handlePermissionChange(feature.key, 'VIEW')}
+                              style={{ width: '17px', height: '17px', cursor: 'pointer', accentColor: '#7c3aed' }}
+                            />
+                          </label>
+                        </td>
+
+                        {/* No Access */}
+                        <td style={{ textAlign: 'center' }}>
+                          <label style={{ display: 'flex', justifyContent: 'center', cursor: 'pointer', margin: 0, padding: '0.4rem' }}>
+                            <input
+                              type="radio"
+                              name={`rbac_${feature.key}`}
+                              checked={currentLevel === 'NO_ACCESS'}
+                              onChange={() => handlePermissionChange(feature.key, 'NO_ACCESS')}
+                              style={{ width: '17px', height: '17px', cursor: 'pointer', accentColor: '#6b7280' }}
+                            />
+                          </label>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1.25rem' }}>
               {editingRole && (
-                <button type="button" className="btn btn-secondary" onClick={() => { setEditingRole(null); setRoleName(''); }}>Cancel Edit</button>
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  onClick={() => { 
+                    setEditingRole(null); 
+                    setRoleName(''); 
+                    setRoleDeptId('');
+                    setRolePermissions(getDefaultPermissions('VIEW'));
+                  }}
+                >
+                  Cancel Edit
+                </button>
               )}
               <button type="submit" className="btn btn-primary">
                 {editingRole ? 'Update Role Matrix' : 'Save Role Matrix'}
@@ -586,35 +771,61 @@ export const UserManagementModule: React.FC = () => {
             </div>
           </form>
 
+          {/* Configured Roles List Table */}
           <div className="table-container">
             <table>
               <thead>
                 <tr>
                   <th>Role Name</th>
-                  <th>Department</th>
-                  <th>Permissions Count</th>
-                  <th>Actions</th>
+                  <th>Department Scope</th>
+                  <th>Configured Permissions</th>
+                  <th style={{ textAlign: 'center' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {customRoles.map(r => {
                   const deptObj = departments.find(d => d.id === r.departmentId);
-                  const permCount = Object.keys(r.permissions || {}).length;
+                  const perms = r.permissions || {};
+                  const fullCount = Object.values(perms).filter(p => p === 'FULL_ACCESS').length;
+                  const editCount = Object.values(perms).filter(p => p === 'EDIT').length;
+                  const createCount = Object.values(perms).filter(p => p === 'CREATE').length;
+                  const viewCount = Object.values(perms).filter(p => p === 'VIEW').length;
 
                   return (
                     <tr key={r.id}>
                       <td style={{ fontWeight: 700 }}>{r.name}</td>
                       <td style={{ fontSize: '0.85rem' }}>{deptObj ? `${deptObj.name} (${deptObj.code})` : 'Global'}</td>
-                      <td style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                        {permCount} feature rules configured
-                      </td>
                       <td>
-                        <div style={{ display: 'flex', gap: '0.4rem' }}>
-                          <button className="btn btn-outline" style={{ padding: '0.25rem 0.5rem' }} onClick={() => { setEditingRole(r); setRoleName(r.name || ''); setRoleDeptId(r.departmentId || ''); setRolePermissions(r.permissions || {}); }}>
-                            <Edit2 size={14} /> Edit Matrix
+                        <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                          {fullCount > 0 && <span className="badge badge-success" style={{ fontSize: '0.72rem' }}>{fullCount} Full Access</span>}
+                          {editCount > 0 && <span className="badge badge-warning" style={{ fontSize: '0.72rem' }}>{editCount} Edit</span>}
+                          {createCount > 0 && <span className="badge badge-info" style={{ fontSize: '0.72rem' }}>{createCount} Create</span>}
+                          {viewCount > 0 && <span className="badge badge-neutral" style={{ fontSize: '0.72rem' }}>{viewCount} View</span>}
+                        </div>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>
+                          <button 
+                            className="btn btn-outline" 
+                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.78rem' }} 
+                            onClick={() => { 
+                              setEditingRole(r); 
+                              setRoleName(r.name || ''); 
+                              setRoleDeptId(r.departmentId || ''); 
+                              setRolePermissions({
+                                ...getDefaultPermissions('NO_ACCESS'),
+                                ...(r.permissions || {})
+                              }); 
+                            }}
+                          >
+                            <Edit2 size={13} /> Edit Matrix
                           </button>
-                          <button className="btn btn-outline" style={{ padding: '0.25rem 0.5rem', color: 'var(--danger)' }} onClick={() => deleteRole(r.id)}>
-                            <Trash2 size={14} /> Delete
+                          <button 
+                            className="btn btn-outline" 
+                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.78rem', color: 'var(--danger)' }} 
+                            onClick={() => deleteRole(r.id)}
+                          >
+                            <Trash2 size={13} /> Delete
                           </button>
                         </div>
                       </td>
@@ -1062,15 +1273,54 @@ export const UserManagementModule: React.FC = () => {
             </table>
           </div>
 
+          {/* Operational Data Reset (Keep Item Master, BOMs & Admin Accounts) */}
+          <div className="card" style={{ padding: '1.25rem', backgroundColor: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.35)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginTop: '1rem' }}>
+            <div style={{ maxWidth: '750px' }}>
+              <h4 style={{ fontSize: '0.98rem', fontWeight: 800, margin: 0, color: '#d97706', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <RefreshCw size={17} />
+                Reset Operational Data (Keep Item Master, BOM Master & Admin Accounts)
+              </h4>
+              <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: '0.35rem 0 0 0', lineHeight: 1.45 }}>
+                Clears all transactional operations (<strong>Sales Orders, Work Orders, Job Cards, Purchase Orders, Goods Receipt Notices, Jobwork Challans, QC Inspections, Machine Assembly Line, and Finished Goods/Dispatches</strong>).<br />
+                <strong style={{ color: 'var(--success)' }}>STRICTLY PRESERVED:</strong> Item Master catalog, Multi-Level BOMs, and Admin user accounts are preserved.
+              </p>
+            </div>
+
+            <button 
+              className="btn btn-primary" 
+              style={{ backgroundColor: '#d97706', borderColor: '#d97706', color: '#ffffff', fontWeight: 700, padding: '0.55rem 1.25rem' }}
+              onClick={() => {
+                if (!currentUser || currentUser.role !== 'Admin') {
+                  alert('Only System Administrators have authorization to perform operational reset.');
+                  return;
+                }
+                const confirmed = window.confirm(
+                  '⚠️ CONFIRM OPERATIONAL RESET:\n\n' +
+                  'Are you sure you want to reset all operational data?\n\n' +
+                  '• CLEARED: Sales Orders, Work Orders, Job Cards, POs, GRNs, Jobwork Challans, QC, Assembly & Dispatches\n' +
+                  '• PRESERVED: Item Master, BOMs, Departments & Admin Users\n\n' +
+                  'Click OK to proceed with the reset.'
+                );
+                if (confirmed) {
+                  const res = resetOperationalData();
+                  alert(res.message);
+                  setMessage({ text: res.message, type: 'success' });
+                }
+              }}
+            >
+              <RefreshCw size={15} /> Reset Operational Data
+            </button>
+          </div>
+
           {/* Clean Database / Wipe Demo Data Banner */}
-          <div className="card" style={{ padding: '1.25rem', backgroundColor: 'rgba(239, 68, 68, 0.06)', border: '1px solid rgba(239, 68, 68, 0.25)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginTop: '1rem' }}>
+          <div className="card" style={{ padding: '1.25rem', backgroundColor: 'rgba(239, 68, 68, 0.06)', border: '1px solid rgba(239, 68, 68, 0.25)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginTop: '0.75rem' }}>
             <div>
               <h4 style={{ fontSize: '0.95rem', fontWeight: 800, margin: 0, color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                 <Trash2 size={16} />
-                Fresh Database Initialization (Clean Start - Zero Demo Records)
+                Full Database Wipe (Clean Start - Zero Records)
               </h4>
               <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0' }}>
-                Permanently wipes all demo records (Items, Customers, Vendors, BOMs, SOs, WOs, POs, GRNs) and leaves only 1 Admin user (<strong>admin</strong> / <strong>password</strong>) for fresh enterprise production data entry.
+                Permanently wipes all records including items and BOMs, leaving only 1 default Admin user (<strong>admin</strong> / <strong>password</strong>).
               </p>
             </div>
 
@@ -1078,7 +1328,7 @@ export const UserManagementModule: React.FC = () => {
               className="btn btn-outline" 
               style={{ color: 'var(--danger)', borderColor: 'var(--danger)', fontWeight: 700, padding: '0.45rem 1rem' }}
               onClick={() => {
-                if (window.confirm('⚠️ Super Admin Warning: Are you sure you want to wipe all demo records and start fresh with a clean database and only 1 admin user?')) {
+                if (window.confirm('⚠️ Super Admin Warning: Are you sure you want to wipe all records and start completely fresh?')) {
                   Object.keys(localStorage).forEach(key => {
                     if (key.startsWith('gec_erp_')) {
                       localStorage.removeItem(key);
@@ -1089,7 +1339,7 @@ export const UserManagementModule: React.FC = () => {
                 }
               }}
             >
-              Wipe Demo Data & Start Fresh
+              Wipe Everything & Start Fresh
             </button>
           </div>
         </div>

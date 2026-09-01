@@ -5,7 +5,7 @@ import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { SingleJobCardPrintView, JobCardListPrintView } from '../printTemplates/JobCardPrintTemplates';
 import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
 import { 
-  ClipboardList, Plus, CheckCircle, Search, ArrowUp, ArrowDown, ArrowUpDown, Package, Printer, RefreshCw 
+  ClipboardList, Plus, CheckCircle, Search, ArrowUp, ArrowDown, ArrowUpDown, Package, Printer, RefreshCw, AlertTriangle 
 } from 'lucide-react';
 import { JobCard, Item } from '../../types/erp';
 
@@ -35,6 +35,39 @@ export const JobCardModule: React.FC = () => {
   const [targetQuantity, setTargetQuantity] = useState(1);
   const [assignedOperator, setAssignedOperator] = useState('');
   const [remarks, setRemarks] = useState('');
+
+  // Shortage Calculation for In-House manufactured components
+  const isInHouseItem = (item: Item) => {
+    const p = (item.processType || (item as any).materialProcessType || '').toLowerCase();
+    const cat = (item.category || '').toUpperCase();
+    return p.includes('in-house') || p.includes('inhouse') || cat === 'MF' || cat === 'AS' || cat === 'FAS' || cat === 'SA' || cat === 'LC';
+  };
+
+  const getInHouseItemShortage = (item: Item) => {
+    const currentStock = item.inHouseStock || 0;
+    const minReq = item.minStockQty || item.reorderLevel || 0;
+    const pendingJCQty = jobCards
+      .filter(jc => jc.status !== 'COMPLETED' && jc.status !== 'CANCELLED')
+      .reduce((sum, jc) => {
+        if (jc.itemId === item.id || jc.itemCode === item.itemCode) {
+          return sum + Math.max(0, (jc.targetQuantity || 1) - (jc.completedQuantity || 0));
+        }
+        return sum;
+      }, 0);
+    return Math.max(0, minReq - (currentStock + pendingJCQty));
+  };
+
+  const inHouseShortageItems = items.filter(i => isInHouseItem(i) && !i.isBlocked && getInHouseItemShortage(i) > 0);
+
+  const handleOpenShortageJCModal = (item: Item) => {
+    const shortage = getInHouseItemShortage(item);
+    setSelectedItemId(item.id);
+    setSelectedWOId('');
+    setTargetQuantity(Math.max(1, shortage));
+    setAssignedOperator('In-House Assembly Lead');
+    setRemarks(`Job card generated directly from in-house shortage requirement (${shortage} ${item.unit}).`);
+    setIsModalOpen(true);
+  };
 
   // Filter items that are In-house or Sub-Assembly
   const buildableItems = items.filter(i => 
@@ -242,6 +275,54 @@ export const JobCardModule: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Shortage Alert Banner */}
+      {inHouseShortageItems.length > 0 && (
+        <div className="card" style={{ padding: '0.875rem 1.25rem', backgroundColor: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '0.5rem', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <AlertTriangle size={20} color="var(--danger)" />
+              <div>
+                <span style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--danger)' }}>
+                  In-House Shortage Alert: {inHouseShortageItems.length} Component(s) Below Minimum Stock Requirement!
+                </span>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                  Click on any item button below to directly open pre-filled Job Card creation modal.
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+              {inHouseShortageItems.map(item => {
+                const shortage = getInHouseItemShortage(item);
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="btn"
+                    style={{ 
+                      fontSize: '0.78rem', 
+                      padding: '0.35rem 0.75rem', 
+                      backgroundColor: 'var(--danger)', 
+                      color: '#ffffff', 
+                      fontWeight: 700,
+                      border: 'none',
+                      borderRadius: '0.375rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.35rem'
+                    }}
+                    onClick={() => handleOpenShortageJCModal(item)}
+                  >
+                    {item.itemCode}: Build {shortage} {item.unit}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toolbar & Filters */}
       <div className="card" style={{ padding: '0.65rem 1rem', backgroundColor: 'var(--bg-card)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', flexShrink: 0 }}>
