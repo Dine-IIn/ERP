@@ -3,7 +3,7 @@ import { useERP } from '../../context/ERPContext';
 import { 
   LayoutDashboard, Package, Users, Contact, Warehouse, Truck, 
   ShoppingCart, FileCheck, Wrench, ShieldCheck, Layers, Shield, Cpu, LogOut, Sun, Moon, FileText, ShoppingBag,
-  AlertTriangle, ClipboardList, Factory, Send
+  AlertTriangle, ClipboardList, Factory, Send, FileSpreadsheet
 } from 'lucide-react';
 
 interface NavItem {
@@ -28,6 +28,7 @@ export const Sidebar: React.FC = () => {
 
   const navItems: NavItem[] = [
     { key: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={16} /> },
+    { key: 'planning', label: 'Planning', icon: <FileSpreadsheet size={16} /> },
     { key: 'shortage', label: 'Shortage Planning', icon: <AlertTriangle size={16} color="var(--warning)" /> },
     { key: 'item-master', label: 'Item Master', icon: <Package size={16} />, badge: lowStockCount > 0 ? lowStockCount : undefined },
     { key: 'customer-master', label: 'Customer Master', icon: <Contact size={16} /> },

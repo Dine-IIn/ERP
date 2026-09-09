@@ -16,7 +16,7 @@ type ItemSortKey = 'itemCode' | 'partCode' | 'oldItemCode' | 'name' | 'category'
 export const ItemMasterModule: React.FC = () => {
   const { 
     items, itemCategories, vendors, boms, currentUser, addItem, updateItem, deleteItem, recoverItem, bulkDeleteItems, bulkRecoverItems, bulkAddItems, 
-    addItemCategory, updateItemCategory, deleteItemCategory, removeAllOldItemCodes, searchTerm, setSearchTerm, setActiveModule 
+    addItemCategory, updateItemCategory, deleteItemCategory, removeAllOldItemCodes, searchTerm, setSearchTerm, setActiveModule, openBOMInEditor 
   } = useERP();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -60,7 +60,6 @@ export const ItemMasterModule: React.FC = () => {
     externalStock: 0,
     minStockQty: 5,
     minOrderQty: 5,
-    grnAllowancePercent: 0,
     mappedVendors: [] as ItemMappedVendor[],
     unitPrice: 0,
     location: '',
@@ -139,19 +138,18 @@ export const ItemMasterModule: React.FC = () => {
       partNo: item.partNo || '',
       unit: item.unit,
       purchaseUOM: item.purchaseUOM || item.unit,
-      conversionFactor: item.conversionFactor || 1,
-      inHouseStock: item.inHouseStock,
-      externalStock: item.externalStock || 0,
-      minStockQty: item.minStockQty || 5,
-      minOrderQty: item.minOrderQty || 5,
-      grnAllowancePercent: item.grnAllowancePercent || 0,
+      conversionFactor: item.conversionFactor !== undefined ? item.conversionFactor : 1,
+      inHouseStock: item.inHouseStock !== undefined ? item.inHouseStock : 0,
+      externalStock: item.externalStock !== undefined ? item.externalStock : 0,
+      minStockQty: item.minStockQty !== undefined ? item.minStockQty : 0,
+      minOrderQty: item.minOrderQty !== undefined ? item.minOrderQty : 1,
       mappedVendors: item.mappedVendors || [],
-      unitPrice: item.unitPrice || 0,
+      unitPrice: item.unitPrice !== undefined ? item.unitPrice : 0,
       location: item.location || '',
       note: item.note || '',
       processType: (item.processType || '') as MaterialProcessType,
-      leadTimeDays: item.leadTimeDays || 10,
-      weightKg: item.weightKg || 0,
+      leadTimeDays: item.leadTimeDays !== undefined ? item.leadTimeDays : 10,
+      weightKg: item.weightKg !== undefined ? item.weightKg : 0,
       testReportRequired: item.testReportRequired || false,
       qcTrigger: (item.qcTrigger || '') as QCTrigger,
       isDirectJobworkShipment: item.isDirectJobworkShipment || false
@@ -174,9 +172,8 @@ export const ItemMasterModule: React.FC = () => {
       conversionFactor: 1,
       inHouseStock: 0,
       externalStock: 0,
-      minStockQty: 5,
-      minOrderQty: 5,
-      grnAllowancePercent: 0,
+      minStockQty: 0,
+      minOrderQty: 1,
       mappedVendors: [],
       unitPrice: 0,
       location: 'Store Rack A',
@@ -249,14 +246,24 @@ export const ItemMasterModule: React.FC = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const payload = {
+      ...formData,
+      minStockQty: formData.minStockQty !== undefined && formData.minStockQty !== ('' as any) ? Number(formData.minStockQty) : 0,
+      minOrderQty: formData.minOrderQty !== undefined && formData.minOrderQty !== ('' as any) ? Number(formData.minOrderQty) : 0,
+      unitPrice: Number(formData.unitPrice) || 0,
+      conversionFactor: Number(formData.conversionFactor) || 1,
+      weightKg: Number(formData.weightKg) || 0,
+      leadTimeDays: Number(formData.leadTimeDays) || 0
+    };
+
     if (editingItem) {
       updateItem({
         ...editingItem,
-        ...formData
+        ...payload
       });
     } else {
       addItem({
-        ...formData
+        ...payload
       });
     }
     setIsModalOpen(false);
@@ -280,7 +287,6 @@ export const ItemMasterModule: React.FC = () => {
     { key: 'inHouseStock', label: 'In-House Stock', defaultSelected: true },
     { key: 'minStockQty', label: 'Min Stock Qty', defaultSelected: false },
     { key: 'minOrderQty', label: 'Min Order Qty', defaultSelected: false },
-    { key: 'grnAllowancePercent', label: 'GRN Allowance %', defaultSelected: false },
     { key: 'unitPrice', label: 'Unit Price (₹)', defaultSelected: true },
     { key: 'weightKg', label: 'Weight (KG)', defaultSelected: false },
     { key: 'testReportRequired', label: 'Test Report Required', defaultSelected: false },
@@ -470,8 +476,8 @@ export const ItemMasterModule: React.FC = () => {
                   required 
                   className="input-field" 
                   placeholder="e.g. 10" 
-                  value={formData.leadTimeDays} 
-                  onChange={(e) => setFormData({ ...formData, leadTimeDays: Number(e.target.value) })} 
+                  value={formData.leadTimeDays === 0 ? '' : formData.leadTimeDays} 
+                  onChange={(e) => setFormData({ ...formData, leadTimeDays: e.target.value === '' ? 0 : Number(e.target.value) })} 
                 />
               </div>
             </div>
@@ -487,15 +493,37 @@ export const ItemMasterModule: React.FC = () => {
               </div>
               <div>
                 <label>UOM Conversion Factor</label>
-                <input type="number" step="0.01" className="input-field" value={formData.conversionFactor} onChange={(e) => setFormData({ ...formData, conversionFactor: Number(e.target.value) })} />
+                <input 
+                  type="number" 
+                  step="0.01" 
+                  className="input-field" 
+                  value={formData.conversionFactor === 0 ? '' : formData.conversionFactor} 
+                  onChange={(e) => setFormData({ ...formData, conversionFactor: e.target.value === '' ? 0 : Number(e.target.value) })} 
+                />
               </div>
             </div>
 
             {/* Stock Levels & Store Location Row */}
             <div className="form-grid-2">
               <div>
-                <label>Min Required Stock Level</label>
-                <input type="number" required className="input-field" placeholder="e.g. 5" value={formData.minStockQty} onChange={(e) => setFormData({ ...formData, minStockQty: Number(e.target.value) })} />
+                <label>Min Required Stock Level (Reorder Trigger)</label>
+                <input 
+                  type="number" 
+                  min="0"
+                  required 
+                  className="input-field" 
+                  placeholder="0" 
+                  value={formData.minStockQty ?? ''} 
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFormData({ ...formData, minStockQty: val === '' ? ('' as any) : Number(val) });
+                  }} 
+                  onBlur={(e) => {
+                    if (e.target.value === '' || isNaN(Number(e.target.value))) {
+                      setFormData({ ...formData, minStockQty: 0 });
+                    }
+                  }}
+                />
               </div>
               <div>
                 <label style={{ fontWeight: 700 }}>Store Location (Rack / Shelf / Bin)</label>
@@ -514,20 +542,47 @@ export const ItemMasterModule: React.FC = () => {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', padding: '0.875rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: '0.5rem', border: '1px solid var(--border-color)' }}>
                 {(formData.processType === 'Brought out' || formData.processType === 'Job work + Brought out' || formData.processType === 'Job work') && (
                   <div>
-                    <label style={{ fontWeight: 700 }}>Min Purchase Order Qty</label>
-                    <input type="number" required className="input-field" value={formData.minOrderQty} onChange={(e) => setFormData({ ...formData, minOrderQty: Number(e.target.value) })} />
-                  </div>
-                )}
-                {['Brought out', 'Job work + Brought out'].includes(formData.processType) && (
-                  <div>
-                    <label>GRN Receiving Allowance %</label>
-                    <input type="number" min="0" max="100" className="input-field" placeholder="e.g. 5 (+5% extra)" value={formData.grnAllowancePercent} onChange={(e) => setFormData({ ...formData, grnAllowancePercent: Number(e.target.value) })} />
+                    <label style={{ fontWeight: 700 }}>Min Purchase Order Qty (MOQ)</label>
+                    <input 
+                      type="number" 
+                      min="0"
+                      required 
+                      className="input-field" 
+                      placeholder="1"
+                      value={formData.minOrderQty ?? ''} 
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setFormData({ ...formData, minOrderQty: val === '' ? ('' as any) : Number(val) });
+                      }} 
+                      onBlur={(e) => {
+                        if (e.target.value === '' || isNaN(Number(e.target.value))) {
+                          setFormData({ ...formData, minOrderQty: 0 });
+                        }
+                      }}
+                    />
                   </div>
                 )}
                 {(formData.processType === 'Brought out' || formData.processType === 'Job work + Brought out') && (
                   <div>
                     <label style={{ fontWeight: 700 }}>Unit Purchase Price (₹)</label>
-                    <input type="number" required className="input-field" value={formData.unitPrice} onChange={(e) => setFormData({ ...formData, unitPrice: Number(e.target.value) })} />
+                    <input 
+                      type="number" 
+                      min="0"
+                      step="0.01"
+                      required 
+                      className="input-field" 
+                      placeholder="0.00"
+                      value={formData.unitPrice ?? ''} 
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setFormData({ ...formData, unitPrice: val === '' ? ('' as any) : Number(val) });
+                      }} 
+                      onBlur={(e) => {
+                        if (e.target.value === '' || isNaN(Number(e.target.value))) {
+                          setFormData({ ...formData, unitPrice: 0 });
+                        }
+                      }}
+                    />
                   </div>
                 )}
               </div>
@@ -772,7 +827,7 @@ export const ItemMasterModule: React.FC = () => {
                                 className="btn btn-outline" 
                                 style={{ padding: '0.25rem 0.45rem', color: '#2563eb', borderColor: '#2563eb' }} 
                                 title={`Open Bill of Materials (BOM) for ${item.name}`}
-                                onClick={() => setActiveModule('bom-master')}
+                                onClick={() => openBOMInEditor(matchingBOM.id)}
                               >
                                 <Layers size={13} />
                               </button>

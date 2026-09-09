@@ -99,7 +99,7 @@ export const MRPPlanningModule: React.FC = () => {
           amount: s.netShortage * (itemObj?.unitPrice || 1000)
         };
       }),
-      remarks: `Auto-generated MRP Purchase Order for active Work Orders`
+      notes: `Auto-generated MRP Purchase Order for active Work Orders`
     });
 
     alert(`Successfully generated Draft Purchase Order for ${criticalShortages.length} shortage component(s)! Redirecting to Purchase Orders...`);

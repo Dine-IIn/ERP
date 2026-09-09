@@ -12,7 +12,10 @@ import { isCircularDependency, getExplodedBOMSummary } from '../../utils/nestedB
 type SortField = 'bomCode' | 'machineModel' | 'version';
 
 export const BOMMasterModule: React.FC = () => {
-  const { boms, items, itemCategories, addBOM, updateBOM, deleteBOM, bulkAddBOMs, searchTerm, setSearchTerm } = useERP();
+  const { 
+    boms, items, itemCategories, addBOM, updateBOM, deleteBOM, bulkAddBOMs, searchTerm, setSearchTerm,
+    selectedBOMIdForView, setSelectedBOMIdForView 
+  } = useERP();
   
   // Navigation & Screen View State
   const [isFormOpen, setIsFormOpen] = useState(false); // Controls Inline Create/Edit Form Screen
@@ -21,6 +24,18 @@ export const BOMMasterModule: React.FC = () => {
 
   // Inline BOM Inspection View state (Opened directly on screen below search bar)
   const [selectedBOM, setSelectedBOM] = useState<BOM | null>(null);
+
+  useEffect(() => {
+    if (selectedBOMIdForView) {
+      const targetBOM = boms.find(b => b.id === selectedBOMIdForView || b.bomCode.toLowerCase() === selectedBOMIdForView.toLowerCase());
+      if (targetBOM) {
+        setSelectedBOM(targetBOM);
+        setIsFormOpen(false);
+        setEditingBOM(null);
+      }
+      setSelectedBOMIdForView(null);
+    }
+  }, [selectedBOMIdForView, boms]);
   const [bomHistoryStack, setBomHistoryStack] = useState<BOM[]>([]); // Navigation History Stack for Nested BOMs
   const [isExplodedView, setIsExplodedView] = useState(false);
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('ALL');

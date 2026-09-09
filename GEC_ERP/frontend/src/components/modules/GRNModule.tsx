@@ -4,7 +4,7 @@ import { AutocompleteSelect, AutocompleteOption } from '../common/AutocompleteSe
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { SingleGRNPrintView, GRNListPrintView } from '../printTemplates/GRNPrintTemplates';
 import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
-import { FileCheck, Plus, CheckCircle, Search, Printer, FileSpreadsheet, Truck, ShoppingCart, ArrowLeft, X, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw } from 'lucide-react';
+import { FileCheck, Plus, CheckCircle, Search, Printer, FileSpreadsheet, Truck, ShoppingCart, ArrowLeft, X, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw, Edit2 } from 'lucide-react';
 import { GRNLineItem, GoodsReceivedNotice } from '../../types/erp';
 import { ExportFieldSelectorModal, FieldOption } from '../common/ExportFieldSelectorModal';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
@@ -12,8 +12,9 @@ import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
 type SortField = 'grnNumber' | 'poNumber' | 'vendorName' | 'invoiceNo' | 'receivedDate';
 
 export const GRNModule: React.FC = () => {
-  const { grns, purchaseOrders, jobworks, items, setActiveModule, currentUser, addGRN, approveGRN, searchTerm, setSearchTerm } = useERP();
+  const { grns, purchaseOrders, jobworks, items, vendors, setActiveModule, currentUser, addGRN, updateGRN, approveGRN, searchTerm, setSearchTerm } = useERP();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingGRN, setEditingGRN] = useState<GoodsReceivedNotice | null>(null);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [printModalOpen, setPrintModalOpen] = useState(false);
   const [printDocType, setPrintDocType] = useState<'SINGLE_GRN' | 'GRN_LIST'>('GRN_LIST');
@@ -132,6 +133,7 @@ export const GRNModule: React.FC = () => {
     }));
 
   const handleOpenModal = () => {
+    setEditingGRN(null);
     setGrnForm({
       grnNumber: `GRN-GEC-${String(grns.length + 1).padStart(3, '0')}`,
       invoiceNo: '',
@@ -144,6 +146,18 @@ export const GRNModule: React.FC = () => {
     setIsModalOpen(true);
   };
 
+  const handleOpenEditModal = (grn: GoodsReceivedNotice) => {
+    setEditingGRN(grn);
+    setGrnForm({
+      grnNumber: grn.grnNumber,
+      invoiceNo: grn.invoiceNo || '',
+      invoiceDate: grn.invoiceDate || grn.receivedDate,
+      receivedDate: grn.receivedDate
+    });
+    setGrnItems(grn.items ? JSON.parse(JSON.stringify(grn.items)) : []);
+    setIsModalOpen(true);
+  };
+
   const handleSourceSelect = (id: string) => {
     setSelectedSourceId(id);
     setDirectJobworkBlockedItem(null);
@@ -151,46 +165,64 @@ export const GRNModule: React.FC = () => {
     if (inwardSourceType === 'PO') {
       const targetPO = purchaseOrders.find(po => po.id === id);
       if (targetPO) {
-        // Check for direct jobwork shipment items
-        const directJobItem = targetPO.items.find(pi => {
-          const matchedItem = items.find(i => i.id === pi.itemId || i.itemCode === pi.itemCode);
-          return matchedItem?.isDirectJobworkShipment;
-        });
-
-        if (directJobItem) {
-          setDirectJobworkBlockedItem({
-            itemCode: directJobItem.itemCode || 'Direct Item',
-            itemName: directJobItem.itemName || 'Direct Jobwork Item'
-          });
-        }
-
         setGrnItems(targetPO.items.map(item => {
           const matchedItem = items.find(i => i.id === item.itemId || i.itemCode === item.itemCode);
-          const isDirect = !!matchedItem?.isDirectJobworkShipment;
+          
+          // Calculate historical receipts for this PO item
+          const prevReceived = grns.reduce((sum, g) => {
+            if (g.poId === targetPO.id || g.poNumber === targetPO.poNumber) {
+              const matchedLine = g.items?.find(it => it.itemId === item.itemId || it.itemCode === item.itemCode);
+              return sum + (matchedLine?.acceptedQty || 0);
+            }
+            return sum;
+          }, 0);
+
+          const orderedQty = item.quantity || item.orderedQty || 1;
+          const maxCanReceiveNow = Math.max(0, orderedQty - prevReceived);
+          const defaultReceive = maxCanReceiveNow;
+
           return {
             itemId: item.itemId,
             itemCode: item.itemCode,
             itemName: item.itemName,
-            orderedQty: item.quantity || item.orderedQty || 1,
-            receivedQty: item.quantity || item.orderedQty || 1,
-            acceptedQty: isDirect ? 0 : (item.quantity || item.orderedQty || 1),
+            orderedQty,
+            prevReceived,
+            maxCanReceiveNow,
+            receivedQty: defaultReceive,
+            acceptedQty: defaultReceive,
             rejectedQty: 0,
-            isDirectJobwork: isDirect,
-            remarks: isDirect ? 'Direct Jobwork Shipment - In-house GRN Bypassed' : 'Inspected OK at store receiving bay'
+            rejectionDisposition: 'SCRAP',
+            rejectionReason: '',
+            purchaseUOM: matchedItem?.purchaseUOM,
+            conversionFactor: matchedItem?.conversionFactor,
+            unit: matchedItem?.unit || 'PCS',
+            isDirectJobwork: false,
+            directJWQty: 0,
+            directJWProduceItemId: '',
+            directJWProduceItemCode: '',
+            directJWProduceItemName: '',
+            directJWVendorId: '',
+            directJWVendorName: '',
+            remarks: 'Inspected OK at store receiving bay'
           };
         }));
       }
     } else {
       const targetJob = jobworks.find(j => j.id === id);
       if (targetJob) {
+        const pendingQty = targetJob.pendingBalance || targetJob.sentQuantity || 1;
         setGrnItems([{
           itemId: targetJob.itemId || 'item-jobwork',
           itemCode: targetJob.itemCode || 'JOBWORK-RET',
           itemName: targetJob.itemName || `Jobwork Machining Return (${targetJob.processRequired || 'External Machining'})`,
           orderedQty: targetJob.sentQuantity || 1,
-          receivedQty: targetJob.pendingBalance || targetJob.sentQuantity || 1,
-          acceptedQty: targetJob.pendingBalance || targetJob.sentQuantity || 1,
+          prevReceived: (targetJob.sentQuantity || 1) - pendingQty,
+          maxCanReceiveNow: pendingQty,
+          receivedQty: pendingQty,
+          acceptedQty: pendingQty,
           rejectedQty: 0,
+          rejectionDisposition: 'SCRAP',
+          rejectionReason: '',
           remarks: 'Jobwork physical dimensions verified against drawing specs'
         }]);
       }
@@ -200,14 +232,25 @@ export const GRNModule: React.FC = () => {
   const handleItemQtyChange = (itemId: string, field: string, val: number) => {
     setGrnItems(prev => prev.map(item => {
       if (item.itemId === itemId) {
-        const updated = { ...item, [field]: val };
+        let safeVal = Math.max(0, val);
+        if (field === 'receivedQty' && item.maxCanReceiveNow !== undefined) {
+          if (safeVal > item.maxCanReceiveNow) {
+            safeVal = item.maxCanReceiveNow;
+            alert(`⚠️ Cannot receive more than remaining balance: ${item.maxCanReceiveNow} (Ordered/Sent: ${item.orderedQty}, Already Received: ${item.prevReceived}).`);
+          }
+        }
+
+        const updated = { ...item, [field]: safeVal };
         if (field === 'receivedQty') {
-          updated.acceptedQty = val;
+          updated.acceptedQty = safeVal;
           updated.rejectedQty = 0;
+          if (updated.isDirectJobwork && (updated.directJWQty || 0) > safeVal) {
+            updated.directJWQty = safeVal;
+          }
         } else if (field === 'acceptedQty') {
-          updated.rejectedQty = Math.max(0, updated.receivedQty - val);
+          updated.rejectedQty = Math.max(0, updated.receivedQty - safeVal);
         } else if (field === 'rejectedQty') {
-          updated.acceptedQty = Math.max(0, updated.receivedQty - val);
+          updated.acceptedQty = Math.max(0, updated.receivedQty - safeVal);
         }
         return updated;
       }
@@ -226,13 +269,42 @@ export const GRNModule: React.FC = () => {
   const handleSubmitGRN = (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (editingGRN) {
+      updateGRN({
+        ...editingGRN,
+        invoiceNo: grnForm.invoiceNo,
+        invoiceDate: grnForm.invoiceDate,
+        receivedDate: grnForm.receivedDate,
+        items: grnItems
+      });
+      setIsModalOpen(false);
+      setEditingGRN(null);
+      return;
+    }
+
+    const selectedItemsToReceive = grnItems.filter(i => i.isSelected !== false && (i.receivedQty || 0) > 0);
+    if (selectedItemsToReceive.length === 0) {
+      alert('Please select at least one item line to receive with a received quantity greater than 0.');
+      return;
+    }
+
+    const invalidDirectJW = selectedItemsToReceive.find(i => i.isDirectJobwork && (i.directJWQty || 0) > 0 && (!i.directJWProduceItemId || !i.directJWVendorId));
+    if (invalidDirectJW) {
+      alert(`Please select both the "Item to Create" and "Job Work Vendor" for direct job work item: ${invalidDirectJW.itemName}`);
+      return;
+    }
+
     let poNumberRef = 'DIRECT-INWARD';
+    let poIdRef: string | undefined = undefined;
+    let challanIdRef: string | undefined = undefined;
+    let challanNoRef: string | undefined = undefined;
     let vendorId = 'vend-gen';
     let vendorName = 'General Vendor';
 
     if (inwardSourceType === 'PO') {
       const poObj = purchaseOrders.find(po => po.id === selectedSourceId);
       if (poObj) {
+        poIdRef = poObj.id;
         poNumberRef = poObj.poNumber;
         vendorId = poObj.vendorId;
         vendorName = poObj.vendorName;
@@ -240,6 +312,8 @@ export const GRNModule: React.FC = () => {
     } else {
       const jobObj = jobworks.find(j => j.id === selectedSourceId);
       if (jobObj) {
+        challanIdRef = jobObj.id;
+        challanNoRef = jobObj.challanNo;
         poNumberRef = jobObj.challanNo;
         vendorId = jobObj.vendorId;
         vendorName = jobObj.vendorName;
@@ -248,13 +322,16 @@ export const GRNModule: React.FC = () => {
 
     addGRN({
       grnNumber: grnForm.grnNumber,
+      poId: poIdRef,
       poNumber: poNumberRef,
+      challanId: challanIdRef,
+      challanNo: challanNoRef,
       vendorId,
       vendorName,
       invoiceNo: grnForm.invoiceNo,
       invoiceDate: grnForm.invoiceDate,
       receivedDate: grnForm.receivedDate,
-      items: grnItems,
+      items: selectedItemsToReceive,
       receivedBy: currentUser?.fullName || 'Store Manager'
     });
 
@@ -273,7 +350,7 @@ export const GRNModule: React.FC = () => {
   ];
 
   return (
-    <div className="module-layout-container">
+    <div className="module-layout-container" style={{ flex: 1, minHeight: 0, height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingRight: '0.25rem' }}>
       {/* Top Header */}
       <div className="sticky-module-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -283,7 +360,7 @@ export const GRNModule: React.FC = () => {
             </button>
           )}
           <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-secondary)' }}>
-            {isModalOpen ? 'Creating Goods Received Note (GRN)' : `All Goods Inward GRN Slips (${filteredGRNs.length})`}
+            {isModalOpen ? (editingGRN ? `Editing ${editingGRN.grnNumber}` : 'Creating Goods Received Note (GRN)') : `All Goods Inward GRN Slips (${filteredGRNs.length})`}
           </span>
         </div>
 
@@ -311,7 +388,7 @@ export const GRNModule: React.FC = () => {
         <div className="card" style={{ padding: '1.25rem', backgroundColor: 'var(--bg-card)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
             <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
-              Create Goods Inward GRN Slip (PO or External Jobwork Return)
+              {editingGRN ? `Edit Goods Received Note (${editingGRN.grnNumber})` : 'Create Goods Inward GRN Slip (PO or External Jobwork Return)'}
             </h3>
             <button type="button" className="btn btn-outline" style={{ padding: '0.25rem 0.5rem', fontSize: '0.78rem' }} onClick={() => setIsModalOpen(false)}>
               <X size={15} /> Close (ESC)
@@ -319,103 +396,383 @@ export const GRNModule: React.FC = () => {
           </div>
 
           <form onSubmit={handleSubmitGRN} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {/* Source Selection Buttons */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              <button
-                type="button"
-                className={`btn ${inwardSourceType === 'PO' ? 'btn-primary' : 'btn-outline'}`}
-                onClick={() => { setInwardSourceType('PO'); setSelectedSourceId(''); setGrnItems([]); }}
-              >
-                <ShoppingCart size={16} /> Inward from Vendor PO
-              </button>
-              <button
-                type="button"
-                className={`btn ${inwardSourceType === 'JOBWORK' ? 'btn-primary' : 'btn-outline'}`}
-                onClick={() => { setInwardSourceType('JOBWORK'); setSelectedSourceId(''); setGrnItems([]); }}
-              >
-                <Truck size={16} /> Inward from External Jobwork Return
-              </button>
-            </div>
+            {/* Source Selection Checkboxes (hidden when editing existing GRN) */}
+            {!editingGRN && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', padding: '0.75rem', backgroundColor: 'var(--bg-subtle, rgba(0,0,0,0.02))', borderRadius: '0.5rem', border: '1px solid var(--border-color)' }}>
+                <label 
+                  style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '0.65rem', 
+                    padding: '0.65rem 0.85rem', 
+                    borderRadius: '0.375rem', 
+                    cursor: 'pointer',
+                    backgroundColor: inwardSourceType === 'PO' ? 'var(--accent-light, rgba(37,99,235,0.08))' : 'var(--bg-card)',
+                    border: inwardSourceType === 'PO' ? '2px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                    fontWeight: 700,
+                    fontSize: '0.88rem',
+                    color: inwardSourceType === 'PO' ? 'var(--accent-primary)' : 'var(--text-primary)'
+                  }}
+                  onClick={() => {
+                    if (inwardSourceType !== 'PO') {
+                      setInwardSourceType('PO');
+                      setSelectedSourceId('');
+                      setGrnItems([]);
+                    }
+                  }}
+                >
+                  <input 
+                    type="checkbox" 
+                    checked={inwardSourceType === 'PO'} 
+                    onChange={() => {
+                      setInwardSourceType('PO');
+                      setSelectedSourceId('');
+                      setGrnItems([]);
+                    }}
+                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                  />
+                  <ShoppingCart size={17} />
+                  <span>Against Purchase Order (PO)</span>
+                </label>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              <div>
-                <label>GRN Number</label>
-                <input type="text" required className="input-field" value={grnForm.grnNumber} onChange={(e) => setGrnForm({ ...grnForm, grnNumber: e.target.value })} />
+                <label 
+                  style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '0.65rem', 
+                    padding: '0.65rem 0.85rem', 
+                    borderRadius: '0.375rem', 
+                    cursor: 'pointer',
+                    backgroundColor: inwardSourceType === 'JOBWORK' ? 'var(--accent-light, rgba(37,99,235,0.08))' : 'var(--bg-card)',
+                    border: inwardSourceType === 'JOBWORK' ? '2px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                    fontWeight: 700,
+                    fontSize: '0.88rem',
+                    color: inwardSourceType === 'JOBWORK' ? 'var(--accent-primary)' : 'var(--text-primary)'
+                  }}
+                  onClick={() => {
+                    if (inwardSourceType !== 'JOBWORK') {
+                      setInwardSourceType('JOBWORK');
+                      setSelectedSourceId('');
+                      setGrnItems([]);
+                    }
+                  }}
+                >
+                  <input 
+                    type="checkbox" 
+                    checked={inwardSourceType === 'JOBWORK'} 
+                    onChange={() => {
+                      setInwardSourceType('JOBWORK');
+                      setSelectedSourceId('');
+                      setGrnItems([]);
+                    }}
+                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                  />
+                  <Truck size={17} />
+                  <span>Against Job Work Challan</span>
+                </label>
               </div>
+            )}
 
+            {/* Select Target Document */}
+            {!editingGRN && (
               <div>
-                <label>{inwardSourceType === 'PO' ? 'Select Target Purchase Order (PO)' : 'Select External Jobwork Challan'}</label>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.25rem', color: 'var(--text-primary)' }}>
+                  {inwardSourceType === 'PO' ? 'Choose Purchase Order (PO) *' : 'Choose Outward Job Work Challan *'}
+                </label>
                 <AutocompleteSelect
                   options={inwardSourceType === 'PO' ? poOptions : jobworkOptions}
                   value={selectedSourceId}
                   onChange={handleSourceSelect}
-                  placeholder={inwardSourceType === 'PO' ? 'Type PO number or vendor...' : 'Type challan no or vendor...'}
+                  placeholder={inwardSourceType === 'PO' ? 'Search & select Purchase Order by PO Number or Vendor...' : 'Search & select Job Work Challan by Number or Vendor...'}
                 />
               </div>
-            </div>
+            )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
               <div>
-                <label>Invoice / Delivery Challan No.</label>
-                <input type="text" required className="input-field" value={grnForm.invoiceNo} onChange={(e) => setGrnForm({ ...grnForm, invoiceNo: e.target.value })} />
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.25rem' }}>Auto-Generated GRN Number</label>
+                <input type="text" required className="input-field" value={grnForm.grnNumber} readOnly={!!editingGRN} onChange={(e) => setGrnForm({ ...grnForm, grnNumber: e.target.value })} />
               </div>
               <div>
-                <label>Inward Received Date</label>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.25rem' }}>Vendor Invoice No / DC No *</label>
+                <input type="text" required className="input-field" placeholder="e.g. INV-2026-981 / DC-0442" value={grnForm.invoiceNo} onChange={(e) => setGrnForm({ ...grnForm, invoiceNo: e.target.value })} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.25rem' }}>Received Date (Default: Today)</label>
                 <input type="date" required className="input-field" value={grnForm.receivedDate} onChange={(e) => setGrnForm({ ...grnForm, receivedDate: e.target.value })} />
               </div>
             </div>
 
-            {/* Received Goods Table */}
+            {/* Line Items for Receiving */}
             {grnItems.length > 0 && (
-              <div style={{ padding: '0.875rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: '0.5rem', border: '1px solid var(--border-color)' }}>
-                <h4 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.5rem', color: 'var(--success)' }}>
-                  Physical Inward Quantity & Quality Verification
-                </h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-                  {grnItems.map(item => (
-                    <div key={item.itemId} style={{ backgroundColor: 'var(--bg-card)', padding: '0.625rem', borderRadius: '0.375rem' }}>
-                      <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{item.itemName} ({item.itemCode})</div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.35rem' }}>Ordered / Sent Qty: {item.orderedQty} Units</div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem' }}>
-                        <div>
-                          <label style={{ fontSize: '0.7rem' }}>Recd Qty</label>
-                          <input type="number" min="1" className="input-field" value={item.receivedQty} onChange={(e) => handleItemQtyChange(item.itemId, 'receivedQty', Number(e.target.value))} />
-                        </div>
-                        <div>
-                          <label style={{ fontSize: '0.7rem' }}>Accepted Qty</label>
-                          <input type="number" min="0" className="input-field" value={item.acceptedQty} onChange={(e) => handleItemQtyChange(item.itemId, 'acceptedQty', Number(e.target.value))} />
-                        </div>
-                        <div>
-                          <label style={{ fontSize: '0.7rem' }}>Rejected Qty</label>
-                          <input type="number" min="0" className="input-field" value={item.rejectedQty} onChange={(e) => handleItemQtyChange(item.itemId, 'rejectedQty', Number(e.target.value))} />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <label style={{ fontSize: '0.9rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
+                    Choose Items to Receive & Verify Quantities
+                  </label>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    {grnItems.length} item(s) found on selected {inwardSourceType === 'PO' ? 'PO' : 'Job Work Challan'}
+                  </span>
                 </div>
-              </div>
-            )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                  {grnItems.map(item => {
+                    const isFullyReceived = item.maxCanReceiveNow <= 0;
+                    const isSelected = item.isSelected !== false && !isFullyReceived;
+                    const itemObj = items.find(i => i.id === item.itemId || i.itemCode === item.itemCode);
+                    const requiresQC = itemObj?.qcTrigger === 'ON_GRN' || itemObj?.testReportRequired;
+                    const directJWQty = item.isDirectJobwork ? (item.directJWQty || 0) : 0;
+                    const remainingInwardQty = Math.max(0, (item.acceptedQty || item.receivedQty || 0) - directJWQty);
 
-            {/* Direct Jobwork Warning & Redirection Action */}
-            {directJobworkBlockedItem && (
-              <div style={{ padding: '0.875rem 1rem', backgroundColor: 'rgba(239, 68, 68, 0.12)', border: '1.5px solid var(--danger)', borderRadius: '0.5rem', color: 'var(--danger)' }}>
-                <div style={{ fontWeight: 800, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  ⚠️ Item Direct Jobwork Shipment Notification
+                    return (
+                      <div 
+                        key={item.itemId || item.id} 
+                        style={{ 
+                          backgroundColor: 'var(--bg-card)', 
+                          padding: '0.85rem', 
+                          borderRadius: '0.5rem', 
+                          border: isSelected ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                          opacity: isFullyReceived ? 0.6 : 1
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              disabled={isFullyReceived}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setGrnItems(prev => prev.map(it => it.itemId === item.itemId ? {
+                                  ...it,
+                                  isSelected: checked,
+                                  receivedQty: checked ? (it.receivedQty || it.maxCanReceiveNow) : 0,
+                                  acceptedQty: checked ? (it.acceptedQty || it.maxCanReceiveNow) : 0
+                                } : it));
+                              }}
+                              style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                            />
+                            <div>
+                              <span style={{ fontWeight: 800, fontSize: '0.92rem', color: 'var(--text-primary)' }}>{item.itemName}</span>
+                              <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)', marginLeft: '0.5rem' }}>({item.itemCode})</span>
+                              {item.partCode && <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '0.4rem' }}>[Part: {item.partCode}]</span>}
+                            </div>
+                          </div>
+
+                          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                            Ordered/Sent: <strong>{item.orderedQty} {item.unit}</strong> &bull; Prev Received: <strong>{item.prevReceived || 0} {item.unit}</strong> &bull; Remaining Allowed: <strong style={{ color: isFullyReceived ? 'var(--danger)' : 'var(--accent-primary)', fontSize: '0.85rem' }}>{item.maxCanReceiveNow} {item.unit}</strong>
+                          </div>
+                        </div>
+
+                        {isFullyReceived && (
+                          <div style={{ fontSize: '0.75rem', color: 'var(--danger)', marginTop: '0.35rem', fontWeight: 600 }}>
+                            ⚠️ This line item is already fully received. No remaining quantity to inward.
+                          </div>
+                        )}
+
+                        {isSelected && (
+                          <>
+                            {item.conversionFactor && item.conversionFactor > 1 && (
+                              <div style={{ fontSize: '0.75rem', color: '#2563eb', backgroundColor: 'rgba(37, 99, 235, 0.08)', padding: '0.35rem 0.6rem', borderRadius: '0.25rem', marginTop: '0.45rem' }}>
+                                📦 <strong>Purchase UOM:</strong> {item.purchaseUOM || 'PACK'} &bull; <strong>Conversion:</strong> 1 {item.purchaseUOM || 'PACK'} = {item.conversionFactor} {item.unit}. Receiving {item.acceptedQty} will credit <strong>{item.acceptedQty * item.conversionFactor} {item.unit}</strong> to physical in-house stock.
+                              </div>
+                            )}
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginTop: '0.65rem' }}>
+                              <div>
+                                <label style={{ fontSize: '0.72rem', fontWeight: 700, display: 'flex', justifyContent: 'space-between' }}>
+                                  <span>Received Qty *</span>
+                                  <span style={{ color: 'var(--text-muted)' }}>(Max Allowed: {item.maxCanReceiveNow})</span>
+                                </label>
+                                <input 
+                                  type="number" 
+                                  min="0" 
+                                  max={item.maxCanReceiveNow} 
+                                  className="input-field" 
+                                  style={{ fontWeight: 700, fontSize: '0.85rem' }}
+                                  value={item.receivedQty === 0 ? '' : item.receivedQty} 
+                                  onChange={(e) => handleItemQtyChange(item.itemId, 'receivedQty', e.target.value === '' ? 0 : Number(e.target.value))} 
+                                />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: '0.72rem', fontWeight: 700 }}>Accepted Qty</label>
+                                <input 
+                                  type="number" 
+                                  min="0" 
+                                  max={item.receivedQty} 
+                                  className="input-field" 
+                                  value={item.acceptedQty === 0 ? '' : item.acceptedQty} 
+                                  onChange={(e) => handleItemQtyChange(item.itemId, 'acceptedQty', e.target.value === '' ? 0 : Number(e.target.value))} 
+                                />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: '0.72rem', fontWeight: 700 }}>Rejected Qty</label>
+                                <input 
+                                  type="number" 
+                                  min="0" 
+                                  max={item.receivedQty} 
+                                  className="input-field" 
+                                  value={item.rejectedQty === 0 ? '' : item.rejectedQty} 
+                                  onChange={(e) => handleItemQtyChange(item.itemId, 'rejectedQty', e.target.value === '' ? 0 : Number(e.target.value))} 
+                                />
+                              </div>
+                            </div>
+
+                            {/* Checkbox: Send Direct to Job Work */}
+                            <div style={{ marginTop: '0.75rem', padding: '0.65rem 0.85rem', backgroundColor: 'var(--bg-subtle, rgba(0,0,0,0.02))', borderRadius: '0.375rem', border: '1px solid var(--border-color)' }}>
+                              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem', color: 'var(--accent-primary)' }}>
+                                <input 
+                                  type="checkbox"
+                                  checked={!!item.isDirectJobwork}
+                                  onChange={(e) => {
+                                    const isDirect = e.target.checked;
+                                    setGrnItems(prev => prev.map(it => it.itemId === item.itemId ? {
+                                      ...it,
+                                      isDirectJobwork: isDirect,
+                                      directJWQty: isDirect ? (it.directJWQty || it.acceptedQty || it.receivedQty || 0) : 0
+                                    } : it));
+                                  }}
+                                  style={{ width: '15px', height: '15px', cursor: 'pointer' }}
+                                />
+                                <span>🚀 Send direct to Job Work (Auto-generate & Merge Job Work Challan)</span>
+                              </label>
+
+                              {item.isDirectJobwork && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', marginTop: '0.65rem' }}>
+                                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 2fr 2fr', gap: '0.75rem' }}>
+                                    <div>
+                                      <label style={{ fontSize: '0.72rem', fontWeight: 700, display: 'block', marginBottom: '0.2rem' }}>
+                                        Direct JW Qty (Max: {item.acceptedQty || item.receivedQty}) *
+                                      </label>
+                                      <input 
+                                        type="number" 
+                                        min="1" 
+                                        max={item.acceptedQty || item.receivedQty} 
+                                        className="input-field" 
+                                        style={{ fontSize: '0.82rem', padding: '0.35rem', fontWeight: 700 }} 
+                                        value={item.directJWQty === 0 ? '' : item.directJWQty} 
+                                        onChange={(e) => {
+                                          const maxAllowed = Number(item.acceptedQty || item.receivedQty || 0);
+                                          const dQty = Math.min(maxAllowed, Math.max(0, Number(e.target.value)));
+                                          setGrnItems(prev => prev.map(it => it.itemId === item.itemId ? { ...it, directJWQty: dQty } : it));
+                                        }} 
+                                      />
+                                    </div>
+
+                                    <div>
+                                      <label style={{ fontSize: '0.72rem', fontWeight: 700, display: 'block', marginBottom: '0.2rem' }}>
+                                        Item to Create / Produce (Output Item) *
+                                      </label>
+                                      <select
+                                        className="input-field"
+                                        required
+                                        style={{ fontSize: '0.82rem', padding: '0.35rem' }}
+                                        value={item.directJWProduceItemId || ''}
+                                        onChange={(e) => {
+                                          const pId = e.target.value;
+                                          const pItem = items.find(i => i.id === pId);
+                                          setGrnItems(prev => prev.map(it => it.itemId === item.itemId ? {
+                                            ...it,
+                                            directJWProduceItemId: pId,
+                                            directJWProduceItemCode: pItem?.itemCode,
+                                            directJWProduceItemName: pItem?.name
+                                          } : it));
+                                        }}
+                                      >
+                                        <option value="">-- Choose Item to Create --</option>
+                                        {items.map(it => (
+                                          <option key={it.id} value={it.id}>
+                                            {it.itemCode} - {it.name} {it.partCode ? `[Part: ${it.partCode}]` : ''}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </div>
+
+                                    <div>
+                                      <label style={{ fontSize: '0.72rem', fontWeight: 700, display: 'block', marginBottom: '0.2rem' }}>
+                                        Job Work Vendor (Mapped to Item Master) *
+                                      </label>
+                                      <select
+                                        className="input-field"
+                                        required
+                                        style={{ fontSize: '0.82rem', padding: '0.35rem' }}
+                                        value={item.directJWVendorId || ''}
+                                        onChange={(e) => {
+                                          const vId = e.target.value;
+                                          const vObj = vendors.find(v => v.id === vId);
+                                          setGrnItems(prev => prev.map(it => it.itemId === item.itemId ? {
+                                            ...it,
+                                            directJWVendorId: vId,
+                                            directJWVendorName: vObj?.name
+                                          } : it));
+                                        }}
+                                      >
+                                        <option value="">-- Choose Job Work Vendor --</option>
+                                        {vendors.map(v => (
+                                          <option key={v.id} value={v.id}>{v.name} ({v.vendorCode})</option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                  </div>
+
+                                  {/* Route Breakdown Summary Badge */}
+                                  <div style={{ fontSize: '0.72rem', backgroundColor: 'var(--bg-card)', padding: '0.4rem 0.6rem', borderRadius: '0.25rem', border: '1px dashed var(--accent-primary)', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                                    <span>
+                                      🚀 <strong>Direct Job Work:</strong> {directJWQty} {item.unit} &rarr; Outward Challan (Merged for same vendor)
+                                    </span>
+                                    <span>
+                                      📦 <strong>Remaining Inward:</strong> {remainingInwardQty} {item.unit} &rarr; {requiresQC ? '⚠️ Pending QC Inspection Quarantine' : '✅ Store Inventory Credit'}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Rejection Disposition Options */}
+                            {item.rejectedQty > 0 && (
+                              <div style={{ marginTop: '0.65rem', padding: '0.6rem', backgroundColor: 'rgba(239, 68, 68, 0.08)', borderRadius: '0.375rem', border: '1px solid rgba(239, 68, 68, 0.25)', display: 'grid', gridTemplateColumns: '1.5fr 2fr', gap: '0.65rem', alignItems: 'center' }}>
+                                <div>
+                                  <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--danger)', display: 'block', marginBottom: '0.2rem' }}>
+                                    ⚠️ Rejection Action / Disposition:
+                                  </label>
+                                  <select 
+                                    className="input-field" 
+                                    style={{ fontSize: '0.78rem', padding: '0.3rem', borderColor: 'var(--danger)', fontWeight: 600 }}
+                                    value={item.rejectionDisposition || 'SCRAP'}
+                                    onChange={(e) => {
+                                      const disp = e.target.value;
+                                      setGrnItems(prev => prev.map(it => it.itemId === item.itemId ? { ...it, rejectionDisposition: disp } : it));
+                                    }}
+                                  >
+                                    <option value="SCRAP">🔴 Damaged / Scrap (Write-Off)</option>
+                                    <option value="IN_HOUSE_REWORK">🟡 Send for In-House Shop Floor Rework</option>
+                                    <option value="VENDOR_REWORK">🔵 Send Back to Vendor for Rework (PO Kept Open)</option>
+                                    <option value="VENDOR_RETURN">🟣 Return to Vendor (Debit Note / Return)</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '0.2rem' }}>
+                                    Rejection Reason / Notes:
+                                  </label>
+                                  <input 
+                                    type="text" 
+                                    placeholder="e.g. Thread damage, dimension off by 0.5mm, transport breakage"
+                                    className="input-field"
+                                    style={{ fontSize: '0.78rem', padding: '0.3rem' }}
+                                    value={item.rejectionReason || ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setGrnItems(prev => prev.map(it => it.itemId === item.itemId ? { ...it, rejectionReason: val } : it));
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-                <div style={{ fontSize: '0.82rem', marginTop: '0.35rem', color: 'var(--text-primary)', lineHeight: 1.4 }}>
-                  Item <strong>{directJobworkBlockedItem.itemCode}</strong> ({directJobworkBlockedItem.itemName}) is configured as <em>Direct Shipped for External Jobwork</em>. Standard in-house store GRN is blocked for this item. You must create an <strong>External Jobwork Challan</strong> to ship it directly to the vendor for processing.
-                </div>
-                <button 
-                  type="button" 
-                  className="btn btn-warning" 
-                  style={{ marginTop: '0.65rem', fontWeight: 700, fontSize: '0.8rem', padding: '0.35rem 0.75rem', gap: '0.35rem', color: '#ffffff', backgroundColor: 'var(--warning)', border: 'none' }}
-                  onClick={() => {
-                    setIsModalOpen(false);
-                    setActiveModule('external-inventory');
-                  }}
-                >
-                  <Truck size={14} /> Go to External Jobwork to Create Challan
-                </button>
               </div>
             )}
 
@@ -424,9 +781,9 @@ export const GRNModule: React.FC = () => {
               <button 
                 type="submit" 
                 className="btn btn-primary"
-                disabled={grnItems.every(i => i.isDirectJobwork)}
+                disabled={grnItems.length === 0 || !grnItems.some(i => i.isSelected !== false && (i.receivedQty || 0) > 0)}
               >
-                Approve Goods Receipt & Credit In-House Stock
+                {editingGRN ? 'Save & Update GRN Slip' : 'Approve Goods Receipt & Process Inward Stock'}
               </button>
             </div>
           </form>
@@ -487,7 +844,6 @@ export const GRNModule: React.FC = () => {
               <tbody>
                 {filteredGRNs.map((grn, idx) => {
                   const isNavSelected = selectedIndex === idx;
-                  const isHistory = grn.status === 'STORED' || grn.status === 'QC_APPROVED';
 
                   return (
                     <tr 
@@ -505,11 +861,6 @@ export const GRNModule: React.FC = () => {
                         <span style={{ fontWeight: 700, color: 'var(--success)', fontFamily: 'monospace' }}>
                           {grn.grnNumber}
                         </span>
-                        {isHistory && (
-                          <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#fff', fontSize: '0.65rem', padding: '0.1rem 0.35rem' }}>
-                            📜 HISTORY
-                          </span>
-                        )}
                       </div>
                     </td>
                     <td style={{ fontWeight: 600, color: 'var(--accent-primary)', fontFamily: 'monospace' }}>{grn.poNumber}</td>
@@ -526,6 +877,9 @@ export const GRNModule: React.FC = () => {
                       <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
                         <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem' }} title="Print GRN Inward Slip" onClick={() => handlePrintSingleGRN(grn)}>
                           <Printer size={14} />
+                        </button>
+                        <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem' }} title="Edit GRN Slip" onClick={() => handleOpenEditModal(grn)}>
+                          <Edit2 size={14} />
                         </button>
                         {grn.status === 'PENDING_QC' && (
                           <button 

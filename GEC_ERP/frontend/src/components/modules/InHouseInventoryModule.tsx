@@ -29,7 +29,6 @@ export const InHouseInventoryModule: React.FC = () => {
     setAdjustedStock(item.inHouseStock);
     setAdjustReason('Physical Count Audit');
     setAdjustLocation(item.location || '');
-    setAdjustReorder(item.reorderLevel || 0);
     setAdjustPrice(item.unitPrice || 0);
   };
 
@@ -41,7 +40,7 @@ export const InHouseInventoryModule: React.FC = () => {
       Number(adjustedStock),
       adjustReason,
       adjustLocation,
-      Number(adjustReorder),
+      adjustingItem.minStockQty || adjustingItem.reorderLevel || 0,
       Number(adjustPrice)
     );
     setAdjustingItem(null);
@@ -197,7 +196,7 @@ export const InHouseInventoryModule: React.FC = () => {
               </th>
               <th onClick={() => handleSort('reorderLevel')} style={{ cursor: 'pointer' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                  Safety Level {sortField === 'reorderLevel' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
+                  Min Stock Level (Item Master) {sortField === 'reorderLevel' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
                 </div>
               </th>
               <th onClick={() => handleSort('unitPrice')} style={{ cursor: 'pointer' }}>
@@ -216,7 +215,8 @@ export const InHouseInventoryModule: React.FC = () => {
           </thead>
           <tbody>
             {filteredItems.map(item => {
-              const isLow = item.inHouseStock <= (item.reorderLevel || 0);
+              const minStock = item.minStockQty || item.reorderLevel || 0;
+              const isLow = item.inHouseStock <= minStock;
               const val = item.inHouseStock * (item.unitPrice || 0);
               return (
                 <tr key={item.id} onDoubleClick={() => handleOpenAdjustModal(item)} style={{ cursor: 'pointer' }} title="Double-click to adjust stock count">
@@ -235,8 +235,8 @@ export const InHouseInventoryModule: React.FC = () => {
                   <td style={{ fontSize: '1rem', fontWeight: 800, color: isLow ? 'var(--danger)' : 'var(--success)' }}>
                     {item.inHouseStock} {item.unit}
                   </td>
-                  <td style={{ color: 'var(--text-muted)' }}>
-                    {item.reorderLevel || 0} {item.unit}
+                  <td style={{ color: 'var(--text-muted)', fontWeight: 600 }}>
+                    {minStock} {item.unit}
                   </td>
                   <td style={{ fontWeight: 500 }}>
                     ₹{(item.unitPrice || 0).toLocaleString()}
@@ -294,23 +294,23 @@ export const InHouseInventoryModule: React.FC = () => {
                   min="0" 
                   required 
                   className="input-field" 
-                  value={adjustedStock} 
-                  onChange={(e) => setAdjustedStock(Number(e.target.value))} 
+                  value={adjustedStock === 0 ? '' : adjustedStock} 
+                  onChange={(e) => setAdjustedStock(e.target.value === '' ? 0 : Number(e.target.value))} 
                 />
               </div>
 
               <div>
-                <label style={{ fontWeight: 700 }}>Safety / Reorder Level ({adjustingItem.unit})</label>
+                <label style={{ fontWeight: 700, color: 'var(--text-muted)' }}>Min Stock Level ({adjustingItem.unit})</label>
                 <input 
-                  type="number" 
-                  min="0" 
+                  type="text" 
+                  disabled 
                   className="input-field" 
-                  value={adjustReorder} 
-                  onChange={(e) => setAdjustReorder(Number(e.target.value))} 
+                  style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)', cursor: 'not-allowed' }}
+                  value={`${adjustingItem.minStockQty || adjustingItem.reorderLevel || 0} (Item Master - Read Only)`}
                 />
               </div>
 
-              <div>
+              <div style={{ gridColumn: 'span 2' }}>
                 <label style={{ fontWeight: 700 }}>Location Rack / Bin</label>
                 <input 
                   type="text" 
@@ -318,17 +318,6 @@ export const InHouseInventoryModule: React.FC = () => {
                   placeholder="e.g. Rack B-04"
                   value={adjustLocation} 
                   onChange={(e) => setAdjustLocation(e.target.value)} 
-                />
-              </div>
-
-              <div>
-                <label style={{ fontWeight: 700 }}>Unit Valuation (₹)</label>
-                <input 
-                  type="number" 
-                  min="0" 
-                  className="input-field" 
-                  value={adjustPrice} 
-                  onChange={(e) => setAdjustPrice(Number(e.target.value))} 
                 />
               </div>
             </div>

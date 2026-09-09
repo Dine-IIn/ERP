@@ -3,7 +3,8 @@ import {
   User, Item, Customer, Vendor, JobworkChallan, 
   PurchaseOrder, GoodsReceivedNotice, WorkOrder, 
   QCInspection, MachineAssembly, BOM, SalesOrder, Role, Department, CustomRole,
-  JobCard, FloorStation, FinishedGoodUnit, DispatchRecord, UserActivityLog, BackupRecord, RBAC_FEATURES 
+  JobCard, FloorStation, FinishedGoodUnit, DispatchRecord, UserActivityLog, BackupRecord, RBAC_FEATURES,
+  JobCardMaterialReissue, POItem, POStatus
 } from '../types/erp';
 import { 
   INITIAL_USERS, INITIAL_CUSTOMERS, INITIAL_VENDORS, INITIAL_ITEM_CATEGORIES, INITIAL_VENDOR_CATEGORIES, INITIAL_ITEMS, 
@@ -143,6 +144,12 @@ interface ERPContextType {
   selectedWOIdForEdit: string | null;
   setSelectedWOIdForEdit: (id: string | null) => void;
   openWOInEditor: (woId: string) => void;
+  selectedBOMIdForView: string | null;
+  setSelectedBOMIdForView: (id: string | null) => void;
+  openBOMInEditor: (bomId: string) => void;
+  jobCardMaterialReissues: JobCardMaterialReissue[];
+  addJobCardMaterialReissue: (reissue: Omit<JobCardMaterialReissue, 'id' | 'reissueNo'>) => void;
+  resubmitPOForApproval: (poId: string, updatedItems?: POItem[], notes?: string) => void;
   setSearchTerm: (term: string) => void;
   setActiveModule: (moduleKey: string) => void;
   toggleTheme: () => void;
@@ -253,9 +260,10 @@ interface ERPContextType {
   updatePurchaseOrder: (po: PurchaseOrder) => void;
   deletePurchaseOrder: (id: string) => void;
   sendPODraftsForApproval: (ids: string[]) => void;
-  updatePOStatus: (id: string, status: PurchaseOrder['status']) => void;
+  updatePOStatus: (id: string, status: PurchaseOrder['status'], rejectionReason?: string) => void;
 
   addGRN: (grn: Omit<GoodsReceivedNotice, 'id' | 'status'>) => void;
+  updateGRN: (grn: GoodsReceivedNotice) => void;
   approveGRN: (grnId: string) => void;
 
   addAssembly: (assembly: Omit<MachineAssembly, 'id'>) => void;
@@ -372,10 +380,17 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [theme, setTheme] = useState<'dark' | 'light'>(() => getStored('theme', 'dark'));
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedWOIdForEdit, setSelectedWOIdForEdit] = useState<string | null>(null);
+  const [selectedBOMIdForView, setSelectedBOMIdForView] = useState<string | null>(null);
+  const [jobCardMaterialReissues, setJobCardMaterialReissues] = useState<JobCardMaterialReissue[]>(() => getStored('jobCardMaterialReissues', []));
 
   const openWOInEditor = (woId: string) => {
     setSelectedWOIdForEdit(woId);
     setActiveModuleState('work-orders');
+  };
+
+  const openBOMInEditor = (bomId: string) => {
+    setSelectedBOMIdForView(bomId);
+    setActiveModuleState('bom-master');
   };
 
   useEffect(() => setStored('users', users), [users]);
@@ -397,6 +412,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => setStored('assemblies', assemblies), [assemblies]);
   useEffect(() => setStored('assemblyStages', assemblyStages), [assemblyStages]);
   useEffect(() => setStored('jobCards', jobCards), [jobCards]);
+  useEffect(() => setStored('jobCardMaterialReissues', jobCardMaterialReissues), [jobCardMaterialReissues]);
   useEffect(() => setStored('floorStations', floorStations), [floorStations]);
   useEffect(() => setStored('finishedGoods', finishedGoods), [finishedGoods]);
   useEffect(() => setStored('dispatchRecords', dispatchRecords), [dispatchRecords]);
@@ -657,11 +673,58 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newQC = { ...qc, id: `qc-${Date.now()}`, timestamp: new Date().toISOString() };
     setQCInspections(prev => [newQC, ...prev]);
     addAuditLog('CREATE_QC', 'Quality Control', `Recorded QC inspection: ${newQC.inspectionNo || newQC.qcNumber || 'QC'} (${qc.referenceType || 'QC'}) - Status: ${qc.status || 'PENDING'}`);
+
+    const passedQty = qc.passedQuantity !== undefined ? qc.passedQuantity : (qc.approvedQty || 0);
+    const isPassed = ((qc.disposition as string) === 'PASSED' || qc.status === 'APPROVED' || (qc.disposition as string) === 'APPROVED');
+    if (isPassed && passedQty > 0 && qc.itemId) {
+      setItems(prevItems => prevItems.map(item => {
+        if (item.id === qc.itemId || item.itemCode === qc.itemCode) {
+          const deductQC = Math.min(item.pendingQCStock || 0, passedQty);
+          return {
+            ...item,
+            pendingQCStock: Math.max(0, (item.pendingQCStock || 0) - deductQC),
+            inHouseStock: (item.inHouseStock || 0) + deductQC
+          };
+        }
+        return item;
+      }));
+    }
   };
 
   const updateQCInspection = (qc: QCInspection) => {
+    const prevQC = qcInspections.find(q => q.id === qc.id);
     setQCInspections(prev => prev.map(q => q.id === qc.id ? qc : q));
     addAuditLog('UPDATE_QC', 'Quality Control', `Updated QC inspection: ${qc.inspectionNo || qc.qcNumber || qc.id}`);
+
+    const oldPassed = prevQC ? (prevQC.passedQuantity !== undefined ? prevQC.passedQuantity : (prevQC.approvedQty || 0)) : 0;
+    const newPassed = ((qc.disposition as string) === 'PASSED' || qc.status === 'APPROVED' || (qc.disposition as string) === 'APPROVED') 
+      ? (qc.passedQuantity !== undefined ? qc.passedQuantity : (qc.approvedQty || 0)) 
+      : 0;
+    const transferQty = Math.max(0, newPassed - oldPassed);
+
+    if (transferQty > 0 && qc.itemId) {
+      setItems(prevItems => prevItems.map(item => {
+        if (item.id === qc.itemId || item.itemCode === qc.itemCode) {
+          const deductQC = Math.min(item.pendingQCStock || 0, transferQty);
+          return {
+            ...item,
+            pendingQCStock: Math.max(0, (item.pendingQCStock || 0) - deductQC),
+            inHouseStock: (item.inHouseStock || 0) + deductQC
+          };
+        }
+        return item;
+      }));
+    }
+
+    if (qc.referenceNo) {
+      const refNo = qc.referenceNo;
+      setGRNs(prevGRNs => prevGRNs.map(g => {
+        if (g.grnNumber === refNo) {
+          return { ...g, status: 'QC_APPROVED' };
+        }
+        return g;
+      }));
+    }
   };
 
   // Assembly Stages
@@ -1367,45 +1430,225 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const sendPODraftsForApproval = (ids: string[]) => {
     setPurchaseOrders(prev => prev.map(po => {
-      if (ids.includes(po.id) && po.status === 'DRAFT') {
-        return { ...po, status: 'WAITING_FOR_APPROVAL' };
+      if (ids.includes(po.id) && (po.status === 'DRAFT' || po.status === 'REJECTED')) {
+        return { ...po, status: 'WAITING_FOR_APPROVAL' as POStatus, rejectionReason: undefined };
       }
       return po;
     }));
+    addAuditLog('SEND_PO_FOR_APPROVAL', 'Purchase Orders', `Submitted ${ids.length} PO draft(s) for manager approval.`);
   };
 
-  const updatePOStatus = (id: string, status: PurchaseOrder['status']) => {
-    setPurchaseOrders(prev => prev.map(p => p.id === id ? { ...p, status } : p));
+  const updatePOStatus = (id: string, status: PurchaseOrder['status'], rejectionReason?: string) => {
+    setPurchaseOrders(prev => prev.map(p => {
+      if (p.id === id) {
+        return {
+          ...p,
+          status,
+          rejectionReason: status === 'REJECTED' ? (rejectionReason || 'Rejected by Approver') : p.rejectionReason,
+          rejectedBy: status === 'REJECTED' ? (currentUser?.fullName || 'Approver') : p.rejectedBy,
+          rejectedAt: status === 'REJECTED' ? new Date().toISOString() : p.rejectedAt
+        };
+      }
+      return p;
+    }));
+    addAuditLog('UPDATE_PO_STATUS', 'Purchase Orders', `Updated PO status to ${status}${rejectionReason ? ` (Reason: ${rejectionReason})` : ''}`);
   };
 
-  const addGRN = (grnData: Omit<GoodsReceivedNotice, 'id' | 'status'>) => {
-    const newGRN: GoodsReceivedNotice = {
-      ...grnData,
-      id: `grn-${Date.now()}`,
-      status: 'QC_APPROVED'
+  const resubmitPOForApproval = (poId: string, updatedItems?: POItem[], notes?: string) => {
+    setPurchaseOrders(prev => prev.map(po => {
+      if (po.id === poId) {
+        const items = updatedItems || po.items;
+        const subtotal = items.reduce((sum, item) => sum + ((item.quantity || item.orderedQty || 1) * (item.unitPrice || 0)), 0);
+        const taxAmount = subtotal * 0.18;
+        const totalAmount = subtotal + taxAmount;
+        return {
+          ...po,
+          items,
+          subtotal,
+          taxAmount,
+          totalAmount,
+          notes: notes !== undefined ? notes : po.notes,
+          status: 'WAITING_FOR_APPROVAL' as POStatus,
+          rejectionReason: undefined,
+          rejectedBy: undefined,
+          rejectedAt: undefined
+        };
+      }
+      return po;
+    }));
+    addAuditLog('RESUBMIT_PO_APPROVAL', 'Purchase Orders', `Resubmitted modified PO for approval.`);
+  };
+
+  const addJobCardMaterialReissue = (reissueData: Omit<JobCardMaterialReissue, 'id' | 'reissueNo'>) => {
+    const newReissue: JobCardMaterialReissue = {
+      ...reissueData,
+      id: `reissue-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      reissueNo: `REISSUE-${Date.now().toString().slice(-4)}`
     };
+    setJobCardMaterialReissues(prev => [newReissue, ...prev]);
 
-    setGRNs(prev => [newGRN, ...prev]);
-
-    // Credit in-house inventory
-    grnData.items.forEach(grnItem => {
+    // Deduct stock from In-House store
+    if (reissueData.itemId) {
       setItems(prevItems => prevItems.map(item => {
-        if (item.id === grnItem.itemId || item.itemCode === grnItem.itemCode) {
+        if (item.id === reissueData.itemId || item.itemCode === reissueData.itemCode) {
           return {
             ...item,
-            inHouseStock: item.inHouseStock + (grnItem.acceptedQty || 0)
+            inHouseStock: Math.max(0, (item.inHouseStock || 0) - (reissueData.quantity || 0))
           };
         }
         return item;
       }));
+    }
+
+    addAuditLog('REISSUE_MATERIAL', 'Job Cards', `Allocated replacement material: ${reissueData.quantity} ${reissueData.unit} of ${reissueData.itemCode} for Worker: ${reissueData.workerName} (Reason: ${reissueData.reason})`);
+  };
+
+  const addGRN = (grnData: Omit<GoodsReceivedNotice, 'id' | 'status'>) => {
+    let hasPendingQC = false;
+    const directJWItemsByVendor = new Map<string, {
+      vendorId: string;
+      vendorName: string;
+      lines: any[];
+    }>();
+
+    // 1. Process items for Stock / Pending QC / Direct Jobwork
+    grnData.items.forEach(grnItem => {
+      const itemObj = items.find(i => i.id === grnItem.itemId || i.itemCode === grnItem.itemCode);
+      const factor = (grnItem.conversionFactor && grnItem.conversionFactor > 0) ? grnItem.conversionFactor : (itemObj?.conversionFactor || 1);
+      const totalRecd = grnItem.acceptedQty !== undefined ? grnItem.acceptedQty : (grnItem.receivedQty || 0);
+      const directQty = grnItem.isDirectJobwork ? (grnItem.directJWQty || 0) : 0;
+      const inwardStoreQty = Math.max(0, totalRecd - directQty);
+      const needsQC = itemObj?.qcTrigger === 'ON_GRN' || itemObj?.testReportRequired;
+
+      if (needsQC && inwardStoreQty > 0) {
+        hasPendingQC = true;
+      }
+
+      // Credit Stock (Store stock only credited if NO QC required; if QC required, goes to pendingQCStock)
+      setItems(prevItems => prevItems.map(item => {
+        if (item.id === grnItem.itemId || item.itemCode === grnItem.itemCode) {
+          const addedInHouse = needsQC ? 0 : (inwardStoreQty * factor);
+          const addedPendingQC = needsQC ? (inwardStoreQty * factor) : 0;
+          const addedExternal = directQty * factor;
+
+          return {
+            ...item,
+            inHouseStock: (item.inHouseStock || 0) + addedInHouse,
+            pendingQCStock: (item.pendingQCStock || 0) + addedPendingQC,
+            externalStock: (item.externalStock || 0) + addedExternal
+          };
+        }
+        return item;
+      }));
+
+      // Create auto QC Inspection record if item requires QC on GRN
+      if (needsQC && inwardStoreQty > 0) {
+        const newQC: QCInspection = {
+          id: `qc-grn-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          inspectionNo: `QC-INSP-${Date.now().toString().slice(-4)}`,
+          qcNumber: `QC-INSP-${Date.now().toString().slice(-4)}`,
+          referenceType: 'GRN',
+          referenceNo: grnData.grnNumber,
+          itemId: itemObj?.id || grnItem.itemId,
+          itemCode: itemObj?.itemCode || grnItem.itemCode,
+          itemName: itemObj?.name || grnItem.itemName,
+          inspectedQty: inwardStoreQty,
+          inspectedQuantity: inwardStoreQty,
+          passedQuantity: 0,
+          failedQuantity: 0,
+          approvedQty: 0,
+          rejectedQty: 0,
+          status: 'PENDING',
+          timestamp: new Date().toISOString(),
+          type: 'GRN'
+        };
+        setQCInspections(prev => [newQC, ...prev]);
+      }
+
+      // Collect Direct Jobwork entries
+      if (grnItem.isDirectJobwork && directQty > 0 && grnItem.directJWVendorId) {
+        const vId = grnItem.directJWVendorId;
+        const vName = grnItem.directJWVendorName || vendors.find(v => v.id === vId)?.name || 'Job Worker';
+        if (!directJWItemsByVendor.has(vId)) {
+          directJWItemsByVendor.set(vId, {
+            vendorId: vId,
+            vendorName: vName,
+            lines: []
+          });
+        }
+        directJWItemsByVendor.get(vId)!.lines.push({
+          itemId: itemObj?.id || grnItem.itemId,
+          itemCode: itemObj?.itemCode || grnItem.itemCode,
+          itemName: itemObj?.name || grnItem.itemName,
+          qty: directQty,
+          producedItemId: grnItem.directJWProduceItemId,
+          producedItemCode: grnItem.directJWProduceItemCode,
+          producedItemName: grnItem.directJWProduceItemName
+        });
+
+        // Map vendor to the produced item in item master
+        if (grnItem.directJWProduceItemId) {
+          setItems(prevItems => prevItems.map(item => {
+            if (item.id === grnItem.directJWProduceItemId) {
+              const currentMapped = item.mappedVendors || [];
+              if (!currentMapped.some(v => v.vendorId === vId)) {
+                return {
+                  ...item,
+                  mappedVendors: [...currentMapped, { vendorId: vId, vendorName: vName, priority: currentMapped.length + 1 }]
+                };
+              }
+            }
+            return item;
+          }));
+        }
+      }
     });
 
+    // 2. Automatically generate merged Job Work Challans by Vendor
+    directJWItemsByVendor.forEach((group, vId) => {
+      const firstLine = group.lines[0];
+      const autoChallan: JobworkChallan = {
+        id: `jw-grn-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        challanNo: `JW-DIR-${Date.now().toString().slice(-4)}`,
+        vendorId: vId,
+        vendorName: group.vendorName,
+        itemId: firstLine?.itemId,
+        itemCode: firstLine?.itemCode,
+        itemName: firstLine?.itemName,
+        producedItemId: firstLine?.producedItemId,
+        producedItemCode: firstLine?.producedItemCode,
+        producedItemName: firstLine?.producedItemName,
+        processRequired: 'Direct Jobwork from Inward GRN',
+        sentQuantity: group.lines.reduce((s, l) => s + l.qty, 0),
+        receivedQuantity: 0,
+        scrapQuantity: 0,
+        pendingBalance: group.lines.reduce((s, l) => s + l.qty, 0),
+        issueDate: grnData.receivedDate || new Date().toISOString().split('T')[0],
+        expectedReturnDate: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+        status: 'ISSUED',
+        items: group.lines,
+        notes: `Direct shipment generated from GRN ${grnData.grnNumber}`
+      };
+      setJobworks(prev => [autoChallan, ...prev]);
+      addAuditLog('AUTO_JOBWORK_CHALLAN', 'Goods Received', `Generated direct Job Work Challan ${autoChallan.challanNo} for vendor ${group.vendorName}`);
+    });
+
+    const newGRN: GoodsReceivedNotice = {
+      ...grnData,
+      id: `grn-${Date.now()}`,
+      status: hasPendingQC ? 'PENDING_QC' : 'QC_APPROVED'
+    };
+
+    setGRNs(prev => [newGRN, ...prev]);
+
+    // 3. Update PO if Against PO
     if (grnData.poId || grnData.poNumber) {
       setPurchaseOrders(prevPOs => prevPOs.map(po => {
         if (po.id === grnData.poId || po.poNumber === grnData.poNumber) {
           const updatedItems = po.items.map(poLine => {
-            const grnLine = grnData.items.find(g => g.itemId === poLine.itemId || g.itemCode === poLine.itemCode);
-            return grnLine ? { ...poLine, receivedQty: (poLine.receivedQty || 0) + (grnLine.acceptedQty || 0) } : poLine;
+            const grnLine = grnData.items.find(g => g.itemId === poLine.itemId || g.itemCode === poLine.itemCode || g.poItemId === poLine.itemId);
+            const receivedQtyInc = grnLine ? (grnLine.acceptedQty !== undefined ? grnLine.acceptedQty : (grnLine.receivedQty || 0)) : 0;
+            return grnLine ? { ...poLine, receivedQty: (poLine.receivedQty || 0) + receivedQtyInc } : poLine;
           });
           const allComplete = updatedItems.every(line => (line.receivedQty || 0) >= (line.quantity || line.orderedQty || 1));
           const anyReceived = updatedItems.some(line => (line.receivedQty || 0) > 0);
@@ -1419,10 +1662,61 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return po;
       }));
     }
+
+    // 4. Update Jobwork Challan if Against Job Work
+    if (grnData.challanId || grnData.challanNo) {
+      setJobworks(prevJWs => prevJWs.map(jw => {
+        if (jw.id === grnData.challanId || jw.challanNo === grnData.challanNo) {
+          const totalRecdThisGRN = grnData.items.reduce((s, it) => s + (it.acceptedQty !== undefined ? it.acceptedQty : (it.receivedQty || 0)), 0);
+          const newReceived = (jw.receivedQuantity || 0) + totalRecdThisGRN;
+          const remaining = Math.max(0, (jw.sentQuantity || 0) - newReceived - (jw.scrapQuantity || 0));
+          return {
+            ...jw,
+            receivedQuantity: newReceived,
+            pendingBalance: remaining,
+            status: remaining === 0 ? 'COMPLETED' : 'PARTIALLY_RECEIVED'
+          };
+        }
+        return jw;
+      }));
+    }
+
+    addAuditLog('CREATE_GRN', 'Goods Received', `Created GRN ${newGRN.grnNumber} (${grnData.items.length} item lines) - Status: ${newGRN.status}`);
   };
 
   const approveGRN = (grnId: string) => {
     setGRNs(prev => prev.map(g => g.id === grnId ? { ...g, status: 'QC_APPROVED' } : g));
+  };
+
+  const updateGRN = (updatedGRN: GoodsReceivedNotice) => {
+    const prevGRN = grns.find(g => g.id === updatedGRN.id);
+    if (!prevGRN) return;
+
+    // Adjust inventory difference for each item
+    prevGRN.items.forEach(oldItem => {
+      const newItem = updatedGRN.items.find(ni => ni.itemId === oldItem.itemId || ni.itemCode === oldItem.itemCode);
+      if (newItem) {
+        const factor = (newItem.conversionFactor && newItem.conversionFactor > 0) ? newItem.conversionFactor : (oldItem.conversionFactor || 1);
+        const oldBaseQty = (oldItem.acceptedQty || 0) * factor;
+        const newBaseQty = (newItem.acceptedQty || 0) * factor;
+        const diff = newBaseQty - oldBaseQty;
+
+        if (diff !== 0) {
+          setItems(prevItems => prevItems.map(item => {
+            if (item.id === oldItem.itemId || item.itemCode === oldItem.itemCode) {
+              return {
+                ...item,
+                inHouseStock: Math.max(0, (item.inHouseStock || 0) + diff)
+              };
+            }
+            return item;
+          }));
+        }
+      }
+    });
+
+    setGRNs(prev => prev.map(g => g.id === updatedGRN.id ? updatedGRN : g));
+    addAuditLog('UPDATE_GRN', 'Goods Received', `Updated GRN ${updatedGRN.grnNumber}`);
   };
 
   const addAssembly = (assemblyData: Omit<MachineAssembly, 'id'>) => {
@@ -1464,6 +1758,12 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       selectedWOIdForEdit,
       setSelectedWOIdForEdit,
       openWOInEditor,
+      selectedBOMIdForView,
+      setSelectedBOMIdForView,
+      openBOMInEditor,
+      jobCardMaterialReissues,
+      addJobCardMaterialReissue,
+      resubmitPOForApproval,
       setSearchTerm,
       setActiveModule,
       toggleTheme,
@@ -1547,6 +1847,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       sendPODraftsForApproval,
       updatePOStatus,
       addGRN,
+      updateGRN,
       approveGRN,
       addAssembly,
       updateAssemblyProgress

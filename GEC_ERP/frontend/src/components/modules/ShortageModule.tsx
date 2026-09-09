@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { 
-  ItemWiseShortagePrintView, WOShortagePrintView, POShortagePrintView 
+  ItemWiseShortagePrintView, WOShortagePrintView, POShortagePrintView, TabularShortagePrintView 
 } from '../printTemplates/ShortagePrintTemplates';
 import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
 import { 
@@ -23,16 +23,32 @@ export const ShortageModule: React.FC = () => {
   // Selected WOs Filter
   const [selectedWOIds, setSelectedWOIds] = useState<string[]>([]);
   
-  // Expanded Tree Node Keys
+  // Universal Shortage Controls
+  const [isExplodeAllBOMs, setIsExplodeAllBOMs] = useState(false);
+  const [shortageFilterMode, setShortageFilterMode] = useState<'SHORTAGE_ONLY' | 'ALL_ITEMS'>('SHORTAGE_ONLY');
+  const [woSearchTerm, setWoSearchTerm] = useState('');
+  const [tableSearchTerm, setTableSearchTerm] = useState('');
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
 
   // Simulation Quantities (key: woId -> simulated qty)
   const [simulatedQuantities, setSimulatedQuantities] = useState<Record<string, number>>({});
 
+  // Helper to get open PO quantity
+  const getOpenPOQuantity = (item: Item | undefined, itemCode: string) => {
+    return purchaseOrders
+      .filter(po => po.status !== 'GOODS_RECEIVED' && po.status !== 'CANCELLED' && po.status !== 'REJECTED')
+      .reduce((sum, po) => {
+        const line = po.items.find(pi => (item && pi.itemId === item.id) || pi.itemCode === itemCode);
+        if (!line) return sum;
+        const ordered = line.quantity || line.orderedQty || 0;
+        const received = line.receivedQty || 0;
+        return sum + Math.max(0, ordered - received);
+      }, 0);
+  };
+
   // --- ITEM-WISE SHORTAGE STATE ---
   const [itemWiseSearch, setItemWiseSearch] = useState('');
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
-  const [showAllItemsToggle, setShowAllItemsToggle] = useState(false);
   const [selectedClassFilters, setSelectedClassFilters] = useState<string[]>([]);
   const [itemTargetQuantities, setItemTargetQuantities] = useState<Record<string, number>>({});
 
@@ -67,7 +83,20 @@ export const ShortageModule: React.FC = () => {
   const isBoughtOutItem = (item: Item) => {
     const p = (item.processType || (item as any).materialProcessType || '').toLowerCase();
     const cat = (item.category || '').toUpperCase();
-    return p.includes('brought out') || p.includes('bought out') || p.includes('brought_out') || cat === 'BO';
+    return p.includes('brought out') || p.includes('bought out') || p.includes('brought_out') || p.includes('job work + brought out') || p.includes('jobwork + brought out') || cat === 'BO';
+  };
+
+  // Helper to test if item is Job Work
+  const isJobWorkItem = (item: Item) => {
+    const p = (item.processType || (item as any).materialProcessType || '').toLowerCase();
+    return p.includes('job work') || p.includes('jobwork') || p.includes('job work + brought out') || p.includes('jobwork + brought out');
+  };
+
+  // Helper to test if item is In-House
+  const isInHouseItem = (item: Item) => {
+    const p = (item.processType || (item as any).materialProcessType || '').toLowerCase();
+    const cat = (item.category || '').toUpperCase();
+    return p.includes('in-house') || p.includes('inhouse') || cat === 'MF' || cat === 'AS' || cat === 'FAS' || cat === 'SA' || cat === 'FP' || cat === 'FG';
   };
 
   // -------------------------------------------------------------
@@ -83,29 +112,64 @@ export const ShortageModule: React.FC = () => {
     if (!matchingBOM || !matchingBOM.components || matchingBOM.components.length === 0) {
       // Standalone / Raw material item calculation
       const inHouse = item.inHouseStock || 0;
-      const reorder = item.reorderLevel || item.minStockQty || 0;
-      const netShortage = Math.max(0, targetQty - inHouse);
+      const minStock = item.minStockQty !== undefined ? item.minStockQty : (item.reorderLevel || 0);
+      const netShortage = Math.max(0, (targetQty + minStock) - inHouse);
       return {
         item,
         matchingBOM: null,
         targetQty,
         maxBuildable: inHouse,
-        constrainingComponent: inHouse < targetQty ? `${item.itemCode} (Direct Stock Shortage)` : undefined,
+        constrainingComponent: inHouse < (targetQty + minStock) ? `${item.itemCode} (Direct Stock Shortage)` : undefined,
         components: [],
-        hasShortage: netShortage > 0 || (inHouse <= reorder)
+        hasShortage: netShortage > 0 || (inHouse <= minStock)
       };
     }
 
     let minBuildable = Infinity;
     let bottleneckComp = '';
 
-    const compLines = matchingBOM.components.map(comp => {
+    // Collect components (support multi-level recursion if isExplodeAllBOMs is true)
+    const collectedComps: Array<{
+      itemId: string;
+      itemCode: string;
+      itemName: string;
+      qtyPerMachine: number;
+      unit: string;
+    }> = [];
+
+    const collectComponents = (bom: BOM, multiplier: number, visited = new Set<string>()) => {
+      if (visited.has(bom.id)) return;
+      visited.add(bom.id);
+
+      bom.components.forEach(comp => {
+        const childIt = items.find(i => i.id === comp.itemId || i.itemCode === comp.itemCode);
+        const qtyPer = (comp.qtyPerMachine || 1) * multiplier;
+        
+        const childBOM = isExplodeAllBOMs ? boms.find(b => b.id === childIt?.id || b.bomCode === childIt?.itemCode || b.machineModel?.toLowerCase() === childIt?.name?.toLowerCase()) : null;
+        if (childBOM && isExplodeAllBOMs) {
+          collectComponents(childBOM, qtyPer, new Set(visited));
+        }
+
+        collectedComps.push({
+          itemId: comp.itemId || childIt?.id || '',
+          itemCode: comp.itemCode || childIt?.itemCode || '',
+          itemName: comp.itemName || childIt?.name || '',
+          qtyPerMachine: qtyPer,
+          unit: comp.unit || childIt?.unit || 'PCS'
+        });
+      });
+    };
+
+    collectComponents(matchingBOM, 1);
+
+    const compLines = collectedComps.map(comp => {
       const childItem = items.find(i => i.id === comp.itemId || i.itemCode === comp.itemCode);
-      const qtyPer = comp.qtyPerMachine || 1;
+      const qtyPer = comp.qtyPerMachine;
       const totalReq = qtyPer * targetQty;
-      const inHouse = childItem ? childItem.inHouseStock : 0;
-      const external = childItem ? childItem.externalStock : 0;
-      const netShortage = Math.max(0, totalReq - inHouse);
+      const inHouse = childItem ? (childItem.inHouseStock || 0) : 0;
+      const external = childItem ? (childItem.externalStock || 0) : 0;
+      const minStock = childItem ? (childItem.minStockQty !== undefined ? childItem.minStockQty : (childItem.reorderLevel || 0)) : 0;
+      const netShortage = Math.max(0, (totalReq + minStock) - inHouse);
       const pSource = childItem?.processType || 'In-house';
 
       const buildableUnits = Math.floor(inHouse / Math.max(1, qtyPer));
@@ -125,6 +189,7 @@ export const ShortageModule: React.FC = () => {
         totalRequired: totalReq,
         inHouseStock: inHouse,
         externalStock: external,
+        minStockQty: minStock,
         netShortage,
         isShortage: netShortage > 0,
         unit: comp.unit || childItem?.unit || 'PCS'
@@ -145,48 +210,200 @@ export const ShortageModule: React.FC = () => {
     };
   };
 
-  // Eligible items for Item-Wise search
-  const allItemShortageMap = items.filter(i => !i.isBlocked).map(calculateItemShortageDetail);
-
-  const eligibleItemWiseItems = allItemShortageMap.filter(detail => {
-    // Class filter
-    if (selectedClassFilters.length > 0 && !selectedClassFilters.includes(detail.item.category)) {
-      return false;
-    }
-
-    // Shortage vs All Items filter
-    if (!showAllItemsToggle && !detail.hasShortage) {
-      return false;
-    }
-
-    // Search query
-    if (itemWiseSearch) {
-      const q = itemWiseSearch.toLowerCase();
-      const matches = detail.item.itemCode.toLowerCase().includes(q) ||
-        detail.item.name.toLowerCase().includes(q) ||
-        (detail.item.category && detail.item.category.toLowerCase().includes(q));
-      if (!matches) return false;
-    }
-
-    return true;
-  });
-
-  // Selected item plans
-  const plannedItemDetails = selectedItemIds.length > 0
-    ? items.filter(i => selectedItemIds.includes(i.id)).map(calculateItemShortageDetail)
-    : eligibleItemWiseItems.slice(0, 5); // Default to first 5 items if none explicitly selected
+  // Item-Wise: ONLY user-added items are rendered
+  const plannedItemDetails = items
+    .filter(i => selectedItemIds.includes(i.id))
+    .map(calculateItemShortageDetail);
 
   // -------------------------------------------------------------
-  // WORK ORDER SHORTAGE TREE CALCULATIONS
+  // WORK ORDER SHORTAGE & COMBINED AGGREGATION CALCULATIONS
   // -------------------------------------------------------------
   const relevantWOs = workOrders.filter(wo => {
     if (selectedWOIds.length > 0 && !selectedWOIds.includes(wo.id)) return false;
     return wo.status === 'IN_PROGRESS' || wo.status === 'PLANNED';
   });
 
+  // Calculate Consolidated Combined Shortage across ALL selected Work Orders
+  const consolidatedMap = new Map<string, {
+    itemId: string;
+    itemCode: string;
+    itemName: string;
+    category: string;
+    processType: string;
+    unit: string;
+    totalRequired: number;
+    inHouseStock: number;
+    externalStock: number;
+    netShortage: number;
+    isShortage: boolean;
+    itemObj?: Item;
+    requiredByWOs: { woId: string; woNumber: string; machineModel: string; requiredQty: number }[];
+  }>();
+
+  // Multi-level recursive BOM explosion helper
+  const explodeBOMRecursively = (
+    bomIdOrModel: string,
+    multiplier: number,
+    woContext: { woId: string; woNumber: string; machineModel: string },
+    targetMap: Map<string, any>,
+    visitedBOMs = new Set<string>()
+  ) => {
+    const bom = boms.find(b => b.id === bomIdOrModel || b.bomCode === bomIdOrModel || b.machineModel?.toLowerCase() === bomIdOrModel?.toLowerCase());
+    if (!bom || !bom.components || visitedBOMs.has(bom.id)) return;
+    visitedBOMs.add(bom.id);
+
+    bom.components.forEach(comp => {
+      const itemObj = items.find(i => i.id === comp.itemId || i.itemCode === comp.itemCode);
+      const qtyPer = comp.qtyPerMachine || 1;
+      const totalReq = qtyPer * multiplier;
+      const key = comp.itemCode || comp.itemId || 'unknown';
+      const inHouse = itemObj ? (itemObj.inHouseStock || 0) : 0;
+      const external = itemObj ? (itemObj.externalStock || 0) : 0;
+      const pSource = itemObj?.processType || 'In-house';
+      const cat = itemObj?.category || 'Component';
+
+      // Check if this component itself has a sub-assembly BOM
+      const subBOM = boms.find(b => b.id === itemObj?.id || b.bomCode === itemObj?.itemCode || b.machineModel?.toLowerCase() === itemObj?.name?.toLowerCase());
+
+      if (subBOM && isExplodeAllBOMs) {
+        // Explode child BOM recursively (BOM inside BOM)
+        explodeBOMRecursively(subBOM.id, totalReq, woContext, targetMap, new Set(visitedBOMs));
+      }
+
+      if (!targetMap.has(key)) {
+        targetMap.set(key, {
+          itemId: itemObj?.id || comp.itemId || '',
+          itemCode: comp.itemCode || itemObj?.itemCode || '',
+          itemName: comp.itemName || itemObj?.name || '',
+          category: cat,
+          processType: pSource,
+          unit: comp.unit || itemObj?.unit || 'PCS',
+          totalRequired: totalReq,
+          inHouseStock: inHouse,
+          externalStock: external,
+          netShortage: 0,
+          isShortage: false,
+          itemObj,
+          requiredByWOs: [{
+            woId: woContext.woId,
+            woNumber: woContext.woNumber,
+            machineModel: woContext.machineModel,
+            requiredQty: totalReq
+          }]
+        });
+      } else {
+        const existing = targetMap.get(key)!;
+        existing.totalRequired += totalReq;
+        existing.requiredByWOs.push({
+          woId: woContext.woId,
+          woNumber: woContext.woNumber,
+          machineModel: woContext.machineModel,
+          requiredQty: totalReq
+        });
+      }
+    });
+  };
+
+  relevantWOs.forEach(wo => {
+    const targetQty = wo.targetQuantity || wo.quantity || 1;
+    const woContext = {
+      woId: wo.id,
+      woNumber: wo.workOrderNo || wo.woNumber || wo.id,
+      machineModel: wo.machineModel
+    };
+
+    if (isExplodeAllBOMs) {
+      explodeBOMRecursively(wo.bomId || wo.machineModel, targetQty, woContext, consolidatedMap);
+    } else {
+      const linkedBOM = boms.find(b => b.machineModel === wo.machineModel || b.id === wo.bomId);
+      const components = wo.woComponents && wo.woComponents.length > 0
+        ? wo.woComponents.map(c => ({
+            itemId: c.itemId || '',
+            itemCode: c.itemCode || '',
+            itemName: c.itemName || '',
+            qtyPerMachine: c.qtyRequired ? c.qtyRequired / (wo.quantity || 1) : 1,
+            unit: c.unit || 'PCS',
+            subAssemblyTag: c.subAssemblyTag || 'General Assembly'
+          }))
+        : (linkedBOM?.components || []);
+
+      components.forEach(comp => {
+        const itemObj = items.find(i => i.id === comp.itemId || i.itemCode === comp.itemCode);
+        const totalReq = (comp.qtyPerMachine || 1) * targetQty;
+        const key = comp.itemCode || comp.itemId || 'unknown';
+        const inHouse = itemObj ? (itemObj.inHouseStock || 0) : 0;
+        const external = itemObj ? (itemObj.externalStock || 0) : 0;
+        const pSource = itemObj?.processType || 'In-house';
+        const cat = itemObj?.category || 'Component';
+
+        if (!consolidatedMap.has(key)) {
+          consolidatedMap.set(key, {
+            itemId: itemObj?.id || comp.itemId || '',
+            itemCode: comp.itemCode || itemObj?.itemCode || '',
+            itemName: comp.itemName || itemObj?.name || '',
+            category: cat,
+            processType: pSource,
+            unit: comp.unit || itemObj?.unit || 'PCS',
+            totalRequired: totalReq,
+            inHouseStock: inHouse,
+            externalStock: external,
+            netShortage: 0,
+            isShortage: false,
+            itemObj,
+            requiredByWOs: [{
+              woId: wo.id,
+              woNumber: wo.workOrderNo || wo.woNumber || wo.id,
+              machineModel: wo.machineModel,
+              requiredQty: totalReq
+            }]
+          });
+        } else {
+          const existing = consolidatedMap.get(key)!;
+          existing.totalRequired += totalReq;
+          existing.requiredByWOs.push({
+            woId: wo.id,
+            woNumber: wo.workOrderNo || wo.woNumber || wo.id,
+            machineModel: wo.machineModel,
+            requiredQty: totalReq
+          });
+        }
+      });
+    }
+  });
+
+  const consolidatedShortageList = Array.from(consolidatedMap.values()).map(c => {
+    const minStock = c.itemObj ? (c.itemObj.minStockQty !== undefined ? c.itemObj.minStockQty : (c.itemObj.reorderLevel || 0)) : 0;
+    const netShortage = Math.max(0, (c.totalRequired + minStock) - c.inHouseStock);
+    return {
+      ...c,
+      minStockQty: minStock,
+      netShortage,
+      isShortage: netShortage > 0
+    };
+  });
+
+  // Filtered lists for each tab based on process type and shortageFilterMode
+  const activeTabConsolidatedShortages = consolidatedShortageList.filter(c => {
+    let matchesTab = true;
+    if (activeTab === 'PO_SHORTAGE') {
+      matchesTab = isBoughtOutItem(c.itemObj || c as any) || c.processType === 'Brought out' || c.processType === 'Job work + Brought out' || c.category === 'BO';
+    } else if (activeTab === 'JOBWORK_SHORTAGE') {
+      matchesTab = isJobWorkItem(c.itemObj || c as any) || c.processType === 'Job work' || c.processType === 'Job work + Brought out';
+    } else if (activeTab === 'JOBCARD_SHORTAGE') {
+      matchesTab = isInHouseItem(c.itemObj || c as any) || c.processType === 'In-house' || c.category === 'MF' || c.category === 'AS' || c.category === 'FAS' || c.category === 'SA';
+    }
+
+    if (!matchesTab) return false;
+
+    if (shortageFilterMode === 'SHORTAGE_ONLY') {
+      return c.isShortage;
+    }
+    return true;
+  });
+
   const getWOShortageData = (wo: WorkOrder) => {
     const linkedBOM = boms.find(b => b.machineModel === wo.machineModel || b.id === wo.bomId);
-    const targetQty = simulatedQuantities[wo.id] !== undefined ? simulatedQuantities[wo.id] : (wo.quantity || 1);
+    const targetQty = wo.targetQuantity || wo.quantity || 1;
 
     const components = wo.woComponents && wo.woComponents.length > 0
       ? wo.woComponents.map(c => ({
@@ -204,7 +421,8 @@ export const ShortageModule: React.FC = () => {
       const totalReq = comp.qtyPerMachine * targetQty;
       const inHouse = itemObj ? itemObj.inHouseStock : 0;
       const external = itemObj ? itemObj.externalStock : 0;
-      const netShortage = Math.max(0, totalReq - inHouse);
+      const minStock = itemObj ? (itemObj.minStockQty !== undefined ? itemObj.minStockQty : (itemObj.reorderLevel || 0)) : 0;
+      const netShortage = Math.max(0, (totalReq + minStock) - inHouse);
       const pSource = itemObj?.processType || 'In-house';
 
       return {
@@ -213,6 +431,7 @@ export const ShortageModule: React.FC = () => {
         totalRequired: totalReq,
         inHouseStock: inHouse,
         externalStock: external,
+        minStockQty: minStock,
         netShortage,
         processType: pSource,
         isShortage: netShortage > 0
@@ -515,33 +734,29 @@ export const ShortageModule: React.FC = () => {
 
       openLiveModuleSheet('Shortage', 'GEC_ERP_Item_Wise_Shortage_Live', flatData, headers);
     } else {
-      const flatData = filteredWOShortages.flatMap(woData => 
-        woData.components.filter(c => c.netShortage > 0).map(c => ({
-          workOrderNo: woData.wo.workOrderNo || woData.wo.woNumber,
-          machineModel: woData.wo.machineModel,
-          targetBuildQty: woData.targetQty,
-          componentCode: c.itemCode,
-          componentName: c.itemName,
-          sourceProcess: c.processType,
-          totalRequired: `${c.totalRequired} ${c.unit}`,
-          inHouseStock: `${c.inHouseStock} ${c.unit}`,
-          netShortage: `${c.netShortage} ${c.unit}`
-        }))
-      );
+      const flatData = activeTabConsolidatedShortages.map(c => ({
+        componentCode: c.itemCode,
+        componentName: c.itemName,
+        category: c.category,
+        sourceProcess: c.processType,
+        totalRequired: `${c.totalRequired} ${c.unit}`,
+        inHouseStock: `${c.inHouseStock} ${c.unit}`,
+        netShortage: `${c.netShortage} ${c.unit}`,
+        requiredByWOs: c.requiredByWOs.map(r => `${r.woNumber} (${r.requiredQty})`).join(', ')
+      }));
 
       const headers: { key: keyof typeof flatData[0]; label: string }[] = [
-        { key: 'workOrderNo', label: 'Work Order No' },
-        { key: 'machineModel', label: 'Machine Model' },
-        { key: 'targetBuildQty', label: 'Target Qty' },
         { key: 'componentCode', label: 'Component Code' },
         { key: 'componentName', label: 'Component Name' },
+        { key: 'category', label: 'Class' },
         { key: 'sourceProcess', label: 'Source' },
-        { key: 'totalRequired', label: 'Total Required' },
+        { key: 'totalRequired', label: 'Total Combined Required' },
         { key: 'inHouseStock', label: 'In-House Stock' },
-        { key: 'netShortage', label: 'Shortage' }
+        { key: 'netShortage', label: 'Net Shortage' },
+        { key: 'requiredByWOs', label: 'Required Across Selected WOs' }
       ];
 
-      openLiveModuleSheet('Shortage', 'GEC_ERP_Work_Order_Shortage_Live', flatData, headers);
+      openLiveModuleSheet('Shortage', `GEC_ERP_Combined_${activeTab}_Live`, flatData, headers);
     }
   };
 
@@ -561,6 +776,45 @@ export const ShortageModule: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button 
+            type="button" 
+            className={`btn ${isExplodeAllBOMs ? 'btn-primary' : 'btn-outline'}`} 
+            onClick={() => setIsExplodeAllBOMs(!isExplodeAllBOMs)} 
+            title="Explode all components and sub-assemblies across multi-level BOMs"
+            style={{ fontWeight: 700, fontSize: '0.82rem', gap: '0.35rem', display: 'inline-flex', alignItems: 'center' }}
+          >
+            <Layers size={14} />
+            {isExplodeAllBOMs ? '💥 Multi-Level BOMs Exploded' : '💥 Explode All BOMs'}
+          </button>
+
+          {/* Universal Shortage vs All Items Mode Toggle */}
+          <div style={{ display: 'inline-flex', borderRadius: '0.375rem', border: '1px solid var(--border-color)', overflow: 'hidden' }}>
+            <button
+              type="button"
+              className={`btn ${shortageFilterMode === 'SHORTAGE_ONLY' ? 'btn-warning' : 'btn-outline'}`}
+              style={{ 
+                padding: '0.3rem 0.65rem', 
+                fontSize: '0.78rem', 
+                fontWeight: 700, 
+                border: 'none', 
+                borderRadius: 0,
+                backgroundColor: shortageFilterMode === 'SHORTAGE_ONLY' ? '#d97706' : undefined,
+                color: shortageFilterMode === 'SHORTAGE_ONLY' ? '#fff' : undefined
+              }}
+              onClick={() => setShortageFilterMode('SHORTAGE_ONLY')}
+            >
+              ⚠️ Shortage Only
+            </button>
+            <button
+              type="button"
+              className={`btn ${shortageFilterMode === 'ALL_ITEMS' ? 'btn-primary' : 'btn-outline'}`}
+              style={{ padding: '0.3rem 0.65rem', fontSize: '0.78rem', fontWeight: 700, border: 'none', borderRadius: 0 }}
+              onClick={() => setShortageFilterMode('ALL_ITEMS')}
+            >
+              📋 All Items (Full BOM)
+            </button>
+          </div>
+
           <button type="button" className="btn btn-outline" onClick={handleRefreshLiveSheet} title="Sync and maintain live CSV sheet">
             <RefreshCw size={14} /> Live Sheet
           </button>
@@ -615,537 +869,523 @@ export const ShortageModule: React.FC = () => {
       {activeTab === 'ITEM_WISE_SHORTAGE' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: 1, minHeight: 0 }}>
           
-          {/* Controls Card: Search, Class Filters, All Items Toggle */}
+          {/* Search & Add Item Bar */}
           <div className="card" style={{ padding: '0.875rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.65rem', flexShrink: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
               
-              {/* Search & All Items Checkbox */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-                <div style={{ position: 'relative', width: '320px', maxWidth: '100%' }}>
-                  <Search size={15} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                  <input
-                    type="text"
-                    placeholder="Search item code, description, class..."
-                    className="input-field"
-                    style={{ paddingLeft: '2.2rem' }}
-                    value={itemWiseSearch}
-                    onChange={(e) => setItemWiseSearch(e.target.value)}
-                  />
-                </div>
+              {/* Item Search & Add Input */}
+              <div style={{ position: 'relative', width: '380px', maxWidth: '100%' }}>
+                <Search size={15} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <input
+                  type="text"
+                  placeholder="Search item code or name to add..."
+                  className="input-field"
+                  style={{ paddingLeft: '2.2rem', fontSize: '0.82rem' }}
+                  value={itemWiseSearch}
+                  onChange={(e) => setItemWiseSearch(e.target.value)}
+                />
 
-                {/* Option to Choose Items Not in Shortage Also */}
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', margin: 0, fontSize: '0.82rem', fontWeight: 700 }}>
-                  <input
-                    type="checkbox"
-                    checked={showAllItemsToggle}
-                    onChange={(e) => setShowAllItemsToggle(e.target.checked)}
-                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                  />
-                  <span>Include All Catalog Items (Even without Shortage)</span>
-                </label>
-              </div>
-
-              <div style={{ display: 'flex', gap: '0.4rem' }}>
-                <button
-                  type="button"
-                  className="btn btn-outline"
-                  style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
-                  onClick={() => setSelectedItemIds(eligibleItemWiseItems.map(d => d.item.id))}
-                >
-                  Select All Filtered ({eligibleItemWiseItems.length})
-                </button>
-                {selectedItemIds.length > 0 && (
-                  <button
-                    type="button"
-                    className="btn btn-outline"
-                    style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', color: 'var(--danger)' }}
-                    onClick={() => setSelectedItemIds([])}
-                  >
-                    Clear Selection
-                  </button>
+                {/* Dropdown for Search Suggestions */}
+                {itemWiseSearch.trim() && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    marginTop: '4px',
+                    backgroundColor: 'var(--bg-card)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '0.375rem',
+                    boxShadow: 'var(--shadow-md)',
+                    maxHeight: '220px',
+                    overflowY: 'auto',
+                    zIndex: 20
+                  }}>
+                    {items
+                      .filter(i => !i.isBlocked && !selectedItemIds.includes(i.id) && (
+                        i.itemCode.toLowerCase().includes(itemWiseSearch.toLowerCase()) ||
+                        i.name.toLowerCase().includes(itemWiseSearch.toLowerCase()) ||
+                        (i.category && i.category.toLowerCase().includes(itemWiseSearch.toLowerCase()))
+                      ))
+                      .slice(0, 10)
+                      .map(it => (
+                        <div
+                          key={it.id}
+                          style={{
+                            padding: '0.5rem 0.75rem',
+                            borderBottom: '1px solid var(--border-color)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                          }}
+                          className="hover-highlight"
+                          onClick={() => {
+                            setSelectedItemIds([...selectedItemIds, it.id]);
+                            setItemWiseSearch('');
+                          }}
+                        >
+                          <div>
+                            <strong style={{ fontFamily: 'monospace', color: 'var(--accent-primary)', marginRight: '0.5rem' }}>{it.itemCode}</strong>
+                            <span>{it.name}</span>
+                          </div>
+                          <span className="badge badge-neutral" style={{ fontSize: '0.7rem' }}>{it.category}</span>
+                        </div>
+                      ))}
+                  </div>
                 )}
               </div>
-            </div>
 
-            {/* Class-Wise Multi-Select Filter Chips */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)' }}>Filter Classes:</span>
-              <button
-                type="button"
-                className={`badge ${selectedClassFilters.length === 0 ? 'badge-primary' : 'badge-neutral'}`}
-                style={{ cursor: 'pointer', padding: '0.2rem 0.5rem', fontSize: '0.72rem' }}
-                onClick={() => setSelectedClassFilters([])}
-              >
-                All Classes
-              </button>
-              {FIXED_ITEM_CLASSES.map(cls => {
-                const isSelected = selectedClassFilters.includes(cls.code);
-                return (
-                  <button
-                    key={cls.code}
-                    type="button"
-                    className={`badge ${isSelected ? 'badge-primary' : 'badge-neutral'}`}
-                    style={{ cursor: 'pointer', padding: '0.2rem 0.5rem', fontSize: '0.72rem' }}
-                    onClick={() => {
-                      if (isSelected) {
-                        setSelectedClassFilters(selectedClassFilters.filter(c => c !== cls.code));
-                      } else {
-                        setSelectedClassFilters([...selectedClassFilters, cls.code]);
-                      }
-                    }}
-                  >
-                    {cls.code} - {cls.name}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Item Selection Pills */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', maxHeight: '100px', overflowY: 'auto', padding: '0.4rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: '0.375rem', border: '1px solid var(--border-color)' }}>
-              {eligibleItemWiseItems.length === 0 ? (
-                <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                  No items found matching the current search / class criteria. Check "Include All Catalog Items" to view items with sufficient stock.
-                </span>
-              ) : (
-                eligibleItemWiseItems.map(d => {
-                  const isChecked = selectedItemIds.includes(d.item.id);
+              {/* Quick Class Filters (Short Form Only) */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)' }}>Class:</span>
+                <button
+                  type="button"
+                  className={`badge ${selectedClassFilters.length === 0 ? 'badge-primary' : 'badge-neutral'}`}
+                  style={{ cursor: 'pointer', padding: '0.2rem 0.45rem', fontSize: '0.72rem' }}
+                  onClick={() => setSelectedClassFilters([])}
+                >
+                  ALL
+                </button>
+                {FIXED_ITEM_CLASSES.map(cls => {
+                  const isSelected = selectedClassFilters.includes(cls.code);
                   return (
                     <button
-                      key={d.item.id}
+                      key={cls.code}
                       type="button"
-                      className={`badge ${isChecked ? 'badge-primary' : 'badge-neutral'}`}
-                      style={{ 
-                        cursor: 'pointer', 
-                        padding: '0.25rem 0.5rem', 
-                        fontSize: '0.75rem',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.35rem'
-                      }}
+                      className={`badge ${isSelected ? 'badge-primary' : 'badge-neutral'}`}
+                      style={{ cursor: 'pointer', padding: '0.2rem 0.45rem', fontSize: '0.72rem' }}
+                      title={cls.name}
                       onClick={() => {
-                        if (isChecked) {
-                          setSelectedItemIds(selectedItemIds.filter(id => id !== d.item.id));
+                        if (isSelected) {
+                          setSelectedClassFilters(selectedClassFilters.filter(c => c !== cls.code));
                         } else {
-                          setSelectedItemIds([...selectedItemIds, d.item.id]);
+                          setSelectedClassFilters([...selectedClassFilters, cls.code]);
                         }
                       }}
                     >
-                      {isChecked ? <CheckSquare size={12} /> : <Square size={12} />}
-                      <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{d.item.itemCode}</span>
-                      <span>{d.item.name}</span>
-                      {d.hasShortage && (
-                        <span style={{ color: 'var(--danger)', fontWeight: 800, marginLeft: '2px' }}>⚠️ Shortage</span>
-                      )}
+                      {cls.code}
                     </button>
                   );
-                })
-              )}
+                })}
+              </div>
             </div>
+
+            {/* Added Items Chips List */}
+            {selectedItemIds.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', alignItems: 'center', paddingTop: '0.35rem', borderTop: '1px solid var(--border-color)' }}>
+                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)' }}>Added Items ({selectedItemIds.length}):</span>
+                {selectedItemIds.map(id => {
+                  const it = items.find(i => i.id === id);
+                  if (!it) return null;
+                  return (
+                    <span key={id} className="badge badge-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}>
+                      <strong style={{ fontFamily: 'monospace' }}>{it.itemCode}</strong> {it.name}
+                      <button 
+                        type="button" 
+                        style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
+                        onClick={() => setSelectedItemIds(selectedItemIds.filter(x => x !== id))}
+                        title="Remove item"
+                      >
+                        <X size={12} />
+                      </button>
+                    </span>
+                  );
+                })}
+                <button 
+                  type="button" 
+                  className="btn btn-outline" 
+                  style={{ padding: '0.15rem 0.45rem', fontSize: '0.7rem', color: 'var(--danger)' }} 
+                  onClick={() => setSelectedItemIds([])}
+                >
+                  Clear All
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Results: Item Breakdown with Suggested Max Buildable Quantity */}
           <div className="table-container" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem', padding: '0.75rem' }}>
             {plannedItemDetails.length === 0 ? (
               <div className="card" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                <CheckCircle size={40} color="var(--success)" style={{ margin: '0 auto 0.75rem auto' }} />
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>No Items Selected</h3>
+                <Package size={40} color="var(--accent-primary)" style={{ margin: '0 auto 0.75rem auto' }} />
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Search and Add Items</h3>
                 <p style={{ fontSize: '0.85rem', margin: '0.25rem 0 0 0' }}>
-                  Select one or more items above to compute child component requirements, net shortages, and maximum buildable capacity.
+                  Use the search box above to add specific items or machines to analyze BOM component shortages and buildable capacity.
                 </p>
               </div>
             ) : (
-              plannedItemDetails.map(plan => {
-                const targetQty = plan.targetQty;
-                const maxBuildable = plan.maxBuildable;
-                const canBuildTarget = maxBuildable >= targetQty;
+              plannedItemDetails
+                .filter(plan => selectedClassFilters.length === 0 || selectedClassFilters.includes(plan.item.category))
+                .map(plan => {
+                  const targetQty = plan.targetQty;
+                  const maxBuildable = plan.maxBuildable;
+                  const canBuildTarget = maxBuildable >= targetQty;
+                  const displayComponents = shortageFilterMode === 'SHORTAGE_ONLY'
+                    ? plan.components.filter(c => c.isShortage)
+                    : plan.components;
 
-                return (
-                  <div 
-                    key={plan.item.id}
-                    className="card"
-                    style={{ 
-                      padding: '1rem', 
-                      backgroundColor: 'var(--bg-card)', 
-                      border: '1px solid var(--border-color)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '0.75rem'
-                    }}
-                  >
-                    {/* Item Plan Header Banner */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', paddingBottom: '0.65rem', borderBottom: '1px solid var(--border-color)' }}>
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <span style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--accent-primary)', fontFamily: 'monospace' }}>
-                            {plan.item.itemCode}
-                          </span>
-                          <span style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
-                            {plan.item.name}
-                          </span>
-                          <span className="badge badge-info" style={{ fontSize: '0.72rem' }}>
-                            Class: {plan.item.category}
-                          </span>
-                          {plan.matchingBOM && (
-                            <span className="badge badge-secondary" style={{ fontSize: '0.72rem' }}>
-                              BOM: {plan.matchingBOM.bomCode} (v{plan.matchingBOM.version})
+                  return (
+                    <div 
+                      key={plan.item.id}
+                      className="card"
+                      style={{ 
+                        padding: '1rem', 
+                        backgroundColor: 'var(--bg-card)', 
+                        border: '1px solid var(--border-color)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.75rem'
+                      }}
+                    >
+                      {/* Item Plan Header Banner */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', paddingBottom: '0.65rem', borderBottom: '1px solid var(--border-color)' }}>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--accent-primary)', fontFamily: 'monospace' }}>
+                              {plan.item.itemCode}
                             </span>
-                          )}
-                        </div>
-                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
-                          In-House Stock: <strong>{plan.item.inHouseStock} {plan.item.unit}</strong> &bull; Reorder Level: <strong>{plan.item.reorderLevel || 0} {plan.item.unit}</strong>
-                        </div>
-                      </div>
-
-                      {/* Quantity Adjuster & Suggested Max Buildable Quantity Display */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                          <label style={{ fontSize: '0.8rem', fontWeight: 700, margin: 0 }}>Planned Build Qty:</label>
-                          <input 
-                            type="number"
-                            min="1"
-                            style={{ width: '80px', padding: '0.3rem 0.5rem', fontWeight: 800, fontSize: '0.9rem' }}
-                            className="input-field"
-                            value={targetQty}
-                            onChange={(e) => handleItemTargetQtyChange(plan.item.id, Number(e.target.value))}
-                          />
-                          <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>{plan.item.unit}</span>
+                            <span style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
+                              {plan.item.name}
+                            </span>
+                            <span className="badge badge-info" style={{ fontSize: '0.72rem' }}>
+                              {plan.item.category}
+                            </span>
+                            {plan.matchingBOM && (
+                              <span className="badge badge-secondary" style={{ fontSize: '0.72rem' }}>
+                                BOM: {plan.matchingBOM.bomCode} (v{plan.matchingBOM.version})
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                            In-House Stock: <strong>{plan.item.inHouseStock} {plan.item.unit}</strong> &bull; Min Stock: <strong>{plan.item.minStockQty !== undefined ? plan.item.minStockQty : (plan.item.reorderLevel || 0)} {plan.item.unit}</strong>
+                          </div>
                         </div>
 
-                        <div style={{ 
-                          padding: '0.4rem 0.85rem', 
-                          backgroundColor: canBuildTarget ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)', 
-                          border: `1px solid ${canBuildTarget ? 'var(--success)' : 'var(--danger)'}`,
-                          borderRadius: '0.5rem',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.5rem'
-                        }}>
-                          <Sparkles size={16} color={canBuildTarget ? 'var(--success)' : 'var(--danger)'} />
-                          <div>
-                            <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>
-                              Suggested Max Buildable
-                            </div>
-                            <div style={{ fontSize: '1.05rem', fontWeight: 900, color: canBuildTarget ? 'var(--success)' : 'var(--danger)' }}>
-                              {maxBuildable} {plan.item.unit}
+                        {/* Quantity Adjuster & Suggested Max Buildable Quantity Display */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <label style={{ fontSize: '0.8rem', fontWeight: 700, margin: 0 }}>Planned Build Qty:</label>
+                            <input 
+                              type="number"
+                              min="1"
+                              style={{ width: '80px', padding: '0.3rem 0.5rem', fontWeight: 800, fontSize: '0.9rem' }}
+                              className="input-field"
+                              value={targetQty}
+                              onChange={(e) => handleItemTargetQtyChange(plan.item.id, Number(e.target.value))}
+                            />
+                            <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>{plan.item.unit}</span>
+                          </div>
+
+                          <div style={{ 
+                            padding: '0.4rem 0.85rem', 
+                            backgroundColor: canBuildTarget ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)', 
+                            border: `1px solid ${canBuildTarget ? 'var(--success)' : 'var(--danger)'}`,
+                            borderRadius: '0.5rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem'
+                          }}>
+                            <Sparkles size={16} color={canBuildTarget ? 'var(--success)' : 'var(--danger)'} />
+                            <div>
+                              <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>
+                                Suggested Max Buildable
+                              </div>
+                              <div style={{ fontSize: '1.05rem', fontWeight: 900, color: canBuildTarget ? 'var(--success)' : 'var(--danger)' }}>
+                                {maxBuildable} {plan.item.unit}
+                              </div>
                             </div>
                           </div>
                         </div>
                       </div>
+
+                      {/* Bottleneck Warning */}
+                      {plan.constrainingComponent && (
+                        <div style={{ padding: '0.4rem 0.75rem', backgroundColor: 'rgba(245, 158, 11, 0.12)', border: '1px solid var(--warning)', borderRadius: '0.375rem', fontSize: '0.78rem', color: 'var(--warning)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                          <AlertTriangle size={14} />
+                          <span>Constraining Bottleneck Component: <strong>{plan.constrainingComponent}</strong></span>
+                        </div>
+                      )}
+
+                      {/* Child Components Shortage Breakdown Table */}
+                      {displayComponents.length === 0 ? (
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic', padding: '0.5rem' }}>
+                          {shortageFilterMode === 'SHORTAGE_ONLY' 
+                            ? 'No component shortages found for this planned quantity.' 
+                            : 'No BOM sub-components defined for this item.'}
+                        </div>
+                      ) : (
+                        <div className="table-container" style={{ maxHeight: '280px', overflowY: 'auto' }}>
+                          <table>
+                            <thead>
+                              <tr>
+                                <th style={{ width: '30px' }}>#</th>
+                                <th>Component Code</th>
+                                <th>Component Name</th>
+                                <th>Class</th>
+                                <th>Source / Process</th>
+                                <th style={{ textAlign: 'right' }}>Qty / Item</th>
+                                <th style={{ textAlign: 'right' }}>Total Req</th>
+                                <th style={{ textAlign: 'right' }}>In-House Stock</th>
+                                <th style={{ textAlign: 'right' }}>Min Stock Qty</th>
+                                <th style={{ textAlign: 'right' }}>Net Shortage</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {displayComponents.map((comp, cIdx) => {
+                                const isLineShortage = comp.netShortage > 0;
+                                return (
+                                  <tr key={cIdx} style={{ backgroundColor: isLineShortage ? 'rgba(239, 68, 68, 0.06)' : 'transparent' }}>
+                                    <td>{cIdx + 1}</td>
+                                    <td style={{ fontWeight: 700, color: 'var(--accent-primary)', fontFamily: 'monospace' }}>
+                                      {comp.itemCode}
+                                    </td>
+                                    <td style={{ fontWeight: 600 }}>{comp.itemName}</td>
+                                    <td><span className="badge badge-neutral" style={{ fontSize: '0.72rem' }}>{comp.category}</span></td>
+                                    <td>
+                                      <span className={`badge ${comp.processType === 'Brought out' ? 'badge-primary' : comp.processType === 'In-house' ? 'badge-success' : 'badge-warning'}`} style={{ fontSize: '0.72rem' }}>
+                                        {comp.processType}
+                                      </span>
+                                    </td>
+                                    <td style={{ textAlign: 'right', fontWeight: 600 }}>{comp.qtyPerItem}</td>
+                                    <td style={{ textAlign: 'right', fontWeight: 700 }}>{comp.totalRequired} {comp.unit}</td>
+                                    <td style={{ textAlign: 'right', fontWeight: 600 }}>{comp.inHouseStock} {comp.unit}</td>
+                                    <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{comp.minStockQty} {comp.unit}</td>
+                                    <td style={{ textAlign: 'right', fontWeight: 800, color: isLineShortage ? 'var(--danger)' : 'var(--success)' }}>
+                                      {isLineShortage ? `${comp.netShortage} ${comp.unit}` : 'OK (0)'}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
                     </div>
-
-                    {/* Bottleneck Warning */}
-                    {plan.constrainingComponent && (
-                      <div style={{ padding: '0.4rem 0.75rem', backgroundColor: 'rgba(245, 158, 11, 0.12)', border: '1px solid var(--warning)', borderRadius: '0.375rem', fontSize: '0.78rem', color: 'var(--warning)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <AlertTriangle size={14} />
-                        <span>Constraining Bottleneck Component: <strong>{plan.constrainingComponent}</strong></span>
-                      </div>
-                    )}
-
-                    {/* Child Components Shortage Breakdown Table */}
-                    {plan.components.length === 0 ? (
-                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic', padding: '0.5rem' }}>
-                        No BOM sub-components defined for this item. Raw stock shortage: {Math.max(0, targetQty - plan.item.inHouseStock)} {plan.item.unit}.
-                      </div>
-                    ) : (
-                      <div className="table-container" style={{ maxHeight: '280px', overflowY: 'auto' }}>
-                        <table>
-                          <thead>
-                            <tr>
-                              <th style={{ width: '30px' }}>#</th>
-                              <th>Component Code</th>
-                              <th>Component Name</th>
-                              <th>Class</th>
-                              <th>Source / Process</th>
-                              <th style={{ textAlign: 'right' }}>Qty / Item</th>
-                              <th style={{ textAlign: 'right' }}>Total Req</th>
-                              <th style={{ textAlign: 'right' }}>In-House Stock</th>
-                              <th style={{ textAlign: 'right' }}>Net Shortage</th>
-                              <th style={{ textAlign: 'center' }}>Action</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {plan.components.map((comp, cIdx) => {
-                              const isLineShortage = comp.netShortage > 0;
-                              return (
-                                <tr key={cIdx} style={{ backgroundColor: isLineShortage ? 'rgba(239, 68, 68, 0.06)' : 'transparent' }}>
-                                  <td>{cIdx + 1}</td>
-                                  <td style={{ fontWeight: 700, color: 'var(--accent-primary)', fontFamily: 'monospace' }}>
-                                    {comp.itemCode}
-                                  </td>
-                                  <td style={{ fontWeight: 600 }}>{comp.itemName}</td>
-                                  <td><span className="badge badge-neutral" style={{ fontSize: '0.72rem' }}>{comp.category}</span></td>
-                                  <td>
-                                    <span className={`badge ${comp.processType === 'Brought out' ? 'badge-primary' : comp.processType === 'In-house' ? 'badge-success' : 'badge-warning'}`} style={{ fontSize: '0.72rem' }}>
-                                      {comp.processType}
-                                    </span>
-                                  </td>
-                                  <td style={{ textAlign: 'right', fontWeight: 600 }}>{comp.qtyPerItem}</td>
-                                  <td style={{ textAlign: 'right', fontWeight: 700 }}>{comp.totalRequired} {comp.unit}</td>
-                                  <td style={{ textAlign: 'right', fontWeight: 600 }}>{comp.inHouseStock} {comp.unit}</td>
-                                  <td style={{ textAlign: 'right', fontWeight: 800, color: isLineShortage ? 'var(--danger)' : 'var(--success)' }}>
-                                    {isLineShortage ? `${comp.netShortage} ${comp.unit}` : 'OK (0)'}
-                                  </td>
-                                  <td style={{ textAlign: 'center' }}>
-                                    {isLineShortage && comp.childItem && (
-                                      <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'center' }}>
-                                        {isBoughtOutItem(comp.childItem) && (
-                                          <button
-                                            type="button"
-                                            className="btn btn-outline"
-                                            style={{ padding: '0.15rem 0.4rem', fontSize: '0.7rem', color: 'var(--accent-primary)' }}
-                                            title="Create Purchase Order"
-                                            onClick={() => handleRaisePO(comp.childItem!, comp.netShortage)}
-                                          >
-                                            <ShoppingCart size={11} /> +PO
-                                          </button>
-                                        )}
-                                        {comp.processType === 'Job work' && (
-                                          <button
-                                            type="button"
-                                            className="btn btn-outline"
-                                            style={{ padding: '0.15rem 0.4rem', fontSize: '0.7rem', color: 'var(--warning)' }}
-                                            title="Issue Job Work Challan"
-                                            onClick={() => handleIssueJobwork(comp.childItem!, comp.netShortage)}
-                                          >
-                                            <Truck size={11} /> +Jobwork
-                                          </button>
-                                        )}
-                                        {comp.processType === 'In-house' && (
-                                          <button
-                                            type="button"
-                                            className="btn btn-outline"
-                                            style={{ padding: '0.15rem 0.4rem', fontSize: '0.7rem', color: 'var(--success)' }}
-                                            title="Create In-house Job Card"
-                                            onClick={() => handleIssueJobCard(comp.childItem!, comp.netShortage)}
-                                          >
-                                            <ClipboardList size={11} /> +JobCard
-                                          </button>
-                                        )}
-                                      </div>
-                                    )}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                );
-              })
+                  );
+                })
             )}
           </div>
         </div>
       )}
 
       {/* ========================================================= */}
-      {/* TAB 2-5: WORK ORDER SHORTAGE TREES & ROUTING              */}
+      {/* TAB 2-5: WORK ORDER SHORTAGE & COMBINED AGGREGATION       */}
       {/* ========================================================= */}
       {activeTab !== 'ITEM_WISE_SHORTAGE' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: 1, minHeight: 0 }}>
           
-          {/* WO Filter Bar */}
-          <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', flexShrink: 0 }}>
+          {/* WO Filter Bar with Search Bar */}
+          <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.65rem', flexShrink: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                <label style={{ fontSize: '0.82rem', fontWeight: 700, margin: 0 }}>Filter Work Orders:</label>
+                <label style={{ fontSize: '0.82rem', fontWeight: 700, margin: 0 }}>Select Work Orders for Combined Shortage:</label>
                 <button 
                   type="button"
                   className={`btn ${selectedWOIds.length === 0 ? 'btn-primary' : 'btn-outline'}`}
                   style={{ padding: '0.25rem 0.65rem', fontSize: '0.78rem' }}
                   onClick={() => setSelectedWOIds([])}
                 >
-                  All Active Work Orders ({workOrders.length})
+                  All Active Work Orders ({workOrders.filter(w => w.status === 'IN_PROGRESS' || w.status === 'PLANNED').length})
                 </button>
               </div>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                Showing <strong>{filteredWOShortages.length}</strong> Work Order build(s) with active shortages
+
+              {/* WO Search Input */}
+              <div style={{ position: 'relative', width: '280px', maxWidth: '100%' }}>
+                <Search size={14} style={{ position: 'absolute', left: '0.65rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <input
+                  type="text"
+                  placeholder="Search Work Order / Model..."
+                  className="input-field"
+                  style={{ paddingLeft: '2rem', paddingRight: '0.5rem', paddingTop: '0.25rem', paddingBottom: '0.25rem', fontSize: '0.78rem' }}
+                  value={woSearchTerm}
+                  onChange={(e) => setWoSearchTerm(e.target.value)}
+                />
               </div>
             </div>
 
             {/* Multi-Select Work Order Badges */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', maxHeight: '90px', overflowY: 'auto', padding: '0.4rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: '0.375rem', border: '1px solid var(--border-color)' }}>
-              {workOrders.map(wo => {
-                const isSelected = selectedWOIds.length === 0 || selectedWOIds.includes(wo.id);
-                const isIndividuallySelected = selectedWOIds.includes(wo.id);
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', maxHeight: '95px', overflowY: 'auto', padding: '0.4rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: '0.375rem', border: '1px solid var(--border-color)' }}>
+              {workOrders
+                .filter(w => (w.status === 'IN_PROGRESS' || w.status === 'PLANNED') && (
+                  !woSearchTerm || 
+                  (w.workOrderNo || '').toLowerCase().includes(woSearchTerm.toLowerCase()) || 
+                  (w.machineModel || '').toLowerCase().includes(woSearchTerm.toLowerCase()) || 
+                  ((w as any).woNumber || '').toLowerCase().includes(woSearchTerm.toLowerCase())
+                ))
+                .map(wo => {
+                  const isSelected = selectedWOIds.length === 0 || selectedWOIds.includes(wo.id);
+                  const isIndividuallySelected = selectedWOIds.includes(wo.id);
+                  const qty = wo.targetQuantity || wo.quantity || 1;
 
-                return (
-                  <button
-                    key={wo.id}
-                    type="button"
-                    className={`badge ${isIndividuallySelected ? 'badge-primary' : (selectedWOIds.length === 0 ? 'badge-info' : 'badge-neutral')}`}
-                    style={{ 
-                      cursor: 'pointer', 
-                      border: isIndividuallySelected ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
-                      padding: '0.25rem 0.5rem',
-                      fontSize: '0.75rem',
-                      opacity: isSelected ? 1 : 0.45
-                    }}
-                    onClick={() => {
-                      if (selectedWOIds.length === 0) {
-                        setSelectedWOIds([wo.id]);
-                      } else if (selectedWOIds.includes(wo.id)) {
-                        const next = selectedWOIds.filter(id => id !== wo.id);
-                        setSelectedWOIds(next);
-                      } else {
-                        setSelectedWOIds([...selectedWOIds, wo.id]);
-                      }
-                    }}
-                  >
-                    <input 
-                      type="checkbox" 
-                      checked={isSelected} 
-                      readOnly 
-                      style={{ marginRight: '0.35rem', pointerEvents: 'none' }} 
-                    />
-                    {wo.workOrderNo || wo.woNumber} - {wo.machineModel}
-                  </button>
-                );
-              })}
+                  return (
+                    <button
+                      key={wo.id}
+                      type="button"
+                      className={`badge ${isIndividuallySelected ? 'badge-primary' : (selectedWOIds.length === 0 ? 'badge-info' : 'badge-neutral')}`}
+                      style={{ 
+                        cursor: 'pointer', 
+                        border: isIndividuallySelected ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                        padding: '0.25rem 0.5rem',
+                        fontSize: '0.75rem',
+                        opacity: isSelected ? 1 : 0.45
+                      }}
+                      onClick={() => {
+                        if (selectedWOIds.length === 0) {
+                          setSelectedWOIds([wo.id]);
+                        } else if (selectedWOIds.includes(wo.id)) {
+                          const next = selectedWOIds.filter(id => id !== wo.id);
+                          setSelectedWOIds(next);
+                        } else {
+                          setSelectedWOIds([...selectedWOIds, wo.id]);
+                        }
+                      }}
+                    >
+                      <input 
+                        type="checkbox" 
+                        checked={isSelected} 
+                        readOnly 
+                        style={{ marginRight: '0.35rem', pointerEvents: 'none' }} 
+                      />
+                      {wo.workOrderNo || wo.woNumber} ({wo.machineModel}) - Qty: {qty}
+                    </button>
+                  );
+                })}
             </div>
           </div>
 
-          {/* Shortage Tree Display */}
-          <div className="table-container" style={{ flex: 1, overflowY: 'auto', padding: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            {filteredWOShortages.length === 0 ? (
-              <div className="card" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                <CheckCircle size={40} color="var(--success)" style={{ margin: '0 auto 0.75rem auto' }} />
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>No Shortage Found!</h3>
-                <p style={{ fontSize: '0.85rem', margin: '0.25rem 0 0 0' }}>
-                  Current store inventory is sufficient for selected build requirements under this tab.
-                </p>
-              </div>
-            ) : (
-              filteredWOShortages.map(({ wo, targetQty, components }) => {
-                const nodeKey = `wo-${wo.id}`;
-                const isExpanded = expandedNodes[nodeKey] !== false; // Default expanded
+          {/* Search Bar for Shortage Items Table */}
+          <div style={{ position: 'relative', width: '100%' }}>
+            <Search size={15} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+            <input
+              type="text"
+              placeholder="Search component code, item description, part code... in table"
+              className="input-field"
+              style={{ paddingLeft: '2.25rem', fontSize: '0.82rem' }}
+              value={tableSearchTerm}
+              onChange={(e) => setTableSearchTerm(e.target.value)}
+            />
+          </div>
 
-                const shortageItems = components.filter(c => c.isShortage);
+          {/* Consolidated Combined Shortage Table (Matches PO Shortage Table) */}
+          {(() => {
+            const rawList = activeTabConsolidatedShortages;
+            const term = tableSearchTerm.trim().toLowerCase();
+            const displayRows = rawList.filter(comp => 
+              !term || 
+              comp.itemCode.toLowerCase().includes(term) || 
+              comp.itemName.toLowerCase().includes(term) || 
+              ((comp.itemObj?.partCode || '').toLowerCase().includes(term))
+            );
 
-                return (
-                  <div 
-                    key={wo.id}
-                    className="card"
-                    style={{ 
-                      padding: '0.875rem', 
-                      backgroundColor: 'var(--bg-card)', 
-                      border: '1px solid var(--border-color)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '0.5rem'
-                    }}
-                  >
-                    {/* WO Header Bar */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }} onClick={() => toggleNode(nodeKey)}>
-                        {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                        <span style={{ fontWeight: 800, color: 'var(--accent-primary)', fontFamily: 'monospace' }}>
-                          {wo.workOrderNo || wo.woNumber}
-                        </span>
-                        <span style={{ fontWeight: 700 }}>{wo.machineModel}</span>
-                        <span className="badge badge-warning" style={{ fontSize: '0.75rem' }}>
-                          {shortageItems.length} Shortage Component(s)
-                        </span>
+            return (
+              <div className="table-container" style={{ flex: 1, overflowY: 'auto', padding: '0.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {displayRows.length === 0 ? (
+                  <div className="card" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    <CheckCircle size={40} color="var(--success)" style={{ margin: '0 auto 0.75rem auto' }} />
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+                      {isExplodeAllBOMs ? 'No Components Found' : 'No Shortage Found!'}
+                    </h3>
+                    <p style={{ fontSize: '0.85rem', margin: '0.25rem 0 0 0' }}>
+                      {isExplodeAllBOMs ? 'No component records match the current filter.' : `Current store inventory is sufficient for all ${relevantWOs.length} selected Work Order build requirements.`}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="card" style={{ padding: '0.875rem', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <AlertTriangle size={16} color={isExplodeAllBOMs ? 'var(--accent-primary)' : 'var(--danger)'} />
+                          {isExplodeAllBOMs 
+                            ? `💥 Complete Exploded BOM Components List (${relevantWOs.length} Selected Work Orders - ${displayRows.length} Items)`
+                            : `Combined Consolidated Shortage (${relevantWOs.length} Selected Work Orders - ${displayRows.length} Shortage Items)`}
+                        </h3>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                          {isExplodeAllBOMs 
+                            ? 'Complete list of all parts and components required to build selected Work Orders.' 
+                            : 'Total combined requirements calculated from actual Work Order demand.'}
+                        </div>
                       </div>
-
-                      {/* Interactive Simulation Input */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Simulate Qty:</label>
-                        <input 
-                          type="number" 
-                          min="1"
-                          style={{ width: '70px', padding: '0.2rem 0.4rem', fontSize: '0.85rem', fontWeight: 700 }}
-                          className="input-field"
-                          value={targetQty}
-                          onChange={(e) => handleSimulatedQtyChange(wo.id, Number(e.target.value))}
-                        />
-                        <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Units</span>
-                      </div>
+                      <span className={`badge ${isExplodeAllBOMs ? 'badge-primary' : 'badge-warning'}`} style={{ fontSize: '0.75rem' }}>
+                        {displayRows.length} {isExplodeAllBOMs ? 'Total Component(s)' : 'Shortage Item(s)'}
+                      </span>
                     </div>
 
-                    {/* Shortage Components Table */}
-                    {isExpanded && (
-                      <div className="table-container" style={{ marginTop: '0.35rem' }}>
-                        <table>
-                          <thead>
-                            <tr>
-                              <th>Component Code</th>
-                              <th>Component Name</th>
-                              <th>Process Type</th>
-                              <th>Qty / Machine</th>
-                              <th>Total Req</th>
-                              <th>In-House Stock</th>
-                              <th>External Stock</th>
-                              <th>Net Shortage</th>
-                              <th>Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {shortageItems.map((comp, idx) => (
-                              <tr key={idx}>
-                                <td style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>
-                                  {comp.itemCode}
-                                </td>
-                                <td style={{ fontWeight: 600 }}>{comp.itemName}</td>
+                    <div className="table-container" style={{ maxHeight: '520px', overflowY: 'auto' }}>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th style={{ width: '45px', textAlign: 'center' }}>Sr No</th>
+                            <th>Item Code</th>
+                            <th>Item Description</th>
+                            <th>Part Code</th>
+                            <th style={{ textAlign: 'right' }}>Required Qty</th>
+                            <th style={{ textAlign: 'right' }}>Current Stock</th>
+                            <th style={{ textAlign: 'right' }}>Min Stock Qty</th>
+                            <th style={{ textAlign: 'right' }}>MOQ</th>
+                            <th style={{ textAlign: 'right' }}>In PO</th>
+                            <th style={{ textAlign: 'right' }}>Shortage</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {displayRows.map((comp, idx) => {
+                            const inPOQty = getOpenPOQuantity(comp.itemObj, comp.itemCode);
+                            const moq = comp.itemObj?.minOrderQty || 1;
+                            const partCode = comp.itemObj?.partCode || comp.itemCode;
+
+                            return (
+                              <tr key={idx} style={{ backgroundColor: comp.netShortage > 0 ? 'rgba(239, 68, 68, 0.04)' : 'transparent' }}>
+                                <td style={{ textAlign: 'center', fontWeight: 600 }}>{idx + 1}</td>
                                 <td>
-                                  <span className={`badge ${
-                                    comp.processType === 'Brought out' ? 'badge-primary' :
-                                    comp.processType === 'In-house' ? 'badge-success' :
-                                    comp.processType === 'Job work' ? 'badge-warning' : 'badge-secondary'
-                                  }`}>
-                                    {comp.processType}
+                                  <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>
+                                    {comp.itemCode}
                                   </span>
                                 </td>
-                                <td>{comp.qtyPerMachine}</td>
-                                <td style={{ fontWeight: 700 }}>{comp.totalRequired} {comp.unit}</td>
-                                <td>{comp.inHouseStock} {comp.unit}</td>
-                                <td style={{ color: 'var(--text-secondary)' }}>{comp.externalStock} {comp.unit}</td>
-                                <td style={{ fontWeight: 800, color: 'var(--danger)' }}>
-                                  {comp.netShortage} {comp.unit}
+                                <td>
+                                  <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{comp.itemName}</div>
                                 </td>
                                 <td>
-                                  <div style={{ display: 'flex', gap: '0.35rem' }}>
-                                    {(comp.processType === 'Brought out' || comp.processType === 'Job work + Brought out') && comp.itemObj && (
-                                      <button 
-                                        className="btn btn-outline" 
-                                        style={{ padding: '0.2rem 0.5rem', fontSize: '0.72rem', color: 'var(--accent-primary)' }}
-                                        onClick={() => handleRaisePO(comp.itemObj!, comp.netShortage, wo)}
-                                      >
-                                        <ShoppingCart size={12} /> Raise PO
-                                      </button>
-                                    )}
-                                    {(comp.processType === 'Job work' || comp.processType === 'Job work + Brought out') && comp.itemObj && (
-                                      <button 
-                                        className="btn btn-outline" 
-                                        style={{ padding: '0.2rem 0.5rem', fontSize: '0.72rem', color: 'var(--warning)' }}
-                                        onClick={() => handleIssueJobwork(comp.itemObj!, comp.netShortage, wo)}
-                                      >
-                                        <Truck size={12} /> Issue Job Work
-                                      </button>
-                                    )}
-                                    {comp.processType === 'In-house' && comp.itemObj && (
-                                      <button 
-                                        className="btn btn-outline" 
-                                        style={{ padding: '0.2rem 0.5rem', fontSize: '0.72rem', color: 'var(--success)' }}
-                                        onClick={() => handleIssueJobCard(comp.itemObj!, comp.netShortage, wo)}
-                                      >
-                                        <ClipboardList size={12} /> Create Job Card
-                                      </button>
-                                    )}
-                                  </div>
+                                  <span style={{ fontFamily: 'monospace', color: 'var(--text-secondary)' }}>
+                                    {partCode}
+                                  </span>
+                                </td>
+                                <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                                  {comp.totalRequired} {comp.unit}
+                                </td>
+                                <td style={{ textAlign: 'right', color: comp.inHouseStock <= 0 ? 'var(--danger)' : 'var(--text-primary)' }}>
+                                  {comp.inHouseStock} {comp.unit}
+                                </td>
+                                <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
+                                  {comp.minStockQty} {comp.unit}
+                                </td>
+                                <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
+                                  {moq} {comp.unit}
+                                </td>
+                                <td style={{ textAlign: 'right', color: inPOQty > 0 ? 'var(--accent-primary)' : 'var(--text-muted)', fontWeight: inPOQty > 0 ? 700 : 400 }}>
+                                  {inPOQty} {comp.unit}
+                                </td>
+                                <td style={{ textAlign: 'right' }}>
+                                  {comp.netShortage > 0 ? (
+                                    <span className="badge badge-danger" style={{ fontWeight: 800, fontSize: '0.8rem', padding: '0.2rem 0.5rem' }}>
+                                      {comp.netShortage} {comp.unit}
+                                    </span>
+                                  ) : (
+                                    <span className="badge badge-success" style={{ fontWeight: 700, fontSize: '0.75rem', padding: '0.15rem 0.4rem' }}>
+                                      OK (0)
+                                    </span>
+                                  )}
                                 </td>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                );
-              })
-            )}
-          </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -1304,10 +1544,26 @@ export const ShortageModule: React.FC = () => {
             }))}
             filterLabel="Selected Items Shortage & Max Buildable Planning"
           />
-        ) : activeTab === 'PO_SHORTAGE' ? (
-          <POShortagePrintView
-            items={poShortageItems}
-            filterLabel="Bought-Out Purchase Order Shortages"
+        ) : (activeTab === 'PO_SHORTAGE' || activeTab === 'JOBWORK_SHORTAGE' || activeTab === 'JOBCARD_SHORTAGE') ? (
+          <TabularShortagePrintView
+            title={activeTab === 'PO_SHORTAGE' ? "BOUGHT-OUT PURCHASE SHORTAGE REPORT" : activeTab === 'JOBWORK_SHORTAGE' ? "EXTERNAL JOBWORK SHORTAGE REPORT" : "IN-HOUSE JOB CARD SHORTAGE REPORT"}
+            rows={activeTabConsolidatedShortages.map((c, idx) => ({
+              srNo: idx + 1,
+              itemDescription: c.itemName,
+              partCode: c.itemCode,
+              requiredQty: c.totalRequired,
+              currentStock: c.inHouseStock,
+              moq: c.itemObj?.minOrderQty || 1,
+              inPO: purchaseOrders.filter(po => po.status !== 'GOODS_RECEIVED' && po.status !== 'CANCELLED').reduce((sum, po) => {
+                const line = po.items.find(pi => pi.itemId === c.itemId || pi.itemCode === c.itemCode);
+                return sum + (line ? (line.quantity || line.orderedQty || 0) : 0);
+              }, 0),
+              shortage: c.netShortage,
+              unit: c.unit,
+              extraInfo: `Class: ${c.category} | Source: ${c.processType}`
+            }))}
+            filterLabel={`Combined Shortage from ${relevantWOs.length} Selected Work Orders`}
+            showMOQAndInPO={activeTab === 'PO_SHORTAGE'}
           />
         ) : (
           <WOShortagePrintView

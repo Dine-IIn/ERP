@@ -3,8 +3,9 @@ import { useERP } from '../../context/ERPContext';
 import { Modal } from '../common/Modal';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { SinglePOPrintView, POListPrintView } from '../printTemplates/POPrintTemplates';
+import { TabularShortagePrintView, TabularShortageRow } from '../printTemplates/ShortagePrintTemplates';
 import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
-import { ShoppingCart, Plus, Trash2, Edit2, Search, Printer, FileSpreadsheet, Send, AlertTriangle, CheckCircle2, XCircle, FileText, ArrowRight, ShieldCheck, ArrowUpDown, ArrowUp, ArrowDown, Percent, Hash, ArrowLeft, X, AlertCircle, RefreshCw } from 'lucide-react';
+import { ShoppingCart, Plus, Trash2, Edit2, Search, Printer, FileSpreadsheet, Send, AlertTriangle, CheckCircle2, XCircle, FileText, ArrowRight, ShieldCheck, ArrowUpDown, ArrowUp, ArrowDown, Percent, Hash, ArrowLeft, X, AlertCircle, RefreshCw, Layers } from 'lucide-react';
 import { POLineItem, PurchaseOrder, Item, POStatus, ItemMappedVendor } from '../../types/erp';
 import { ExportFieldSelectorModal, FieldOption } from '../common/ExportFieldSelectorModal';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
@@ -14,12 +15,14 @@ type POSortField = 'poNumber' | 'vendorName' | 'orderDate' | 'deliveryDate' | 'p
 export const PurchaseOrderModule: React.FC = () => {
   const { 
     purchaseOrders, vendors, items, workOrders, boms, addPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder, 
-    updatePOStatus, sendPODraftsForApproval, currentUser, searchTerm, setSearchTerm 
+    updatePOStatus, sendPODraftsForApproval, resubmitPOForApproval, currentUser, searchTerm, setSearchTerm 
   } = useERP();
   
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [isShortageModalOpen, setIsShortageModalOpen] = useState(false);
   const [selectedShortageItem, setSelectedShortageItem] = useState<Item | null>(null);
+  const [isExplodeShortage, setIsExplodeShortage] = useState(false);
+  const [isShortagePrintOpen, setIsShortagePrintOpen] = useState(false);
 
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [printModalOpen, setPrintModalOpen] = useState(false);
@@ -29,6 +32,11 @@ export const PurchaseOrderModule: React.FC = () => {
   // Edit PO state
   const [editingPO, setEditingPO] = useState<PurchaseOrder | null>(null);
   const [isEditPOModalOpen, setIsEditPOModalOpen] = useState(false);
+
+  // Cancellation Challan state (for POs sent to vendor)
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [cancellingPO, setCancellingPO] = useState<PurchaseOrder | null>(null);
+  const [cancellationReason, setCancellationReason] = useState('');
 
   // Manual PO Creation State (without shortage)
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
@@ -53,24 +61,46 @@ export const PurchaseOrderModule: React.FC = () => {
   const [selectedPOQty, setSelectedPOQty] = useState<number>(1);
   const [wizardSearchTerm, setWizardSearchTerm] = useState('');
 
-  // Calculate Net Effective Item Shortage
-  const getItemEffectiveShortage = (item: Item) => {
-    const totalCurrentStock = item.inHouseStock + item.externalStock;
-
-    const pendingPOQty = purchaseOrders
-      .filter(po => po.status !== 'GOODS_RECEIVED' && po.status !== 'CANCELLED')
+  // Helper: Open PO Quantity
+  const getOpenPOQuantity = (item: Item) => {
+    return purchaseOrders
+      .filter(po => po.status !== 'GOODS_RECEIVED' && po.status !== 'CANCELLED' && po.status !== 'REJECTED')
       .reduce((sum, po) => {
-        const poLine = po.items.find(l => l.itemId === item.id);
-        if (poLine) {
-          const qty = poLine.quantity || poLine.orderedQty || 0;
-          const recd = poLine.receivedQty || 0;
-          return sum + Math.max(0, qty - recd);
-        }
-        return sum;
+        const line = po.items.find(pi => pi.itemId === item.id || pi.itemCode === item.itemCode);
+        if (!line) return sum;
+        const ordered = line.quantity || line.orderedQty || 0;
+        const received = line.receivedQty || 0;
+        return sum + Math.max(0, ordered - received);
       }, 0);
+  };
 
-    const minReq = item.minStockQty || item.reorderLevel || 0;
-    const netShortage = Math.max(0, minReq - (totalCurrentStock + pendingPOQty));
+  // Helper: Item Work Order Demand
+  const getItemWorkOrderDemand = (itemId: string, itemCode: string) => {
+    let demand = 0;
+    const activeWOs = workOrders.filter(w => w.status !== 'COMPLETED' && w.status !== 'CANCELLED');
+    activeWOs.forEach(wo => {
+      const bom = boms.find(b => b.id === wo.bomId || b.bomCode === (wo as any).bomCode || b.machineModel?.toLowerCase() === wo.machineModel?.toLowerCase());
+      if (bom && bom.components) {
+        const comp = bom.components.find(c => c.itemId === itemId || c.itemCode === itemCode);
+        if (comp) {
+          demand += (comp.qtyPerMachine || 1) * (wo.quantity || 1);
+        }
+      }
+    });
+    return demand;
+  };
+
+  // Calculate Net Effective Item Shortage: z + shortage = x + y  =>  shortage = (x + y) - z
+  const getItemEffectiveShortage = (item: Item) => {
+    const totalCurrentStock = (item.inHouseStock || 0) + (item.externalStock || 0);
+    const demandQty = getItemWorkOrderDemand(item.id, item.itemCode);
+    const minStock = item.minStockQty !== undefined ? item.minStockQty : (item.reorderLevel || 0);
+
+    const pendingPOQty = getOpenPOQuantity(item);
+
+    const totalRequirement = demandQty + minStock;
+    const totalAvailable = totalCurrentStock + pendingPOQty;
+    const netShortage = Math.max(0, totalRequirement - totalAvailable);
     return netShortage;
   };
 
@@ -402,16 +432,27 @@ export const PurchaseOrderModule: React.FC = () => {
     alert(`✅ Manual Purchase Order ${manualPOForm.poNumber} created successfully for ${itemObj.itemCode}!`);
   };
 
-  // Save edits on PO (If PO was APPROVED, require re-approval by setting status to WAITING_FOR_APPROVAL)
+  // Save edits on PO (Enforces MOQ constraint)
   const handleSaveEditPO = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingPO) return;
+
+    // Validate MOQ for each line item
+    for (const it of editingPO.items) {
+      const itemObj = items.find(i => i.id === it.itemId || i.itemCode === it.itemCode);
+      const moq = itemObj?.minOrderQty || 1;
+      const qty = it.quantity || it.orderedQty || 0;
+      if (qty < moq) {
+        alert(`⚠️ Item "${it.itemCode}" has a Minimum Order Quantity (MOQ) of ${moq} ${it.unit || 'units'}. Quantity cannot be less than ${moq}.`);
+        return;
+      }
+    }
 
     const subtotal = editingPO.items.reduce((sum, item) => sum + ((item.quantity || item.orderedQty || 1) * (item.unitPrice || 0)), 0);
     const taxAmount = Math.round(subtotal * 0.18);
     const totalAmount = subtotal + taxAmount;
 
-    // Check if PO was approved
+    // Check if PO was approved or rejected
     const wasApproved = editingPO.status === 'APPROVED';
     const newStatus = wasApproved ? 'WAITING_FOR_APPROVAL' : editingPO.status;
 
@@ -431,6 +472,53 @@ export const PurchaseOrderModule: React.FC = () => {
     } else {
       alert(`✅ PO ${editingPO.poNumber} updated successfully.`);
     }
+  };
+
+  const handleResubmitPO = () => {
+    if (!editingPO) return;
+
+    for (const it of editingPO.items) {
+      const itemObj = items.find(i => i.id === it.itemId || i.itemCode === it.itemCode);
+      const moq = itemObj?.minOrderQty || 1;
+      const qty = it.quantity || it.orderedQty || 0;
+      if (qty < moq) {
+        alert(`⚠️ Item "${it.itemCode}" has a Minimum Order Quantity (MOQ) of ${moq} ${it.unit || 'units'}. Quantity cannot be less than ${moq}.`);
+        return;
+      }
+    }
+
+    resubmitPOForApproval(editingPO.id, editingPO.items, editingPO.notes);
+    setIsEditPOModalOpen(false);
+    setEditingPO(null);
+    alert(`✅ PO ${editingPO.poNumber} has been updated and resubmitted for approval.`);
+  };
+
+  const handleOpenCancelChallan = (po: PurchaseOrder) => {
+    setCancellingPO(po);
+    setCancellationReason('');
+    setIsCancelModalOpen(true);
+  };
+
+  const handleIssueCancelChallan = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cancellingPO || !cancellationReason.trim()) {
+      alert('Please provide a reason for cancelling this Purchase Order.');
+      return;
+    }
+
+    const challanNo = `PO-CNCL-${Date.now().toString().slice(-4)}`;
+    updatePurchaseOrder({
+      ...cancellingPO,
+      status: 'CANCELLED',
+      cancellationChallanNo: challanNo,
+      cancellationReason: cancellationReason.trim(),
+      cancelledBy: currentUser?.fullName || 'Procurement Officer',
+      cancelledAt: new Date().toISOString()
+    });
+
+    alert(`✅ Cancellation Challan ${challanNo} issued. PO ${cancellingPO.poNumber} has been voided.`);
+    setIsCancelModalOpen(false);
+    setCancellingPO(null);
   };
 
   const handlePrintPO = (po: PurchaseOrder) => {
@@ -461,6 +549,36 @@ export const PurchaseOrderModule: React.FC = () => {
     );
   });
 
+  // Build rows for Tabular Shortage Matrix
+  const getWizardTableRows = () => {
+    const term = wizardSearchTerm.trim().toLowerCase();
+
+    return wizardShortageItemsFiltered.map((item, idx) => {
+      const reqQty = getItemWorkOrderDemand(item.id, item.itemCode);
+      const minStock = item.minStockQty !== undefined ? item.minStockQty : (item.reorderLevel || 0);
+      const currentStock = (item.inHouseStock || 0) + (item.externalStock || 0);
+      const inPO = getOpenPOQuantity(item);
+      const shortage = getItemEffectiveShortage(item);
+
+      return {
+        srNo: idx + 1,
+        item,
+        itemCode: item.itemCode,
+        itemDescription: item.name,
+        partCode: item.partCode || item.itemCode,
+        requiredQty: reqQty,
+        currentStock,
+        minStockQty: minStock,
+        moq: item.minOrderQty || 1,
+        inPO,
+        shortage,
+        unit: item.unit
+      };
+    });
+  };
+
+  const wizardTableRows = getWizardTableRows();
+
   return (
     <div className="module-layout-container">
       
@@ -469,179 +587,193 @@ export const PurchaseOrderModule: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           {isWizardOpen && (
             <button className="btn btn-outline" style={{ padding: '0.35rem 0.65rem', gap: '0.35rem', fontWeight: 600 }} onClick={() => setIsWizardOpen(false)}>
-              <ArrowLeft size={16} /> Back to PO List <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>(ESC)</span>
+              <X size={16} /> Back to POs <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>(ESC)</span>
             </button>
           )}
-          <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-secondary)' }}>
-            {isWizardOpen ? 'Select Shortage Item to Generate Purchase Order' : `All Purchase Orders (${filteredPOs.length})`}
-          </span>
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-primary)' }}>
+            <ShoppingCart size={20} color="var(--accent-primary)" />
+            {isWizardOpen ? 'Shortage PO Wizard (Tabular Matrix)' : 'Purchase Order Ledger & Procurement Control'}
+          </h2>
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          {/* Send All Draft POs for Approval Button */}
+          <button type="button" className="btn btn-outline" onClick={handleRefreshLiveSheet} title="Sync and maintain live CSV sheet">
+            <RefreshCw size={14} /> Live Sheet
+          </button>
+          <button type="button" className="btn btn-outline" onClick={() => setIsExportModalOpen(true)} title="Export POs to CSV file">
+            <FileSpreadsheet size={14} /> Export POs
+          </button>
+          <button type="button" className="btn btn-outline" onClick={handlePrintPOList} title="Print Filtered PO Ledger">
+            <Printer size={14} /> Print Report
+          </button>
           {draftPOs.length > 0 && !isWizardOpen && (
             <button 
+              type="button" 
               className="btn btn-warning" 
-              style={{ fontWeight: 700, padding: '0.45rem 0.85rem', gap: '0.4rem', color: '#ffffff', backgroundColor: 'var(--warning)', border: 'none' }}
+              style={{ color: '#fff', backgroundColor: '#d97706', borderColor: '#d97706', fontWeight: 700 }} 
               onClick={() => {
                 const ids = draftPOs.map(p => p.id);
                 sendPODraftsForApproval(ids);
                 alert(`✅ Successfully sent ${ids.length} Draft Purchase Order(s) for Approval!`);
               }}
             >
-              <Send size={16} /> Send All Draft POs for Approval ({draftPOs.length})
+              <Send size={14} /> Submit ({draftPOs.length}) Drafts for Approval
             </button>
           )}
-
-          <button type="button" className="btn btn-outline" onClick={handleRefreshLiveSheet} title="Sync and maintain live CSV sheet">
-            <RefreshCw size={14} /> Live Sheet
-          </button>
-          <button type="button" className="btn btn-outline" onClick={handlePrintPOList} title="Print filtered purchase orders report">
-            <Printer size={14} /> Print Report
-          </button>
-          <button className="btn btn-outline" onClick={() => setIsExportModalOpen(true)}>
-            <FileSpreadsheet size={14} /> Export Custom
-          </button>
           {!isWizardOpen && (
             <>
-              <button className="btn btn-outline" onClick={() => { setIsWizardOpen(true); setWizardSearchTerm(''); }}>
-                <AlertTriangle size={14} color="var(--warning)" /> Shortage PO Wizard
+              <button 
+                type="button" 
+                className="btn btn-outline" 
+                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600 }}
+                onClick={() => { setIsWizardOpen(true); setWizardSearchTerm(''); }}
+              >
+                <AlertTriangle size={14} color="var(--warning)" /> Shortage PO Wizard ({shortageItems.length})
               </button>
-              <button id="btn-new-po" className="btn btn-primary" onClick={handleOpenManualPOModal}>
-                <Plus size={16} /> Create Manual PO
+              <button className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }} onClick={handleOpenManualPOModal}>
+                <Plus size={16} /> Create PO
               </button>
             </>
           )}
         </div>
       </div>
 
-      {/* Main View: Wizard Page Panel OR Standard PO List */}
+      {/* Tabular Shortage PO Wizard View */}
       {isWizardOpen ? (
-        /* In-Screen Panel: Select Shortage Item (Only Shortage Items Listed) */
-        <div className="card" style={{ padding: '1.25rem', backgroundColor: 'var(--bg-card)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
-              Select Shortage Item to Generate PO
-            </h3>
-            <button type="button" className="btn btn-outline" style={{ padding: '0.25rem 0.5rem', fontSize: '0.78rem' }} onClick={() => setIsWizardOpen(false)}>
-              <X size={15} /> Close (ESC)
-            </button>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {/* Search Bar for Shortage Items */}
-            <div style={{ position: 'relative', width: '100%' }}>
-              <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-              <input
-                type="text"
-                placeholder="Search shortage item code, description, category..."
-                className="input-field"
-                style={{ paddingLeft: '2.25rem' }}
-                value={wizardSearchTerm}
-                onChange={(e) => setWizardSearchTerm(e.target.value)}
-              />
+        <div className="card" style={{ padding: '1.25rem', backgroundColor: 'var(--bg-card)', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <AlertTriangle size={18} color="var(--warning)" />
+                Bought-Out Shortage Procurement Wizard (Tabular Matrix)
+              </h3>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                Review required demand, current stock, MOQ, open POs, and generate vendor POs directly.
+              </div>
             </div>
 
-            {shortageItems.length === 0 ? (
-              <div style={{ padding: '2rem', textAlign: 'center', backgroundColor: 'var(--bg-tertiary)', borderRadius: '0.5rem', color: 'var(--success)' }}>
-                <CheckCircle2 size={32} style={{ marginBottom: '0.5rem' }} />
-                <div style={{ fontWeight: 700, fontSize: '1rem' }}>All items have sufficient stock levels!</div>
-                <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                  No material shortages currently exist. PO creation is restricted to shortage items only.
-                </div>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '420px', overflowY: 'auto' }}>
-                {wizardShortageItemsFiltered.map(item => {
-                  const shortage = getItemEffectiveShortage(item);
-
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className="btn btn-outline"
-                      style={{ justifyContent: 'space-between', padding: '0.875rem 1.25rem', textAlign: 'left', display: 'flex', alignItems: 'center' }}
-                      onClick={() => handleOpenShortagePOModal(item)}
-                    >
-                      <div>
-                        <div style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
-                          {item.itemCode} - {item.name}
-                        </div>
-                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-                          In-House: {item.inHouseStock} | External: {item.externalStock} | Min Stock: {item.minStockQty || 5} {item.unit} | MOQ: {item.minOrderQty || 5} {item.unit}
-                        </div>
-                      </div>
-                      <span className="badge badge-danger" style={{ fontSize: '0.82rem', padding: '0.35rem 0.65rem', fontWeight: 800 }}>
-                        Shortage: {shortage} {item.unit}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <button 
+                type="button" 
+                className="btn btn-outline" 
+                style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem' }}
+                onClick={() => setIsShortagePrintOpen(true)}
+              >
+                <Printer size={14} /> Print Shortage Table
+              </button>
+              <button type="button" className="btn btn-outline" style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem' }} onClick={() => setIsWizardOpen(false)}>
+                <X size={15} /> Close (ESC)
+              </button>
+            </div>
           </div>
+
+          {/* Search Bar for Shortage Items */}
+          <div style={{ position: 'relative', width: '100%' }}>
+            <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+            <input
+              type="text"
+              placeholder="Search shortage item description, part code... (or filter rows)"
+              className="input-field"
+              style={{ paddingLeft: '2.25rem' }}
+              value={wizardSearchTerm}
+              onChange={(e) => setWizardSearchTerm(e.target.value)}
+            />
+          </div>
+
+          {/* Tabular Shortage Matrix */}
+          {wizardTableRows.length === 0 ? (
+            <div style={{ padding: '3rem 1rem', textAlign: 'center', color: 'var(--success)' }}>
+              <CheckCircle2 size={44} style={{ marginBottom: '0.5rem', opacity: 0.8 }} />
+              <div style={{ fontWeight: 800, fontSize: '1.05rem' }}>All items have sufficient stock levels!</div>
+              <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                No active material shortages exist currently.
+              </div>
+            </div>
+          ) : (
+            <div className="table-container" style={{ maxHeight: '500px', overflowY: 'auto' }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th style={{ width: '45px', textAlign: 'center' }}>Sr No</th>
+                    <th>Item Code</th>
+                    <th>Item Description</th>
+                    <th>Part Code</th>
+                    <th style={{ textAlign: 'right' }}>Required Qty</th>
+                    <th style={{ textAlign: 'right' }}>Current Stock</th>
+                    <th style={{ textAlign: 'right' }}>Min Stock Qty</th>
+                    <th style={{ textAlign: 'right' }}>MOQ</th>
+                    <th style={{ textAlign: 'right' }}>In PO</th>
+                    <th style={{ textAlign: 'right' }}>Shortage</th>
+                    <th style={{ width: '130px', textAlign: 'center' }}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {wizardTableRows.map((row, idx) => (
+                    <tr key={idx} style={{ backgroundColor: row.shortage > 0 ? 'rgba(239, 68, 68, 0.04)' : 'transparent' }}>
+                      <td style={{ textAlign: 'center', fontWeight: 600 }}>{idx + 1}</td>
+                      <td>
+                        <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>
+                          {row.itemCode}
+                        </span>
+                      </td>
+                      <td>
+                        <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{row.itemDescription}</div>
+                      </td>
+                      <td>
+                        <span style={{ fontFamily: 'monospace', color: 'var(--text-secondary)' }}>
+                          {row.partCode}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                        {row.requiredQty} {row.unit}
+                      </td>
+                      <td style={{ textAlign: 'right', color: row.currentStock <= 0 ? 'var(--danger)' : 'var(--text-primary)' }}>
+                        {row.currentStock} {row.unit}
+                      </td>
+                      <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
+                        {row.minStockQty} {row.unit}
+                      </td>
+                      <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
+                        {row.moq} {row.unit}
+                      </td>
+                      <td style={{ textAlign: 'right', color: row.inPO > 0 ? 'var(--accent-primary)' : 'var(--text-muted)', fontWeight: row.inPO > 0 ? 700 : 400 }}>
+                        {row.inPO} {row.unit}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <span className="badge badge-danger" style={{ fontWeight: 800, fontSize: '0.8rem', padding: '0.2rem 0.5rem' }}>
+                          {row.shortage} {row.unit}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          style={{ padding: '0.3rem 0.65rem', fontSize: '0.78rem', fontWeight: 700, gap: '0.3rem', display: 'inline-flex', alignItems: 'center' }}
+                          onClick={() => handleOpenShortagePOModal(row.item)}
+                        >
+                          <Plus size={13} /> Create PO
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       ) : (
         <>
-          {/* Red Shortage Items Alert Banner at Top */}
-          {shortageItems.length > 0 && (
-            <div className="card" style={{ padding: '0.875rem 1.25rem', backgroundColor: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '0.5rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <AlertTriangle size={20} color="var(--danger)" />
-                  <div>
-                    <span style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--danger)' }}>
-                      Shortage Alert: {shortageItems.length} Item(s) Below Minimum Stock Requirement!
-                    </span>
-                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                      Click on any red item button below to open shortage details and generate PO.
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                  {shortageItems.map(item => {
-                    const shortage = getItemEffectiveShortage(item);
-
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        className="btn"
-                        style={{ 
-                          fontSize: '0.78rem', 
-                          padding: '0.35rem 0.75rem', 
-                          backgroundColor: 'var(--danger)', 
-                          color: '#ffffff', 
-                          fontWeight: 700,
-                          border: 'none',
-                          borderRadius: '0.375rem',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.35rem'
-                        }}
-                        onClick={() => handleOpenShortagePOModal(item)}
-                      >
-                        {item.itemCode}: Order {shortage} {item.unit}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Filter Bar with Lifecycle Status Filter */}
           <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', backgroundColor: 'var(--bg-card)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-              <div style={{ position: 'relative', width: '360px', maxWidth: '100%' }}>
-                <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <div style={{ position: 'relative', width: '340px', maxWidth: '100%' }}>
+                <Search size={15} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                 <input
                   type="text"
-                  placeholder="Search PO, vendor, item... (type @history to search completed)"
+                  placeholder="Search PO Number, Vendor, Item, Ref... (type @history)"
                   className="input-field"
-                  style={{ paddingLeft: '2.25rem' }}
+                  style={{ paddingLeft: '2.25rem', fontSize: '0.82rem' }}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
@@ -654,18 +786,17 @@ export const PurchaseOrderModule: React.FC = () => {
               )}
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
               <div>
-                <label style={{ fontSize: '0.72rem', margin: 0 }}>PO Lifecycle View</label>
-                <select className="input-field" style={{ padding: '0.35rem 0.6rem', fontSize: '0.8rem' }} value={selectedPOStatusFilter} onChange={(e) => setSelectedPOStatusFilter(e.target.value)}>
-                  <option value="ACTIVE_ONLY">Active POs (Hides Goods Received)</option>
-                  <option value="ALL">All Statuses (Including Goods Received)</option>
-                  <option value="DRAFT">Drafts ({draftPOs.length})</option>
-                  <option value="WAITING_FOR_APPROVAL">Waiting for Approval</option>
+                <label style={{ fontSize: '0.72rem', margin: 0 }}>Lifecycle Status</label>
+                <select className="input-field" style={{ padding: '0.35rem 0.6rem', fontSize: '0.8rem', fontWeight: 600 }} value={selectedPOStatusFilter} onChange={(e) => setSelectedPOStatusFilter(e.target.value)}>
+                  <option value="ALL">All Active Lifecycle</option>
+                  <option value="DRAFT">Draft</option>
+                  <option value="WAITING_FOR_APPROVAL">Waiting Approval</option>
                   <option value="APPROVED">Approved</option>
+                  <option value="REJECTED">Rejected</option>
                   <option value="SENT">Sent to Vendor</option>
                   <option value="GOODS_RECEIVED">Goods Received (History)</option>
-                  <option value="CANCELLED">Cancelled</option>
                 </select>
               </div>
               <div>
@@ -693,6 +824,8 @@ export const PurchaseOrderModule: React.FC = () => {
                       Vendor Name {sortField === 'vendorName' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
                     </div>
                   </th>
+                  <th>Item Code(s)</th>
+                  <th>Item Description</th>
                   <th onClick={() => handleSortToggle('orderDate')} style={{ cursor: 'pointer' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                       Order Date {sortField === 'orderDate' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
@@ -709,7 +842,6 @@ export const PurchaseOrderModule: React.FC = () => {
                     </div>
                   </th>
                   <th>Prepared By</th>
-                  <th>Ordered / Received Qty</th>
                   <th onClick={() => handleSortToggle('totalAmount')} style={{ cursor: 'pointer' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                       Total Amount {sortField === 'totalAmount' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
@@ -726,6 +858,7 @@ export const PurchaseOrderModule: React.FC = () => {
                     po.status === 'GOODS_RECEIVED' ? 'badge-success' :
                     po.status === 'APPROVED' ? 'badge-info' :
                     po.status === 'WAITING_FOR_APPROVAL' ? 'badge-warning' :
+                    po.status === 'REJECTED' ? 'badge-danger' :
                     po.status === 'DRAFT' ? 'badge-neutral' :
                     po.status === 'CANCELLED' ? 'badge-danger' : 'badge-neutral';
 
@@ -750,6 +883,11 @@ export const PurchaseOrderModule: React.FC = () => {
                             {po.poNumber}
                           </span>
                           {po.status === 'DRAFT' && <span className="badge badge-warning" style={{ fontSize: '0.65rem' }}>DRAFT</span>}
+                          {po.cancellationChallanNo && (
+                            <span className="badge badge-danger" style={{ fontSize: '0.65rem' }}>
+                              CNCL ({po.cancellationChallanNo})
+                            </span>
+                          )}
                           {(po.status === 'GOODS_RECEIVED' || (po.status as string) === 'RECEIVED' || po.status === 'CANCELLED') && (
                             <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#fff', fontSize: '0.65rem', padding: '0.1rem 0.35rem' }}>
                               📜 HISTORY
@@ -758,31 +896,28 @@ export const PurchaseOrderModule: React.FC = () => {
                         </div>
                       </td>
                       <td style={{ fontWeight: 600 }}>{po.vendorName}</td>
+                      <td>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                          {po.items.map((pi, piIdx) => (
+                            <span key={piIdx} style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)', fontSize: '0.78rem' }}>
+                              {pi.itemCode}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', maxWidth: '240px' }}>
+                          {po.items.map((pi, piIdx) => (
+                            <span key={piIdx} style={{ color: 'var(--text-secondary)', fontSize: '0.78rem' }}>
+                              {pi.itemName}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
                       <td>{po.orderDate}</td>
                       <td>{po.deliveryDate || po.expectedDeliveryDate}</td>
                       <td style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>{createdDisplay}</td>
                       <td style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>{po.preparedBy || 'System User'}</td>
-                      <td>
-                        {(() => {
-                          const totalOrdered = po.items.reduce((sum, it) => sum + (it.quantity || it.orderedQty || 1), 0);
-                          const totalReceived = po.items.reduce((sum, it) => sum + (it.receivedQty || 0), 0);
-                          const totalBalance = Math.max(0, totalOrdered - totalReceived);
-                          const isComplete = totalReceived >= totalOrdered && totalOrdered > 0;
-
-                          return (
-                            <div>
-                              <div style={{ fontWeight: 700, fontSize: '0.82rem', color: isComplete ? 'var(--success)' : totalReceived > 0 ? 'var(--warning)' : 'var(--text-primary)' }}>
-                                {totalReceived} / {totalOrdered} Recd
-                              </div>
-                              {totalBalance > 0 && (
-                                <span style={{ fontSize: '0.72rem', color: 'var(--danger)', fontWeight: 600 }}>
-                                  ({totalBalance} Pending)
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })()}
-                      </td>
                       <td style={{ fontWeight: 800, color: 'var(--text-primary)' }}>
                         ₹{(po.totalAmount || 0).toLocaleString()}
                       </td>
@@ -796,9 +931,26 @@ export const PurchaseOrderModule: React.FC = () => {
                           <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem' }} title="Print Vendor Purchase Order" onClick={() => handlePrintSinglePO(po)}>
                             <Printer size={14} />
                           </button>
-                          <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem' }} title="Edit PO" onClick={() => { setEditingPO({ ...po }); setIsEditPOModalOpen(true); }}>
-                            <Edit2 size={14} />
-                          </button>
+                          {['DRAFT', 'WAITING_FOR_APPROVAL', 'APPROVED', 'REJECTED'].includes(po.status) && (
+                            <button 
+                              className="btn btn-outline" 
+                              style={{ padding: '0.3rem 0.5rem' }} 
+                              title="Edit PO (Will require re-approval)" 
+                              onClick={() => { setEditingPO({ ...po }); setIsEditPOModalOpen(true); }}
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                          )}
+                          {['ISSUED', 'SENT', 'PARTIALLY_RECEIVED'].includes(po.status) && (
+                            <button 
+                              className="btn btn-outline" 
+                              style={{ padding: '0.2rem 0.45rem', fontSize: '0.72rem', color: 'var(--danger)', borderColor: 'var(--danger)' }} 
+                              title="Issue PO Cancellation Challan" 
+                              onClick={() => handleOpenCancelChallan(po)}
+                            >
+                              Cancel Challan
+                            </button>
+                          )}
                           <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem', color: 'var(--danger)' }} title="Delete PO" onClick={() => {
                             if (window.confirm(`Are you sure you want to delete PO ${po.poNumber}? Any associated item shortage will reappear.`)) {
                               deletePurchaseOrder(po.id);
@@ -806,16 +958,14 @@ export const PurchaseOrderModule: React.FC = () => {
                           }}>
                             <Trash2 size={14} />
                           </button>
-                          {po.status === 'DRAFT' && (
+                          {po.status === 'REJECTED' && (
                             <button 
-                              className="btn btn-outline" 
-                              style={{ fontSize: '0.75rem', padding: '0.2rem 0.4rem', color: 'var(--warning)', borderColor: 'var(--warning)' }}
-                              onClick={() => {
-                                updatePOStatus(po.id, 'WAITING_FOR_APPROVAL');
-                                alert(`PO ${po.poNumber} sent for approval!`);
-                              }}
+                              className="btn btn-primary" 
+                              style={{ fontSize: '0.75rem', padding: '0.2rem 0.45rem', backgroundColor: 'var(--accent-primary)', borderColor: 'var(--accent-primary)' }}
+                              title={`Rejected: ${po.rejectionReason || 'Requires modifications'}. Click to edit and resubmit.`}
+                              onClick={() => { setEditingPO({ ...po }); setIsEditPOModalOpen(true); }}
                             >
-                              Send for Approval
+                              Edit & Resubmit
                             </button>
                           )}
                           {po.status === 'WAITING_FOR_APPROVAL' && (
@@ -836,9 +986,10 @@ export const PurchaseOrderModule: React.FC = () => {
                                 style={{ fontSize: '0.75rem', padding: '0.2rem 0.45rem', color: 'var(--danger)', borderColor: 'var(--danger)' }}
                                 title="Reject PO"
                                 onClick={() => {
-                                  if (window.confirm(`Reject PO ${po.poNumber}? It will be returned to Draft status for revisions.`)) {
-                                    updatePOStatus(po.id, 'DRAFT');
-                                    alert(`❌ PO ${po.poNumber} Rejected and returned to Draft.`);
+                                  const reason = window.prompt(`Enter rejection reason for PO ${po.poNumber}:`, 'Price discrepancy / quantity revision required');
+                                  if (reason !== null) {
+                                    updatePOStatus(po.id, 'REJECTED', reason);
+                                    alert(`❌ PO ${po.poNumber} Rejected.`);
                                   }
                                 }}
                               >
@@ -1023,12 +1174,20 @@ export const PurchaseOrderModule: React.FC = () => {
                   <option value="DRAFT">DRAFT</option>
                   <option value="WAITING_FOR_APPROVAL">WAITING FOR APPROVAL</option>
                   <option value="APPROVED">APPROVED</option>
+                  <option value="REJECTED">REJECTED</option>
                   <option value="SENT">SENT TO VENDOR</option>
                   <option value="GOODS_RECEIVED">GOODS RECEIVED</option>
                   <option value="CANCELLED">CANCELLED</option>
                 </select>
               </div>
             </div>
+
+            {editingPO.rejectionReason && (
+              <div style={{ padding: '0.65rem 0.85rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--danger)', borderRadius: '0.375rem', fontSize: '0.8rem', color: 'var(--danger)' }}>
+                <strong>🚫 Rejection Remarks:</strong> {editingPO.rejectionReason}
+                {editingPO.rejectedBy && <span style={{ marginLeft: '0.5rem', color: 'var(--text-muted)' }}>— {editingPO.rejectedBy}</span>}
+              </div>
+            )}
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
               <div>
@@ -1045,30 +1204,43 @@ export const PurchaseOrderModule: React.FC = () => {
               <label style={{ fontWeight: 700, fontSize: '0.85rem' }}>PO Line Items</label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.35rem' }}>
                 {editingPO.items.map((item, idx) => {
+                  const itemObj = items.find(i => i.id === item.itemId || i.itemCode === item.itemCode);
+                  const moq = itemObj?.minOrderQty || 1;
                   const qty = item.quantity || item.orderedQty || 1;
                   const price = item.unitPrice || 0;
                   const itemTotal = qty * price;
 
                   return (
-                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: '0.5rem', alignItems: 'center', backgroundColor: 'var(--bg-tertiary)', padding: '0.5rem', borderRadius: '0.375rem' }}>
+                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '2fr 1.2fr 1fr 1fr', gap: '0.5rem', alignItems: 'center', backgroundColor: 'var(--bg-tertiary)', padding: '0.5rem', borderRadius: '0.375rem' }}>
                       <div>
                         <strong>{item.itemName}</strong>
-                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Code: {item.itemCode}</div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                          Code: {item.itemCode} &bull; <span style={{ color: 'var(--accent-primary)', fontWeight: 600 }}>MOQ: {moq} {item.unit || 'PCS'}</span>
+                        </div>
                       </div>
                       <div>
-                        <label style={{ fontSize: '0.7rem' }}>Quantity</label>
+                        <label style={{ fontSize: '0.7rem', display: 'flex', justifyContent: 'space-between' }}>
+                          <span>Quantity</span>
+                          <span style={{ color: 'var(--text-muted)' }}>(Min: {moq})</span>
+                        </label>
                         <input 
                           type="number" 
-                          min="1" 
+                          min={moq} 
                           className="input-field" 
-                          value={qty} 
+                          value={qty === 0 ? '' : qty} 
                           onChange={(e) => {
-                            const newQty = Number(e.target.value);
+                            const val = e.target.value;
+                            const newQty = val === '' ? 0 : Number(val);
                             const updatedItems = [...editingPO.items];
                             updatedItems[idx] = { ...item, quantity: newQty, orderedQty: newQty, amount: newQty * price, totalAmount: newQty * price };
                             setEditingPO({ ...editingPO, items: updatedItems });
                           }} 
                         />
+                        {qty < moq && qty > 0 && (
+                          <span style={{ fontSize: '0.68rem', color: 'var(--danger)', fontWeight: 700 }}>
+                            ⚠️ Min MOQ is {moq}
+                          </span>
+                        )}
                       </div>
                       <div>
                         <label style={{ fontSize: '0.7rem' }}>Unit Price (₹)</label>
@@ -1076,9 +1248,10 @@ export const PurchaseOrderModule: React.FC = () => {
                           type="number" 
                           min="0" 
                           className="input-field" 
-                          value={price} 
+                          value={price === 0 ? '' : price} 
                           onChange={(e) => {
-                            const newPrice = Number(e.target.value);
+                            const val = e.target.value;
+                            const newPrice = val === '' ? 0 : Number(val);
                             const updatedItems = [...editingPO.items];
                             updatedItems[idx] = { ...item, unitPrice: newPrice, amount: qty * newPrice, totalAmount: qty * newPrice };
                             setEditingPO({ ...editingPO, items: updatedItems });
@@ -1096,7 +1269,13 @@ export const PurchaseOrderModule: React.FC = () => {
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
               <button type="button" className="btn btn-secondary" onClick={() => { setIsEditPOModalOpen(false); setEditingPO(null); }}>Cancel (ESC)</button>
-              <button type="submit" className="btn btn-primary">Save PO Changes</button>
+              {editingPO.status === 'REJECTED' ? (
+                <button type="button" className="btn btn-primary" style={{ backgroundColor: 'var(--success)', borderColor: 'var(--success)' }} onClick={handleResubmitPO}>
+                  ✓ Resubmit for Approval
+                </button>
+              ) : (
+                <button type="submit" className="btn btn-primary">Save PO Changes</button>
+              )}
             </div>
           </form>
         </Modal>
@@ -1182,10 +1361,13 @@ export const PurchaseOrderModule: React.FC = () => {
                     required 
                     min={moq} 
                     className="input-field" 
-                    value={manualItemQty} 
-                    onChange={(e) => setManualItemQty(Number(e.target.value))} 
+                    value={manualItemQty === 0 ? '' : manualItemQty} 
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setManualItemQty(val === '' ? 0 : Number(val));
+                    }} 
                   />
-                  {manualItemQty < moq && (
+                  {manualItemQty < moq && manualItemQty > 0 && (
                     <span style={{ fontSize: '0.72rem', color: 'var(--danger)', fontWeight: 600 }}>
                       ⚠️ Quantity cannot be less than MOQ ({moq} {selectedItemObj?.unit || 'PCS'})
                     </span>
@@ -1199,8 +1381,11 @@ export const PurchaseOrderModule: React.FC = () => {
                     min="0" 
                     step="0.01"
                     className="input-field" 
-                    value={manualItemPrice} 
-                    onChange={(e) => setManualItemPrice(Number(e.target.value))} 
+                    value={manualItemPrice === 0 ? '' : manualItemPrice} 
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setManualItemPrice(val === '' ? 0 : Number(val));
+                    }} 
                   />
                 </div>
               </div>
@@ -1289,6 +1474,62 @@ export const PurchaseOrderModule: React.FC = () => {
           <POListPrintView purchaseOrders={filteredPOs} filterLabel={isHistorySearch ? 'All Active & Historical Purchase Orders' : 'Active Purchase Orders'} />
         )}
       </PrintManagerModal>
+
+      {/* Shortage Wizard Table Print Modal */}
+      <PrintManagerModal
+        isOpen={isShortagePrintOpen}
+        onClose={() => setIsShortagePrintOpen(false)}
+        title="Print Shortage Purchase Order Matrix"
+        documentRefNumber="PO-SHORTAGE-MATRIX"
+      >
+        <TabularShortagePrintView 
+          title="PURCHASE ORDER SHORTAGE REPORT" 
+          rows={wizardTableRows} 
+          filterLabel={isExplodeShortage ? "Exploded Active Work Orders BOM Shortages" : "Active Material Stock Shortages"}
+          showMOQAndInPO={true}
+        />
+      </PrintManagerModal>
+
+      {/* Cancellation Challan Modal (For Sent POs) */}
+      {isCancelModalOpen && cancellingPO && (
+        <Modal
+          isOpen={isCancelModalOpen}
+          onClose={() => { setIsCancelModalOpen(false); setCancellingPO(null); }}
+          title={`Issue PO Cancellation Challan (${cancellingPO.poNumber})`}
+        >
+          <form onSubmit={handleIssueCancelChallan} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ padding: '0.75rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--danger)', borderRadius: '0.375rem', fontSize: '0.82rem', color: 'var(--danger)' }}>
+              <strong>⚠️ Formal Cancellation Notice:</strong> This Purchase Order was previously dispatched to vendor <strong>{cancellingPO.vendorName}</strong>. Issuing this challan will formally void the order and record a cancellation audit trail.
+            </div>
+
+            <div>
+              <label style={{ fontWeight: 700 }}>PO Reference</label>
+              <input type="text" className="input-field" readOnly value={`${cancellingPO.poNumber} - ${cancellingPO.vendorName}`} />
+            </div>
+
+            <div>
+              <label style={{ fontWeight: 700 }}>Cancellation Reason / Justification *</label>
+              <textarea
+                required
+                className="input-field"
+                rows={3}
+                placeholder="e.g. Design revision, vendor delayed lead time, alternative supplier chosen..."
+                value={cancellationReason}
+                onChange={(e) => setCancellationReason(e.target.value)}
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => { setIsCancelModalOpen(false); setCancellingPO(null); }}>
+                Close
+              </button>
+              <button type="submit" className="btn btn-danger" style={{ backgroundColor: 'var(--danger)', color: '#fff' }}>
+                Issue Cancellation Challan
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
 
       {/* Export Field Selector Modal */}
       <ExportFieldSelectorModal<PurchaseOrder>

@@ -1,0 +1,31 @@
+{
+  "users": [
+    {
+      "id": "usr-admin",
+      "username": "admin",
+      "full_name": "System Administrator",
+      "role": "Admin",
+      "email": "admin@gecmachines.com",
+      "is_super_admin": true,
+      "is_admin": true
+    }
+  ],
+  "activityLogs": [],
+  "backups": [
+    {
+      "id": "bak-1788241207793",
+      "fileName": "GEC_ERP_BACKUP_2026-09-01T05-40-07-779Z.json",
+      "filePath": "D:\\ERP\\GEC_ERP\\backups\\GEC_ERP_BACKUP_2026-09-01T05-40-07-779Z.json",
+      "fileSizeKb": 0,
+      "backupType": "SCHEDULED",
+      "status": "SUCCESS",
+      "createdAt": "2026-09-01T05:40:07.793Z"
+    }
+  ],
+  "settings": {
+    "backupIntervalDays": 2,
+    "lastBackupDate": "2026-09-01T05:40:07.793Z",
+    "storageLocation": "D:/ERP/GEC_ERP/storage",
+    "backupLocation": "D:/ERP/GEC_ERP/backups"
+  }
+}

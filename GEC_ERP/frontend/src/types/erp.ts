@@ -118,7 +118,7 @@ export interface Item {
   minStockQty?: number;
   minOrderQty?: number;
   reorderLevel?: number;
-  grnAllowancePercent?: number;
+  pendingQCStock?: number;
   unitPrice: number;
   weightKg?: number;
   location: string;
@@ -249,7 +249,7 @@ export interface SalesOrder {
   customNotes?: string;
 }
 
-export type POStatus = 'DRAFT' | 'WAITING_FOR_APPROVAL' | 'APPROVED' | 'ISSUED' | 'SENT' | 'PARTIALLY_RECEIVED' | 'GOODS_RECEIVED' | 'RECEIVED' | 'CANCELLED';
+export type POStatus = 'DRAFT' | 'WAITING_FOR_APPROVAL' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'ISSUED' | 'SENT' | 'PARTIALLY_RECEIVED' | 'GOODS_RECEIVED' | 'RECEIVED' | 'CANCELLED';
 
 export interface POItem {
   itemId?: string;
@@ -259,6 +259,8 @@ export interface POItem {
   orderedQty?: number;
   receivedQty?: number;
   unit?: string;
+  purchaseUOM?: string;
+  conversionFactor?: number;
   unitPrice?: number;
   totalAmount?: number;
   amount?: number;
@@ -282,7 +284,13 @@ export interface PurchaseOrder {
   taxAmount?: number;
   totalAmount?: number;
   notes?: string;
-  remarks?: string;
+  rejectionReason?: string;
+  rejectedBy?: string;
+  rejectedAt?: string;
+  cancellationReason?: string;
+  cancellationChallanNo?: string;
+  cancelledBy?: string;
+  cancelledAt?: string;
 }
 
 export type WOStage = 'PLANNING' | 'ASSEMBLY' | 'TESTING' | 'QUALITY' | 'COMPLETED' | string;
@@ -392,6 +400,9 @@ export interface JobworkChallan {
   itemId?: string;
   itemCode?: string;
   itemName?: string;
+  producedItemId?: string;
+  producedItemCode?: string;
+  producedItemName?: string;
   processRequired?: string;
   sentQuantity?: number;
   receivedQuantity?: number;
@@ -399,6 +410,8 @@ export interface JobworkChallan {
   pendingBalance?: number;
   notes?: string;
 }
+
+export type GRNRejectionDisposition = 'SCRAP' | 'IN_HOUSE_REWORK' | 'VENDOR_REWORK' | 'VENDOR_RETURN';
 
 export interface GRNItem {
   poItemId?: string;
@@ -408,11 +421,22 @@ export interface GRNItem {
   receivedQty?: number;
   acceptedQty?: number;
   rejectedQty?: number;
+  rejectionDisposition?: GRNRejectionDisposition;
+  rejectionReason?: string;
   unit?: string;
+  purchaseUOM?: string;
+  conversionFactor?: number;
   unitPrice?: number;
   orderedQty?: number;
   quantity?: number;
   remarks?: string;
+  isDirectJobwork?: boolean;
+  directJWQty?: number;
+  directJWProduceItemId?: string;
+  directJWProduceItemCode?: string;
+  directJWProduceItemName?: string;
+  directJWVendorId?: string;
+  directJWVendorName?: string;
 }
 
 export type GRNLineItem = GRNItem;
@@ -420,8 +444,10 @@ export type GRNLineItem = GRNItem;
 export interface GoodsReceivedNote {
   id: string;
   grnNumber: string;
+  sourceType?: 'PO' | 'JOBWORK' | 'STANDALONE';
   poNumber: string;
   poId?: string;
+  challanId?: string;
   vendorId?: string;
   vendorName: string;
   challanNo?: string;
@@ -545,6 +571,26 @@ export interface DispatchRecord {
   transporterName?: string;
   vehicleNo?: string;
   docketNo?: string;
+  notes?: string;
+}
+
+export interface JobCardMaterialReissue {
+  id: string;
+  reissueNo: string;
+  jobCardId: string;
+  jobCardNo?: string;
+  woNumber?: string;
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  quantity: number;
+  unit: string;
+  workerName: string;
+  supervisorName: string;
+  reason: 'DAMAGED_DURING_FITTING' | 'LOST_MISSING' | 'MACHINE_SCRAP' | 'DEFECTIVE_RAW_MATERIAL' | 'EXTRA_REQUIREMENT' | string;
+  customReason?: string;
+  issuedDate: string;
+  status: 'ISSUED' | 'APPROVED';
   notes?: string;
 }
 

@@ -21,6 +21,7 @@ import { ShortageModule } from './components/modules/ShortageModule';
 import { JobCardModule } from './components/modules/JobCardModule';
 import { FloorPlanningModule } from './components/modules/FloorPlanningModule';
 import { DispatchModule } from './components/modules/DispatchModule';
+import { PlanningModule } from './components/modules/PlanningModule';
 
 const MainContent: React.FC = () => {
   const { currentUser, activeModule, setActiveModule } = useERP();
@@ -58,6 +59,18 @@ const MainContent: React.FC = () => {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [activeModule, setActiveModule]);
 
+  // Disable scroll wheel increment/decrement on all number inputs globally
+  useEffect(() => {
+    const handleWheel = () => {
+      const activeEl = document.activeElement as HTMLElement | null;
+      if (activeEl && activeEl.tagName === 'INPUT' && (activeEl as HTMLInputElement).type === 'number') {
+        activeEl.blur();
+      }
+    };
+    window.addEventListener('wheel', handleWheel, { passive: true });
+    return () => window.removeEventListener('wheel', handleWheel);
+  }, []);
+
   if (!currentUser) {
     return <LoginSignup />;
   }
@@ -65,6 +78,7 @@ const MainContent: React.FC = () => {
   const renderActiveModule = () => {
     switch (activeModule) {
       case 'dashboard': return <DashboardModule />;
+      case 'planning': return <PlanningModule />;
       case 'shortage': return <ShortageModule />;
       case 'item-master': return <ItemMasterModule />;
       case 'customer-master': return <CustomerMasterModule />;

@@ -216,3 +216,89 @@ export const POShortagePrintView: React.FC<{
     <GECPrintSignatory preparedBy="Purchase Officer" checkedBy="Procurement Lead" authorizedBy="Commercial Director" />
   </div>
 );
+
+// 4. Unified Tabular Shortage Print View
+export interface TabularShortageRow {
+  srNo: number;
+  itemCode?: string;
+  itemDescription: string;
+  partCode: string;
+  requiredQty: number | string;
+  currentStock: number | string;
+  minStockQty?: number | string;
+  moq?: number | string;
+  inPO?: number | string;
+  shortage: number | string;
+  unit?: string;
+  extraInfo?: string;
+}
+
+export const TabularShortagePrintView: React.FC<{
+  title: string;
+  rows: TabularShortageRow[];
+  filterLabel?: string;
+  showMOQAndInPO?: boolean;
+}> = ({
+  title,
+  rows,
+  filterLabel = 'Shortage Summary',
+  showMOQAndInPO = true
+}) => (
+  <div>
+    <GECPrintHeader docTitle={title.toUpperCase()} />
+
+    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem', fontSize: '0.8rem', color: '#4b5563' }}>
+      <div>Scope: <strong>{filterLabel}</strong> ({rows.length} Shortage Items)</div>
+      <div>Generated: {new Date().toLocaleString()}</div>
+    </div>
+
+    <table className="print-table">
+      <thead>
+        <tr>
+          <th style={{ width: '35px', textAlign: 'center' }}>Sr No</th>
+          <th>Item Code</th>
+          <th>Item Description</th>
+          <th>Part Code</th>
+          <th style={{ width: '85px', textAlign: 'right' }}>Required Qty</th>
+          <th style={{ width: '85px', textAlign: 'right' }}>Current Stock</th>
+          <th style={{ width: '85px', textAlign: 'right' }}>Min Stock Qty</th>
+          {showMOQAndInPO && <th style={{ width: '70px', textAlign: 'right' }}>MOQ</th>}
+          {showMOQAndInPO && <th style={{ width: '70px', textAlign: 'right' }}>In PO</th>}
+          <th style={{ width: '85px', textAlign: 'right' }}>Shortage</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.length === 0 ? (
+          <tr>
+            <td colSpan={showMOQAndInPO ? 10 : 8} style={{ textAlign: 'center', padding: '12px', color: '#059669', fontWeight: 600 }}>
+              ✓ No active shortage found. All inventory requirements are satisfied!
+            </td>
+          </tr>
+        ) : (
+          rows.map((r, idx) => (
+            <tr key={idx} style={{ backgroundColor: Number(r.shortage) > 0 ? '#fef2f2' : 'transparent' }}>
+              <td style={{ textAlign: 'center' }}>{r.srNo}</td>
+              <td style={{ fontFamily: 'monospace', fontWeight: 700, color: '#2563eb' }}>{r.itemCode || r.partCode}</td>
+              <td style={{ fontWeight: 600 }}>
+                {r.itemDescription}
+                {r.extraInfo && <div style={{ fontSize: '0.7rem', color: '#6b7280' }}>{r.extraInfo}</div>}
+              </td>
+              <td style={{ fontFamily: 'monospace', color: '#4b5563' }}>{r.partCode}</td>
+              <td style={{ textAlign: 'right', fontWeight: 600 }}>{r.requiredQty} {r.unit || ''}</td>
+              <td style={{ textAlign: 'right' }}>{r.currentStock} {r.unit || ''}</td>
+              <td style={{ textAlign: 'right' }}>{r.minStockQty ?? 0} {r.unit || ''}</td>
+              {showMOQAndInPO && <td style={{ textAlign: 'right' }}>{r.moq || '-'}</td>}
+              {showMOQAndInPO && <td style={{ textAlign: 'right', color: '#2563eb' }}>{r.inPO || '0'}</td>}
+              <td style={{ textAlign: 'right', fontWeight: 800, color: Number(r.shortage) > 0 ? '#dc2626' : '#059669' }}>
+                {r.shortage} {r.unit || ''}
+              </td>
+            </tr>
+          ))
+        )}
+      </tbody>
+    </table>
+
+    <GECPrintSignatory preparedBy="Materials Planner" checkedBy="Store & Purchase Lead" authorizedBy="Operations Head" />
+  </div>
+);
+

@@ -258,15 +258,50 @@ export const QualityControlModule: React.FC = () => {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
               <div>
                 <label>Total Inspected Qty</label>
-                <input type="number" min="1" required className="input-field" value={qcForm.inspectedQuantity} onChange={(e) => setQcForm({ ...qcForm, inspectedQuantity: Number(e.target.value) })} />
+                <input 
+                  type="number" 
+                  min="1" 
+                  required 
+                  className="input-field" 
+                  value={qcForm.inspectedQuantity === 0 ? '' : qcForm.inspectedQuantity} 
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setQcForm({ ...qcForm, inspectedQuantity: val === '' ? 0 : Number(val) });
+                  }}
+                  onBlur={(e) => {
+                    if (!e.target.value || Number(e.target.value) < 1) {
+                      setQcForm({ ...qcForm, inspectedQuantity: 1 });
+                    }
+                  }}
+                />
               </div>
               <div>
                 <label>Passed Qty</label>
-                <input type="number" min="0" required className="input-field" value={qcForm.passedQuantity} onChange={(e) => setQcForm({ ...qcForm, passedQuantity: Number(e.target.value) })} />
+                <input 
+                  type="number" 
+                  min="0" 
+                  required 
+                  className="input-field" 
+                  value={qcForm.passedQuantity === 0 ? '' : qcForm.passedQuantity} 
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setQcForm({ ...qcForm, passedQuantity: val === '' ? 0 : Number(val) });
+                  }} 
+                />
               </div>
               <div>
                 <label>Failed / Defect Qty</label>
-                <input type="number" min="0" required className="input-field" value={qcForm.failedQuantity} onChange={(e) => setQcForm({ ...qcForm, failedQuantity: Number(e.target.value) })} />
+                <input 
+                  type="number" 
+                  min="0" 
+                  required 
+                  className="input-field" 
+                  value={qcForm.failedQuantity === 0 ? '' : qcForm.failedQuantity} 
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setQcForm({ ...qcForm, failedQuantity: val === '' ? 0 : Number(val) });
+                  }} 
+                />
               </div>
             </div>
 
@@ -276,6 +311,7 @@ export const QualityControlModule: React.FC = () => {
                 <option value="PASSED">PASSED (Approved for Assembly / Store)</option>
                 <option value="REJECTED">REJECTED (Return to Vendor)</option>
                 <option value="REWORK_REQUIRED">REWORK REQUIRED (Send back for In-house touchup)</option>
+                <option value="DESTROYED">DESTROYED (Scrapped & Destroyed on Inspection)</option>
               </select>
             </div>
 
@@ -321,6 +357,7 @@ export const QualityControlModule: React.FC = () => {
                 <option value="PASSED">Approved / Passed</option>
                 <option value="FAILED">Rejected / Failed</option>
                 <option value="REWORK">Rework Required</option>
+                <option value="DESTROYED">Destroyed / Scrapped</option>
               </select>
             </div>
           </div>

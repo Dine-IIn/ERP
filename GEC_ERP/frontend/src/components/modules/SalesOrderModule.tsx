@@ -263,7 +263,22 @@ export const SalesOrderModule: React.FC = () => {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '0.25rem' }}>Order Quantity</label>
-                <input type="number" min="1" required className="input-field" value={soForm.quantity} onChange={(e) => setSoForm({ ...soForm, quantity: Number(e.target.value) })} />
+                <input 
+                  type="number" 
+                  min="1" 
+                  required 
+                  className="input-field" 
+                  value={soForm.quantity === 0 ? '' : soForm.quantity} 
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSoForm({ ...soForm, quantity: val === '' ? 0 : Number(val) });
+                  }}
+                  onBlur={(e) => {
+                    if (!e.target.value || Number(e.target.value) < 1) {
+                      setSoForm({ ...soForm, quantity: 1 });
+                    }
+                  }}
+                />
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '0.25rem' }}>Target Delivery Date</label>
@@ -445,6 +460,33 @@ export const SalesOrderModule: React.FC = () => {
                                   {originalWO.workOrderNo || originalWO.woNumber} (Direct WO)
                                 </button>
                               )}
+
+                              {exactMatchWOs.map(w => (
+                                <button
+                                  key={w.id}
+                                  className="badge badge-neutral"
+                                  style={{ 
+                                    cursor: 'pointer', 
+                                    border: '1px dashed var(--accent-primary)', 
+                                    padding: '0.2rem 0.45rem', 
+                                    fontSize: '0.72rem',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    textAlign: 'center',
+                                    fontWeight: 600,
+                                    borderRadius: '0.25rem',
+                                    backgroundColor: 'rgba(59, 130, 246, 0.08)'
+                                  }}
+                                  title={`Similar Active WO with identical model/BOM (${w.machineModel}, Qty: ${w.quantity}) - Click to inspect`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openWOInEditor(w.id);
+                                  }}
+                                >
+                                  🔗 {w.workOrderNo || w.woNumber} ({w.quantity} Qty Similar)
+                                </button>
+                              ))}
                             </div>
                           );
                         })()}
