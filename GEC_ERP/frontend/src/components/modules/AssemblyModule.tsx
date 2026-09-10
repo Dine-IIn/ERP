@@ -26,6 +26,8 @@ export const AssemblyModule: React.FC = () => {
   });
 
   const [selectedStationFilter, setSelectedStationFilter] = useState<string>('ALL');
+  const [startDateFilter, setStartDateFilter] = useState<string>('');
+  const [endDateFilter, setEndDateFilter] = useState<string>('');
 
   // Universal @history search handling
   const isHistorySearch = searchTerm.toLowerCase().includes('@history');
@@ -36,6 +38,7 @@ export const AssemblyModule: React.FC = () => {
     const model = a.machineModel || '';
     const subType = a.subAssemblyType || a.currentStage || '';
     const woNo = a.workOrderNo || a.woNumber || '';
+    const asmDate = a.startDate || (a as any).date || '';
 
     const matchesSearch = !cleanSearchTerm || (
       asmCode.toLowerCase().includes(cleanSearchTerm) ||
@@ -46,7 +49,12 @@ export const AssemblyModule: React.FC = () => {
 
     const matchesStation = selectedStationFilter === 'ALL' || subType === selectedStationFilter;
 
-    return matchesSearch && matchesStation;
+    if (!matchesSearch || !matchesStation) return false;
+
+    if (startDateFilter && asmDate && asmDate < startDateFilter) return false;
+    if (endDateFilter && asmDate && asmDate > endDateFilter) return false;
+
+    return true;
   });
 
   const handleRefreshLiveSheet = () => {
@@ -249,8 +257,8 @@ export const AssemblyModule: React.FC = () => {
         <>
           {/* Filter Bar */}
           <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', backgroundColor: 'var(--bg-card)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-              <div style={{ position: 'relative', width: '380px', maxWidth: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', flex: 1 }}>
+              <div style={{ position: 'relative', width: '320px', maxWidth: '100%' }}>
                 <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                 <input
                   type="text"
@@ -260,6 +268,40 @@ export const AssemblyModule: React.FC = () => {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>From:</span>
+                <input
+                  type="date"
+                  className="input-field"
+                  style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem', width: '135px' }}
+                  value={startDateFilter}
+                  onChange={(e) => setStartDateFilter(e.target.value)}
+                  title="Filter assemblies on or after this date"
+                />
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>To:</span>
+                <input
+                  type="date"
+                  className="input-field"
+                  style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem', width: '135px' }}
+                  value={endDateFilter}
+                  onChange={(e) => setEndDateFilter(e.target.value)}
+                  title="Filter assemblies on or before this date"
+                />
+                {(startDateFilter || endDateFilter) && (
+                  <button
+                    className="btn btn-outline"
+                    style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', color: 'var(--danger)' }}
+                    onClick={() => {
+                      setStartDateFilter('');
+                      setEndDateFilter('');
+                    }}
+                    title="Clear Date Filters"
+                  >
+                    Clear Dates
+                  </button>
+                )}
               </div>
 
               {isHistorySearch && (

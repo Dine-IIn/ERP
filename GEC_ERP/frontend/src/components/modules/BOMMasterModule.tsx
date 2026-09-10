@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { SingleBOMPrintView, BOMListPrintView } from '../printTemplates/BOMPrintTemplates';
@@ -317,6 +317,22 @@ export const BOMMasterModule: React.FC = () => {
     setComponents(components.filter(c => c.itemId !== itemId));
   };
 
+  const formRef = useRef<HTMLFormElement>(null);
+
+  // Ctrl + S (or Cmd + S) shortcut to save BOM form
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (isFormOpen && formRef.current) {
+          formRef.current.requestSubmit();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFormOpen]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (components.length === 0) {
@@ -404,7 +420,7 @@ export const BOMMasterModule: React.FC = () => {
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <form ref={formRef} onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             
             <div className="form-grid-2">
               <div>

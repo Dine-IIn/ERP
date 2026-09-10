@@ -29,6 +29,10 @@ export const SalesOrderModule: React.FC = () => {
   const [sortField, setSortField] = useState<SortField>('orderDate');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
+  // Date Range Filters
+  const [startDateFilter, setStartDateFilter] = useState<string>('');
+  const [endDateFilter, setEndDateFilter] = useState<string>('');
+
   const [editingSO, setEditingSO] = useState<SalesOrder | null>(null);
 
   const [soForm, setSoForm] = useState({
@@ -152,11 +156,17 @@ export const SalesOrderModule: React.FC = () => {
         return false;
       }
 
-      return !cleanSearchTerm || (
+      const matchesSearch = !cleanSearchTerm || (
         so.soNumber.toLowerCase().includes(cleanSearchTerm) ||
         so.customerName.toLowerCase().includes(cleanSearchTerm) ||
         so.machineModel.toLowerCase().includes(cleanSearchTerm)
       );
+      if (!matchesSearch) return false;
+
+      if (startDateFilter && so.orderDate && so.orderDate < startDateFilter) return false;
+      if (endDateFilter && so.orderDate && so.orderDate > endDateFilter) return false;
+
+      return true;
     })
     .sort((a, b) => {
       let valA: any = a[sortField] || '';
@@ -299,24 +309,61 @@ export const SalesOrderModule: React.FC = () => {
         </div>
       ) : (
         <>
-          {/* Inline Search Bar */}
-          <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: '1rem', backgroundColor: 'var(--bg-card)', flexWrap: 'wrap' }}>
-            <div style={{ position: 'relative', width: '360px', maxWidth: '100%' }}>
-              <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-              <input
-                type="text"
-                placeholder="Search SO, customer, model... (type @history to search completed)"
-                className="input-field"
-                style={{ paddingLeft: '2.25rem' }}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+          {/* Inline Search Bar & Date Filter */}
+          <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', backgroundColor: 'var(--bg-card)', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', flex: 1 }}>
+              <div style={{ position: 'relative', width: '340px', maxWidth: '100%' }}>
+                <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <input
+                  type="text"
+                  placeholder="Search SO, customer, model... (type @history to search completed)"
+                  className="input-field"
+                  style={{ paddingLeft: '2.25rem' }}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>From:</span>
+                <input
+                  type="date"
+                  className="input-field"
+                  style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem', width: '135px' }}
+                  value={startDateFilter}
+                  onChange={(e) => setStartDateFilter(e.target.value)}
+                  title="Filter SOs booked on or after this date"
+                />
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>To:</span>
+                <input
+                  type="date"
+                  className="input-field"
+                  style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem', width: '135px' }}
+                  value={endDateFilter}
+                  onChange={(e) => setEndDateFilter(e.target.value)}
+                  title="Filter SOs booked on or before this date"
+                />
+                {(startDateFilter || endDateFilter) && (
+                  <button
+                    className="btn btn-outline"
+                    style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', color: 'var(--danger)' }}
+                    onClick={() => {
+                      setStartDateFilter('');
+                      setEndDateFilter('');
+                    }}
+                    title="Clear Date Filters"
+                  >
+                    Clear Dates
+                  </button>
+                )}
+              </div>
+
+              {isHistorySearch && (
+                <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#ffffff', fontSize: '0.75rem', fontWeight: 700 }}>
+                  📜 History Search Active
+                </span>
+              )}
             </div>
-            {isHistorySearch && (
-              <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#ffffff', fontSize: '0.75rem', fontWeight: 700 }}>
-                📜 History Search Active
-              </span>
-            )}
           </div>
 
           <div className="table-container">

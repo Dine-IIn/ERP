@@ -31,6 +31,10 @@ export const ExternalInventoryModule: React.FC = () => {
   const [sortField, setSortField] = useState<JWSortKey>('challanNo');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
+  // Date Range Filters
+  const [startDateFilter, setStartDateFilter] = useState<string>('');
+  const [endDateFilter, setEndDateFilter] = useState<string>('');
+
   const [issueData, setIssueData] = useState({
     challanNo: '',
     vendorId: '',
@@ -80,13 +84,19 @@ export const ExternalInventoryModule: React.FC = () => {
       if (!isHistorySearch && isCompleted) {
         return false;
       }
-      return !cleanSearchTerm || (
+      const matchesSearch = !cleanSearchTerm || (
         j.challanNo.toLowerCase().includes(cleanSearchTerm) ||
         j.vendorName.toLowerCase().includes(cleanSearchTerm) ||
         j.itemName.toLowerCase().includes(cleanSearchTerm) ||
         j.itemCode.toLowerCase().includes(cleanSearchTerm) ||
         j.processRequired.toLowerCase().includes(cleanSearchTerm)
       );
+      if (!matchesSearch) return false;
+
+      if (startDateFilter && j.issueDate && j.issueDate < startDateFilter) return false;
+      if (endDateFilter && j.issueDate && j.issueDate > endDateFilter) return false;
+
+      return true;
     })
     .sort((a, b) => {
       let valA: any = (a as any)[sortField] ?? '';
@@ -100,19 +110,59 @@ export const ExternalInventoryModule: React.FC = () => {
       return 0;
     });
 
-  // Helper: Item Work Order Demand
+  // Helper: Item Work Order Demand (Multi-Level Exploded & woComponents supported)
   const getItemWorkOrderDemand = (itemId: string, itemCode: string) => {
     let demand = 0;
     const activeWOs = workOrders.filter(w => w.status !== 'COMPLETED' && w.status !== 'CANCELLED');
+
+    const explodeDemand = (
+      components: Array<{ itemId?: string; itemCode?: string; qtyPerMachine?: number; qtyRequired?: number }>,
+      multiplier: number,
+      visited = new Set<string>()
+    ) => {
+      components.forEach(comp => {
+        const cItemId = comp.itemId || '';
+        const cItemCode = comp.itemCode || '';
+        const qtyPer = comp.qtyPerMachine !== undefined ? comp.qtyPerMachine : (comp.qtyRequired || 1);
+        const totalCompQty = qtyPer * multiplier;
+
+        if (
+          (itemId && cItemId && cItemId === itemId) ||
+          (itemCode && cItemCode && cItemCode.toLowerCase() === itemCode.toLowerCase())
+        ) {
+          demand += totalCompQty;
+        }
+
+        const childItem = items.find(i => (cItemId && i.id === cItemId) || (cItemCode && i.itemCode.toLowerCase() === cItemCode.toLowerCase()));
+        if (childItem) {
+          const subBOM = boms.find(b => b.id === childItem.id || b.bomCode?.toLowerCase() === childItem.itemCode.toLowerCase() || b.machineModel?.toLowerCase() === childItem.name?.toLowerCase());
+          if (subBOM && subBOM.components && subBOM.components.length > 0 && !visited.has(subBOM.id)) {
+            const nextVisited = new Set(visited);
+            nextVisited.add(subBOM.id);
+            explodeDemand(subBOM.components, totalCompQty, nextVisited);
+          }
+        }
+      });
+    };
+
     activeWOs.forEach(wo => {
-      const bom = boms.find(b => b.id === wo.bomId || b.bomCode === (wo as any).bomCode || b.machineModel?.toLowerCase() === wo.machineModel?.toLowerCase());
-      if (bom && bom.components) {
-        const comp = bom.components.find(c => c.itemId === itemId || c.itemCode === itemCode);
-        if (comp) {
-          demand += (comp.qtyPerMachine || 1) * (wo.quantity || 1);
+      const remainingQty = Math.max(0, (wo.targetQuantity || wo.quantity || 1) - (wo.completedQuantity || 0));
+      if (remainingQty <= 0) return;
+
+      if (wo.woComponents && wo.woComponents.length > 0) {
+        explodeDemand(wo.woComponents.map(c => ({
+          itemId: c.itemId,
+          itemCode: c.itemCode,
+          qtyPerMachine: c.qtyRequired ? c.qtyRequired / (wo.quantity || wo.targetQuantity || 1) : 1
+        })), remainingQty);
+      } else {
+        const bom = boms.find(b => b.id === wo.bomId || b.bomCode === (wo as any).bomCode || b.machineModel?.toLowerCase() === wo.machineModel?.toLowerCase());
+        if (bom && bom.components) {
+          explodeDemand(bom.components, remainingQty, new Set([bom.id]));
         }
       }
     });
+
     return demand;
   };
 
@@ -550,25 +600,61 @@ export const ExternalInventoryModule: React.FC = () => {
         </div>
       </div>
 
-      {/* Inline Search Bar */}
-      <div className="card" style={{ padding: '0.65rem 1rem', display: 'flex', alignItems: 'center', backgroundColor: 'var(--bg-card)', flexShrink: 0, gap: '1rem', flexWrap: 'wrap' }}>
-        <div style={{ position: 'relative', width: '380px', maxWidth: '100%' }}>
-          <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-          <input
-            type="text"
-            placeholder="Search challan no, vendor, part... (type @history to search completed)"
-            className="input-field"
-            style={{ paddingLeft: '2.25rem' }}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
+      {/* Inline Search Bar & Date Filter */}
+      <div className="card" style={{ padding: '0.65rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'var(--bg-card)', flexShrink: 0, gap: '1rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', flex: 1 }}>
+          <div style={{ position: 'relative', width: '360px', maxWidth: '100%' }}>
+            <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+            <input
+              type="text"
+              placeholder="Search challan no, vendor, part... (type @history to search completed)"
+              className="input-field"
+              style={{ paddingLeft: '2.25rem' }}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
 
-        {isHistorySearch && (
-          <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#ffffff', fontSize: '0.75rem', fontWeight: 700 }}>
-            📜 History Search Active
-          </span>
-        )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>From:</span>
+            <input
+              type="date"
+              className="input-field"
+              style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem', width: '135px' }}
+              value={startDateFilter}
+              onChange={(e) => setStartDateFilter(e.target.value)}
+              title="Filter challans issued on or after this date"
+            />
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>To:</span>
+            <input
+              type="date"
+              className="input-field"
+              style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem', width: '135px' }}
+              value={endDateFilter}
+              onChange={(e) => setEndDateFilter(e.target.value)}
+              title="Filter challans issued on or before this date"
+            />
+            {(startDateFilter || endDateFilter) && (
+              <button
+                className="btn btn-outline"
+                style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', color: 'var(--danger)' }}
+                onClick={() => {
+                  setStartDateFilter('');
+                  setEndDateFilter('');
+                }}
+                title="Clear Date Filters"
+              >
+                Clear Dates
+              </button>
+            )}
+          </div>
+
+          {isHistorySearch && (
+            <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#ffffff', fontSize: '0.75rem', fontWeight: 700 }}>
+              📜 History Search Active
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Jobwork Table with Sorting */}

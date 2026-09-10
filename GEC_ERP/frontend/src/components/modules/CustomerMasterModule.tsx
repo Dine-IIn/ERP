@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { BulkUploadModal } from '../common/BulkUploadModal';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
@@ -132,6 +132,22 @@ export const CustomerMasterModule: React.FC = () => {
     ]);
   };
 
+  const formRef = useRef<HTMLFormElement>(null);
+
+  // Ctrl + S (or Cmd + S) shortcut to save customer form
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (isModalOpen && formRef.current) {
+          formRef.current.requestSubmit();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isModalOpen]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (editingCustomer) {
@@ -190,7 +206,7 @@ export const CustomerMasterModule: React.FC = () => {
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <form ref={formRef} onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '0.25rem' }}>Customer Code</label>

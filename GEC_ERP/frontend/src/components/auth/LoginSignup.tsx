@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
-import { Lock, UserCheck, Building2, Sun, Moon, ArrowRight, KeyRound, Mail, CheckCircle2, AlertCircle, X } from 'lucide-react';
+import { Lock, UserCheck, Building2, Sun, Moon, ArrowRight, KeyRound, Mail, CheckCircle2, AlertCircle, X, Eye, EyeOff } from 'lucide-react';
 import { Modal } from '../common/Modal';
 
 export const LoginSignup: React.FC = () => {
-  const { login, theme, toggleTheme, users } = useERP();
+  const { login, theme, toggleTheme, users, resetUserPassword } = useERP();
   const [username, setUsername] = useState<string>('');
   const [password, setPassword] = useState<string>('');
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [showNewPassword, setShowNewPassword] = useState<boolean>(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
 
   // Forgot Password Modal State
@@ -77,9 +80,14 @@ export const LoginSignup: React.FC = () => {
       return;
     }
 
-    // In storage/state password is reset
-    setOtpStep('SUCCESS');
-    setForgotMsg({ text: 'Password reset successfully! You may now sign in with your new credentials.', type: 'success' });
+    // Update user password in ERPContext
+    const resetRes = resetUserPassword(forgotEmail, newPassword);
+    if (resetRes.success) {
+      setOtpStep('SUCCESS');
+      setForgotMsg({ text: 'Password reset successfully! You may now sign in with your new credentials.', type: 'success' });
+    } else {
+      setForgotMsg({ text: resetRes.message, type: 'danger' });
+    }
   };
 
   const handleCloseForgotModal = () => {
@@ -201,15 +209,35 @@ export const LoginSignup: React.FC = () => {
             <div style={{ position: 'relative' }}>
               <Lock size={18} style={{ position: 'absolute', left: '0.875rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 required
                 autoComplete="off"
                 placeholder="Enter password"
                 className="input-field"
-                style={{ paddingLeft: '2.5rem' }}
+                style={{ paddingLeft: '2.5rem', paddingRight: '2.5rem' }}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  position: 'absolute',
+                  right: '0.75rem',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--text-muted)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: '0.25rem'
+                }}
+                title={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
             </div>
           </div>
 
@@ -293,26 +321,72 @@ export const LoginSignup: React.FC = () => {
 
               <div>
                 <label>New Password</label>
-                <input
-                  type="password"
-                  required
-                  placeholder="Enter new password (min 6 characters)"
-                  className="input-field"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                />
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showNewPassword ? 'text' : 'password'}
+                    required
+                    placeholder="Enter new password (min 6 characters)"
+                    className="input-field"
+                    style={{ paddingRight: '2.5rem' }}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    style={{
+                      position: 'absolute',
+                      right: '0.75rem',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: 'var(--text-muted)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '0.25rem'
+                    }}
+                    title={showNewPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
               </div>
 
               <div>
                 <label>Confirm New Password</label>
-                <input
-                  type="password"
-                  required
-                  placeholder="Re-enter new password"
-                  className="input-field"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                />
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    required
+                    placeholder="Re-enter new password"
+                    className="input-field"
+                    style={{ paddingRight: '2.5rem' }}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    style={{
+                      position: 'absolute',
+                      right: '0.75rem',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: 'var(--text-muted)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '0.25rem'
+                    }}
+                    title={showConfirmPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>

@@ -31,6 +31,8 @@ export const DispatchModule: React.FC = () => {
   const [dispatchNotes, setDispatchNotes] = useState('Dispatched with operational manuals and toolkit.');
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [startDateFilter, setStartDateFilter] = useState<string>('');
+  const [endDateFilter, setEndDateFilter] = useState<string>('');
 
   // Ready Finished Goods in Stock
   const inStockUnits = finishedGoods.filter(fg => fg.status === 'IN_STOCK' || fg.status === 'ALLOCATED');
@@ -111,13 +113,20 @@ export const DispatchModule: React.FC = () => {
   const isHistorySearch = searchQuery.toLowerCase().includes('@history');
   const cleanSearchTerm = searchQuery.replace(/@history/gi, '').trim().toLowerCase();
 
-  const filteredDispatchHistory = dispatchRecords.filter(d =>
-    !cleanSearchTerm ||
-    d.dispatchNo.toLowerCase().includes(cleanSearchTerm) ||
-    d.customerName.toLowerCase().includes(cleanSearchTerm) ||
-    d.serialNo.toLowerCase().includes(cleanSearchTerm) ||
-    d.soNumber.toLowerCase().includes(cleanSearchTerm)
-  );
+  const filteredDispatchHistory = dispatchRecords.filter(d => {
+    const matchesSearch = !cleanSearchTerm ||
+      d.dispatchNo.toLowerCase().includes(cleanSearchTerm) ||
+      d.customerName.toLowerCase().includes(cleanSearchTerm) ||
+      d.serialNo.toLowerCase().includes(cleanSearchTerm) ||
+      d.soNumber.toLowerCase().includes(cleanSearchTerm);
+
+    if (!matchesSearch) return false;
+
+    if (startDateFilter && d.dispatchDate && d.dispatchDate < startDateFilter) return false;
+    if (endDateFilter && d.dispatchDate && d.dispatchDate > endDateFilter) return false;
+
+    return true;
+  });
 
   const handlePrintSingleDispatch = (d: DispatchRecord) => {
     setSelectedPrintDispatch(d);
@@ -302,7 +311,7 @@ export const DispatchModule: React.FC = () => {
           </h3>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <div style={{ position: 'relative', width: '300px' }}>
+            <div style={{ position: 'relative', width: '280px' }}>
               <Search size={14} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
               <input 
                 type="text" 
@@ -312,6 +321,40 @@ export const DispatchModule: React.FC = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>From:</span>
+              <input
+                type="date"
+                className="input-field"
+                style={{ padding: '0.25rem 0.45rem', fontSize: '0.78rem', width: '130px' }}
+                value={startDateFilter}
+                onChange={(e) => setStartDateFilter(e.target.value)}
+                title="Filter dispatches on or after this date"
+              />
+              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>To:</span>
+              <input
+                type="date"
+                className="input-field"
+                style={{ padding: '0.25rem 0.45rem', fontSize: '0.78rem', width: '130px' }}
+                value={endDateFilter}
+                onChange={(e) => setEndDateFilter(e.target.value)}
+                title="Filter dispatches on or before this date"
+              />
+              {(startDateFilter || endDateFilter) && (
+                <button
+                  className="btn btn-outline"
+                  style={{ padding: '0.2rem 0.45rem', fontSize: '0.72rem', color: 'var(--danger)' }}
+                  onClick={() => {
+                    setStartDateFilter('');
+                    setEndDateFilter('');
+                  }}
+                  title="Clear Date Filters"
+                >
+                  Clear
+                </button>
+              )}
             </div>
 
             {isHistorySearch && (

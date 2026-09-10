@@ -27,6 +27,10 @@ export const GRNModule: React.FC = () => {
   const [sortField, setSortField] = useState<SortField>('grnNumber');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
+  // Date Range Filters
+  const [startDateFilter, setStartDateFilter] = useState<string>('');
+  const [endDateFilter, setEndDateFilter] = useState<string>('');
+
   const handleSortToggle = (field: SortField) => {
     if (sortField === field) {
       setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
@@ -46,12 +50,18 @@ export const GRNModule: React.FC = () => {
       if (!isHistorySearch && isHistory) {
         // default show active unless @history
       }
-      return !cleanSearchTerm || (
+      const matchesSearch = !cleanSearchTerm || (
         g.grnNumber.toLowerCase().includes(cleanSearchTerm) ||
         g.poNumber.toLowerCase().includes(cleanSearchTerm) ||
         g.vendorName.toLowerCase().includes(cleanSearchTerm) ||
         (g.invoiceNo && g.invoiceNo.toLowerCase().includes(cleanSearchTerm))
       );
+      if (!matchesSearch) return false;
+
+      if (startDateFilter && g.receivedDate < startDateFilter) return false;
+      if (endDateFilter && g.receivedDate > endDateFilter) return false;
+
+      return true;
     })
     .sort((a, b) => {
       let valA: any = a[sortField] || '';
@@ -790,25 +800,61 @@ export const GRNModule: React.FC = () => {
         </div>
       ) : (
         <>
-          {/* Inline Search Bar */}
-          <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', backgroundColor: 'var(--bg-card)', gap: '1rem', flexWrap: 'wrap' }}>
-            <div style={{ position: 'relative', width: '380px', maxWidth: '100%' }}>
-              <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-              <input
-                type="text"
-                placeholder="Search GRN number, PO/challan, vendor... (type @history to search completed)"
-                className="input-field"
-                style={{ paddingLeft: '2.25rem' }}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
+          {/* Inline Search Bar & Date Filter */}
+          <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'var(--bg-card)', gap: '1rem', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', flex: 1 }}>
+              <div style={{ position: 'relative', width: '380px', maxWidth: '100%' }}>
+                <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <input
+                  type="text"
+                  placeholder="Search GRN number, PO/challan, vendor... (type @history to search completed)"
+                  className="input-field"
+                  style={{ paddingLeft: '2.25rem' }}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
 
-            {isHistorySearch && (
-              <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#ffffff', fontSize: '0.75rem', fontWeight: 700 }}>
-                📜 History Search Active
-              </span>
-            )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>From:</span>
+                <input
+                  type="date"
+                  className="input-field"
+                  style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem', width: '135px' }}
+                  value={startDateFilter}
+                  onChange={(e) => setStartDateFilter(e.target.value)}
+                  title="Filter GRNs received on or after this date"
+                />
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>To:</span>
+                <input
+                  type="date"
+                  className="input-field"
+                  style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem', width: '135px' }}
+                  value={endDateFilter}
+                  onChange={(e) => setEndDateFilter(e.target.value)}
+                  title="Filter GRNs received on or before this date"
+                />
+                {(startDateFilter || endDateFilter) && (
+                  <button
+                    className="btn btn-outline"
+                    style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', color: 'var(--danger)' }}
+                    onClick={() => {
+                      setStartDateFilter('');
+                      setEndDateFilter('');
+                    }}
+                    title="Clear Date Filters"
+                  >
+                    Clear Dates
+                  </button>
+                )}
+              </div>
+
+              {isHistorySearch && (
+                <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#ffffff', fontSize: '0.75rem', fontWeight: 700 }}>
+                  📜 History Search Active
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="table-container">
@@ -837,7 +883,7 @@ export const GRNModule: React.FC = () => {
                     </div>
                   </th>
                   <th>Received By</th>
-                  <th>Status</th>
+                  <th>QC Status</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -869,9 +915,27 @@ export const GRNModule: React.FC = () => {
                     <td>{grn.receivedDate}</td>
                     <td style={{ fontSize: '0.85rem' }}>{grn.receivedBy || 'Store'}</td>
                     <td>
-                      <span className={`badge ${grn.status === 'QC_APPROVED' ? 'badge-success' : 'badge-warning'}`}>
-                        {grn.status.replace('_', ' ')}
-                      </span>
+                      {grn.status === 'NO_QC' ? (
+                        <span className="badge" style={{ backgroundColor: 'var(--bg-subtle, rgba(0,0,0,0.05))', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', fontWeight: 600 }}>
+                          No QC
+                        </span>
+                      ) : grn.status === 'QC_APPROVED' ? (
+                        <span className="badge badge-success" style={{ fontWeight: 700 }}>
+                          QC Approved
+                        </span>
+                      ) : grn.status === 'PARTIALLY_QC' ? (
+                        <span className="badge" style={{ backgroundColor: '#dbeafe', color: '#1e40af', fontWeight: 700, border: '1px solid #bfdbfe' }}>
+                          Partially Inspected
+                        </span>
+                      ) : grn.status === 'PENDING_QC' ? (
+                        <span className="badge badge-warning" style={{ fontWeight: 700 }}>
+                          Pending QC
+                        </span>
+                      ) : (
+                        <span className="badge">
+                          {String(grn.status).replace('_', ' ')}
+                        </span>
+                      )}
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>

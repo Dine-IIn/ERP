@@ -29,6 +29,8 @@ export const JobCardModule: React.FC = () => {
   const [progressQtyInput, setProgressQtyInput] = useState<number>(1);
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [startDateFilter, setStartDateFilter] = useState<string>('');
+  const [endDateFilter, setEndDateFilter] = useState<string>('');
 
   const [printModalOpen, setPrintModalOpen] = useState(false);
   const [printDocType, setPrintDocType] = useState<'SINGLE_JC' | 'JC_LIST'>('JC_LIST');
@@ -56,19 +58,59 @@ export const JobCardModule: React.FC = () => {
   });
   const [reissueItemSearch, setReissueItemSearch] = useState('');
 
-  // Helper: Item Work Order Demand
+  // Helper: Item Work Order Demand (Multi-Level Exploded & woComponents supported)
   const getItemWorkOrderDemand = (itemId: string, itemCode: string) => {
     let demand = 0;
     const activeWOs = workOrders.filter(w => w.status !== 'COMPLETED' && w.status !== 'CANCELLED');
+
+    const explodeDemand = (
+      components: Array<{ itemId?: string; itemCode?: string; qtyPerMachine?: number; qtyRequired?: number }>,
+      multiplier: number,
+      visited = new Set<string>()
+    ) => {
+      components.forEach(comp => {
+        const cItemId = comp.itemId || '';
+        const cItemCode = comp.itemCode || '';
+        const qtyPer = comp.qtyPerMachine !== undefined ? comp.qtyPerMachine : (comp.qtyRequired || 1);
+        const totalCompQty = qtyPer * multiplier;
+
+        if (
+          (itemId && cItemId && cItemId === itemId) ||
+          (itemCode && cItemCode && cItemCode.toLowerCase() === itemCode.toLowerCase())
+        ) {
+          demand += totalCompQty;
+        }
+
+        const childItem = items.find(i => (cItemId && i.id === cItemId) || (cItemCode && i.itemCode.toLowerCase() === cItemCode.toLowerCase()));
+        if (childItem) {
+          const subBOM = boms.find(b => b.id === childItem.id || b.bomCode?.toLowerCase() === childItem.itemCode.toLowerCase() || b.machineModel?.toLowerCase() === childItem.name?.toLowerCase());
+          if (subBOM && subBOM.components && subBOM.components.length > 0 && !visited.has(subBOM.id)) {
+            const nextVisited = new Set(visited);
+            nextVisited.add(subBOM.id);
+            explodeDemand(subBOM.components, totalCompQty, nextVisited);
+          }
+        }
+      });
+    };
+
     activeWOs.forEach(wo => {
-      const bom = boms.find(b => b.id === wo.bomId || b.bomCode === (wo as any).bomCode || b.machineModel?.toLowerCase() === wo.machineModel?.toLowerCase());
-      if (bom && bom.components) {
-        const comp = bom.components.find(c => c.itemId === itemId || c.itemCode === itemCode);
-        if (comp) {
-          demand += (comp.qtyPerMachine || 1) * (wo.quantity || 1);
+      const remainingQty = Math.max(0, (wo.targetQuantity || wo.quantity || 1) - (wo.completedQuantity || 0));
+      if (remainingQty <= 0) return;
+
+      if (wo.woComponents && wo.woComponents.length > 0) {
+        explodeDemand(wo.woComponents.map(c => ({
+          itemId: c.itemId,
+          itemCode: c.itemCode,
+          qtyPerMachine: c.qtyRequired ? c.qtyRequired / (wo.quantity || wo.targetQuantity || 1) : 1
+        })), remainingQty);
+      } else {
+        const bom = boms.find(b => b.id === wo.bomId || b.bomCode === (wo as any).bomCode || b.machineModel?.toLowerCase() === wo.machineModel?.toLowerCase());
+        if (bom && bom.components) {
+          explodeDemand(bom.components, remainingQty, new Set([bom.id]));
         }
       }
     });
+
     return demand;
   };
 
@@ -305,7 +347,12 @@ export const JobCardModule: React.FC = () => {
         (jc.woNumber && jc.woNumber.toLowerCase().includes(cleanSearchTerm)) ||
         (jc.assignedOperator && jc.assignedOperator.toLowerCase().includes(cleanSearchTerm));
 
-      return matchesStatus && matchesSearch;
+      if (!matchesStatus || !matchesSearch) return false;
+
+      if (startDateFilter && jc.startDate && jc.startDate < startDateFilter) return false;
+      if (endDateFilter && jc.startDate && jc.startDate > endDateFilter) return false;
+
+      return true;
     })
     .sort((a, b) => {
       let valA: any = (a as any)[sortField] ?? '';
@@ -642,8 +689,8 @@ export const JobCardModule: React.FC = () => {
 
       {/* Toolbar & Filters */}
       <div className="card" style={{ padding: '0.65rem 1rem', backgroundColor: 'var(--bg-card)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <div style={{ position: 'relative', width: '340px', maxWidth: '100%' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', flex: 1 }}>
+          <div style={{ position: 'relative', width: '320px', maxWidth: '100%' }}>
             <Search size={15} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
             <input 
               type="text" 
@@ -653,6 +700,40 @@ export const JobCardModule: React.FC = () => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>From:</span>
+            <input
+              type="date"
+              className="input-field"
+              style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem', width: '135px' }}
+              value={startDateFilter}
+              onChange={(e) => setStartDateFilter(e.target.value)}
+              title="Filter by start date"
+            />
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>To:</span>
+            <input
+              type="date"
+              className="input-field"
+              style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem', width: '135px' }}
+              value={endDateFilter}
+              onChange={(e) => setEndDateFilter(e.target.value)}
+              title="Filter by start date"
+            />
+            {(startDateFilter || endDateFilter) && (
+              <button
+                className="btn btn-outline"
+                style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', color: 'var(--danger)' }}
+                onClick={() => {
+                  setStartDateFilter('');
+                  setEndDateFilter('');
+                }}
+                title="Clear Date Filters"
+              >
+                Clear Dates
+              </button>
+            )}
           </div>
 
           {isHistorySearch && (

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { User, Role, Department, CustomRole, PermissionLevel, UserActivityLog, BackupRecord, RBAC_FEATURES, RBACFeatureDefinition } from '../../types/erp';
-import { UserPlus, Shield, Trash2, Key, Lock, UserCheck, Building2, Plus, Edit2, Database, Activity, RefreshCw, Download, HardDrive, ShieldCheck, Search, CheckCircle2, XCircle } from 'lucide-react';
+import { UserPlus, Shield, Trash2, Key, Lock, UserCheck, Building2, Plus, Edit2, Database, Activity, RefreshCw, Download, HardDrive, ShieldCheck, Search, CheckCircle2, XCircle, Eye, EyeOff } from 'lucide-react';
 
 export const UserManagementModule: React.FC = () => {
   const { 
@@ -16,10 +16,23 @@ export const UserManagementModule: React.FC = () => {
   const [username, setUsername] = useState('');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  const [userPassword, setUserPassword] = useState('password');
+  const [showCreatePassword, setShowCreatePassword] = useState(false);
   const [role, setRole] = useState<Role>('Production Manager');
   const [selectedDeptId, setSelectedDeptId] = useState<string>('');
   const [selectedRoleId, setSelectedRoleId] = useState<string>('');
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'danger' } | null>(null);
+
+  // User Edit State
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editUsername, setEditUsername] = useState('');
+  const [editFullName, setEditFullName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editPassword, setEditPassword] = useState('');
+  const [showEditPassword, setShowEditPassword] = useState(false);
+  const [editRole, setEditRole] = useState<Role>('Production Manager');
+  const [editDeptId, setEditDeptId] = useState('');
+  const [editRoleId, setEditRoleId] = useState('');
 
   // Department Form State
   const [deptName, setDeptName] = useState('');
@@ -78,12 +91,22 @@ export const UserManagementModule: React.FC = () => {
     );
   }
 
+  // Filter out Super Admin if current user is not Super Admin
+  const visibleUsers = users.filter(u => {
+    const isSuper = u.isSuperAdmin || u.username.toLowerCase() === 'superadmin';
+    if (isSuper) {
+      return currentUser?.isSuperAdmin === true;
+    }
+    return true;
+  });
+
   const handleAddUserSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const res = addUser({
       username,
       fullName,
       email: email || `${username}@gecmachines.com`,
+      password: userPassword.trim() || 'password',
       role,
       departmentId: selectedDeptId || undefined,
       roleId: selectedRoleId || undefined
@@ -97,6 +120,7 @@ export const UserManagementModule: React.FC = () => {
       setUsername('');
       setFullName('');
       setEmail('');
+      setUserPassword('password');
       setRole('Production Manager');
     } else {
       setMessage({ text: res.message, type: 'danger' });
@@ -104,8 +128,12 @@ export const UserManagementModule: React.FC = () => {
   };
 
   const handleDeleteUser = (userId: string) => {
-    if (!window.confirm('Are you sure you want to remove this user?')) return;
     const target = users.find(u => u.id === userId);
+    if (target?.isSuperAdmin || target?.username.toLowerCase() === 'superadmin') {
+      alert('Access Denied: Super Admin account cannot be deleted.');
+      return;
+    }
+    if (!window.confirm('Are you sure you want to remove this user?')) return;
     const res = deleteUser(userId);
     if (res.success) {
       setMessage({ text: res.message, type: 'success' });
@@ -113,6 +141,63 @@ export const UserManagementModule: React.FC = () => {
     } else {
       setMessage({ text: res.message, type: 'danger' });
     }
+  };
+
+  const handleOpenEditUser = (user: User) => {
+    const isSuper = user.isSuperAdmin || user.username.toLowerCase() === 'superadmin';
+    if (isSuper && !currentUser?.isSuperAdmin) {
+      alert('Access Denied: Super Admin account cannot be modified.');
+      return;
+    }
+    setEditingUser(user);
+    setEditUsername(user.username);
+    setEditFullName(user.fullName);
+    setEditEmail(user.email || '');
+    setEditPassword(user.password || '');
+    setEditRole(user.role);
+    setEditDeptId(user.departmentId || '');
+    setEditRoleId(user.roleId || '');
+  };
+
+  const handleUpdateUserSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    const isSuper = editingUser.username.toLowerCase() === 'superadmin' || editingUser.isSuperAdmin;
+    if (isSuper && !currentUser?.isSuperAdmin) {
+      setMessage({ text: 'Access Denied: Super Admin account cannot be modified.', type: 'danger' });
+      return;
+    }
+    const trimmedUsername = editUsername.trim();
+    const trimmedFullName = editFullName.trim();
+    if (!trimmedUsername || !trimmedFullName) {
+      setMessage({ text: 'Username and Full Name are required.', type: 'danger' });
+      return;
+    }
+
+    // Check if username changed and conflicts with another user
+    const usernameConflict = users.some(u => u.id !== editingUser.id && u.username.toLowerCase() === trimmedUsername.toLowerCase());
+    if (usernameConflict) {
+      setMessage({ text: `Username "${trimmedUsername}" is already taken by another user.`, type: 'danger' });
+      return;
+    }
+
+    const finalRole = isSuper ? 'Admin' : editRole;
+
+    const updated: User = {
+      ...editingUser,
+      username: isSuper ? editingUser.username : trimmedUsername,
+      fullName: trimmedFullName,
+      email: editEmail.trim() || `${trimmedUsername}@gecmachines.com`,
+      password: editPassword.trim() || editingUser.password || 'password',
+      role: finalRole,
+      departmentId: editDeptId || undefined,
+      roleId: editRoleId || undefined
+    };
+
+    updateUser(updated);
+    addAuditLog('UPDATE_USER', 'User Management', `Updated user details for ${updated.username} (${updated.fullName}, Role: ${updated.role})`);
+    setMessage({ text: `User account "${updated.fullName}" (${updated.username}) updated successfully!`, type: 'success' });
+    setEditingUser(null);
   };
 
   const handleAddDepartmentSubmit = (e: React.FormEvent) => {
@@ -275,7 +360,7 @@ export const UserManagementModule: React.FC = () => {
   });
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+    <div className="module-layout-container" style={{ flex: 1, minHeight: 0, height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.875rem', paddingRight: '0.25rem' }}>
       
       {/* Top Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
@@ -296,7 +381,7 @@ export const UserManagementModule: React.FC = () => {
             style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', border: 'none' }}
             onClick={() => { setActiveTab('USERS'); setMessage(null); }}
           >
-            <UserCheck size={14} /> Users & Admins ({users.length})
+            <UserCheck size={14} /> Users ({users.length})
           </button>
           <button 
             className={`btn ${activeTab === 'ROLES' ? 'btn-primary' : 'btn-outline'}`}
@@ -343,13 +428,13 @@ export const UserManagementModule: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 1: USERS & ADMINS */}
+      {/* TAB 1: USERS */}
       {activeTab === 'USERS' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           {/* Create User Form */}
           <form onSubmit={handleAddUserSubmit} className="card" style={{ padding: '1.25rem', backgroundColor: 'var(--bg-card)' }}>
             <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <UserPlus size={16} /> Provision New Employee / Admin Account
+              <UserPlus size={16} /> Provision New User Account
             </h3>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.875rem' }}>
               <div>
@@ -363,6 +448,40 @@ export const UserManagementModule: React.FC = () => {
               <div>
                 <label style={{ fontSize: '0.78rem', fontWeight: 600 }}>Work Email (for OTP Reset)</label>
                 <input type="email" placeholder="e.g. jigar@gecmachines.com" className="input-field" value={email} onChange={(e) => setEmail(e.target.value)} />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.78rem', fontWeight: 600 }}>Account Password *</label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showCreatePassword ? 'text' : 'password'}
+                    required
+                    placeholder="Enter password (e.g. Admin@123)"
+                    className="input-field"
+                    style={{ paddingRight: '2.5rem' }}
+                    value={userPassword}
+                    onChange={(e) => setUserPassword(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCreatePassword(!showCreatePassword)}
+                    style={{
+                      position: 'absolute',
+                      right: '0.65rem',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: 'var(--text-muted)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '0.2rem'
+                    }}
+                    title={showCreatePassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showCreatePassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
               </div>
               <div>
                 <label style={{ fontSize: '0.78rem', fontWeight: 600 }}>Assigned Role *</label>
@@ -429,7 +548,7 @@ export const UserManagementModule: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {users.map(u => {
+                {visibleUsers.map(u => {
                   const deptObj = departments.find(d => d.id === u.departmentId);
                   const isProtectedSuperAdmin = u.username.toLowerCase() === 'superadmin' || u.isSuperAdmin;
 
@@ -468,6 +587,14 @@ export const UserManagementModule: React.FC = () => {
                           <button 
                             className="btn btn-outline" 
                             style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }} 
+                            title={`Edit profile and details for ${u.username}`}
+                            onClick={() => handleOpenEditUser(u)}
+                          >
+                            <Edit2 size={13} /> Edit
+                          </button>
+                          <button 
+                            className="btn btn-outline" 
+                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }} 
                             title={`Inspect ${u.username}'s complete activity log`}
                             onClick={() => {
                               setSelectedAuditUser(u.username);
@@ -489,6 +616,165 @@ export const UserManagementModule: React.FC = () => {
               </tbody>
             </table>
           </div>
+
+          {/* Edit User Modal Dialog */}
+          {editingUser && (
+            <div style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.65)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 9999,
+              padding: '1rem',
+              backdropFilter: 'blur(3px)'
+            }}>
+              <div className="card" style={{ maxWidth: '620px', width: '100%', padding: '1.5rem', backgroundColor: 'var(--bg-card)', boxShadow: 'var(--shadow-lg)', border: '1px solid var(--border-color)', borderRadius: '0.75rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-primary)' }}>
+                    <Edit2 size={18} color="var(--accent-primary)" /> Edit User: {editingUser.fullName} ({editingUser.username})
+                  </h3>
+                  <button type="button" className="btn btn-outline" style={{ padding: '0.25rem 0.5rem', fontSize: '0.78rem' }} onClick={() => setEditingUser(null)}>
+                    <XCircle size={16} /> Cancel
+                  </button>
+                </div>
+
+                <form onSubmit={handleUpdateUserSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div>
+                      <label style={{ fontSize: '0.8rem', fontWeight: 700 }}>Username *</label>
+                      <input
+                        type="text"
+                        required
+                        disabled={editingUser.username.toLowerCase() === 'superadmin' || editingUser.isSuperAdmin}
+                        className="input-field"
+                        value={editUsername}
+                        onChange={(e) => setEditUsername(e.target.value)}
+                        style={editingUser.username.toLowerCase() === 'superadmin' || editingUser.isSuperAdmin ? { backgroundColor: 'var(--bg-tertiary)', cursor: 'not-allowed' } : {}}
+                      />
+                      {(editingUser.username.toLowerCase() === 'superadmin' || editingUser.isSuperAdmin) && (
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Super Admin username cannot be changed</span>
+                      )}
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: '0.8rem', fontWeight: 700 }}>Full Name *</label>
+                      <input
+                        type="text"
+                        required
+                        className="input-field"
+                        value={editFullName}
+                        onChange={(e) => setEditFullName(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: '0.8rem', fontWeight: 700 }}>Work Email</label>
+                      <input
+                        type="email"
+                        className="input-field"
+                        value={editEmail}
+                        onChange={(e) => setEditEmail(e.target.value)}
+                        placeholder="e.g. user@gecmachines.com"
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: '0.8rem', fontWeight: 700 }}>Account Password (Case-Sensitive)</label>
+                      <div style={{ position: 'relative' }}>
+                        <input
+                          type={showEditPassword ? 'text' : 'password'}
+                          required
+                          className="input-field"
+                          style={{ paddingRight: '2.5rem' }}
+                          value={editPassword}
+                          onChange={(e) => setEditPassword(e.target.value)}
+                          placeholder="Enter password"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowEditPassword(!showEditPassword)}
+                          style={{
+                            position: 'absolute',
+                            right: '0.65rem',
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: 'var(--text-muted)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            padding: '0.2rem'
+                          }}
+                          title={showEditPassword ? 'Hide password' : 'Show password'}
+                        >
+                          {showEditPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: '0.8rem', fontWeight: 700 }}>Assigned Role *</label>
+                      <select
+                        className="input-field"
+                        disabled={editingUser.username.toLowerCase() === 'superadmin' || editingUser.isSuperAdmin}
+                        value={editRole}
+                        onChange={(e) => {
+                          const chosenRoleName = e.target.value as Role;
+                          setEditRole(chosenRoleName);
+                          const matchingRole = customRoles.find(r => (r.name || r.roleName) === chosenRoleName);
+                          if (matchingRole) {
+                            setEditRoleId(matchingRole.id);
+                            if (matchingRole.departmentId) {
+                              setEditDeptId(matchingRole.departmentId);
+                            }
+                          }
+                        }}
+                      >
+                        {customRoles.map(r => (
+                          <option key={r.id} value={r.name || r.roleName}>
+                            {r.name || r.roleName}
+                          </option>
+                        ))}
+                        {customRoles.length === 0 && (
+                          <>
+                            <option value="Admin">Admin</option>
+                            <option value="Production Manager">Production Manager</option>
+                            <option value="Store Manager">Store Manager</option>
+                            <option value="QC Officer">QC Officer</option>
+                          </>
+                        )}
+                      </select>
+                    </div>
+
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={{ fontSize: '0.8rem', fontWeight: 700 }}>Assigned Department</label>
+                      <select className="input-field" value={editDeptId} onChange={(e) => setEditDeptId(e.target.value)}>
+                        <option value="">-- All Departments / Global --</option>
+                        {departments.map(d => (
+                          <option key={d.id} value={d.id}>{d.name} ({d.code})</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.75rem', borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem' }}>
+                    <button type="button" className="btn btn-secondary" onClick={() => setEditingUser(null)}>
+                      Cancel
+                    </button>
+                    <button type="submit" className="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <CheckCircle2 size={16} /> Save Changes
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -636,7 +922,7 @@ export const UserManagementModule: React.FC = () => {
             </div>
 
             {/* RBAC Matrix Table */}
-            <div className="table-container" style={{ maxHeight: '420px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '0.5rem' }}>
+            <div className="table-container" style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '560px', border: '1px solid var(--border-color)', borderRadius: '0.5rem' }}>
               <table>
                 <thead>
                   <tr style={{ backgroundColor: 'var(--bg-tertiary)' }}>
@@ -886,7 +1172,7 @@ export const UserManagementModule: React.FC = () => {
                   onChange={(e) => setSelectedAuditUser(e.target.value)}
                 >
                   <option value="ALL">👥 All Users (Combined Activity)</option>
-                  {users.map(u => (
+                  {visibleUsers.map(u => (
                     <option key={u.id} value={u.username}>
                       {u.fullName} ({u.username}) - {u.role}
                     </option>
@@ -1273,16 +1559,16 @@ export const UserManagementModule: React.FC = () => {
             </table>
           </div>
 
-          {/* Operational Data Reset (Keep Item Master, BOMs & Admin Accounts) */}
+          {/* Operational Data Reset (Keep Item Master, BOMs, Vendors, Customers & Admin Accounts) */}
           <div className="card" style={{ padding: '1.25rem', backgroundColor: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.35)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginTop: '1rem' }}>
             <div style={{ maxWidth: '750px' }}>
               <h4 style={{ fontSize: '0.98rem', fontWeight: 800, margin: 0, color: '#d97706', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                 <RefreshCw size={17} />
-                Reset Operational Data (Keep Item Master, BOM Master & Admin Accounts)
+                Reset Operational Data (Keep Item Master, BOM Master, Vendors, Customers & Admin Accounts)
               </h4>
               <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: '0.35rem 0 0 0', lineHeight: 1.45 }}>
                 Clears all transactional operations (<strong>Sales Orders, Work Orders, Job Cards, Purchase Orders, Goods Receipt Notices, Jobwork Challans, QC Inspections, Machine Assembly Line, and Finished Goods/Dispatches</strong>).<br />
-                <strong style={{ color: 'var(--success)' }}>STRICTLY PRESERVED:</strong> Item Master catalog, Multi-Level BOMs, and Admin user accounts are preserved.
+                <strong style={{ color: 'var(--success)' }}>STRICTLY PRESERVED:</strong> Item Master, Multi-Level BOMs, Customer Master, Vendor Master, and Admin user accounts are preserved.
               </p>
             </div>
 
@@ -1298,7 +1584,7 @@ export const UserManagementModule: React.FC = () => {
                   '⚠️ CONFIRM OPERATIONAL RESET:\n\n' +
                   'Are you sure you want to reset all operational data?\n\n' +
                   '• CLEARED: Sales Orders, Work Orders, Job Cards, POs, GRNs, Jobwork Challans, QC, Assembly & Dispatches\n' +
-                  '• PRESERVED: Item Master, BOMs, Departments & Admin Users\n\n' +
+                  '• PRESERVED: Item Master, BOMs, Customers, Vendors, Departments & Admin Users\n\n' +
                   'Click OK to proceed with the reset.'
                 );
                 if (confirmed) {

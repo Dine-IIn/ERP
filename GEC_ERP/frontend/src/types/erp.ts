@@ -64,6 +64,7 @@ export interface User {
   roleId?: string;
   departmentId?: string;
   email: string;
+  password?: string;
   avatarUrl?: string;
   isSuperAdmin?: boolean;
   desktopSessionId?: string;
@@ -341,9 +342,16 @@ export interface QCInspection {
   qcNumber?: string;
   referenceType?: 'GRN' | 'ASSEMBLY' | 'IN_HOUSE_PROCESS';
   referenceNo?: string;
+  grnId?: string;
+  grnNumber?: string;
+  vendorId?: string;
+  vendorName?: string;
   itemId?: string;
   itemCode?: string;
   itemName?: string;
+  grnQty?: number;
+  alreadyInspectedBefore?: number;
+  remainingAfterThis?: number;
   inspectedQty?: number;
   inspectedQuantity?: number;
   passedQuantity?: number;
@@ -456,7 +464,7 @@ export interface GoodsReceivedNote {
   receivedDate: string;
   receivedBy?: string;
   items: GRNItem[];
-  status: 'PENDING_QC' | 'QC_PASSED' | 'QC_APPROVED' | 'STORED';
+  status: 'PENDING_QC' | 'QC_PASSED' | 'QC_APPROVED' | 'NO_QC' | 'PARTIALLY_QC' | 'STORED';
 }
 
 export type GoodsReceivedNotice = GoodsReceivedNote;

@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
   User, Item, Customer, Vendor, JobworkChallan, 
   PurchaseOrder, GoodsReceivedNotice, WorkOrder, 
-  QCInspection, MachineAssembly, BOM, SalesOrder, Role, Department, CustomRole,
+  QCInspection, QCType, MachineAssembly, BOM, SalesOrder, Role, Department, CustomRole,
   JobCard, FloorStation, FinishedGoodUnit, DispatchRecord, UserActivityLog, BackupRecord, RBAC_FEATURES,
   JobCardMaterialReissue, POItem, POStatus
 } from '../types/erp';
@@ -158,6 +158,7 @@ interface ERPContextType {
   login: (username: string, password: string) => { success: boolean; message: string };
   signup: (username: string, password: string, fullName: string, role: Role) => { success: boolean; message: string };
   logout: () => void;
+  resetUserPassword: (usernameOrEmail: string, newPass: string) => { success: boolean; message: string };
   addUser: (user: Omit<User, 'id'>) => { success: boolean; message: string };
   updateUser: (user: User) => void;
   deleteUser: (id: string) => { success: boolean; message: string };
@@ -266,8 +267,29 @@ interface ERPContextType {
   updateGRN: (grn: GoodsReceivedNotice) => void;
   approveGRN: (grnId: string) => void;
 
+  reportQCInspection: (payload: ReportQCPayload) => void;
+
   addAssembly: (assembly: Omit<MachineAssembly, 'id'>) => void;
   updateAssemblyProgress: (id: string, progress: number, status: MachineAssembly['status']) => void;
+}
+
+export interface ReportQCPayload {
+  grnId?: string;
+  grnNumber?: string;
+  vendorId?: string;
+  vendorName?: string;
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  grnQty?: number;
+  inspectedQty: number;
+  approvedQty: number;
+  rejectedQty: number;
+  disposition?: any;
+  defectReason?: string;
+  inspectorName?: string;
+  inspectionDate?: string;
+  type?: QCType;
 }
 
 const ERPContext = createContext<ERPContextType | undefined>(undefined);
@@ -308,7 +330,13 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const [users, setUsers] = useState<User[]>(() => getStored('users', INITIAL_USERS));
+  const [users, setUsers] = useState<User[]>(() => {
+    const loaded = getStored<User[]>('users', INITIAL_USERS);
+    return loaded.map(u => ({
+      ...u,
+      password: u.password || (u.username.toLowerCase() === 'superadmin' ? 'GEC_SuperAdmin#2026!Secured$' : 'admin')
+    }));
+  });
   const [departments, setDepartments] = useState<Department[]>(() => getStored('departments', [
     { id: 'dept-1', code: 'PROD', name: 'Production', headName: 'Rajesh Sharma', description: 'Assembly & Machining' },
     { id: 'dept-2', code: 'STORE', name: 'Store & Inventory', headName: 'Manish Patel', description: 'Material Storage' },
@@ -468,13 +496,15 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [currentUser]);
 
-  // Auth Methods
+  // Auth Methods - Strict Case-Sensitive Verification
   const login = (username: string, password: string) => {
     const cleanUser = username.trim().toLowerCase();
     const found = users.find(u => u.username.toLowerCase() === cleanUser);
     
     if (cleanUser === 'superadmin') {
-      if (password === 'GEC_SuperAdmin#2026!Secured$' || password === 'password' || password.length >= 4) {
+      const expectedSuperPass = found?.password || 'GEC_SuperAdmin#2026!Secured$';
+      // Case-sensitive exact match
+      if (password === expectedSuperPass) {
         const deviceType = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? 'mobile' : 'desktop';
         const newSessionId = `sess-${Date.now()}-${Math.random()}`;
         const updatedSuperUser: User = {
@@ -484,6 +514,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             fullName: 'GEC System Super Admin',
             role: 'Admin',
             email: 'superadmin@gecmachines.com',
+            password: expectedSuperPass,
             isSuperAdmin: true
           }),
           ...(deviceType === 'desktop' ? { desktopSessionId: newSessionId } : { mobileSessionId: newSessionId })
@@ -496,26 +527,40 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setCurrentUser(updatedSuperUser);
         return { success: true, message: 'Super Admin logged in successfully' };
       }
-      return { success: false, message: 'Invalid Super Admin password' };
+      return { success: false, message: 'Invalid Super Admin password. Passwords are case-sensitive.' };
     }
 
-    if (found && (password === 'password' || password.length >= 4)) {
-      const deviceType = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? 'mobile' : 'desktop';
-      const newSessionId = `sess-${Date.now()}-${Math.random()}`;
-      const updatedUser: User = {
-        ...found,
-        ...(deviceType === 'desktop' ? { desktopSessionId: newSessionId } : { mobileSessionId: newSessionId })
-      };
+    if (found) {
+      const expectedPassword = found.password || (found.username.toLowerCase() === 'admin' ? 'admin' : 'password');
+      // Case-sensitive exact match
+      if (password === expectedPassword) {
+        const deviceType = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? 'mobile' : 'desktop';
+        const newSessionId = `sess-${Date.now()}-${Math.random()}`;
+        const updatedUser: User = {
+          ...found,
+          ...(deviceType === 'desktop' ? { desktopSessionId: newSessionId } : { mobileSessionId: newSessionId })
+        };
 
-      setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
-      setCurrentUser(updatedUser);
-      return { success: true, message: 'Logged in successfully' };
+        setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+        setCurrentUser(updatedUser);
+        return { success: true, message: 'Logged in successfully' };
+      }
     }
 
     return { 
       success: false, 
-      message: 'Invalid username or password. User accounts must be created by a System Administrator.' 
+      message: 'Invalid username or password. Passwords are case-sensitive.' 
     };
+  };
+
+  const resetUserPassword = (usernameOrEmail: string, newPass: string) => {
+    const target = users.find(u => 
+      u.username.toLowerCase() === usernameOrEmail.toLowerCase().trim() || 
+      (u.email && u.email.toLowerCase() === usernameOrEmail.toLowerCase().trim())
+    );
+    if (!target) return { success: false, message: 'User account not found.' };
+    setUsers(prev => prev.map(u => u.id === target.id ? { ...u, password: newPass } : u));
+    return { success: true, message: 'Password updated successfully!' };
   };
 
   const signup = (username: string, password: string, fullName: string, role: Role) => {
@@ -540,6 +585,11 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateUser = (userData: User) => {
+    const target = users.find(u => u.id === userData.id);
+    const isSuper = target?.isSuperAdmin || target?.username.toLowerCase() === 'superadmin';
+    if (isSuper && !currentUser?.isSuperAdmin) {
+      return;
+    }
     setUsers(prev => prev.map(u => u.id === userData.id ? userData : u));
   };
 
@@ -1304,10 +1354,8 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setAssemblies([]);
       setFinishedGoods([]);
       setDispatchRecords([]);
-      setCustomers([]);
-      setVendors([]);
 
-      // 2. Preserve Item Master, BOMs, and Admin users only
+      // 2. Preserve Item Master, BOMs, Customers, Vendors, and Admin users only
       const preservedAdmins = users.filter(u => 
         u.role === 'Admin' || 
         u.isSuperAdmin || 
@@ -1329,14 +1377,12 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setStored('assemblies', []);
       setStored('finishedGoods', []);
       setStored('dispatchRecords', []);
-      setStored('customers', []);
-      setStored('vendors', []);
       setStored('users', finalAdmins);
 
-      addAuditLog('SYSTEM_RESET', 'System Administration', 'Operational reset executed. Item Master, BOMs, and Admin user accounts preserved.');
+      addAuditLog('SYSTEM_RESET', 'System Administration', 'Operational reset executed. Item Master, BOMs, Customers, Vendors, Departments, and Admin user accounts preserved.');
       return { 
         success: true, 
-        message: 'System Reset Complete: All operational transactions (Orders, Job Cards, POs, Challans, GRNs, Assembly & QC) have been reset. Item Master, BOMs, and Admin accounts are intact.' 
+        message: 'System Reset Complete: All operational transactions (Orders, Job Cards, POs, Challans, GRNs, Assembly & QC) have been reset. Item Master, BOMs, Customers, Vendors, and Admin accounts are intact.' 
       };
     } catch (err: any) {
       return { success: false, message: `System reset error: ${err?.message || 'Unknown error'}` };
@@ -1541,30 +1587,6 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return item;
       }));
 
-      // Create auto QC Inspection record if item requires QC on GRN
-      if (needsQC && inwardStoreQty > 0) {
-        const newQC: QCInspection = {
-          id: `qc-grn-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-          inspectionNo: `QC-INSP-${Date.now().toString().slice(-4)}`,
-          qcNumber: `QC-INSP-${Date.now().toString().slice(-4)}`,
-          referenceType: 'GRN',
-          referenceNo: grnData.grnNumber,
-          itemId: itemObj?.id || grnItem.itemId,
-          itemCode: itemObj?.itemCode || grnItem.itemCode,
-          itemName: itemObj?.name || grnItem.itemName,
-          inspectedQty: inwardStoreQty,
-          inspectedQuantity: inwardStoreQty,
-          passedQuantity: 0,
-          failedQuantity: 0,
-          approvedQty: 0,
-          rejectedQty: 0,
-          status: 'PENDING',
-          timestamp: new Date().toISOString(),
-          type: 'GRN'
-        };
-        setQCInspections(prev => [newQC, ...prev]);
-      }
-
       // Collect Direct Jobwork entries
       if (grnItem.isDirectJobwork && directQty > 0 && grnItem.directJWVendorId) {
         const vId = grnItem.directJWVendorId;
@@ -1636,7 +1658,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newGRN: GoodsReceivedNotice = {
       ...grnData,
       id: `grn-${Date.now()}`,
-      status: hasPendingQC ? 'PENDING_QC' : 'QC_APPROVED'
+      status: hasPendingQC ? 'PENDING_QC' : 'NO_QC'
     };
 
     setGRNs(prev => [newGRN, ...prev]);
@@ -1719,6 +1741,96 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addAuditLog('UPDATE_GRN', 'Goods Received', `Updated GRN ${updatedGRN.grnNumber}`);
   };
 
+  const reportQCInspection = (payload: ReportQCPayload) => {
+    const itemObj = items.find(i => i.id === payload.itemId || i.itemCode === payload.itemCode);
+    const factor = itemObj?.conversionFactor || 1;
+    const approvedBase = (payload.approvedQty || 0) * factor;
+    const inspectedBase = (payload.inspectedQty || 0) * factor;
+
+    // 1. Credit approved stock to inHouseStock & release from pendingQCStock
+    setItems(prevItems => prevItems.map(item => {
+      if (item.id === payload.itemId || item.itemCode === payload.itemCode) {
+        return {
+          ...item,
+          inHouseStock: (item.inHouseStock || 0) + approvedBase,
+          pendingQCStock: Math.max(0, (item.pendingQCStock || 0) - inspectedBase)
+        };
+      }
+      return item;
+    }));
+
+    // 2. Add QC Inspection record
+    const newQC: QCInspection = {
+      id: `qc-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      inspectionNo: `QC-INSP-${Date.now().toString().slice(-4)}`,
+      qcNumber: `QC-GEC-${String(qcInspections.length + 1).padStart(3, '0')}`,
+      referenceType: 'GRN',
+      referenceNo: payload.grnNumber || payload.grnId || 'DIRECT',
+      grnId: payload.grnId,
+      grnNumber: payload.grnNumber,
+      vendorId: payload.vendorId,
+      vendorName: payload.vendorName,
+      itemId: payload.itemId,
+      itemCode: payload.itemCode,
+      itemName: payload.itemName,
+      grnQty: payload.grnQty,
+      inspectedQty: payload.inspectedQty,
+      inspectedQuantity: payload.inspectedQty,
+      passedQuantity: payload.approvedQty,
+      approvedQty: payload.approvedQty,
+      failedQuantity: payload.rejectedQty,
+      rejectedQty: payload.rejectedQty,
+      status: payload.rejectedQty > 0 ? (payload.approvedQty > 0 ? 'CONDITIONAL_APPROVAL' : 'REJECTED') : 'APPROVED',
+      disposition: payload.disposition || (payload.rejectedQty > 0 ? (payload.approvedQty > 0 ? 'CONDITIONAL_APPROVAL' : 'REJECTED') : 'PASSED'),
+      defectReason: payload.defectReason || '',
+      remarks: payload.defectReason || '',
+      inspectionDate: new Date().toISOString().split('T')[0],
+      timestamp: new Date().toISOString(),
+      inspectorName: payload.inspectorName || currentUser?.fullName || 'QC Inspector',
+      type: payload.type || 'GRN'
+    };
+
+    setQCInspections(prev => [newQC, ...prev]);
+
+    // 3. Update parent GRN status
+    if (payload.grnId || payload.grnNumber) {
+      setGRNs(prevGRNs => prevGRNs.map(grn => {
+        if (grn.id === payload.grnId || grn.grnNumber === payload.grnNumber) {
+          const allQCsForGRN = [newQC, ...qcInspections.filter(q => q.grnId === grn.id || q.referenceNo === grn.grnNumber || q.grnNumber === grn.grnNumber)];
+          
+          let allItemsInspected = true;
+          let anyItemInspected = false;
+
+          grn.items.forEach(gItem => {
+            const itObj = items.find(i => i.id === gItem.itemId || i.itemCode === gItem.itemCode);
+            const needsQC = itObj?.qcTrigger === 'ON_GRN' || itObj?.testReportRequired;
+            if (needsQC) {
+              const totalInspectedForLine = allQCsForGRN
+                .filter(q => q.itemId === gItem.itemId || q.itemCode === gItem.itemCode)
+                .reduce((sum, q) => sum + (q.inspectedQuantity || q.inspectedQty || 0), 0);
+              const targetQty = gItem.acceptedQty !== undefined ? gItem.acceptedQty : (gItem.receivedQty || 0);
+              if (totalInspectedForLine >= targetQty) {
+                anyItemInspected = true;
+              } else {
+                allItemsInspected = false;
+                if (totalInspectedForLine > 0) anyItemInspected = true;
+              }
+            }
+          });
+
+          const newStatus = allItemsInspected ? 'QC_APPROVED' : (anyItemInspected ? 'PARTIALLY_QC' : grn.status);
+          return {
+            ...grn,
+            status: newStatus as any
+          };
+        }
+        return grn;
+      }));
+    }
+
+    addAuditLog('REPORT_QC', 'Quality Control', `Reported QC for GRN ${payload.grnNumber || '-'} (${payload.itemCode}): Inspected ${payload.inspectedQty}, Approved ${payload.approvedQty}, Rejected ${payload.rejectedQty}`);
+  };
+
   const addAssembly = (assemblyData: Omit<MachineAssembly, 'id'>) => {
     setAssemblies(prev => [{ ...assemblyData, id: `asm-${Date.now()}` }, ...prev]);
   };
@@ -1770,6 +1882,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       login,
       signup,
       logout,
+      resetUserPassword,
       addUser,
       updateUser,
       deleteUser,
@@ -1849,6 +1962,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addGRN,
       updateGRN,
       approveGRN,
+      reportQCInspection,
       addAssembly,
       updateAssemblyProgress
     }}>

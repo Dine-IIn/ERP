@@ -68,7 +68,7 @@ export const PlanningModule: React.FC = () => {
     const activeJWs = jobworks.filter(j => j.status === 'ISSUED' || j.status === 'PARTIALLY_RECEIVED');
 
     return items.map(item => {
-      const partCode = item.partCode || item.itemCode || '-';
+      const partCode = item.partCode || '-';
       const itemCode = item.itemCode;
       const name = item.name;
       const currentStock = item.inHouseStock || 0;
@@ -238,17 +238,17 @@ export const PlanningModule: React.FC = () => {
     const headers: { key: keyof typeof data[0]; label: string }[] = [
       { key: 'partCode', label: 'Part Code' },
       { key: 'itemCode', label: 'Item Code' },
-      { key: 'pendingPO', label: 'Pending PO' },
-      { key: 'pendingWO', label: 'Pending WO' },
-      { key: 'pendingJobCard', label: 'Pending Job Card' },
-      { key: 'pendingQC', label: 'Pending QC (Inspection)' },
-      { key: 'currentStock', label: 'Current Stock' },
-      { key: 'totalRequired', label: 'Total Required' },
+      { key: 'name', label: 'Description' },
+      { key: 'currentStock', label: 'Curr Stock' },
+      { key: 'pendingPO', label: 'Pend PO' },
+      { key: 'pendingWO', label: 'Pend WO' },
+      { key: 'pendingJobCard', label: 'Pend JobCard' },
+      { key: 'pendingQC', label: 'Pend QC' },
+      { key: 'pendingJW', label: 'Pend JobWork' },
+      { key: 'totalRequired', label: 'Tot Req' },
+      { key: 'minStockLevel', label: 'Min Stock' },
       { key: 'shortage', label: 'Shortage' },
-      { key: 'minStockLevel', label: 'Min Stock Level' },
       { key: 'minShortage', label: 'Min Shortage' },
-      { key: 'name', label: 'Item Description' },
-      { key: 'pendingJW', label: 'Pending Job Work Qty' },
       { key: 'unit', label: 'UOM' }
     ];
 
@@ -425,68 +425,68 @@ export const PlanningModule: React.FC = () => {
         <table>
           <thead>
             <tr>
-              <th onClick={() => handleSortToggle('partCode')} style={{ cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+              <th onClick={() => handleSortToggle('partCode')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
                   Part Code {sortField === 'partCode' ? (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                 </div>
               </th>
-              <th onClick={() => handleSortToggle('itemCode')} style={{ cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+              <th onClick={() => handleSortToggle('itemCode')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
                   Item Code {sortField === 'itemCode' ? (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                 </div>
               </th>
-              <th onClick={() => handleSortToggle('name')} style={{ cursor: 'pointer', minWidth: '220px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                  Item Description {sortField === 'name' ? (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+              <th onClick={() => handleSortToggle('name')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', minWidth: '180px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                  Description {sortField === 'name' ? (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                 </div>
               </th>
-              <th onClick={() => handleSortToggle('currentStock')} style={{ cursor: 'pointer', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.25rem' }}>
-                  Current Stock {sortField === 'currentStock' ? (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+              <th onClick={() => handleSortToggle('currentStock')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
+                  Curr Stock {sortField === 'currentStock' ? (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                 </div>
               </th>
-              <th onClick={() => handleSortToggle('pendingPO')} style={{ cursor: 'pointer', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.25rem' }}>
-                  Pending PO {sortField === 'pendingPO' ? (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+              <th onClick={() => handleSortToggle('pendingPO')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
+                  Pend PO {sortField === 'pendingPO' ? (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                 </div>
               </th>
-              <th onClick={() => handleSortToggle('pendingWO')} style={{ cursor: 'pointer', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.25rem' }}>
-                  Pending WO {sortField === 'pendingWO' ? (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+              <th onClick={() => handleSortToggle('pendingWO')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
+                  Pend WO {sortField === 'pendingWO' ? (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                 </div>
               </th>
-              <th onClick={() => handleSortToggle('pendingJobCard')} style={{ cursor: 'pointer', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.25rem' }}>
-                  Pending Job Card {sortField === 'pendingJobCard' ? (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+              <th onClick={() => handleSortToggle('pendingJobCard')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
+                  Pend JobCard {sortField === 'pendingJobCard' ? (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                 </div>
               </th>
-              <th onClick={() => handleSortToggle('pendingQC')} style={{ cursor: 'pointer', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.25rem' }}>
-                  Pending QC (Inspection) {sortField === 'pendingQC' ? (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+              <th onClick={() => handleSortToggle('pendingQC')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
+                  Pend QC {sortField === 'pendingQC' ? (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                 </div>
               </th>
-              <th onClick={() => handleSortToggle('pendingJW')} style={{ cursor: 'pointer', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.25rem' }}>
-                  Pending Job Work Qty {sortField === 'pendingJW' ? (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+              <th onClick={() => handleSortToggle('pendingJW')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
+                  Pend JobWork {sortField === 'pendingJW' ? (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                 </div>
               </th>
-              <th onClick={() => handleSortToggle('totalRequired')} style={{ cursor: 'pointer', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.25rem' }}>
-                  Total Required {sortField === 'totalRequired' ? (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+              <th onClick={() => handleSortToggle('totalRequired')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
+                  Tot Req {sortField === 'totalRequired' ? (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                 </div>
               </th>
-              <th onClick={() => handleSortToggle('minStockLevel')} style={{ cursor: 'pointer', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.25rem' }}>
-                  Min Stock Level {sortField === 'minStockLevel' ? (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+              <th onClick={() => handleSortToggle('minStockLevel')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
+                  Min Stock {sortField === 'minStockLevel' ? (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                 </div>
               </th>
-              <th onClick={() => handleSortToggle('shortage')} style={{ cursor: 'pointer', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.25rem' }}>
+              <th onClick={() => handleSortToggle('shortage')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
                   Shortage {sortField === 'shortage' ? (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                 </div>
               </th>
-              <th onClick={() => handleSortToggle('minShortage')} style={{ cursor: 'pointer', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.25rem' }}>
+              <th onClick={() => handleSortToggle('minShortage')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
                   Min Shortage {sortField === 'minShortage' ? (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                 </div>
               </th>
@@ -495,7 +495,7 @@ export const PlanningModule: React.FC = () => {
           <tbody>
             {filteredData.length === 0 ? (
               <tr>
-                <td colSpan={13} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-muted)' }}>
+                <td colSpan={13} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
                   <Package size={36} style={{ margin: '0 auto 0.5rem', opacity: 0.4 }} />
                   <div style={{ fontWeight: 600 }}>No planning records found matching active filters.</div>
                 </td>
@@ -517,18 +517,18 @@ export const PlanningModule: React.FC = () => {
                       cursor: 'pointer'
                     }}
                   >
-                    {/* Part Code */}
-                    <td style={{ fontFamily: 'monospace', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                    {/* 1. Part Code */}
+                    <td style={{ padding: '0.35rem 0.5rem', fontFamily: 'monospace', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
                       {row.partCode}
                     </td>
 
-                    {/* Item Code */}
-                    <td style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)', fontSize: '0.82rem' }}>
+                    {/* 2. Item Code */}
+                    <td style={{ padding: '0.35rem 0.5rem', fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)', fontSize: '0.82rem' }}>
                       {row.itemCode}
                     </td>
 
-                    {/* Item Description */}
-                    <td>
+                    {/* 3. Description */}
+                    <td style={{ padding: '0.35rem 0.5rem' }}>
                       <div style={{ fontWeight: 600, fontSize: '0.82rem', color: 'var(--text-primary)' }}>
                         {row.name}
                       </div>
@@ -537,15 +537,15 @@ export const PlanningModule: React.FC = () => {
                       </div>
                     </td>
 
-                    {/* Current Stock */}
-                    <td style={{ textAlign: 'right', fontWeight: 700, fontSize: '0.82rem' }}>
+                    {/* 4. Curr Stock */}
+                    <td style={{ padding: '0.35rem 0.5rem', textAlign: 'center', fontWeight: 700, fontSize: '0.82rem' }}>
                       <span style={{ color: row.currentStock === 0 ? 'var(--danger)' : 'var(--text-primary)' }}>
                         {row.currentStock} {row.unit}
                       </span>
                     </td>
 
-                    {/* Pending PO */}
-                    <td style={{ textAlign: 'right', fontSize: '0.82rem' }}>
+                    {/* 5. Pend PO */}
+                    <td style={{ padding: '0.35rem 0.5rem', textAlign: 'center', fontSize: '0.82rem' }}>
                       {row.pendingPO > 0 ? (
                         <span style={{ color: '#2563eb', fontWeight: 700 }}>+{row.pendingPO}</span>
                       ) : (
@@ -553,8 +553,8 @@ export const PlanningModule: React.FC = () => {
                       )}
                     </td>
 
-                    {/* Pending WO */}
-                    <td style={{ textAlign: 'right', fontSize: '0.82rem' }}>
+                    {/* 6. Pend WO */}
+                    <td style={{ padding: '0.35rem 0.5rem', textAlign: 'center', fontSize: '0.82rem' }}>
                       {row.pendingWO > 0 ? (
                         <span style={{ color: '#d97706', fontWeight: 600 }}>{row.pendingWO}</span>
                       ) : (
@@ -562,8 +562,8 @@ export const PlanningModule: React.FC = () => {
                       )}
                     </td>
 
-                    {/* Pending Job Card */}
-                    <td style={{ textAlign: 'right', fontSize: '0.82rem' }}>
+                    {/* 7. Pend JobCard */}
+                    <td style={{ padding: '0.35rem 0.5rem', textAlign: 'center', fontSize: '0.82rem' }}>
                       {row.pendingJobCard > 0 ? (
                         <span style={{ color: '#7c3aed', fontWeight: 600 }}>{row.pendingJobCard}</span>
                       ) : (
@@ -571,8 +571,8 @@ export const PlanningModule: React.FC = () => {
                       )}
                     </td>
 
-                    {/* Pending QC (Inspection) */}
-                    <td style={{ textAlign: 'right', fontSize: '0.82rem' }}>
+                    {/* 8. Pend QC */}
+                    <td style={{ padding: '0.35rem 0.5rem', textAlign: 'center', fontSize: '0.82rem' }}>
                       {row.pendingQC > 0 ? (
                         <span style={{ color: '#0891b2', fontWeight: 700, backgroundColor: 'rgba(8, 145, 178, 0.08)', padding: '0.15rem 0.4rem', borderRadius: '0.25rem' }}>
                           {row.pendingQC}
@@ -582,8 +582,8 @@ export const PlanningModule: React.FC = () => {
                       )}
                     </td>
 
-                    {/* Pending Job Work Qty */}
-                    <td style={{ textAlign: 'right', fontSize: '0.82rem' }}>
+                    {/* 9. Pend JobWork */}
+                    <td style={{ padding: '0.35rem 0.5rem', textAlign: 'center', fontSize: '0.82rem' }}>
                       {row.pendingJW > 0 ? (
                         <span style={{ color: '#059669', fontWeight: 600 }}>{row.pendingJW}</span>
                       ) : (
@@ -591,23 +591,23 @@ export const PlanningModule: React.FC = () => {
                       )}
                     </td>
 
-                    {/* Total Required */}
-                    <td style={{ textAlign: 'right', fontWeight: 700, fontSize: '0.82rem', color: 'var(--text-primary)' }}>
+                    {/* 10. Tot Req */}
+                    <td style={{ padding: '0.35rem 0.5rem', textAlign: 'center', fontWeight: 700, fontSize: '0.82rem', color: 'var(--text-primary)' }}>
                       {row.totalRequired}
                     </td>
 
-                    {/* Min Stock Level */}
-                    <td style={{ textAlign: 'right', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                    {/* 11. Min Stock */}
+                    <td style={{ padding: '0.35rem 0.5rem', textAlign: 'center', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
                       {row.minStockLevel}
                     </td>
 
-                    {/* Shortage */}
-                    <td style={{ textAlign: 'right', fontSize: '0.82rem' }}>
+                    {/* 12. Shortage */}
+                    <td style={{ padding: '0.35rem 0.5rem', textAlign: 'center', fontSize: '0.82rem' }}>
                       {row.shortage > 0 ? (
                         <span style={{ 
                           color: '#ffffff', 
                           backgroundColor: 'var(--danger)', 
-                          padding: '0.2rem 0.5rem', 
+                          padding: '0.15rem 0.45rem', 
                           borderRadius: '0.25rem', 
                           fontWeight: 800 
                         }}>
@@ -618,13 +618,13 @@ export const PlanningModule: React.FC = () => {
                       )}
                     </td>
 
-                    {/* Min Shortage */}
-                    <td style={{ textAlign: 'right', fontSize: '0.82rem' }}>
+                    {/* 13. Min Shortage */}
+                    <td style={{ padding: '0.35rem 0.5rem', textAlign: 'center', fontSize: '0.82rem' }}>
                       {row.minShortage > 0 ? (
                         <span style={{ 
                           color: '#b45309', 
                           backgroundColor: 'rgba(245, 158, 11, 0.15)', 
-                          padding: '0.15rem 0.45rem', 
+                          padding: '0.15rem 0.4rem', 
                           borderRadius: '0.25rem', 
                           fontWeight: 700 
                         }}>
@@ -673,16 +673,16 @@ export const PlanningModule: React.FC = () => {
                   <th style={{ padding: '4px', textAlign: 'left', border: '1px solid #cbd5e1' }}>Part Code</th>
                   <th style={{ padding: '4px', textAlign: 'left', border: '1px solid #cbd5e1' }}>Item Code</th>
                   <th style={{ padding: '4px', textAlign: 'left', border: '1px solid #cbd5e1' }}>Description</th>
-                  <th style={{ padding: '4px', textAlign: 'right', border: '1px solid #cbd5e1' }}>Curr Stock</th>
-                  <th style={{ padding: '4px', textAlign: 'right', border: '1px solid #cbd5e1' }}>Pend PO</th>
-                  <th style={{ padding: '4px', textAlign: 'right', border: '1px solid #cbd5e1' }}>Pend WO</th>
-                  <th style={{ padding: '4px', textAlign: 'right', border: '1px solid #cbd5e1' }}>Pend JC</th>
-                  <th style={{ padding: '4px', textAlign: 'right', border: '1px solid #cbd5e1' }}>Pend QC</th>
-                  <th style={{ padding: '4px', textAlign: 'right', border: '1px solid #cbd5e1' }}>Pend JW</th>
-                  <th style={{ padding: '4px', textAlign: 'right', border: '1px solid #cbd5e1' }}>Tot Req</th>
-                  <th style={{ padding: '4px', textAlign: 'right', border: '1px solid #cbd5e1' }}>Min Stk</th>
-                  <th style={{ padding: '4px', textAlign: 'right', border: '1px solid #cbd5e1' }}>Shortage</th>
-                  <th style={{ padding: '4px', textAlign: 'right', border: '1px solid #cbd5e1' }}>Min Short</th>
+                  <th style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>Curr Stock</th>
+                  <th style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>Pend PO</th>
+                  <th style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>Pend WO</th>
+                  <th style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>Pend JobCard</th>
+                  <th style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>Pend QC</th>
+                  <th style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>Pend JobWork</th>
+                  <th style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>Tot Req</th>
+                  <th style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>Min Stock</th>
+                  <th style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>Shortage</th>
+                  <th style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>Min Shortage</th>
                 </tr>
               </thead>
               <tbody>
@@ -691,16 +691,16 @@ export const PlanningModule: React.FC = () => {
                     <td style={{ padding: '4px', border: '1px solid #cbd5e1', fontFamily: 'monospace' }}>{row.partCode}</td>
                     <td style={{ padding: '4px', border: '1px solid #cbd5e1', fontFamily: 'monospace', fontWeight: 700 }}>{row.itemCode}</td>
                     <td style={{ padding: '4px', border: '1px solid #cbd5e1' }}>{row.name}</td>
-                    <td style={{ padding: '4px', textAlign: 'right', border: '1px solid #cbd5e1', fontWeight: 700 }}>{row.currentStock}</td>
-                    <td style={{ padding: '4px', textAlign: 'right', border: '1px solid #cbd5e1' }}>{row.pendingPO}</td>
-                    <td style={{ padding: '4px', textAlign: 'right', border: '1px solid #cbd5e1' }}>{row.pendingWO}</td>
-                    <td style={{ padding: '4px', textAlign: 'right', border: '1px solid #cbd5e1' }}>{row.pendingJobCard}</td>
-                    <td style={{ padding: '4px', textAlign: 'right', border: '1px solid #cbd5e1' }}>{row.pendingQC}</td>
-                    <td style={{ padding: '4px', textAlign: 'right', border: '1px solid #cbd5e1' }}>{row.pendingJW}</td>
-                    <td style={{ padding: '4px', textAlign: 'right', border: '1px solid #cbd5e1', fontWeight: 700 }}>{row.totalRequired}</td>
-                    <td style={{ padding: '4px', textAlign: 'right', border: '1px solid #cbd5e1' }}>{row.minStockLevel}</td>
-                    <td style={{ padding: '4px', textAlign: 'right', border: '1px solid #cbd5e1', fontWeight: 800, color: row.shortage > 0 ? '#dc2626' : '#16a34a' }}>{row.shortage}</td>
-                    <td style={{ padding: '4px', textAlign: 'right', border: '1px solid #cbd5e1' }}>{row.minShortage}</td>
+                    <td style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1', fontWeight: 700 }}>{row.currentStock}</td>
+                    <td style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>{row.pendingPO}</td>
+                    <td style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>{row.pendingWO}</td>
+                    <td style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>{row.pendingJobCard}</td>
+                    <td style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>{row.pendingQC}</td>
+                    <td style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>{row.pendingJW}</td>
+                    <td style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1', fontWeight: 700 }}>{row.totalRequired}</td>
+                    <td style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>{row.minStockLevel}</td>
+                    <td style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1', fontWeight: 800, color: row.shortage > 0 ? '#dc2626' : '#16a34a' }}>{row.shortage}</td>
+                    <td style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>{row.minShortage}</td>
                   </tr>
                 ))}
               </tbody>

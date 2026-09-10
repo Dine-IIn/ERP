@@ -74,19 +74,60 @@ export const PurchaseOrderModule: React.FC = () => {
       }, 0);
   };
 
-  // Helper: Item Work Order Demand
+  // Helper: Item Work Order Demand (Multi-Level Exploded & woComponents supported)
   const getItemWorkOrderDemand = (itemId: string, itemCode: string) => {
     let demand = 0;
     const activeWOs = workOrders.filter(w => w.status !== 'COMPLETED' && w.status !== 'CANCELLED');
+
+    const explodeDemand = (
+      components: Array<{ itemId?: string; itemCode?: string; qtyPerMachine?: number; qtyRequired?: number }>,
+      multiplier: number,
+      visited = new Set<string>()
+    ) => {
+      components.forEach(comp => {
+        const cItemId = comp.itemId || '';
+        const cItemCode = comp.itemCode || '';
+        const qtyPer = comp.qtyPerMachine !== undefined ? comp.qtyPerMachine : (comp.qtyRequired || 1);
+        const totalCompQty = qtyPer * multiplier;
+
+        if (
+          (itemId && cItemId && cItemId === itemId) ||
+          (itemCode && cItemCode && cItemCode.toLowerCase() === itemCode.toLowerCase())
+        ) {
+          demand += totalCompQty;
+        }
+
+        // Check if child component has its own BOM (Multi-level Sub-Assembly)
+        const childItem = items.find(i => (cItemId && i.id === cItemId) || (cItemCode && i.itemCode.toLowerCase() === cItemCode.toLowerCase()));
+        if (childItem) {
+          const subBOM = boms.find(b => b.id === childItem.id || b.bomCode?.toLowerCase() === childItem.itemCode.toLowerCase() || b.machineModel?.toLowerCase() === childItem.name?.toLowerCase());
+          if (subBOM && subBOM.components && subBOM.components.length > 0 && !visited.has(subBOM.id)) {
+            const nextVisited = new Set(visited);
+            nextVisited.add(subBOM.id);
+            explodeDemand(subBOM.components, totalCompQty, nextVisited);
+          }
+        }
+      });
+    };
+
     activeWOs.forEach(wo => {
-      const bom = boms.find(b => b.id === wo.bomId || b.bomCode === (wo as any).bomCode || b.machineModel?.toLowerCase() === wo.machineModel?.toLowerCase());
-      if (bom && bom.components) {
-        const comp = bom.components.find(c => c.itemId === itemId || c.itemCode === itemCode);
-        if (comp) {
-          demand += (comp.qtyPerMachine || 1) * (wo.quantity || 1);
+      const remainingQty = Math.max(0, (wo.targetQuantity || wo.quantity || 1) - (wo.completedQuantity || 0));
+      if (remainingQty <= 0) return;
+
+      if (wo.woComponents && wo.woComponents.length > 0) {
+        explodeDemand(wo.woComponents.map(c => ({
+          itemId: c.itemId,
+          itemCode: c.itemCode,
+          qtyPerMachine: c.qtyRequired ? c.qtyRequired / (wo.quantity || wo.targetQuantity || 1) : 1
+        })), remainingQty);
+      } else {
+        const bom = boms.find(b => b.id === wo.bomId || b.bomCode === (wo as any).bomCode || b.machineModel?.toLowerCase() === wo.machineModel?.toLowerCase());
+        if (bom && bom.components) {
+          explodeDemand(bom.components, remainingQty, new Set([bom.id]));
         }
       }
     });
+
     return demand;
   };
 

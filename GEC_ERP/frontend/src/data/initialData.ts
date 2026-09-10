@@ -13,6 +13,7 @@ export const INITIAL_USERS: User[] = [
     fullName: 'System Administrator',
     role: 'Admin',
     email: 'admin@gecmachines.com',
+    password: 'admin',
     isSuperAdmin: true
   }
 ];

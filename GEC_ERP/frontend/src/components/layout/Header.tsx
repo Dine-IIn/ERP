@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useERP } from '../../context/ERPContext';
-import { Search, Wifi, WifiOff, Server, AlertCircle, Users } from 'lucide-react';
-import { UserManagementModal } from '../common/UserManagementModal';
-
+import { Search, Wifi, WifiOff, Server, AlertCircle } from 'lucide-react';
 export const Header: React.FC = () => {
   const { 
     activeModule, setActiveModule, searchTerm, setSearchTerm, currentUser,
@@ -10,7 +8,6 @@ export const Header: React.FC = () => {
     openBOMInEditor, openWOInEditor
   } = useERP();
   
-  const [isUserManagementOpen, setIsUserManagementOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
   // User Internet / Network Connection State
@@ -341,7 +338,7 @@ export const Header: React.FC = () => {
         )}
       </div>
 
-      {/* Right Separate Indicators for User, Server, & Manage Users */}
+      {/* Right Separate Indicators for User & Server */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
         {/* User Connection Status Indicator */}
         <div style={{
@@ -376,25 +373,7 @@ export const Header: React.FC = () => {
           {isServerOnline ? <Server size={13} /> : <AlertCircle size={13} />}
           <span>Server: {isServerOnline ? 'Online' : 'Offline'}</span>
         </div>
-
-        {/* User Role & Manage Users Button for Admin */}
-        {currentUser?.role === 'Admin' && (
-          <button
-            className="btn btn-outline"
-            style={{ padding: '0.3rem 0.65rem', fontSize: '0.73rem', gap: '0.35rem' }}
-            onClick={() => setIsUserManagementOpen(true)}
-            title="Manage Users & Security"
-          >
-            <Users size={14} />
-            <span>Manage Users</span>
-          </button>
-        )}
       </div>
-
-      <UserManagementModal
-        isOpen={isUserManagementOpen}
-        onClose={() => setIsUserManagementOpen(false)}
-      />
     </header>
   );
 };

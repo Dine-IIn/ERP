@@ -28,6 +28,15 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
     );
   }
 
+  // Filter out Super Admin if current user is not Super Admin
+  const visibleUsers = users.filter(u => {
+    const isSuper = u.isSuperAdmin || u.username.toLowerCase() === 'superadmin';
+    if (isSuper) {
+      return currentUser?.isSuperAdmin === true;
+    }
+    return true;
+  });
+
   const handleAddUserSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const res = addUser({
@@ -140,10 +149,10 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
         {/* Users List Table */}
         <div>
           <h4 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.5rem', color: 'var(--text-primary)' }}>
-            Active System Accounts ({users.length}):
+            Active System Accounts ({visibleUsers.length}):
           </h4>
           <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '0.5rem', backgroundColor: 'var(--bg-input)' }}>
-            {users.map(u => {
+            {visibleUsers.map(u => {
               const isSuper = u.isSuperAdmin || u.username.toLowerCase() === 'superadmin';
               return (
                 <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.625rem 0.875rem', borderBottom: '1px solid var(--border-color)', backgroundColor: isSuper ? 'var(--bg-tertiary)' : 'transparent' }}>
