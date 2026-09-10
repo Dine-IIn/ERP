@@ -226,8 +226,11 @@ interface ERPContextType {
 
   // Job Cards Methods
   addJobCard: (jc: Omit<JobCard, 'id' | 'jobCardNo'>) => void;
+  updateJobCard: (jc: JobCard) => void;
   updateJobCardProgress: (id: string, completedQuantity: number) => void;
   closeJobCard: (id: string) => void;
+  reopenJobCard: (id: string) => void;
+  deleteJobCard: (id: string) => boolean;
   createExchangeJobCard: (woId: string, returnParts: any[], newParts: any[]) => void;
 
   // Floor Planning Methods
@@ -525,6 +528,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return exists ? prev.map(u => u.id === updatedSuperUser.id ? updatedSuperUser : u) : [updatedSuperUser, ...prev];
         });
         setCurrentUser(updatedSuperUser);
+        setActiveModule('superadmin-analytics');
         return { success: true, message: 'Super Admin logged in successfully' };
       }
       return { success: false, message: 'Invalid Super Admin password. Passwords are case-sensitive.' };
@@ -543,6 +547,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
         setCurrentUser(updatedUser);
+        setActiveModule('dashboard');
         return { success: true, message: 'Logged in successfully' };
       }
     }
@@ -1016,6 +1021,11 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setJobCards(prev => [newJC, ...prev]);
   };
 
+  const updateJobCard = (jc: JobCard) => {
+    setJobCards(prev => prev.map(j => j.id === jc.id ? jc : j));
+    addAuditLog('UPDATE_JOB_CARD', 'Job Cards', `Updated Job Card ${jc.jobCardNo}`);
+  };
+
   const updateJobCardProgress = (id: string, completedQuantity: number) => {
     setJobCards(prev => prev.map(jc => {
       if (jc.id === id) {
@@ -1060,6 +1070,74 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
 
     setJobCards(prev => prev.map(jc => jc.id === id ? { ...jc, status: 'COMPLETED', completionDate: new Date().toISOString().split('T')[0] } : jc));
+    addAuditLog('CLOSE_JOB_CARD', 'Job Cards', `Closed Job Card ${targetJC.jobCardNo} (Completed ${targetJC.targetQuantity} units).`);
+  };
+
+  const reopenJobCard = (id: string) => {
+    const targetJC = jobCards.find(jc => jc.id === id);
+    if (!targetJC || targetJC.status !== 'COMPLETED') return;
+
+    // 1. Revert finished item credit from in-house stock
+    setItems(prevItems => prevItems.map(i => {
+      if (i.id === targetJC.itemId || i.itemCode === targetJC.itemCode) {
+        return {
+          ...i,
+          inHouseStock: Math.max(0, i.inHouseStock - targetJC.targetQuantity)
+        };
+      }
+      return i;
+    }));
+
+    // 2. Return consumed components back to in-house inventory
+    targetJC.components.forEach(comp => {
+      setItems(prevItems => prevItems.map(i => {
+        if (i.id === comp.itemId || i.itemCode === comp.itemCode) {
+          return {
+            ...i,
+            inHouseStock: i.inHouseStock + (comp.qtyPerUnit * targetJC.targetQuantity)
+          };
+        }
+        return i;
+      }));
+    });
+
+    // 3. Set status back to IN_PROGRESS
+    setJobCards(prev => prev.map(jc => jc.id === id ? {
+      ...jc,
+      status: 'IN_PROGRESS',
+      completionDate: undefined
+    } : jc));
+
+    addAuditLog('REOPEN_JOB_CARD', 'Job Cards', `Reopened completed Job Card ${targetJC.jobCardNo} (Inventory stock adjustments reversed).`);
+  };
+
+  const deleteJobCard = (id: string): boolean => {
+    const targetJC = jobCards.find(jc => jc.id === id);
+    if (!targetJC) return false;
+
+    if (targetJC.completedQuantity > 0) {
+      alert(`❌ Cannot delete Job Card ${targetJC.jobCardNo} because ${targetJC.completedQuantity} units have already been processed.`);
+      return false;
+    }
+
+    const nowIso = new Date().toISOString();
+    const userDisplay = currentUser?.fullName || currentUser?.username || 'Admin';
+
+    setJobCards(prev => prev.map(jc => {
+      if (jc.id === id) {
+        return {
+          ...jc,
+          status: 'CANCELLED',
+          isDeleted: true,
+          deletedAt: nowIso,
+          deletedBy: userDisplay
+        };
+      }
+      return jc;
+    }));
+
+    addAuditLog('DELETE_JOB_CARD', 'Job Cards', `Soft-deleted Job Card ${targetJC.jobCardNo} (Archived to history).`);
+    return true;
   };
 
   const createExchangeJobCard = (woId: string, returnParts: any[], newParts: any[]) => {
@@ -1471,7 +1549,103 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deletePurchaseOrder = (id: string) => {
-    setPurchaseOrders(prev => prev.filter(p => p.id !== id));
+    const target = purchaseOrders.find(p => p.id === id);
+    if (!target) return;
+
+    const totalOrdered = target.items.reduce((sum, item) => sum + (item.quantity || item.orderedQty || 0), 0);
+    const totalReceived = target.items.reduce((sum, item) => sum + (item.receivedQty || 0), 0);
+    const nowIso = new Date().toISOString();
+    const userDisplay = currentUser?.fullName || currentUser?.username || 'Admin';
+
+    // Case 1: Partial GRN has been taken (0 < totalReceived < totalOrdered) -> Split PO
+    if (totalReceived > 0 && totalReceived < totalOrdered) {
+      // 1. Update target PO: retain fulfilled portion (e.g. 3 of 5 received)
+      const fulfilledItems = target.items.map(item => {
+        const orig = item.originalOrderedQty || item.quantity || item.orderedQty || 1;
+        const rec = item.receivedQty || 0;
+        const uPrice = item.unitPrice || 0;
+        return {
+          ...item,
+          originalOrderedQty: orig,
+          orderedQty: orig,
+          quantity: orig,
+          receivedQty: rec,
+          cancelledQty: 0,
+          totalAmount: rec * uPrice,
+          amount: rec * uPrice
+        };
+      });
+      const fulfilledSubtotal = fulfilledItems.reduce((sum, it) => sum + ((it.receivedQty || 0) * (it.unitPrice || 0)), 0);
+      const fulfilledTax = fulfilledSubtotal * 0.18;
+      const fulfilledTotal = fulfilledSubtotal + fulfilledTax;
+
+      const updatedFulfilledPO: PurchaseOrder = {
+        ...target,
+        items: fulfilledItems,
+        subtotal: fulfilledSubtotal,
+        taxAmount: fulfilledTax,
+        totalAmount: fulfilledTotal,
+        status: 'GOODS_RECEIVED',
+        isSplitFulfilled: true,
+        splitNotes: `Partially fulfilled portion retained (${totalReceived} of ${totalOrdered} units received) upon cancellation of remaining pending balance.`
+      };
+
+      // 2. Create split cancelled balance PO (e.g. PO-A-deleted with 2 of 5 cancelled)
+      const cancelledItems = target.items.map(item => {
+        const orig = item.originalOrderedQty || item.quantity || item.orderedQty || 1;
+        const rec = item.receivedQty || 0;
+        const rem = Math.max(0, orig - rec);
+        const uPrice = item.unitPrice || 0;
+        return {
+          ...item,
+          originalOrderedQty: orig,
+          orderedQty: orig,
+          quantity: orig,
+          cancelledQty: rem,
+          receivedQty: 0,
+          totalAmount: rem * uPrice,
+          amount: rem * uPrice
+        };
+      }).filter(item => (item.cancelledQty || 0) > 0);
+
+      const cancelledSubtotal = cancelledItems.reduce((sum, it) => sum + ((it.cancelledQty || 0) * (it.unitPrice || 0)), 0);
+      const cancelledTax = cancelledSubtotal * 0.18;
+      const cancelledTotal = cancelledSubtotal + cancelledTax;
+
+      const splitDeletedPO: PurchaseOrder = {
+        ...target,
+        id: `po-${Date.now()}-del`,
+        poNumber: `${target.poNumber}-deleted`,
+        items: cancelledItems,
+        subtotal: cancelledSubtotal,
+        taxAmount: cancelledTax,
+        totalAmount: cancelledTotal,
+        status: 'CANCELLED',
+        isDeleted: true,
+        deletedAt: nowIso,
+        deletedBy: userDisplay,
+        splitFromPoNumber: target.poNumber,
+        notes: `Cancelled remainder balance of ${totalOrdered - totalReceived} units from partial PO ${target.poNumber}.`
+      };
+
+      setPurchaseOrders(prev => [splitDeletedPO, ...prev.map(p => p.id === id ? updatedFulfilledPO : p)]);
+      addAuditLog('SPLIT_DELETE_PO', 'Purchase Orders', `Split and cancelled partial PO ${target.poNumber}: Retained fulfilled portion (${totalReceived}/${totalOrdered} received) under ${target.poNumber} and created cancelled balance PO ${splitDeletedPO.poNumber} (${totalOrdered - totalReceived}/${totalOrdered} units).`);
+    } else {
+      // Case 2: No GRN taken (or completely unfulfilled): soft-delete
+      setPurchaseOrders(prev => prev.map(p => {
+        if (p.id === id) {
+          return {
+            ...p,
+            status: 'CANCELLED',
+            isDeleted: true,
+            deletedAt: nowIso,
+            deletedBy: userDisplay
+          };
+        }
+        return p;
+      }));
+      addAuditLog('SOFT_DELETE_PO', 'Purchase Orders', `Soft-deleted Purchase Order ${target.poNumber} (Archived, hidden from active views).`);
+    }
   };
 
   const sendPODraftsForApproval = (ids: string[]) => {
@@ -1932,8 +2106,11 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updateWorkOrderComponents,
       updateWorkOrderStage,
       addJobCard,
+      updateJobCard,
       updateJobCardProgress,
       closeJobCard,
+      reopenJobCard,
+      deleteJobCard,
       createExchangeJobCard,
       assignWOToStation,
       moveWOStation,

@@ -6,9 +6,7 @@ import { CustomerListPrintView } from '../printTemplates/ItemMasterPrintTemplate
 import { Contact, Plus, Edit2, Trash2, Upload, Search, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown, ArrowLeft, X, Printer, RefreshCw } from 'lucide-react';
 import { Customer } from '../../types/erp';
 import { parseCustomersSheet } from '../../utils/csvParser';
-import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
-import { ExportFieldSelectorModal, FieldOption } from '../common/ExportFieldSelectorModal';
 
 type SortField = 'customerCode' | 'name' | 'city' | 'phone';
 
@@ -16,8 +14,7 @@ export const CustomerMasterModule: React.FC = () => {
   const { customers, addCustomer, updateCustomer, deleteCustomer, bulkAddCustomers, searchTerm, setSearchTerm } = useERP();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
-  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
-  const [printModalOpen, setPrintModalOpen] = useState(false);
+    const [printModalOpen, setPrintModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
 
   // Single Column Sorting State
@@ -114,23 +111,7 @@ export const CustomerMasterModule: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleOpenSheet = () => {
-    openLiveModuleSheet('Customers', 'GEC_Customers_Live', customers, [
-      { key: 'customerCode', label: 'Customer Code' },
-      { key: 'name', label: 'Client / Company Name' },
-      { key: 'contactPerson', label: 'Contact Person' },
-      { key: 'phone', label: 'Phone' },
-      { key: 'email', label: 'Email' },
-      { key: 'city', label: 'City' },
-      { key: 'state', label: 'State' },
-      { key: 'address', label: 'Address' },
-      { key: 'gstin', label: 'GSTIN' },
-      { key: 'pan', label: 'PAN (Optional)' },
-      { key: 'bankName', label: 'Bank Name' },
-      { key: 'accountNumber', label: 'Account Number' },
-      { key: 'ifscCode', label: 'IFSC Code' }
-    ]);
-  };
+
 
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -171,14 +152,11 @@ export const CustomerMasterModule: React.FC = () => {
             </button>
           )}
           <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-secondary)' }}>
-            {isModalOpen ? (editingCustomer ? `Editing Customer (${editingCustomer.customerCode})` : 'Register New Customer') : `All Customers (${filteredCustomers.length})`}
+            {isModalOpen ? (editingCustomer ? 'Edit Customer Details' : 'Register New Customer Account') : `All Customers (${filteredCustomers.length})`}
           </span>
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <button className="btn btn-outline" onClick={handleOpenSheet} title="Sync and maintain live CSV sheet">
-            <RefreshCw size={14} /> Live Sheet
-          </button>
           <button type="button" className="btn btn-outline" onClick={() => setPrintModalOpen(true)} title="Print filtered customers catalog report">
             <Printer size={14} /> Print Report
           </button>

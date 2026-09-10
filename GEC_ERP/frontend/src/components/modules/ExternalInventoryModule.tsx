@@ -7,7 +7,6 @@ import { SingleJobworkPrintView, JobworkListPrintView } from '../printTemplates/
 import { TabularShortagePrintView } from '../printTemplates/ShortagePrintTemplates';
 import { Truck, Plus, ArrowRightLeft, CheckCircle, Search, Printer, FileSpreadsheet, ArrowUp, ArrowDown, ArrowUpDown, RefreshCw, AlertTriangle, Layers, X, CheckCircle2 } from 'lucide-react';
 import { JobworkChallan, Item } from '../../types/erp';
-import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
 
 type JWSortKey = 'challanNo' | 'vendorName' | 'itemName' | 'processRequired' | 'sentQuantity' | 'receivedQuantity' | 'scrapQuantity' | 'pendingBalance' | 'expectedReturnDate' | 'status';
 
@@ -61,7 +60,19 @@ export const ExternalInventoryModule: React.FC = () => {
     }
   };
 
-  const vendorOptions: AutocompleteOption[] = vendors.map(v => ({
+  const selectedTargetItem = items.find(i => i.id === issueData.producedItemId) || items.find(i => i.id === issueData.itemId);
+  const mappedVendorIds = (selectedTargetItem?.mappedVendors || []).map(mv => mv.vendorId).filter(Boolean);
+  const mappedVendorNames = (selectedTargetItem?.mappedVendors || []).map(mv => mv.vendorName?.trim().toLowerCase()).filter(Boolean);
+
+  const availableVendors = (selectedTargetItem?.mappedVendors && selectedTargetItem.mappedVendors.length > 0)
+    ? vendors.filter(v => 
+        mappedVendorIds.includes(v.id) || 
+        (v.name && mappedVendorNames.includes(v.name.trim().toLowerCase())) || 
+        (v.vendorCode && mappedVendorNames.includes(v.vendorCode.trim().toLowerCase()))
+      )
+    : vendors;
+
+  const vendorOptions: AutocompleteOption[] = availableVendors.map(v => ({
     value: v.id,
     label: v.name,
     sublabel: `${v.vendorCode} | ${v.category} | ${v.city}`
@@ -191,17 +202,21 @@ export const ExternalInventoryModule: React.FC = () => {
 
   const handleOpenShortageJWModal = (item: Item) => {
     const shortage = getJobworkItemShortage(item);
-    const preferredVendorId = item.mappedVendors?.[0]?.vendorId || vendors[0]?.id || '';
+    
+    // Find BOM component raw material if available, else default to item itself
+    const matchingBOM = boms.find(b => b.id === item.id || b.bomCode === item.itemCode || b.machineModel?.toLowerCase() === item.name.toLowerCase());
+    const rawItemId = matchingBOM?.components?.[0]?.itemId || item.id;
+
     setIssueData({
       challanNo: `JW-GEC-2026-${String(jobworks.length + 1).padStart(3, '0')}`,
-      vendorId: preferredVendorId,
-      itemId: item.id,
-      producedItemId: '',
+      vendorId: '',
+      itemId: rawItemId,
+      producedItemId: item.id,
       sentQuantity: Math.max(1, shortage),
       processRequired: 'External Machining & Heat Treatment',
       issueDate: new Date().toISOString().split('T')[0],
       expectedReturnDate: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
-      notes: `Jobwork issued directly from inventory shortage requirement (${shortage} ${item.unit}).`
+      notes: `Jobwork issued directly from inventory shortage requirement for target item ${item.itemCode} (${shortage} ${item.unit}).`
     });
     setIsIssueModalOpen(true);
   };
@@ -230,40 +245,6 @@ export const ExternalInventoryModule: React.FC = () => {
   const handlePrintChallanList = () => {
     setPrintDocType('CHALLAN_LIST');
     setPrintModalOpen(true);
-  };
-
-  const handleRefreshLiveSheet = () => {
-    const data = filteredJobworks.map(j => ({
-      challanNo: j.challanNo,
-      vendorName: j.vendorName,
-      itemCode: j.itemCode,
-      itemName: j.itemName,
-      processRequired: j.processRequired,
-      sentQuantity: j.sentQuantity,
-      receivedQuantity: j.receivedQuantity,
-      scrapQuantity: j.scrapQuantity,
-      pendingBalance: j.pendingBalance,
-      issueDate: j.issueDate,
-      expectedReturnDate: j.expectedReturnDate,
-      status: j.status
-    }));
-
-    const headers: { key: keyof typeof data[0]; label: string }[] = [
-      { key: 'challanNo', label: 'Challan No' },
-      { key: 'vendorName', label: 'Processing Vendor' },
-      { key: 'itemCode', label: 'Component Code' },
-      { key: 'itemName', label: 'Component Name' },
-      { key: 'processRequired', label: 'Process Required' },
-      { key: 'sentQuantity', label: 'Sent Quantity' },
-      { key: 'receivedQuantity', label: 'Received Quantity' },
-      { key: 'scrapQuantity', label: 'Scrap Quantity' },
-      { key: 'pendingBalance', label: 'Pending Balance' },
-      { key: 'issueDate', label: 'Issue Date' },
-      { key: 'expectedReturnDate', label: 'Expected Return Date' },
-      { key: 'status', label: 'Challan Status' }
-    ];
-
-    openLiveModuleSheet('Jobwork', 'GEC_Jobwork_Challans_Live', data, headers);
   };
 
   const handleOpenReturnModal = (challan: JobworkChallan) => {
@@ -437,9 +418,6 @@ export const ExternalInventoryModule: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          <button type="button" className="btn btn-outline" onClick={handleRefreshLiveSheet} title="Sync and maintain live CSV sheet">
-            <RefreshCw size={14} /> Live Sheet
-          </button>
           <button type="button" className="btn btn-outline" onClick={handlePrintChallanList} title="Print filtered jobwork challans report">
             <Printer size={14} /> Print Report
           </button>
@@ -807,23 +785,37 @@ export const ExternalInventoryModule: React.FC = () => {
 
           {/* Item to Produce / Processed Output Item */}
           <div>
-            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.25rem', color: 'var(--text-primary)' }}>
-              2. Target Item to Produce / Finished Processed Part (Optional)
+            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.25rem', color: 'var(--accent-primary)' }}>
+              2. Target Item to Produce / Finished Processed Part *
             </label>
             <AutocompleteSelect
               options={itemOptions}
               value={issueData.producedItemId}
-              onChange={(val) => setIssueData({ ...issueData, producedItemId: val })}
+              onChange={(val) => {
+                setIssueData(prev => ({
+                  ...prev,
+                  producedItemId: val,
+                  vendorId: ''
+                }));
+              }}
               placeholder="Search output / processed item to produce..."
+              required
             />
           </div>
 
           {/* Search Processing Vendor & Challan No */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.25rem' }}>
-                3. Processing Vendor *
-              </label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: 700 }}>
+                  3. Processing Vendor *
+                </label>
+                {selectedTargetItem && selectedTargetItem.mappedVendors && selectedTargetItem.mappedVendors.length > 0 && (
+                  <span style={{ fontSize: '0.72rem', color: 'var(--success)', fontWeight: 600 }}>
+                    ✓ Filtered to {availableVendors.length} mapped vendor(s)
+                  </span>
+                )}
+              </div>
               <AutocompleteSelect
                 options={vendorOptions}
                 value={issueData.vendorId}

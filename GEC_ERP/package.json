@@ -7,6 +7,7 @@
     "dev": "cd frontend && corepack pnpm dev",
     "build": "cd frontend && corepack pnpm build",
     "server": "cd backend && corepack pnpm dev",
+    "server:manage": "cd backend && node src/serverManager.js",
     "tauri:dev": "cd frontend && corepack pnpm tauri:dev",
     "tauri:build": "cd frontend && corepack pnpm tauri:build",
     "cap:android": "cd frontend && corepack pnpm cap:android",

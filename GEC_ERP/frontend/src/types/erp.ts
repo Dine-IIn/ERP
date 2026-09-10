@@ -4,6 +4,8 @@ export type Role = 'Admin' | 'Production Manager' | 'Store Manager' | 'QC Office
 
 export type PermissionLevel = 'FULL_ACCESS' | 'EDIT' | 'CREATE' | 'VIEW' | 'NO_ACCESS';
 
+export type PermissionAction = 'VIEW' | 'CREATE' | 'EDIT' | 'DELETE' | 'APPROVE';
+
 export interface RBACFeatureDefinition {
   key: string;
   name: string;
@@ -36,6 +38,7 @@ export interface ModulePermission {
   moduleKey: string;
   moduleName: string;
   level: PermissionLevel;
+  actions?: PermissionAction[];
 }
 
 export interface CustomRole {
@@ -44,7 +47,7 @@ export interface CustomRole {
   roleName?: string;
   description?: string;
   departmentId?: string;
-  permissions?: Record<string, PermissionLevel>;
+  permissions?: Record<string, PermissionAction[] | PermissionLevel | string[]>;
   isSystemRole?: boolean;
 }
 
@@ -258,6 +261,8 @@ export interface POItem {
   itemName?: string;
   quantity?: number;
   orderedQty?: number;
+  originalOrderedQty?: number;
+  cancelledQty?: number;
   receivedQty?: number;
   unit?: string;
   purchaseUOM?: string;
@@ -292,6 +297,12 @@ export interface PurchaseOrder {
   cancellationChallanNo?: string;
   cancelledBy?: string;
   cancelledAt?: string;
+  isDeleted?: boolean;
+  deletedAt?: string;
+  deletedBy?: string;
+  isSplitFulfilled?: boolean;
+  splitFromPoNumber?: string;
+  splitNotes?: string;
 }
 
 export type WOStage = 'PLANNING' | 'ASSEMBLY' | 'TESTING' | 'QUALITY' | 'COMPLETED' | string;
@@ -535,6 +546,9 @@ export interface JobCard {
   completionDate?: string;
   remarks?: string;
   stationName?: string;
+  isDeleted?: boolean;
+  deletedAt?: string;
+  deletedBy?: string;
   components: JobCardComponentLine[];
 }
 
@@ -601,4 +615,37 @@ export interface JobCardMaterialReissue {
   status: 'ISSUED' | 'APPROVED';
   notes?: string;
 }
+
+// Letter-Encoded PO Number Generator: PO + Month (2 letters) + Year (2 letters) + 4-digit Seq
+// Mapping: 0->A, 1->B, 2->C, 3->D, 4->E, 5->F, 6->G, 7->H, 8->I, 9->J
+// Example: Sept 2026 -> 09 (AJ), 26 (CG) -> POAJCG0001
+export const generateNextPONumber = (existingPOs: { poNumber?: string }[] = [], date: Date = new Date()): string => {
+  const DIGIT_MAP: Record<string, string> = {
+    '0': 'A', '1': 'B', '2': 'C', '3': 'D', '4': 'E',
+    '5': 'F', '6': 'G', '7': 'H', '8': 'I', '9': 'J'
+  };
+
+  const encodeDigits = (str: string) => str.split('').map(d => DIGIT_MAP[d] || d).join('');
+
+  const monthStr = String(date.getMonth() + 1).padStart(2, '0'); // e.g. "09" -> "AJ"
+  const yearStr = String(date.getFullYear()).slice(-2);           // e.g. "26" -> "CG"
+
+  const monthCode = encodeDigits(monthStr);
+  const yearCode = encodeDigits(yearStr);
+  const prefix = `PO${monthCode}${yearCode}`; // e.g. "POAJCG"
+
+  let maxSeq = 0;
+  existingPOs.forEach(po => {
+    if (po.poNumber && po.poNumber.startsWith(prefix)) {
+      const seqPart = po.poNumber.slice(prefix.length).split('-')[0];
+      const num = parseInt(seqPart, 10);
+      if (!isNaN(num) && num > maxSeq) {
+        maxSeq = num;
+      }
+    }
+  });
+
+  const nextSeq = maxSeq + 1;
+  return `${prefix}${String(nextSeq).padStart(4, '0')}`;
+};
 

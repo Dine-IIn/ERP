@@ -4,9 +4,8 @@ import { Modal } from '../common/Modal';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { SingleJobCardPrintView, JobCardListPrintView } from '../printTemplates/JobCardPrintTemplates';
 import { TabularShortagePrintView } from '../printTemplates/ShortagePrintTemplates';
-import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
 import { 
-  ClipboardList, Plus, CheckCircle, Search, ArrowUp, ArrowDown, ArrowUpDown, Package, Printer, RefreshCw, AlertTriangle, Layers, X, CheckCircle2 
+  ClipboardList, Plus, CheckCircle, Search, ArrowUp, ArrowDown, ArrowUpDown, Package, Printer, RefreshCw, AlertTriangle, Layers, X, CheckCircle2, Edit2, Trash2, RotateCcw
 } from 'lucide-react';
 import { JobCard, Item } from '../../types/erp';
 
@@ -14,12 +13,14 @@ type JCSortKey = 'jobCardNo' | 'itemType' | 'itemName' | 'woNumber' | 'targetQua
 
 export const JobCardModule: React.FC = () => {
   const { 
-    jobCards, items, workOrders, boms, addJobCard, updateJobCardProgress, closeJobCard,
+    jobCards, items, workOrders, boms, addJobCard, updateJobCard, updateJobCardProgress, closeJobCard, reopenJobCard, deleteJobCard,
     jobCardMaterialReissues, addJobCardMaterialReissue, currentUser 
   } = useERP();
 
   const [activeMainTab, setActiveMainTab] = useState<'JOB_CARDS' | 'REISSUES'>('JOB_CARDS');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingJC, setEditingJC] = useState<JobCard | null>(null);
   const [isReissueModalOpen, setIsReissueModalOpen] = useState(false);
   const [isShortageWizardOpen, setIsShortageWizardOpen] = useState(false);
   const [isExplodeShortage, setIsExplodeShortage] = useState(false);
@@ -27,7 +28,7 @@ export const JobCardModule: React.FC = () => {
   const [wizardSearchTerm, setWizardSearchTerm] = useState('');
   const [selectedJC, setSelectedJC] = useState<JobCard | null>(null);
   const [progressQtyInput, setProgressQtyInput] = useState<number>(1);
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [statusFilter, setStatusFilter] = useState<string>('ACTIVE_ONLY');
   const [searchQuery, setSearchQuery] = useState('');
   const [startDateFilter, setStartDateFilter] = useState<string>('');
   const [endDateFilter, setEndDateFilter] = useState<string>('');
@@ -334,16 +335,68 @@ export const JobCardModule: React.FC = () => {
     alert(`✅ Material Re-Issue logged successfully! ${reissueForm.quantity} ${itemObj.unit} of ${itemObj.itemCode} deducted from in-house stock.`);
   };
 
-  // Universal @history search handling
-  const isHistorySearch = searchQuery.toLowerCase().includes('@history');
-  const cleanSearchTerm = searchQuery.replace(/@history/gi, '').trim().toLowerCase();
+  // Handlers for Edit, Reopen, and Soft-Delete
+  const handleOpenEditModal = (jc: JobCard) => {
+    setEditingJC(JSON.parse(JSON.stringify(jc)));
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveEditJobCard = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingJC) return;
+    updateJobCard(editingJC);
+    setIsEditModalOpen(false);
+    setEditingJC(null);
+    alert(`✅ Job Card ${editingJC.jobCardNo} updated successfully!`);
+  };
+
+  const handleReopenJobCard = (jc: JobCard) => {
+    if (!window.confirm(`⚠️ Reopen Job Card ${jc.jobCardNo}?\n\nThis will:\n1. Revert the ${jc.targetQuantity} finished units from in-house stock.\n2. Restore the consumed components back to store inventory.\n3. Move this Job Card back to 'IN_PROGRESS'.\n\nProceed?`)) {
+      return;
+    }
+    reopenJobCard(jc.id);
+    alert(`✅ Job Card ${jc.jobCardNo} reopened successfully! Status is now IN_PROGRESS.`);
+  };
+
+  const handleDeleteJobCard = (jc: JobCard) => {
+    if ((jc.completedQuantity || 0) > 0) {
+      alert(`❌ Cannot delete Job Card ${jc.jobCardNo} because ${jc.completedQuantity} units have already been processed.`);
+      return;
+    }
+    if (window.confirm(`Are you sure you want to delete Job Card ${jc.jobCardNo}?\n\nIt will be safely archived (soft-deleted) and can be viewed via @history or @deleted.`)) {
+      deleteJobCard(jc.id);
+    }
+  };
+
+  // Universal @history & @deleted search handling
+  const isHistorySearch = searchQuery.toLowerCase().includes('@history') || searchQuery.toLowerCase().includes('@deleted') || searchQuery.trim().startsWith('@');
+  const cleanSearchTerm = searchQuery.replace(/@history|@deleted/gi, '').replace(/^@/g, '').trim().toLowerCase();
 
   const filteredJobCards = jobCards
     .filter(jc => {
-      const matchesStatus = statusFilter === 'ALL' || jc.status === statusFilter;
+      const isHistorical = jc.status === 'COMPLETED' || jc.status === 'CANCELLED' || jc.isDeleted;
+
+      // By default show active unless @history is typed or a specific status filter is picked
+      if (!isHistorySearch && statusFilter === 'ACTIVE_ONLY' && (isHistorical || jc.isDeleted)) {
+        return false;
+      }
+      if (!isHistorySearch && statusFilter === 'ALL' && (jc.status === 'COMPLETED' || jc.isDeleted)) {
+        return false;
+      }
+
+      let matchesStatus = true;
+      if (isHistorySearch || statusFilter === 'ALL' || statusFilter === 'ACTIVE_ONLY') {
+        matchesStatus = true;
+      } else if (statusFilter === 'DELETED') {
+        matchesStatus = !!jc.isDeleted;
+      } else {
+        matchesStatus = jc.status === statusFilter && !jc.isDeleted;
+      }
+
       const matchesSearch = !cleanSearchTerm || 
         jc.jobCardNo.toLowerCase().includes(cleanSearchTerm) ||
         jc.itemName.toLowerCase().includes(cleanSearchTerm) ||
+        jc.itemCode.toLowerCase().includes(cleanSearchTerm) ||
         (jc.woNumber && jc.woNumber.toLowerCase().includes(cleanSearchTerm)) ||
         (jc.assignedOperator && jc.assignedOperator.toLowerCase().includes(cleanSearchTerm));
 
@@ -375,34 +428,6 @@ export const JobCardModule: React.FC = () => {
   const handlePrintJCList = () => {
     setPrintDocType('JC_LIST');
     setPrintModalOpen(true);
-  };
-
-  const handleRefreshLiveSheet = () => {
-    const data = filteredJobCards.map(jc => ({
-      jobCardNo: jc.jobCardNo,
-      woNumber: jc.woNumber || '-',
-      itemCode: jc.itemCode,
-      itemName: jc.itemName,
-      targetQuantity: jc.targetQuantity,
-      completedQuantity: jc.completedQuantity,
-      assignedOperator: jc.assignedOperator || 'Technician',
-      stationName: jc.stationName || 'Assembly Bay',
-      status: jc.status
-    }));
-
-    const headers: { key: keyof typeof data[0]; label: string }[] = [
-      { key: 'jobCardNo', label: 'Job Card No' },
-      { key: 'woNumber', label: 'Work Order Ref' },
-      { key: 'itemCode', label: 'Item Code' },
-      { key: 'itemName', label: 'Component / Machine' },
-      { key: 'targetQuantity', label: 'Target Qty' },
-      { key: 'completedQuantity', label: 'Completed Qty' },
-      { key: 'assignedOperator', label: 'Operator / Lead' },
-      { key: 'stationName', label: 'Station Bay' },
-      { key: 'status', label: 'Status' }
-    ];
-
-    openLiveModuleSheet('JobCards', 'GEC_ERP_Job_Cards_Live', data, headers);
   };
 
   const getWizardTableRows = () => {
@@ -532,9 +557,6 @@ export const JobCardModule: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          <button type="button" className="btn btn-outline" onClick={handleRefreshLiveSheet} title="Sync and maintain live CSV sheet">
-            <RefreshCw size={14} /> Live Sheet
-          </button>
           <button type="button" className="btn btn-outline" onClick={handlePrintJCList} title="Print filtered job cards report">
             <Printer size={14} /> Print Report
           </button>
@@ -743,15 +765,22 @@ export const JobCardModule: React.FC = () => {
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: '0.35rem' }}>
-          {['ALL', 'OPEN', 'IN_PROGRESS', 'COMPLETED'].map(status => (
+        <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+          {[
+            { key: 'ACTIVE_ONLY', label: 'Active Only' },
+            { key: 'ALL', label: 'All Lifecycle' },
+            { key: 'OPEN', label: 'Open' },
+            { key: 'IN_PROGRESS', label: 'In Progress' },
+            { key: 'COMPLETED', label: 'Completed (History)' },
+            { key: 'DELETED', label: 'Deleted' }
+          ].map(opt => (
             <button 
-              key={status}
-              className={`btn ${statusFilter === status ? 'btn-primary' : 'btn-outline'}`}
+              key={opt.key}
+              className={`btn ${statusFilter === opt.key ? 'btn-primary' : 'btn-outline'}`}
               style={{ padding: '0.25rem 0.6rem', fontSize: '0.78rem' }}
-              onClick={() => setStatusFilter(status)}
+              onClick={() => setStatusFilter(opt.key)}
             >
-              {status.replace('_', ' ')}
+              {opt.label}
             </button>
           ))}
         </div>
@@ -933,7 +962,7 @@ export const JobCardModule: React.FC = () => {
                       </span>
                     </td>
                     <td onClick={(e) => e.stopPropagation()} style={{ textAlign: 'center' }}>
-                      <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'center', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap' }}>
                         <button 
                           className="btn btn-outline" 
                           style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem' }} 
@@ -942,15 +971,42 @@ export const JobCardModule: React.FC = () => {
                         >
                           <Printer size={13} />
                         </button>
-                        {!isComplete && (
+                        
+                        {jc.isDeleted ? (
+                          <span className="badge" style={{ backgroundColor: '#dc2626', color: '#fff', fontSize: '0.72rem', fontWeight: 700 }}>
+                            🗑️ Deleted (Archived)
+                          </span>
+                        ) : isComplete ? (
                           <>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--success)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                              <CheckCircle size={14} /> Closed & In Stock
+                            </span>
+                            <button
+                              className="btn btn-outline"
+                              style={{ padding: '0.2rem 0.45rem', fontSize: '0.75rem', color: '#d97706', borderColor: '#d97706' }}
+                              title="Reopen Job Card and reverse stock movements"
+                              onClick={() => handleReopenJobCard(jc)}
+                            >
+                              <RotateCcw size={13} /> Reopen
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button 
+                              className="btn btn-outline" 
+                              style={{ padding: '0.2rem 0.45rem', fontSize: '0.75rem', color: 'var(--accent-primary)' }}
+                              title="Edit Job Card"
+                              onClick={() => handleOpenEditModal(jc)}
+                            >
+                              <Edit2 size={13} />
+                            </button>
                             <button 
                               className="btn btn-outline" 
                               style={{ padding: '0.2rem 0.45rem', fontSize: '0.75rem' }}
                               title="Update progress"
                               onClick={() => { setSelectedJC(jc); setProgressQtyInput(jc.completedQuantity + 1); }}
                             >
-                              Update Qty
+                              Progress
                             </button>
                             <button 
                               className="btn btn-primary" 
@@ -960,12 +1016,16 @@ export const JobCardModule: React.FC = () => {
                             >
                               <CheckCircle size={13} /> Close
                             </button>
+                            <button 
+                              className="btn btn-outline" 
+                              style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem', color: 'var(--danger)', borderColor: (jc.completedQuantity || 0) > 0 ? 'var(--border-color)' : 'var(--danger)', opacity: (jc.completedQuantity || 0) > 0 ? 0.4 : 1 }}
+                              title={(jc.completedQuantity || 0) > 0 ? "Cannot delete: quantity already processed" : "Delete Job Card (Archived to History)"}
+                              onClick={() => handleDeleteJobCard(jc)}
+                              disabled={(jc.completedQuantity || 0) > 0}
+                            >
+                              <Trash2 size={13} />
+                            </button>
                           </>
-                        )}
-                        {isComplete && (
-                          <span style={{ fontSize: '0.75rem', color: 'var(--success)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
-                            <CheckCircle size={14} /> In Stock
-                          </span>
                         )}
                       </div>
                     </td>
@@ -1278,6 +1338,88 @@ export const JobCardModule: React.FC = () => {
           showMOQAndInPO={false}
         />
       </PrintManagerModal>
+
+      {/* Modal: Edit Job Card */}
+      {isEditModalOpen && editingJC && (
+        <Modal isOpen={isEditModalOpen} onClose={() => { setIsEditModalOpen(false); setEditingJC(null); }} title={`✏️ Edit Job Card: ${editingJC.jobCardNo}`}>
+          <form onSubmit={handleSaveEditJobCard} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ padding: '0.6rem 0.8rem', backgroundColor: 'var(--bg-secondary)', borderRadius: '6px', fontSize: '0.85rem' }}>
+              <div><strong>Item:</strong> {editingJC.itemName} (<span style={{ fontFamily: 'monospace' }}>{editingJC.itemCode}</span>)</div>
+              {editingJC.woNumber && <div><strong>Work Order:</strong> {editingJC.woNumber}</div>}
+              <div><strong>Current Progress:</strong> {editingJC.completedQuantity} / {editingJC.targetQuantity} units</div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div>
+                <label style={{ fontSize: '0.82rem', fontWeight: 700 }}>Target Quantity *</label>
+                <input 
+                  type="number" 
+                  min={Math.max(1, editingJC.completedQuantity || 1)} 
+                  required 
+                  className="input-field"
+                  value={editingJC.targetQuantity}
+                  onChange={(e) => setEditingJC({ ...editingJC, targetQuantity: Number(e.target.value) })}
+                />
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Cannot be less than completed qty ({editingJC.completedQuantity || 0}).</span>
+              </div>
+              <div>
+                <label style={{ fontSize: '0.82rem', fontWeight: 700 }}>Assigned Operator / Shopfloor Lead</label>
+                <input 
+                  type="text" 
+                  className="input-field" 
+                  value={editingJC.assignedOperator || ''}
+                  onChange={(e) => setEditingJC({ ...editingJC, assignedOperator: e.target.value })}
+                  placeholder="e.g. Ramesh Patel / Assembly Lead"
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div>
+                <label style={{ fontSize: '0.82rem', fontWeight: 700 }}>Station / Bay Name</label>
+                <input 
+                  type="text" 
+                  className="input-field" 
+                  value={editingJC.stationName || ''}
+                  onChange={(e) => setEditingJC({ ...editingJC, stationName: e.target.value })}
+                  placeholder="e.g. Sub-Assembly Line 2"
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.82rem', fontWeight: 700 }}>Status</label>
+                <select 
+                  className="input-field"
+                  value={editingJC.status}
+                  onChange={(e) => setEditingJC({ ...editingJC, status: e.target.value as any })}
+                >
+                  <option value="OPEN">OPEN</option>
+                  <option value="IN_PROGRESS">IN_PROGRESS</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label style={{ fontSize: '0.82rem', fontWeight: 700 }}>Remarks / Instructions</label>
+              <textarea 
+                className="input-field" 
+                rows={3}
+                value={editingJC.remarks || ''}
+                onChange={(e) => setEditingJC({ ...editingJC, remarks: e.target.value })}
+                placeholder="Enter shopfloor instructions or assembly notes..."
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => { setIsEditModalOpen(false); setEditingJC(null); }}>
+                Cancel
+              </button>
+              <button type="submit" className="btn btn-primary" style={{ fontWeight: 700 }}>
+                💾 Save Job Card Changes
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </div>
   );
 };

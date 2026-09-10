@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Modal } from './Modal';
 import { FileSpreadsheet, CheckSquare, Square } from 'lucide-react';
-import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
 
 export interface FieldOption<T> {
   key: keyof T;
@@ -61,7 +60,7 @@ export function ExportFieldSelectorModal<T extends Record<string, any>>({
       alert('Please select at least one field to export in the sheet!');
       return;
     }
-    openLiveModuleSheet(subfolder, fileName, data, selectedHeaders);
+    // live sheet export disabled
     onClose();
   };
 

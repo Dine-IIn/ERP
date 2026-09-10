@@ -3,7 +3,6 @@ import { useERP } from '../../context/ERPContext';
 import { Modal } from '../common/Modal';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { ItemMasterListPrintView } from '../printTemplates/ItemMasterPrintTemplates';
-import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
 import { Warehouse, AlertTriangle, Search, ArrowUp, ArrowDown, ArrowUpDown, Printer, RefreshCw, Edit2, CheckCircle } from 'lucide-react';
 import { Item } from '../../types/erp';
 
@@ -87,34 +86,6 @@ export const InHouseInventoryModule: React.FC = () => {
   const totalStockValue = items.reduce((sum, item) => sum + (item.inHouseStock * (item.unitPrice || 0)), 0);
   const lowStockCount = items.filter(i => i.inHouseStock <= (i.reorderLevel || 0)).length;
 
-  const handleRefreshLiveSheet = () => {
-    const data = filteredItems.map(item => ({
-      itemCode: item.itemCode,
-      name: item.name,
-      category: item.category,
-      location: item.location || '',
-      inHouseStock: `${item.inHouseStock} ${item.unit}`,
-      reorderLevel: `${item.reorderLevel || 0} ${item.unit}`,
-      unitPrice: `₹${(item.unitPrice || 0).toLocaleString()}`,
-      totalValuation: `₹${(item.inHouseStock * (item.unitPrice || 0)).toLocaleString()}`,
-      status: item.inHouseStock <= (item.reorderLevel || 0) ? 'LOW_STOCK' : 'NORMAL'
-    }));
-
-    const headers: { key: keyof typeof data[0]; label: string }[] = [
-      { key: 'itemCode', label: 'Item Code' },
-      { key: 'name', label: 'Component & Spec' },
-      { key: 'category', label: 'Category' },
-      { key: 'location', label: 'Location Rack' },
-      { key: 'inHouseStock', label: 'In-House Stock' },
-      { key: 'reorderLevel', label: 'Safety Level' },
-      { key: 'unitPrice', label: 'Unit Valuation' },
-      { key: 'totalValuation', label: 'Total Valuation' },
-      { key: 'status', label: 'Stock Status' }
-    ];
-
-    openLiveModuleSheet('InHouseStock', 'GEC_ERP_Store_Inventory_Live', data, headers);
-  };
-
   return (
     <div className="module-layout-container">
       <div className="sticky-module-header">
@@ -125,9 +96,6 @@ export const InHouseInventoryModule: React.FC = () => {
           </span>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <button type="button" className="btn btn-outline" onClick={handleRefreshLiveSheet} title="Sync and maintain live CSV sheet">
-            <RefreshCw size={14} /> Live Sheet
-          </button>
           <button type="button" className="btn btn-outline" onClick={() => setPrintModalOpen(true)} title="Print filtered inventory valuation report">
             <Printer size={14} /> Print Report
           </button>

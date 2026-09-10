@@ -22,6 +22,7 @@ import { JobCardModule } from './components/modules/JobCardModule';
 import { FloorPlanningModule } from './components/modules/FloorPlanningModule';
 import { DispatchModule } from './components/modules/DispatchModule';
 import { PlanningModule } from './components/modules/PlanningModule';
+import { SuperAdminAnalyticsModule } from './components/modules/SuperAdminAnalyticsModule';
 
 const MainContent: React.FC = () => {
   const { currentUser, activeModule, setActiveModule } = useERP();
@@ -49,15 +50,16 @@ const MainContent: React.FC = () => {
         }
 
         // Priority 3: If no active form/modal is open, navigate back to Dashboard
-        if (activeModule !== 'dashboard') {
-          setActiveModule('dashboard');
+        const homeModule = currentUser?.isSuperAdmin ? 'superadmin-analytics' : 'dashboard';
+        if (activeModule !== homeModule) {
+          setActiveModule(homeModule);
         }
       }
     };
 
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [activeModule, setActiveModule]);
+  }, [activeModule, setActiveModule, currentUser]);
 
   // Disable scroll wheel increment/decrement on all number inputs globally
   useEffect(() => {
@@ -77,6 +79,7 @@ const MainContent: React.FC = () => {
 
   const renderActiveModule = () => {
     switch (activeModule) {
+      case 'superadmin-analytics': return <SuperAdminAnalyticsModule />;
       case 'dashboard': return <DashboardModule />;
       case 'planning': return <PlanningModule />;
       case 'shortage': return <ShortageModule />;
@@ -96,7 +99,7 @@ const MainContent: React.FC = () => {
       case 'dispatch': return <DispatchModule />;
       case 'assembly': return <AssemblyModule />;
       case 'user-management': return <UserManagementModule />;
-      default: return <DashboardModule />;
+      default: return currentUser?.isSuperAdmin ? <SuperAdminAnalyticsModule /> : <DashboardModule />;
     }
   };
 

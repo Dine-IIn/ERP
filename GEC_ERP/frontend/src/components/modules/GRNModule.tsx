@@ -3,10 +3,8 @@ import { useERP } from '../../context/ERPContext';
 import { AutocompleteSelect, AutocompleteOption } from '../common/AutocompleteSelect';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { SingleGRNPrintView, GRNListPrintView } from '../printTemplates/GRNPrintTemplates';
-import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
 import { FileCheck, Plus, CheckCircle, Search, Printer, FileSpreadsheet, Truck, ShoppingCart, ArrowLeft, X, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw, Edit2 } from 'lucide-react';
 import { GRNLineItem, GoodsReceivedNotice } from '../../types/erp';
-import { ExportFieldSelectorModal, FieldOption } from '../common/ExportFieldSelectorModal';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
 
 type SortField = 'grnNumber' | 'poNumber' | 'vendorName' | 'invoiceNo' | 'receivedDate';
@@ -15,8 +13,7 @@ export const GRNModule: React.FC = () => {
   const { grns, purchaseOrders, jobworks, items, vendors, setActiveModule, currentUser, addGRN, updateGRN, approveGRN, searchTerm, setSearchTerm } = useERP();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingGRN, setEditingGRN] = useState<GoodsReceivedNotice | null>(null);
-  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
-  const [printModalOpen, setPrintModalOpen] = useState(false);
+    const [printModalOpen, setPrintModalOpen] = useState(false);
   const [printDocType, setPrintDocType] = useState<'SINGLE_GRN' | 'GRN_LIST'>('GRN_LIST');
   const [selectedPrintGRN, setSelectedPrintGRN] = useState<GoodsReceivedNotice | null>(null);
 
@@ -54,7 +51,8 @@ export const GRNModule: React.FC = () => {
         g.grnNumber.toLowerCase().includes(cleanSearchTerm) ||
         g.poNumber.toLowerCase().includes(cleanSearchTerm) ||
         g.vendorName.toLowerCase().includes(cleanSearchTerm) ||
-        (g.invoiceNo && g.invoiceNo.toLowerCase().includes(cleanSearchTerm))
+        (g.invoiceNo && g.invoiceNo.toLowerCase().includes(cleanSearchTerm)) ||
+        (g.items && g.items.some(i => (i.itemCode || '').toLowerCase().includes(cleanSearchTerm) || (i.itemName || '').toLowerCase().includes(cleanSearchTerm)))
       );
       if (!matchesSearch) return false;
 
@@ -84,32 +82,6 @@ export const GRNModule: React.FC = () => {
   const handlePrintGRNList = () => {
     setPrintDocType('GRN_LIST');
     setPrintModalOpen(true);
-  };
-
-  const handleRefreshLiveSheet = () => {
-    const data = filteredGRNs.map(g => ({
-      grnNumber: g.grnNumber,
-      poNumber: g.poNumber,
-      vendorName: g.vendorName,
-      invoiceNo: g.invoiceNo || g.challanNo || '',
-      receivedDate: g.receivedDate,
-      receivedBy: g.receivedBy || 'Store',
-      linesCount: g.items?.length || 0,
-      status: g.status
-    }));
-
-    const headers: { key: keyof typeof data[0]; label: string }[] = [
-      { key: 'grnNumber', label: 'GRN Number' },
-      { key: 'poNumber', label: 'PO / Challan Ref' },
-      { key: 'vendorName', label: 'Vendor Name' },
-      { key: 'invoiceNo', label: 'Invoice / Challan No' },
-      { key: 'receivedDate', label: 'Received Date' },
-      { key: 'receivedBy', label: 'Received By' },
-      { key: 'linesCount', label: 'Item Lines' },
-      { key: 'status', label: 'GRN Status' }
-    ];
-
-    openLiveModuleSheet('GRN', 'GEC_ERP_GRN_Ledger_Live', data, headers);
   };
 
   // Source Type: 'PO' (Vendor PO) or 'JOBWORK' (Jobwork Challan Return)
@@ -350,15 +322,7 @@ export const GRNModule: React.FC = () => {
 
   const { selectedIndex, setSelectedIndex } = useTableKeyboardNav(filteredGRNs, handlePrintGRNDoc);
 
-  const availableExportFields: FieldOption<GoodsReceivedNotice>[] = [
-    { key: 'grnNumber', label: 'GRN Number' },
-    { key: 'poNumber', label: 'PO Ref Number' },
-    { key: 'vendorName', label: 'Vendor Name' },
-    { key: 'invoiceNo', label: 'Invoice No' },
-    { key: 'receivedDate', label: 'Received Date' },
-    { key: 'status', label: 'QC Status' }
-  ];
-
+  
   return (
     <div className="module-layout-container" style={{ flex: 1, minHeight: 0, height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingRight: '0.25rem' }}>
       {/* Top Header */}
@@ -375,16 +339,10 @@ export const GRNModule: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <button type="button" className="btn btn-outline" onClick={handleRefreshLiveSheet} title="Sync and maintain live CSV sheet">
-            <RefreshCw size={14} /> Live Sheet
-          </button>
           <button type="button" className="btn btn-outline" onClick={handlePrintGRNList} title="Print filtered GRN inward report">
             <Printer size={14} /> Print Report
           </button>
-          <button className="btn btn-outline" onClick={() => setIsExportModalOpen(true)}>
-            <FileSpreadsheet size={14} /> Export Custom
-          </button>
-          {!isModalOpen && (
+                    {!isModalOpen && (
             <button className="btn btn-primary" onClick={handleOpenModal}>
               <Plus size={16} /> Create Goods Inward GRN
             </button>
@@ -876,6 +834,8 @@ export const GRNModule: React.FC = () => {
                       Vendor Name {sortField === 'vendorName' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
                     </div>
                   </th>
+                  <th>Item Code(s)</th>
+                  <th>Item Description</th>
                   <th>Invoice Ref</th>
                   <th onClick={() => handleSortToggle('receivedDate')} style={{ cursor: 'pointer' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
@@ -911,7 +871,33 @@ export const GRNModule: React.FC = () => {
                     </td>
                     <td style={{ fontWeight: 600, color: 'var(--accent-primary)', fontFamily: 'monospace' }}>{grn.poNumber}</td>
                     <td style={{ fontWeight: 600 }}>{grn.vendorName}</td>
-                    <td style={{ fontSize: '0.85rem' }}>{grn.invoiceNo}</td>
+                    <td>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                        {grn.items && grn.items.length > 0 ? (
+                          grn.items.map((it, itIdx) => (
+                            <span key={itIdx} style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)', fontSize: '0.78rem' }}>
+                              {it.itemCode || 'ITEM'}
+                            </span>
+                          ))
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>—</span>
+                        )}
+                      </div>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', maxWidth: '250px' }}>
+                        {grn.items && grn.items.length > 0 ? (
+                          grn.items.map((it, itIdx) => (
+                            <span key={itIdx} style={{ color: 'var(--text-secondary)', fontSize: '0.78rem' }}>
+                              {it.itemName || it.itemCode} <strong style={{ color: 'var(--text-primary)' }}>({it.receivedQty ?? it.acceptedQty ?? 0} {it.unit || 'PCS'})</strong>
+                            </span>
+                          ))
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>—</span>
+                        )}
+                      </div>
+                    </td>
+                    <td style={{ fontSize: '0.85rem' }}>{grn.invoiceNo || '—'}</td>
                     <td>{grn.receivedDate}</td>
                     <td style={{ fontSize: '0.85rem' }}>{grn.receivedBy || 'Store'}</td>
                     <td>
@@ -980,15 +966,6 @@ export const GRNModule: React.FC = () => {
       </PrintManagerModal>
 
       {/* Export Field Selector Modal */}
-      <ExportFieldSelectorModal<GoodsReceivedNotice>
-        isOpen={isExportModalOpen}
-        onClose={() => setIsExportModalOpen(false)}
-        title="Custom Export Goods Received Notices Live Sheet"
-        subfolder="GRN"
-        fileName="GEC_GRN_Inward_Live"
-        data={filteredGRNs}
-        availableFields={availableExportFields}
-      />
-    </div>
+          </div>
   );
 };

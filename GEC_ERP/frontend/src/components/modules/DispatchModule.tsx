@@ -3,7 +3,6 @@ import { useERP } from '../../context/ERPContext';
 import { Modal } from '../common/Modal';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { SingleDispatchPrintView, DispatchListPrintView } from '../printTemplates/JobCardPrintTemplates';
-import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
 import { 
   Truck, PackageCheck, Send, RotateCcw, AlertTriangle, 
   CheckCircle, Search, Printer, User, FileText, ArrowRight, ShieldCheck, RefreshCw 
@@ -139,36 +138,6 @@ export const DispatchModule: React.FC = () => {
     setPrintModalOpen(true);
   };
 
-  const handleRefreshLiveSheet = () => {
-    const data = filteredDispatchHistory.map(d => ({
-      dispatchNo: d.dispatchNo,
-      serialNo: d.serialNo,
-      machineModel: d.machineModel,
-      customerName: d.customerName,
-      soNumber: d.soNumber,
-      transporterName: d.transporterName || '-',
-      vehicleNo: d.vehicleNo || '-',
-      docketNo: d.docketNo || '-',
-      dispatchDate: d.dispatchDate,
-      notes: d.notes || ''
-    }));
-
-    const headers: { key: keyof typeof data[0]; label: string }[] = [
-      { key: 'dispatchNo', label: 'Dispatch No' },
-      { key: 'serialNo', label: 'Machine Serial No' },
-      { key: 'machineModel', label: 'Machine Model' },
-      { key: 'customerName', label: 'Customer Name' },
-      { key: 'soNumber', label: 'Sales Order Ref' },
-      { key: 'transporterName', label: 'Transporter' },
-      { key: 'vehicleNo', label: 'Vehicle No' },
-      { key: 'docketNo', label: 'LR / Docket No' },
-      { key: 'dispatchDate', label: 'Dispatch Date' },
-      { key: 'notes', label: 'Dispatch Notes' }
-    ];
-
-    openLiveModuleSheet('Dispatch', 'GEC_ERP_Dispatch_Register_Live', data, headers);
-  };
-
   return (
     <div className="module-layout-container">
       
@@ -185,9 +154,6 @@ export const DispatchModule: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <button type="button" className="btn btn-outline" onClick={handleRefreshLiveSheet} title="Sync and maintain live CSV sheet">
-            <RefreshCw size={14} /> Live Sheet
-          </button>
           <button type="button" className="btn btn-outline" onClick={handlePrintDispatchList} title="Print filtered dispatch register report">
             <Printer size={14} /> Print Report
           </button>

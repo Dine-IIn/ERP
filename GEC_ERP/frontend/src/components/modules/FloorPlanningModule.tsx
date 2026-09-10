@@ -3,7 +3,6 @@ import { useERP } from '../../context/ERPContext';
 import { Modal } from '../common/Modal';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { AssemblyListPrintView } from '../printTemplates/AssemblyPrintTemplates';
-import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
 import { 
   Layers, Clock, AlertTriangle, CheckCircle, ArrowRight, 
   MoveRight, Wrench, Package, Sparkles, User, ShieldCheck, Factory, Plus, Edit2, Trash2, Printer, RefreshCw 
@@ -186,38 +185,6 @@ export const FloorPlanningModule: React.FC = () => {
     alert(`🎉 Machine ${serialNoInput} successfully sent to Finished Goods Inventory!`);
   };
 
-  const handleRefreshLiveSheet = () => {
-    const data = activeWOs.map(wo => {
-      const pInfo = getWOPriorityInfo(wo);
-      const progressObj = calculateWOProgress(wo);
-      return {
-        woNumber: wo.woNumber,
-        soNumber: wo.soNumber || '-',
-        machineModel: wo.machineModel,
-        customerName: wo.customerName || 'General Stock',
-        targetCompletionDate: wo.targetCompletionDate,
-        leadDaysRemaining: pInfo.daysRemaining,
-        urgencyLevel: pInfo.urgencyLevel,
-        progressPercent: `${progressObj.percent}%`,
-        stageBreakdown: progressObj.breakdown
-      };
-    });
-
-    const headers: { key: keyof typeof data[0]; label: string }[] = [
-      { key: 'woNumber', label: 'Work Order No' },
-      { key: 'soNumber', label: 'Sales Order Ref' },
-      { key: 'machineModel', label: 'Machine Model' },
-      { key: 'customerName', label: 'Customer' },
-      { key: 'targetCompletionDate', label: 'Delivery Due Date' },
-      { key: 'leadDaysRemaining', label: 'Days Remaining' },
-      { key: 'urgencyLevel', label: 'Urgency Priority' },
-      { key: 'progressPercent', label: 'Progress (%)' },
-      { key: 'stageBreakdown', label: 'Stage Breakdown' }
-    ];
-
-    openLiveModuleSheet('FloorPlanning', 'GEC_ERP_Floor_Planning_Live', data, headers);
-  };
-
   return (
     <div className="module-layout-container">
       
@@ -234,9 +201,6 @@ export const FloorPlanningModule: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <button type="button" className="btn btn-outline" onClick={handleRefreshLiveSheet} title="Sync and maintain live CSV sheet">
-            <RefreshCw size={14} /> Live Sheet
-          </button>
           <button type="button" className="btn btn-outline" onClick={() => setPrintModalOpen(true)} title="Print floor planning schedule report">
             <Printer size={14} /> Print Report
           </button>

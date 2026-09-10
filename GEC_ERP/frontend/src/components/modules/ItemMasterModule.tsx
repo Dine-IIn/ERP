@@ -2,14 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { Modal } from '../common/Modal';
 import { BulkUploadModal } from '../common/BulkUploadModal';
-import { ExportFieldSelectorModal, FieldOption } from '../common/ExportFieldSelectorModal';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { ItemMasterListPrintView } from '../printTemplates/ItemMasterPrintTemplates';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
 import { Plus, Edit2, Trash2, Upload, Search, FileSpreadsheet, Settings, Filter, Edit3, ArrowUp, ArrowDown, ArrowUpDown, ArrowLeft, X, Printer, RefreshCw, Layers, RotateCcw, ShieldAlert } from 'lucide-react';
 import { Item, ItemCategory, QCTrigger, MaterialProcessType, ItemMappedVendor, FIXED_ITEM_CLASSES } from '../../types/erp';
 import { parseItemsSheet } from '../../utils/csvParser';
-import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
 
 type ItemSortKey = 'itemCode' | 'partCode' | 'oldItemCode' | 'name' | 'category' | 'location' | 'processType' | 'leadTimeDays' | 'unit' | 'inHouseStock' | 'externalStock' | 'unitPrice';
 
@@ -22,8 +20,7 @@ export const ItemMasterModule: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [isCatModalOpen, setIsCatModalOpen] = useState(false);
-  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
-  const [printModalOpen, setPrintModalOpen] = useState(false);
+    const [printModalOpen, setPrintModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
 
   const [editingCategoryName, setEditingCategoryName] = useState<string | null>(null);
@@ -291,25 +288,7 @@ export const ItemMasterModule: React.FC = () => {
     }
   };
 
-  const availableExportFields: FieldOption<Item>[] = [
-    { key: 'itemCode', label: 'Item Code', defaultSelected: true },
-    { key: 'name', label: 'Item Description', defaultSelected: true },
-    { key: 'partNo', label: 'Part No.', defaultSelected: true },
-    { key: 'category', label: 'Category', defaultSelected: true },
-    { key: 'processType', label: 'Material Process Type', defaultSelected: true },
-    { key: 'unit', label: 'Base UOM', defaultSelected: true },
-    { key: 'purchaseUOM', label: 'Purchase UOM', defaultSelected: true },
-    { key: 'conversionFactor', label: 'Conversion Factor', defaultSelected: false },
-    { key: 'inHouseStock', label: 'In-House Stock', defaultSelected: true },
-    { key: 'minStockQty', label: 'Min Stock Qty', defaultSelected: false },
-    { key: 'minOrderQty', label: 'Min Order Qty', defaultSelected: false },
-    { key: 'unitPrice', label: 'Unit Price (₹)', defaultSelected: true },
-    { key: 'weightKg', label: 'Weight (KG)', defaultSelected: false },
-    { key: 'testReportRequired', label: 'Test Report Required', defaultSelected: false },
-    { key: 'location', label: 'Store Location', defaultSelected: true },
-    { key: 'note', label: 'Note', defaultSelected: true }
-  ];
-
+  
   const handleAddCategorySubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (newCatInput.trim()) {
@@ -323,73 +302,26 @@ export const ItemMasterModule: React.FC = () => {
       updateItemCategory(oldCat, editedCategoryVal.trim());
     }
     setEditingCategoryName(null);
-  };  return (
+  };
+
+  return (
     <div className="module-layout-container">
       {/* Top Header Actions Bar */}
-      <div className="sticky-module-header">
+      <div className="sticky-module-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           {isModalOpen && (
             <button className="btn btn-outline" style={{ padding: '0.35rem 0.65rem', gap: '0.35rem', fontWeight: 600 }} onClick={() => setIsModalOpen(false)}>
-              <ArrowLeft size={16} /> Back to Items List <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>(ESC)</span>
+              <ArrowLeft size={16} /> Back to Item Master <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>(ESC)</span>
             </button>
           )}
           <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-secondary)' }}>
-            {isModalOpen ? (editingItem ? `Editing Item Master (${editingItem.itemCode})` : 'Register New Item Master') : `All Items (${filteredItems.length})`}
+            {isModalOpen ? (editingItem ? 'Edit Item Details' : 'Register New Item') : `Item Master Catalog (${filteredItems.length})`}
           </span>
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <button 
-            className="btn btn-outline" 
-            style={{ color: 'var(--danger)', borderColor: 'var(--danger)', gap: '0.35rem' }} 
-            onClick={() => {
-              if (window.confirm('⚠️ Super Admin Confirmation: Are you sure you want to permanently remove all old item codes across the system? This action cannot be undone.')) {
-                removeAllOldItemCodes();
-                alert('All old item codes have been permanently removed.');
-              }
-            }}
-            title="Super Admin tool to clear old legacy item codes"
-          >
-            <Trash2 size={16} /> Remove All Old Codes
-          </button>
-          <button type="button" className="btn btn-outline" onClick={() => {
-            const data = filteredItems.map(item => ({
-              itemCode: item.itemCode,
-              partCode: item.partCode || '',
-              oldItemCode: item.oldItemCode || '',
-              name: item.name,
-              category: item.category || '',
-              processType: item.processType || '',
-              inHouseStock: item.inHouseStock,
-              externalStock: item.externalStock || 0,
-              unit: item.unit,
-              unitPrice: item.unitPrice || 0,
-              location: item.location || ''
-            }));
-
-            const headers: { key: keyof typeof data[0]; label: string }[] = [
-              { key: 'itemCode', label: 'Item Code' },
-              { key: 'partCode', label: 'Part Code' },
-              { key: 'oldItemCode', label: 'Old Code' },
-              { key: 'name', label: 'Description' },
-              { key: 'category', label: 'Category' },
-              { key: 'processType', label: 'Process Type' },
-              { key: 'inHouseStock', label: 'In-House Stock' },
-              { key: 'externalStock', label: 'External Stock' },
-              { key: 'unit', label: 'UOM' },
-              { key: 'unitPrice', label: 'Unit Price (₹)' },
-              { key: 'location', label: 'Store Location' }
-            ];
-
-            openLiveModuleSheet('ItemMaster', 'GEC_ERP_Item_Master_Live', data, headers);
-          }} title="Sync and maintain live CSV sheet">
-            <RefreshCw size={14} /> Live Sheet
-          </button>
           <button type="button" className="btn btn-outline" onClick={() => setPrintModalOpen(true)} title="Print filtered items catalog report">
             <Printer size={14} /> Print Report
-          </button>
-          <button className="btn btn-outline" onClick={() => setIsExportModalOpen(true)}>
-            <FileSpreadsheet size={16} /> Open Sheet ({filteredItems.length} filtered)
           </button>
           <button className="btn btn-secondary" onClick={() => setIsBulkModalOpen(true)}>
             <Upload size={16} /> Bulk Create / Update
@@ -975,16 +907,7 @@ export const ItemMasterModule: React.FC = () => {
       </Modal>
 
       {/* Export Field Selector Modal */}
-      <ExportFieldSelectorModal<Item>
-        isOpen={isExportModalOpen}
-        onClose={() => setIsExportModalOpen(false)}
-        title="Custom Export Live Sheet Options"
-        subfolder="Inventory"
-        fileName="GEC_Filtered_Items_Live"
-        data={filteredItems}
-        availableFields={availableExportFields}
-      />
-
+      
       {/* Feature-Wise Modular Print Manager Modal */}
       <PrintManagerModal
         isOpen={printModalOpen}

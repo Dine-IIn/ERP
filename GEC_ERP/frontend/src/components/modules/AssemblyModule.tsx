@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { AssemblyListPrintView } from '../printTemplates/AssemblyPrintTemplates';
-import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
-import { Layers, Plus, CheckCircle, Search, Settings, Trash2, ArrowLeft, X, Printer, RefreshCw } from 'lucide-react';
+import { Layers, Plus, CheckCircle, Search, Settings, Trash2, ArrowLeft, X, Printer } from 'lucide-react';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
 
 export const AssemblyModule: React.FC = () => {
@@ -56,28 +55,6 @@ export const AssemblyModule: React.FC = () => {
 
     return true;
   });
-
-  const handleRefreshLiveSheet = () => {
-    const data = filteredAssemblies.map(a => ({
-      assemblyCode: a.assemblyCode || 'ASM-01',
-      workOrderNo: a.workOrderNo || a.woNumber || 'WO-GEC-001',
-      machineModel: a.machineModel || '',
-      subAssemblyType: a.subAssemblyType || a.currentStage || '',
-      progressPercentage: `${a.progressPercentage || 50}%`,
-      status: a.status || (a.progressPercentage === 100 ? 'TESTED_READY' : 'IN_PROGRESS')
-    }));
-
-    const headers: { key: keyof typeof data[0]; label: string }[] = [
-      { key: 'assemblyCode', label: 'Assembly Code' },
-      { key: 'workOrderNo', label: 'Work Order Ref' },
-      { key: 'machineModel', label: 'Machine Model' },
-      { key: 'subAssemblyType', label: 'Station / Sub-Assembly' },
-      { key: 'progressPercentage', label: 'Progress (%)' },
-      { key: 'status', label: 'Assembly Status' }
-    ];
-
-    openLiveModuleSheet('Assembly', 'GEC_ERP_Assembly_Floor_Live', data, headers);
-  };
 
   const { selectedIndex, setSelectedIndex } = useTableKeyboardNav(filteredAssemblies, (a) => {
     const nextProg = Math.min(100, (a.progressPercentage || 50) + 25);
@@ -142,9 +119,6 @@ export const AssemblyModule: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <button type="button" className="btn btn-outline" onClick={handleRefreshLiveSheet} title="Sync and maintain live CSV sheet">
-            <RefreshCw size={14} /> Live Sheet
-          </button>
           <button type="button" className="btn btn-outline" onClick={() => setPrintModalOpen(true)} title="Print assembly floor tracking report">
             <Printer size={14} /> Print Report
           </button>

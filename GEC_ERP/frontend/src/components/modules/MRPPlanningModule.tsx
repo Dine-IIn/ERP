@@ -2,25 +2,12 @@ import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { ShoppingCart, Search, FileSpreadsheet } from 'lucide-react';
 import { MRPShortageItem } from '../../types/erp';
-import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
 
 export const MRPPlanningModule: React.FC = () => {
   const { items, purchaseOrders, workOrders, setActiveModule, addPurchaseOrder, vendors, searchTerm, setSearchTerm } = useERP();
 
   // Explode required components from active Work Orders (Standard BOM + Custom Extra WO tools)
   const activeWOs = workOrders.filter(w => w.status === 'IN_PROGRESS');
-
-  const handleOpenSheet = () => {
-    openLiveModuleSheet('MRP', 'GEC_MRP_Shortage_Planning_Live', mrpResults, [
-      { key: 'itemCode', label: 'Item Code' },
-      { key: 'itemName', label: 'Component Name' },
-      { key: 'requiredQtyForBuild', label: 'Required for Active WOs' },
-      { key: 'currentInHouseStock', label: 'In-House Stock' },
-      { key: 'pendingPOQuantity', label: 'Pending PO Quantity' },
-      { key: 'netShortage', label: 'Net Shortage Quantity' },
-      { key: 'suggestedAction', label: 'Suggested Action' }
-    ]);
-  };
 
   const mrpResults: MRPShortageItem[] = items
     .filter(item => item.category !== 'Final Machine Unit')
@@ -113,9 +100,6 @@ export const MRPPlanningModule: React.FC = () => {
           <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0 }}>MRP & Material Shortage Planning</h2>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <button className="btn btn-outline" onClick={handleOpenSheet}>
-            <FileSpreadsheet size={16} /> Open Sheet
-          </button>
           {criticalShortages.length > 0 && (
             <button className="btn btn-primary" onClick={handleAutoCreateDraftPO}>
               <ShoppingCart size={16} /> 1-Click Auto PO for {criticalShortages.length} Shortage Item(s)

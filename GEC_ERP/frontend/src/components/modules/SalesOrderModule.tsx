@@ -3,10 +3,8 @@ import { useERP } from '../../context/ERPContext';
 import { AutocompleteSelect, AutocompleteOption } from '../common/AutocompleteSelect';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { SingleSOPrintView, SOListPrintView } from '../printTemplates/SOPrintTemplates';
-import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
 import { ShoppingBag, Plus, ArrowRight, CheckCircle2, Search, Printer, FileSpreadsheet, ArrowLeft, X, Edit2, Trash2, RefreshCw } from 'lucide-react';
 import { SalesOrder } from '../../types/erp';
-import { ExportFieldSelectorModal, FieldOption } from '../common/ExportFieldSelectorModal';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
 import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Modal } from '../common/Modal';
@@ -20,8 +18,7 @@ export const SalesOrderModule: React.FC = () => {
   } = useERP();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
-  const [printModalOpen, setPrintModalOpen] = useState(false);
+    const [printModalOpen, setPrintModalOpen] = useState(false);
   const [printDocType, setPrintDocType] = useState<'SINGLE_SO' | 'SO_LIST'>('SO_LIST');
   const [selectedPrintSO, setSelectedPrintSO] = useState<SalesOrder | null>(null);
   
@@ -108,32 +105,6 @@ export const SalesOrderModule: React.FC = () => {
     setPrintModalOpen(true);
   };
 
-  const handleRefreshLiveSheet = () => {
-    const data = filteredSOs.map(so => ({
-      soNumber: so.soNumber,
-      customerName: so.customerName,
-      machineModel: so.machineModel,
-      quantity: so.quantity || 1,
-      orderDate: so.orderDate,
-      deliveryDate: so.deliveryDate,
-      status: so.status,
-      customNotes: so.customNotes || ''
-    }));
-
-    const headers: { key: keyof typeof data[0]; label: string }[] = [
-      { key: 'soNumber', label: 'SO Number' },
-      { key: 'customerName', label: 'Customer Name' },
-      { key: 'machineModel', label: 'Item Description' },
-      { key: 'quantity', label: 'Order Quantity' },
-      { key: 'orderDate', label: 'Order Date' },
-      { key: 'deliveryDate', label: 'Target Delivery' },
-      { key: 'status', label: 'Order Status' },
-      { key: 'customNotes', label: 'Custom Notes' }
-    ];
-
-    openLiveModuleSheet('SalesOrders', 'GEC_ERP_Sales_Orders_Live', data, headers);
-  };
-
   const handleSortToggle = (field: SortField) => {
     if (sortField === field) {
       setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
@@ -187,16 +158,7 @@ export const SalesOrderModule: React.FC = () => {
   );
 
   // Custom Export Field Definitions
-  const availableExportFields: FieldOption<SalesOrder>[] = [
-    { key: 'soNumber', label: 'SO Number' },
-    { key: 'customerName', label: 'Customer Name' },
-    { key: 'machineModel', label: 'Machine Model' },
-    { key: 'quantity', label: 'Order Quantity' },
-    { key: 'orderDate', label: 'Order Date' },
-    { key: 'deliveryDate', label: 'Target Delivery' },
-    { key: 'status', label: 'SO Status' }
-  ];
-
+  
   return (
     <div className="module-layout-container">
       {/* Top Header */}
@@ -213,16 +175,10 @@ export const SalesOrderModule: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <button type="button" className="btn btn-outline" onClick={handleRefreshLiveSheet} title="Sync and maintain live CSV sheet">
-            <RefreshCw size={14} /> Live Sheet
-          </button>
           <button type="button" className="btn btn-outline" onClick={handlePrintSOList} title="Print filtered sales orders report">
             <Printer size={14} /> Print Report
           </button>
-          <button className="btn btn-outline" onClick={() => setIsExportModalOpen(true)}>
-            <FileSpreadsheet size={14} /> Export Custom
-          </button>
-          {!isModalOpen && (
+                    {!isModalOpen && (
             <button className="btn btn-primary" onClick={handleOpenModal}>
               <Plus size={16} /> Create Sales Order
             </button>
@@ -665,16 +621,7 @@ export const SalesOrderModule: React.FC = () => {
       )}
 
       {/* Export Field Selector Modal */}
-      <ExportFieldSelectorModal<SalesOrder>
-        isOpen={isExportModalOpen}
-        onClose={() => setIsExportModalOpen(false)}
-        title="Custom Export Live Sheet Options"
-        subfolder="SalesOrders"
-        fileName="GEC_Filtered_SalesOrders_Live"
-        data={filteredSOs}
-        availableFields={availableExportFields}
-      />
-
+      
       {/* Feature-Wise Modular Print Manager Modal */}
       <PrintManagerModal
         isOpen={printModalOpen}

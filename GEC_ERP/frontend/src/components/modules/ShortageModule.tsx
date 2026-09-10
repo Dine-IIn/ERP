@@ -4,12 +4,11 @@ import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { 
   ItemWiseShortagePrintView, WOShortagePrintView, POShortagePrintView, TabularShortagePrintView 
 } from '../printTemplates/ShortagePrintTemplates';
-import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
 import { 
   AlertTriangle, Filter, Printer, ChevronRight, ChevronDown, 
   Layers, Package, Truck, ClipboardList, ShoppingCart, Search, RefreshCw, CheckCircle, Split, ArrowUpDown, ArrowUp, ArrowDown, X, Plus, Sparkles, CheckSquare, Square 
 } from 'lucide-react';
-import { WorkOrder, BOM, Item, PurchaseOrder, JobworkChallan, JobCard, FIXED_ITEM_CLASSES } from '../../types/erp';
+import { WorkOrder, BOM, Item, PurchaseOrder, JobworkChallan, JobCard, FIXED_ITEM_CLASSES, generateNextPONumber } from '../../types/erp';
 
 export const ShortageModule: React.FC = () => {
   const { 
@@ -485,7 +484,7 @@ export const ShortageModule: React.FC = () => {
     const vendorName = vendors.find(v => v.id === vendorId)?.name || 'Default Vendor';
     const targetQty = Math.max(netShortage, item.minOrderQty || 1);
     addPurchaseOrder({
-      poNumber: `PO-GEC-${Date.now().toString().slice(-4)}`,
+      poNumber: generateNextPONumber(purchaseOrders),
       vendorId,
       vendorName,
       orderDate: new Date().toISOString().split('T')[0],
@@ -578,7 +577,7 @@ export const ShortageModule: React.FC = () => {
 
     if (processTypeChoice === 'PO_ONLY') {
       addPurchaseOrder({
-        poNumber: `PO-GEC-${Date.now().toString().slice(-4)}`,
+        poNumber: generateNextPONumber(purchaseOrders),
         vendorId: vendorId || vendors[0]?.id || '',
         vendorName: vendors.find(v => v.id === vendorId)?.name || 'Default Vendor',
         orderDate: new Date().toISOString().split('T')[0],
@@ -629,7 +628,7 @@ export const ShortageModule: React.FC = () => {
 
       if (poQty > 0) {
         addPurchaseOrder({
-          poNumber: `PO-GEC-${Date.now().toString().slice(-4)}`,
+          poNumber: generateNextPONumber(purchaseOrders),
           vendorId: vendorId || vendors[0]?.id || '',
           vendorName: vendors.find(v => v.id === vendorId)?.name || 'Default Vendor',
           orderDate: new Date().toISOString().split('T')[0],
@@ -670,94 +669,6 @@ export const ShortageModule: React.FC = () => {
     }
 
     setDualModalData(null);
-  };
-
-  const handleRefreshLiveSheet = () => {
-    if (activeTab === 'ITEM_WISE_SHORTAGE') {
-      const flatData: any[] = [];
-      plannedItemDetails.forEach(plan => {
-        if (plan.components.length === 0) {
-          flatData.push({
-            plannedItemCode: plan.item.itemCode,
-            plannedItemName: plan.item.name,
-            itemClass: plan.item.category,
-            targetBuildQty: plan.targetQty,
-            maxBuildableQty: plan.maxBuildable,
-            bottleneckComponent: plan.constrainingComponent || 'None',
-            childComponentCode: '-',
-            childComponentName: '-',
-            childClass: '-',
-            sourceProcess: '-',
-            qtyPerItem: '-',
-            totalRequired: '-',
-            inHouseStock: plan.item.inHouseStock,
-            netShortage: Math.max(0, plan.targetQty - plan.item.inHouseStock)
-          });
-        } else {
-          plan.components.forEach(comp => {
-            flatData.push({
-              plannedItemCode: plan.item.itemCode,
-              plannedItemName: plan.item.name,
-              itemClass: plan.item.category,
-              targetBuildQty: plan.targetQty,
-              maxBuildableQty: plan.maxBuildable,
-              bottleneckComponent: plan.constrainingComponent || 'None',
-              childComponentCode: comp.itemCode,
-              childComponentName: comp.itemName,
-              childClass: comp.category,
-              sourceProcess: comp.processType,
-              qtyPerItem: comp.qtyPerItem,
-              totalRequired: `${comp.totalRequired} ${comp.unit}`,
-              inHouseStock: `${comp.inHouseStock} ${comp.unit}`,
-              netShortage: `${comp.netShortage} ${comp.unit}`
-            });
-          });
-        }
-      });
-
-      const headers: { key: keyof typeof flatData[0]; label: string }[] = [
-        { key: 'plannedItemCode', label: 'Parent Item Code' },
-        { key: 'plannedItemName', label: 'Parent Item Name' },
-        { key: 'itemClass', label: 'Class' },
-        { key: 'targetBuildQty', label: 'Target Build Qty' },
-        { key: 'maxBuildableQty', label: 'Max Buildable Qty' },
-        { key: 'bottleneckComponent', label: 'Bottleneck Component' },
-        { key: 'childComponentCode', label: 'Child Component Code' },
-        { key: 'childComponentName', label: 'Child Component Name' },
-        { key: 'childClass', label: 'Child Class' },
-        { key: 'sourceProcess', label: 'Source' },
-        { key: 'qtyPerItem', label: 'Qty / Item' },
-        { key: 'totalRequired', label: 'Total Required' },
-        { key: 'inHouseStock', label: 'In-House Stock' },
-        { key: 'netShortage', label: 'Net Shortage' }
-      ];
-
-      openLiveModuleSheet('Shortage', 'GEC_ERP_Item_Wise_Shortage_Live', flatData, headers);
-    } else {
-      const flatData = activeTabConsolidatedShortages.map(c => ({
-        componentCode: c.itemCode,
-        componentName: c.itemName,
-        category: c.category,
-        sourceProcess: c.processType,
-        totalRequired: `${c.totalRequired} ${c.unit}`,
-        inHouseStock: `${c.inHouseStock} ${c.unit}`,
-        netShortage: `${c.netShortage} ${c.unit}`,
-        requiredByWOs: c.requiredByWOs.map(r => `${r.woNumber} (${r.requiredQty})`).join(', ')
-      }));
-
-      const headers: { key: keyof typeof flatData[0]; label: string }[] = [
-        { key: 'componentCode', label: 'Component Code' },
-        { key: 'componentName', label: 'Component Name' },
-        { key: 'category', label: 'Class' },
-        { key: 'sourceProcess', label: 'Source' },
-        { key: 'totalRequired', label: 'Total Combined Required' },
-        { key: 'inHouseStock', label: 'In-House Stock' },
-        { key: 'netShortage', label: 'Net Shortage' },
-        { key: 'requiredByWOs', label: 'Required Across Selected WOs' }
-      ];
-
-      openLiveModuleSheet('Shortage', `GEC_ERP_Combined_${activeTab}_Live`, flatData, headers);
-    }
   };
 
   return (
@@ -814,10 +725,6 @@ export const ShortageModule: React.FC = () => {
               📋 All Items (Full BOM)
             </button>
           </div>
-
-          <button type="button" className="btn btn-outline" onClick={handleRefreshLiveSheet} title="Sync and maintain live CSV sheet">
-            <RefreshCw size={14} /> Live Sheet
-          </button>
           <button type="button" className="btn btn-outline" onClick={() => setPrintModalOpen(true)} title="Print Shortage Analysis Report">
             <Printer size={14} /> Print Report
           </button>

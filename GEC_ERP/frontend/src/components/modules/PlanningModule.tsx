@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
-import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
 import { 
   FileSpreadsheet, Search, Printer, RefreshCw, Filter, 
   AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, Package, Layers, X, CheckSquare, Square
@@ -216,45 +215,6 @@ export const PlanningModule: React.FC = () => {
     );
   };
 
-  const handleRefreshLiveSheet = () => {
-    const data = filteredData.map(r => ({
-      partCode: r.partCode,
-      itemCode: r.itemCode,
-      name: r.name,
-      category: r.category,
-      pendingPO: r.pendingPO,
-      pendingWO: r.pendingWO,
-      pendingJobCard: r.pendingJobCard,
-      pendingQC: r.pendingQC,
-      currentStock: r.currentStock,
-      totalRequired: r.totalRequired,
-      shortage: r.shortage,
-      minStockLevel: r.minStockLevel,
-      minShortage: r.minShortage,
-      pendingJW: r.pendingJW,
-      unit: r.unit
-    }));
-
-    const headers: { key: keyof typeof data[0]; label: string }[] = [
-      { key: 'partCode', label: 'Part Code' },
-      { key: 'itemCode', label: 'Item Code' },
-      { key: 'name', label: 'Description' },
-      { key: 'currentStock', label: 'Curr Stock' },
-      { key: 'pendingPO', label: 'Pend PO' },
-      { key: 'pendingWO', label: 'Pend WO' },
-      { key: 'pendingJobCard', label: 'Pend JobCard' },
-      { key: 'pendingQC', label: 'Pend QC' },
-      { key: 'pendingJW', label: 'Pend JobWork' },
-      { key: 'totalRequired', label: 'Tot Req' },
-      { key: 'minStockLevel', label: 'Min Stock' },
-      { key: 'shortage', label: 'Shortage' },
-      { key: 'minShortage', label: 'Min Shortage' },
-      { key: 'unit', label: 'UOM' }
-    ];
-
-    openLiveModuleSheet('PLANNING', 'GEC_ERP_Planning_Demand_Matrix_Live', data, headers);
-  };
-
   // Summary KPI statistics
   const totalShortageItemsCount = useMemo(() => {
     return planningData.filter(d => d.shortage > 0).length;
@@ -292,9 +252,6 @@ export const PlanningModule: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          <button type="button" className="btn btn-outline" onClick={handleRefreshLiveSheet} title="Sync and view live CSV spreadsheet">
-            <RefreshCw size={14} /> Live Sheet
-          </button>
           <button type="button" className="btn btn-primary" onClick={() => setPrintModalOpen(true)} title="Print formatted planning table">
             <Printer size={14} /> Print Planning Report
           </button>

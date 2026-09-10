@@ -3,12 +3,10 @@ import { useERP } from '../../context/ERPContext';
 import { BulkUploadModal } from '../common/BulkUploadModal';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { VendorListPrintView } from '../printTemplates/ItemMasterPrintTemplates';
-import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
 import { Users, Plus, Edit2, Trash2, Upload, Search, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown, ArrowLeft, X, Printer, RefreshCw } from 'lucide-react';
 import { Vendor } from '../../types/erp';
 import { parseVendorsSheet } from '../../utils/csvParser';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
-import { ExportFieldSelectorModal, FieldOption } from '../common/ExportFieldSelectorModal';
 
 const templateCSV = `Code,Name,Category,ContactPerson,Phone,Email,City,GSTIN,PAN,BankName,AccountNumber,IFSC\nVEND-GEC-099,Apex Nitriding Works,Raw Material Supplier,Rakesh Shah,9825099887,contact@apexnitride.com,Ahmedabad,24AAAPA1122K1Z5,AAAPA1122K,HDFC Bank,502000887766,HDFC0000123`;
 
@@ -22,8 +20,7 @@ export const VendorMasterModule: React.FC = () => {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
-  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
-  const [printModalOpen, setPrintModalOpen] = useState(false);
+    const [printModalOpen, setPrintModalOpen] = useState(false);
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
 
   // Single Column Sorting State
@@ -150,78 +147,26 @@ export const VendorMasterModule: React.FC = () => {
   };
 
   // Custom Export Field Definitions
-  const availableExportFields: FieldOption<Vendor>[] = [
-    { key: 'vendorCode', label: 'Vendor Code' },
-    { key: 'name', label: 'Vendor Name' },
-    { key: 'category', label: 'Category' },
-    { key: 'contactPerson', label: 'Contact Person' },
-    { key: 'phone', label: 'Phone Number' },
-    { key: 'email', label: 'Email Address' },
-    { key: 'city', label: 'City' },
-    { key: 'gstin', label: 'GSTIN' },
-    { key: 'pan', label: 'PAN' },
-    { key: 'bankName', label: 'Bank Name' },
-    { key: 'accountNumber', label: 'Account Number' },
-    { key: 'ifscCode', label: 'IFSC Code' }
-  ];
-
+  
   return (
     <div className="module-layout-container">
       
       {/* Top Action Header */}
-      <div className="sticky-module-header">
+      <div className="sticky-module-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           {isModalOpen && (
             <button className="btn btn-outline" style={{ padding: '0.35rem 0.65rem', gap: '0.35rem', fontWeight: 600 }} onClick={() => setIsModalOpen(false)}>
-              <ArrowLeft size={16} /> Back to Vendor List <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>(ESC)</span>
+              <ArrowLeft size={16} /> Back to Vendor Directory <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>(ESC)</span>
             </button>
           )}
           <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-secondary)' }}>
-            {isModalOpen ? (editingVendor ? `Editing Vendor: ${editingVendor.vendorCode}` : 'Registering New Vendor') : `All Vendor Masters (${filteredVendors.length})`}
+            {isModalOpen ? (editingVendor ? 'Edit Vendor Partner' : 'Register New Vendor Partner') : `Vendor / Supplier Directory (${filteredVendors.length})`}
           </span>
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <button type="button" className="btn btn-outline" onClick={() => {
-            const data = filteredVendors.map(v => ({
-              vendorCode: v.vendorCode,
-              name: v.name,
-              category: v.category || '',
-              contactPerson: v.contactPerson,
-              phone: v.phone,
-              email: v.email,
-              city: v.city,
-              gstin: v.gstin,
-              pan: v.pan || '',
-              bankName: v.bankName || '',
-              accountNumber: v.accountNumber || '',
-              ifscCode: v.ifscCode || ''
-            }));
-
-            const headers: { key: keyof typeof data[0]; label: string }[] = [
-              { key: 'vendorCode', label: 'Vendor Code' },
-              { key: 'name', label: 'Vendor Name' },
-              { key: 'category', label: 'Category' },
-              { key: 'contactPerson', label: 'Contact Person' },
-              { key: 'phone', label: 'Phone' },
-              { key: 'email', label: 'Email' },
-              { key: 'city', label: 'City' },
-              { key: 'gstin', label: 'GSTIN' },
-              { key: 'pan', label: 'PAN' },
-              { key: 'bankName', label: 'Bank Name' },
-              { key: 'accountNumber', label: 'Account Number' },
-              { key: 'ifscCode', label: 'IFSC Code' }
-            ];
-
-            openLiveModuleSheet('Vendors', 'GEC_Vendors_Live', data, headers);
-          }} title="Sync and maintain live CSV sheet">
-            <RefreshCw size={14} /> Live Sheet
-          </button>
           <button type="button" className="btn btn-outline" onClick={() => setPrintModalOpen(true)} title="Print filtered vendors directory report">
             <Printer size={14} /> Print Report
-          </button>
-          <button className="btn btn-outline" onClick={() => setIsExportModalOpen(true)}>
-            <FileSpreadsheet size={16} /> Open Sheet ({filteredVendors.length} filtered)
           </button>
           <button className="btn btn-outline" onClick={() => setIsBulkModalOpen(true)}>
             <Upload size={16} /> Bulk Create / Update
@@ -445,16 +390,7 @@ export const VendorMasterModule: React.FC = () => {
       />
 
       {/* Export Field Selector Modal */}
-      <ExportFieldSelectorModal<Vendor>
-        isOpen={isExportModalOpen}
-        onClose={() => setIsExportModalOpen(false)}
-        title="Custom Export Live Sheet Options"
-        subfolder="Vendors"
-        fileName="GEC_Filtered_Vendors_Live"
-        data={filteredVendors}
-        availableFields={availableExportFields}
-      />
-
+      
       {/* Feature-Wise Modular Print Manager Modal */}
       <PrintManagerModal
         isOpen={printModalOpen}

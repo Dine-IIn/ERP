@@ -5,7 +5,6 @@ import { SingleBOMPrintView, BOMListPrintView } from '../printTemplates/BOMPrint
 import { BOMUploadModal } from '../common/BOMUploadModal';
 import { Plus, Trash2, Edit2, Search, Printer, FileSpreadsheet, Upload, ArrowUpDown, ArrowUp, ArrowDown, Layers, Filter, Eye, Zap, ArrowLeft, X, RefreshCw } from 'lucide-react';
 import { BOM, BOMComponent, Item } from '../../types/erp';
-import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
 import { isCircularDependency, getExplodedBOMSummary } from '../../utils/nestedBOMHelper';
 
@@ -225,64 +224,7 @@ export const BOMMasterModule: React.FC = () => {
     setPrintModalOpen(true);
   };
 
-  const handleRefreshLiveSheet = () => {
-    const data = filteredBOMs.map(b => ({
-      bomCode: b.bomCode,
-      machineModel: b.machineModel,
-      version: b.version,
-      componentsCount: b.components?.length || 0,
-      estimatedProductionHours: b.estimatedProductionHours || 120,
-      lastUpdated: b.lastUpdated || ''
-    }));
 
-    const headers: { key: keyof typeof data[0]; label: string }[] = [
-      { key: 'bomCode', label: 'BOM Code' },
-      { key: 'machineModel', label: 'Machine Model / Parent Item' },
-      { key: 'version', label: 'BOM Revision' },
-      { key: 'componentsCount', label: 'Total Components' },
-      { key: 'estimatedProductionHours', label: 'Est Production Hours' },
-      { key: 'lastUpdated', label: 'Last Revision Date' }
-    ];
-
-    openLiveModuleSheet('BOM', 'GEC_ERP_BOM_Catalog_Live', data, headers);
-  };
-
-  // Open Live Sheet for BOM
-  const handleOpenIndividualBOMSheet = (b: BOM) => {
-    const sanitizedModelName = b.machineModel.replace(/[^a-zA-Z0-9]/g, '_');
-    const flatData = b.components.map(c => {
-      const itemObj = items.find(i => i.id === c.itemId || i.itemCode === c.itemCode);
-      const unitPrice = itemObj ? itemObj.unitPrice : 0;
-      return {
-        bomCode: b.bomCode,
-        machineModel: b.machineModel,
-        version: b.version,
-        itemCode: c.itemCode || '',
-        itemName: c.itemName || '',
-        subAssemblyTag: c.subAssemblyTag,
-        qtyPerMachine: c.qtyPerMachine,
-        unit: c.unit,
-        unitPrice,
-        totalItemCost: c.qtyPerMachine * unitPrice,
-        lastUpdated: b.lastUpdated
-      };
-    });
-
-    const headers: { key: keyof typeof flatData[0]; label: string }[] = [
-      { key: 'bomCode', label: 'BOM Code' },
-      { key: 'machineModel', label: 'Machine Model' },
-      { key: 'version', label: 'Version' },
-      { key: 'itemCode', label: 'Item Code' },
-      { key: 'itemName', label: 'Component Name' },
-      { key: 'qtyPerMachine', label: 'Qty Per Machine' },
-      { key: 'unit', label: 'Unit' },
-      { key: 'unitPrice', label: 'Unit Price (INR)' },
-      { key: 'totalItemCost', label: 'Total Cost (INR)' },
-      { key: 'lastUpdated', label: 'Last Updated' }
-    ];
-
-    openLiveModuleSheet('BOM', 'GEC_ERP_BOM_Master_Live', flatData, headers);
-  };
 
   const handleAddComponent = () => {
     const itemObj = items.find(i => i.id === selectedItemId);
@@ -390,9 +332,6 @@ export const BOMMasterModule: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <button type="button" className="btn btn-outline" onClick={handleRefreshLiveSheet} title="Sync and maintain live CSV sheet">
-            <RefreshCw size={14} /> Live Sheet
-          </button>
           <button type="button" className="btn btn-outline" onClick={handlePrintBOMList} title="Print filtered BOM catalog report">
             <Printer size={14} /> Print Report
           </button>
@@ -775,9 +714,7 @@ export const BOMMasterModule: React.FC = () => {
                 </div>
 
                 <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                  <button className="btn btn-outline" style={{ color: 'var(--success)' }} title="Open Individual BOM Sheet" onClick={() => handleOpenIndividualBOMSheet(selectedBOM)}>
-                    <FileSpreadsheet size={15} /> Open Live Sheet
-                  </button>
+                  
                   <button className="btn btn-outline" title="Print BOM Document" onClick={() => handlePrintSingleBOM(selectedBOM)}>
                     <Printer size={15} /> Print
                   </button>

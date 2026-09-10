@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { SingleQCPrintView, QCListPrintView } from '../printTemplates/QCPrintTemplates';
-import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
 import { ShieldCheck, Plus, Edit2, CheckCircle, XCircle, AlertCircle, Search, ArrowLeft, X, Printer, RefreshCw, ClipboardList, History, Check, AlertTriangle } from 'lucide-react';
 import { QCDisposition, QCInspection, QCType } from '../../types/erp';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
@@ -248,42 +247,6 @@ export const QualityControlModule: React.FC = () => {
     setPrintModalOpen(true);
   };
 
-  const handleRefreshLiveSheet = () => {
-    const data = filteredQCs.map(q => ({
-      qcNumber: q.qcNumber || q.inspectionNo || '',
-      inspectionDate: q.inspectionDate || '',
-      type: q.type || q.referenceType || 'INCOMING_PO',
-      grnNumber: q.grnNumber || q.referenceNo || '',
-      vendorName: q.vendorName || '',
-      itemCode: q.itemCode || '',
-      itemName: q.itemName || '',
-      inspectedQty: q.inspectedQuantity || q.inspectedQty || 1,
-      approvedQty: q.passedQuantity || q.approvedQty || 0,
-      rejectedQty: q.failedQuantity || q.rejectedQty || 0,
-      disposition: q.disposition || q.status || 'PASSED',
-      inspectorName: q.inspectorName || 'QC Officer',
-      defectReason: q.defectReason || q.remarks || ''
-    }));
-
-    const headers: { key: keyof typeof data[0]; label: string }[] = [
-      { key: 'qcNumber', label: 'QC Report No' },
-      { key: 'inspectionDate', label: 'Inspection Date' },
-      { key: 'type', label: 'Type' },
-      { key: 'grnNumber', label: 'GRN Number' },
-      { key: 'vendorName', label: 'Vendor' },
-      { key: 'itemCode', label: 'Item Code' },
-      { key: 'itemName', label: 'Component Name' },
-      { key: 'inspectedQty', label: 'Inspected Qty' },
-      { key: 'approvedQty', label: 'Approved Qty' },
-      { key: 'rejectedQty', label: 'Rejected Qty' },
-      { key: 'disposition', label: 'Disposition' },
-      { key: 'inspectorName', label: 'Inspector' },
-      { key: 'defectReason', label: 'Notes / Reasons' }
-    ];
-
-    openLiveModuleSheet('QC', 'GEC_ERP_QC_Audits_Live', data, headers);
-  };
-
   // Manual/Adhoc Modal functions
   const handleOpenManualModal = () => {
     setEditingQC(null);
@@ -391,9 +354,6 @@ export const QualityControlModule: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <button type="button" className="btn btn-outline" onClick={handleRefreshLiveSheet} title="Sync and maintain live CSV sheet">
-            <RefreshCw size={14} /> Live Sheet
-          </button>
           <button type="button" className="btn btn-outline" onClick={handlePrintQCList} title="Print filtered QC inspection report">
             <Printer size={14} /> Print Report
           </button>

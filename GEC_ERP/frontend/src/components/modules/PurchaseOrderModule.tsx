@@ -4,10 +4,8 @@ import { Modal } from '../common/Modal';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { SinglePOPrintView, POListPrintView } from '../printTemplates/POPrintTemplates';
 import { TabularShortagePrintView, TabularShortageRow } from '../printTemplates/ShortagePrintTemplates';
-import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
 import { ShoppingCart, Plus, Trash2, Edit2, Search, Printer, FileSpreadsheet, Send, AlertTriangle, CheckCircle2, XCircle, FileText, ArrowRight, ShieldCheck, ArrowUpDown, ArrowUp, ArrowDown, Percent, Hash, ArrowLeft, X, AlertCircle, RefreshCw, Layers } from 'lucide-react';
-import { POLineItem, PurchaseOrder, Item, POStatus, ItemMappedVendor } from '../../types/erp';
-import { ExportFieldSelectorModal, FieldOption } from '../common/ExportFieldSelectorModal';
+import { POLineItem, PurchaseOrder, Item, POStatus, ItemMappedVendor, generateNextPONumber } from '../../types/erp';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
 
 type POSortField = 'poNumber' | 'vendorName' | 'orderDate' | 'deliveryDate' | 'poCreateDateTime' | 'totalAmount';
@@ -24,8 +22,7 @@ export const PurchaseOrderModule: React.FC = () => {
   const [isExplodeShortage, setIsExplodeShortage] = useState(false);
   const [isShortagePrintOpen, setIsShortagePrintOpen] = useState(false);
 
-  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
-  const [printModalOpen, setPrintModalOpen] = useState(false);
+    const [printModalOpen, setPrintModalOpen] = useState(false);
   const [printDocType, setPrintDocType] = useState<'SINGLE_PO' | 'PO_LIST'>('PO_LIST');
   const [selectedPrintPO, setSelectedPrintPO] = useState<PurchaseOrder | null>(null);
 
@@ -172,16 +169,16 @@ export const PurchaseOrderModule: React.FC = () => {
     }
   };
 
-  // Universal @history search handling
-  const isHistorySearch = searchTerm.toLowerCase().includes('@history') || searchTerm.trim().startsWith('@');
-  const cleanSearchTerm = searchTerm.replace(/@history/gi, '').replace(/^@/g, '').trim().toLowerCase();
+  // Universal @history & @deleted search handling
+  const isHistorySearch = searchTerm.toLowerCase().includes('@history') || searchTerm.toLowerCase().includes('@deleted') || searchTerm.trim().startsWith('@');
+  const cleanSearchTerm = searchTerm.replace(/@history|@deleted/gi, '').replace(/^@/g, '').trim().toLowerCase();
 
   const filteredPOs = purchaseOrders
     .filter(po => {
-      const isCompleted = po.status === 'GOODS_RECEIVED' || (po.status as string) === 'RECEIVED' || po.status === 'CANCELLED' || (po as any).isArchived;
+      const isCompleted = po.status === 'GOODS_RECEIVED' || (po.status as string) === 'RECEIVED' || po.status === 'CANCELLED' || (po as any).isArchived || po.isDeleted;
 
-      // By default show active unless @history is typed
-      if (!isHistorySearch && isCompleted) {
+      // By default show active unless @history or @deleted is typed
+      if (!isHistorySearch && (po.isDeleted || isCompleted)) {
         return false;
       }
 
@@ -230,32 +227,6 @@ export const PurchaseOrderModule: React.FC = () => {
   const handlePrintPOList = () => {
     setPrintDocType('PO_LIST');
     setPrintModalOpen(true);
-  };
-
-  const handleRefreshLiveSheet = () => {
-    const data = filteredPOs.map(po => ({
-      poNumber: po.poNumber,
-      vendorName: po.vendorName,
-      orderDate: po.orderDate,
-      expectedDeliveryDate: po.expectedDeliveryDate || po.deliveryDate || '',
-      itemsCount: po.items?.length || 0,
-      totalAmount: po.totalAmount || 0,
-      status: po.status,
-      notes: po.notes || ''
-    }));
-
-    const headers: { key: keyof typeof data[0]; label: string }[] = [
-      { key: 'poNumber', label: 'PO Number' },
-      { key: 'vendorName', label: 'Vendor Name' },
-      { key: 'orderDate', label: 'Order Date' },
-      { key: 'expectedDeliveryDate', label: 'Delivery Date' },
-      { key: 'itemsCount', label: 'Line Items' },
-      { key: 'totalAmount', label: 'Total Value (₹)' },
-      { key: 'status', label: 'PO Status' },
-      { key: 'notes', label: 'Purchase Notes' }
-    ];
-
-    openLiveModuleSheet('PurchaseOrders', 'GEC_ERP_Purchase_Orders_Live', data, headers);
   };
 
   // Open Shortage PO Creation Modal for specific Item
@@ -350,7 +321,7 @@ export const PurchaseOrderModule: React.FC = () => {
       alert(`✅ Merged ${selectedShortageItem.itemCode} (${selectedPOQty} ${selectedShortageItem.unit}) into existing Draft PO ${existingDraftPO.poNumber} for ${vendorObj.name}!`);
     } else {
       // Create new DRAFT PO for this vendor
-      const poNo = `PO-GEC-${String(purchaseOrders.length + 1).padStart(3, '0')}`;
+      const poNo = generateNextPONumber(purchaseOrders);
       const createDateTime = new Date().toISOString();
 
       const subtotal = amount;
@@ -410,7 +381,7 @@ export const PurchaseOrderModule: React.FC = () => {
   };
 
   const handleOpenManualPOModal = () => {
-    const nextNo = `PO-GEC-${String(purchaseOrders.length + 1).padStart(3, '0')}`;
+    const nextNo = generateNextPONumber(purchaseOrders);
     setManualPOForm({
       poNumber: nextNo,
       vendorId: '',
@@ -568,17 +539,7 @@ export const PurchaseOrderModule: React.FC = () => {
 
   const { selectedIndex, setSelectedIndex } = useTableKeyboardNav(filteredPOs, handlePrintPO);
 
-  const availablePOExportFields: FieldOption<PurchaseOrder>[] = [
-    { key: 'poNumber', label: 'PO Number' },
-    { key: 'vendorName', label: 'Vendor Name' },
-    { key: 'orderDate', label: 'Order Date' },
-    { key: 'deliveryDate', label: 'Expected Delivery Date' },
-    { key: 'poCreateDateTime', label: 'Created Date & Time' },
-    { key: 'preparedBy', label: 'Prepared By' },
-    { key: 'totalAmount', label: 'Total Amount (₹)' },
-    { key: 'status', label: 'PO Status' }
-  ];
-
+  
   const wizardShortageItemsFiltered = shortageItems.filter(item => {
     const term = wizardSearchTerm.trim().toLowerCase();
     if (!term) return true;
@@ -638,13 +599,7 @@ export const PurchaseOrderModule: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          <button type="button" className="btn btn-outline" onClick={handleRefreshLiveSheet} title="Sync and maintain live CSV sheet">
-            <RefreshCw size={14} /> Live Sheet
-          </button>
-          <button type="button" className="btn btn-outline" onClick={() => setIsExportModalOpen(true)} title="Export POs to CSV file">
-            <FileSpreadsheet size={14} /> Export POs
-          </button>
-          <button type="button" className="btn btn-outline" onClick={handlePrintPOList} title="Print Filtered PO Ledger">
+                    <button type="button" className="btn btn-outline" onClick={handlePrintPOList} title="Print Filtered PO Ledger">
             <Printer size={14} /> Print Report
           </button>
           {draftPOs.length > 0 && !isWizardOpen && (
@@ -867,6 +822,7 @@ export const PurchaseOrderModule: React.FC = () => {
                   </th>
                   <th>Item Code(s)</th>
                   <th>Item Description</th>
+                  <th style={{ minWidth: '150px' }}>Received / Total Qty</th>
                   <th onClick={() => handleSortToggle('orderDate')} style={{ cursor: 'pointer' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                       Order Date {sortField === 'orderDate' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
@@ -919,17 +875,27 @@ export const PurchaseOrderModule: React.FC = () => {
                       title="Double click or press Enter to view PO document"
                     >
                       <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                          <span style={{ fontWeight: 700, color: 'var(--accent-primary)', fontFamily: 'monospace' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                          <span style={{ fontWeight: 700, color: po.isDeleted ? 'var(--text-muted)' : 'var(--accent-primary)', fontFamily: 'monospace', textDecoration: po.isDeleted ? 'line-through' : 'none' }}>
                             {po.poNumber}
                           </span>
-                          {po.status === 'DRAFT' && <span className="badge badge-warning" style={{ fontSize: '0.65rem' }}>DRAFT</span>}
+                          {po.isDeleted && (
+                            <span className="badge" style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', color: 'var(--danger)', fontSize: '0.65rem', border: '1px solid var(--danger)' }}>
+                              🗑️ {po.splitFromPoNumber ? 'SPLIT CANCELLED' : 'DELETED (HIDDEN)'}
+                            </span>
+                          )}
+                          {po.isSplitFulfilled && (
+                            <span className="badge" style={{ backgroundColor: '#059669', color: '#fff', fontSize: '0.65rem' }}>
+                              ✅ PARTIAL FULFILLED
+                            </span>
+                          )}
+                          {po.status === 'DRAFT' && !po.isDeleted && <span className="badge badge-warning" style={{ fontSize: '0.65rem' }}>DRAFT</span>}
                           {po.cancellationChallanNo && (
                             <span className="badge badge-danger" style={{ fontSize: '0.65rem' }}>
                               CNCL ({po.cancellationChallanNo})
                             </span>
                           )}
-                          {(po.status === 'GOODS_RECEIVED' || (po.status as string) === 'RECEIVED' || po.status === 'CANCELLED') && (
+                          {!po.isDeleted && (po.status === 'GOODS_RECEIVED' || (po.status as string) === 'RECEIVED' || po.status === 'CANCELLED') && (
                             <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#fff', fontSize: '0.65rem', padding: '0.1rem 0.35rem' }}>
                               📜 HISTORY
                             </span>
@@ -955,6 +921,39 @@ export const PurchaseOrderModule: React.FC = () => {
                           ))}
                         </div>
                       </td>
+                      <td>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                          {po.items.map((pi, piIdx) => {
+                            const totalOrdered = pi.originalOrderedQty || pi.orderedQty || pi.quantity || 1;
+                            const received = pi.receivedQty || 0;
+                            const isComplete = received >= totalOrdered;
+                            const isPartial = received > 0 && received < totalOrdered;
+                            const isDeletedSplit = po.isDeleted && pi.cancelledQty && pi.cancelledQty > 0;
+
+                            return (
+                              <div key={piIdx} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem' }}>
+                                {isDeletedSplit ? (
+                                  <span className="badge" style={{ backgroundColor: 'rgba(239, 68, 68, 0.12)', color: 'var(--danger)', fontWeight: 700, padding: '0.12rem 0.4rem' }}>
+                                    ❌ {pi.cancelledQty} / {totalOrdered} {pi.unit || 'PCS'} (Cancelled)
+                                  </span>
+                                ) : isComplete ? (
+                                  <span className="badge badge-success" style={{ fontWeight: 700, padding: '0.12rem 0.4rem' }}>
+                                    ✓ {received} / {totalOrdered} {pi.unit || 'PCS'}
+                                  </span>
+                                ) : isPartial ? (
+                                  <span className="badge badge-warning" style={{ fontWeight: 700, padding: '0.12rem 0.4rem' }}>
+                                    ⏳ {received} / {totalOrdered} {pi.unit || 'PCS'}
+                                  </span>
+                                ) : (
+                                  <span className="badge badge-neutral" style={{ fontWeight: 600, padding: '0.12rem 0.4rem' }}>
+                                    0 / {totalOrdered} {pi.unit || 'PCS'}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </td>
                       <td>{po.orderDate}</td>
                       <td>{po.deliveryDate || po.expectedDeliveryDate}</td>
                       <td style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>{createdDisplay}</td>
@@ -964,7 +963,7 @@ export const PurchaseOrderModule: React.FC = () => {
                       </td>
                       <td>
                         <span className={`badge ${statusClass}`}>
-                          {po.status.replace(/_/g, ' ')}
+                          {po.isDeleted ? 'CANCELLED / DELETED' : po.status.replace(/_/g, ' ')}
                         </span>
                       </td>
                       <td onClick={(e) => e.stopPropagation()}>
@@ -972,7 +971,7 @@ export const PurchaseOrderModule: React.FC = () => {
                           <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem' }} title="Print Vendor Purchase Order" onClick={() => handlePrintSinglePO(po)}>
                             <Printer size={14} />
                           </button>
-                          {['DRAFT', 'WAITING_FOR_APPROVAL', 'APPROVED', 'REJECTED'].includes(po.status) && (
+                          {!po.isDeleted && ['DRAFT', 'WAITING_FOR_APPROVAL', 'APPROVED', 'REJECTED'].includes(po.status) && (
                             <button 
                               className="btn btn-outline" 
                               style={{ padding: '0.3rem 0.5rem' }} 
@@ -982,7 +981,7 @@ export const PurchaseOrderModule: React.FC = () => {
                               <Edit2 size={14} />
                             </button>
                           )}
-                          {['ISSUED', 'SENT', 'PARTIALLY_RECEIVED'].includes(po.status) && (
+                          {!po.isDeleted && ['ISSUED', 'SENT', 'PARTIALLY_RECEIVED'].includes(po.status) && (
                             <button 
                               className="btn btn-outline" 
                               style={{ padding: '0.2rem 0.45rem', fontSize: '0.72rem', color: 'var(--danger)', borderColor: 'var(--danger)' }} 
@@ -992,13 +991,21 @@ export const PurchaseOrderModule: React.FC = () => {
                               Cancel Challan
                             </button>
                           )}
-                          <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem', color: 'var(--danger)' }} title="Delete PO" onClick={() => {
-                            if (window.confirm(`Are you sure you want to delete PO ${po.poNumber}? Any associated item shortage will reappear.`)) {
-                              deletePurchaseOrder(po.id);
-                            }
-                          }}>
-                            <Trash2 size={14} />
-                          </button>
+                          {!po.isDeleted && (
+                            <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem', color: 'var(--danger)' }} title="Delete / Cancel PO" onClick={() => {
+                              const totalOrd = po.items.reduce((s, i) => s + (i.quantity || i.orderedQty || 0), 0);
+                              const totalRec = po.items.reduce((s, i) => s + (i.receivedQty || 0), 0);
+                              let confirmMsg = `Are you sure you want to delete PO ${po.poNumber}?\n\nIt will be safely archived (soft-deleted) and can be searched via @history or @deleted.`;
+                              if (totalRec > 0 && totalRec < totalOrd) {
+                                confirmMsg = `⚠️ Notice: PO ${po.poNumber} has partial goods receipt (${totalRec} of ${totalOrd} units received).\n\nDeleting will:\n1. Keep received ${totalRec} units in ${po.poNumber} as Completed (${totalRec}/${totalOrd} received).\n2. Split and cancel remaining ${totalOrd - totalRec} units into ${po.poNumber}-deleted (${totalOrd - totalRec}/${totalOrd} cancelled & archived).\n\nProceed with split deletion?`;
+                              }
+                              if (window.confirm(confirmMsg)) {
+                                deletePurchaseOrder(po.id);
+                              }
+                            }}>
+                              <Trash2 size={14} />
+                            </button>
+                          )}
                           {po.status === 'REJECTED' && (
                             <button 
                               className="btn btn-primary" 
@@ -1573,15 +1580,6 @@ export const PurchaseOrderModule: React.FC = () => {
       )}
 
       {/* Export Field Selector Modal */}
-      <ExportFieldSelectorModal<PurchaseOrder>
-        isOpen={isExportModalOpen}
-        onClose={() => setIsExportModalOpen(false)}
-        title="Custom Export Purchase Orders Live Sheet"
-        subfolder="PurchaseOrders"
-        fileName="GEC_Filtered_Purchase_Orders_Live"
-        data={filteredPOs}
-        availableFields={availablePOExportFields}
-      />
-    </div>
+          </div>
   );
 };

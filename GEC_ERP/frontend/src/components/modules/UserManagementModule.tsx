@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useERP } from '../../context/ERPContext';
-import { User, Role, Department, CustomRole, PermissionLevel, UserActivityLog, BackupRecord, RBAC_FEATURES, RBACFeatureDefinition } from '../../types/erp';
+import { User, Role, Department, CustomRole, PermissionLevel, PermissionAction, UserActivityLog, BackupRecord, RBAC_FEATURES, RBACFeatureDefinition } from '../../types/erp';
 import { UserPlus, Shield, Trash2, Key, Lock, UserCheck, Building2, Plus, Edit2, Database, Activity, RefreshCw, Download, HardDrive, ShieldCheck, Search, CheckCircle2, XCircle, Eye, EyeOff } from 'lucide-react';
 
 export const UserManagementModule: React.FC = () => {
@@ -44,16 +44,35 @@ export const UserManagementModule: React.FC = () => {
   const [roleName, setRoleName] = useState('');
   const [roleDeptId, setRoleDeptId] = useState('');
 
-  // Default permissions: Map all RBAC_FEATURES to 'VIEW'
-  const getDefaultPermissions = (level: PermissionLevel = 'VIEW'): Record<string, PermissionLevel> => {
-    const perms: Record<string, PermissionLevel> = {};
+  const ALL_ACTIONS: PermissionAction[] = ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'APPROVE'];
+
+  const normalizePermsToActions = (raw: any): PermissionAction[] => {
+    if (!raw) return [];
+    if (Array.isArray(raw)) {
+      return raw.filter(a => ALL_ACTIONS.includes(a as PermissionAction)) as PermissionAction[];
+    }
+    if (typeof raw === 'string') {
+      if (raw === 'FULL_ACCESS') return [...ALL_ACTIONS];
+      if (raw === 'EDIT') return ['VIEW', 'EDIT'];
+      if (raw === 'CREATE') return ['VIEW', 'CREATE'];
+      if (raw === 'VIEW') return ['VIEW'];
+      if (raw === 'NO_ACCESS') return [];
+    }
+    return [];
+  };
+
+  // Default permissions generator
+  const getDefaultPermissions = (preset: 'FULL_ACCESS' | 'VIEW' | 'NO_ACCESS' = 'VIEW'): Record<string, PermissionAction[]> => {
+    const perms: Record<string, PermissionAction[]> = {};
     RBAC_FEATURES.forEach(f => {
-      perms[f.key] = level;
+      if (preset === 'FULL_ACCESS') perms[f.key] = [...ALL_ACTIONS];
+      else if (preset === 'VIEW') perms[f.key] = ['VIEW'];
+      else perms[f.key] = [];
     });
     return perms;
   };
 
-  const [rolePermissions, setRolePermissions] = useState<Record<string, PermissionLevel>>(getDefaultPermissions('VIEW'));
+  const [rolePermissions, setRolePermissions] = useState<Record<string, PermissionAction[]>>(getDefaultPermissions('VIEW'));
 
   const [auditSearch, setAuditSearch] = useState('');
   const [selectedAuditUser, setSelectedAuditUser] = useState<string>('ALL');
@@ -216,11 +235,29 @@ export const UserManagementModule: React.FC = () => {
     setMessage({ text: `Department "${deptName}" added successfully!`, type: 'success' });
   };
 
-  const handlePermissionChange = (moduleKey: string, level: PermissionLevel) => {
-    setRolePermissions(prev => ({
-      ...prev,
-      [moduleKey]: level
-    }));
+  const handleToggleAction = (moduleKey: string, action: PermissionAction | 'FULL_ACCESS' | 'NO_ACCESS') => {
+    setRolePermissions(prev => {
+      const current = normalizePermsToActions(prev[moduleKey]);
+      let next: PermissionAction[] = [];
+
+      if (action === 'NO_ACCESS') {
+        next = [];
+      } else if (action === 'FULL_ACCESS') {
+        const isFull = ALL_ACTIONS.every(a => current.includes(a));
+        next = isFull ? [] : [...ALL_ACTIONS];
+      } else {
+        if (current.includes(action)) {
+          next = current.filter(a => a !== action);
+        } else {
+          next = [...current, action];
+        }
+      }
+
+      return {
+        ...prev,
+        [moduleKey]: next
+      };
+    });
   };
 
   const handleSaveRoleSubmit = (e: React.FormEvent) => {
@@ -859,22 +896,6 @@ export const UserManagementModule: React.FC = () => {
                 <button
                   type="button"
                   className="btn btn-outline"
-                  style={{ padding: '0.2rem 0.5rem', fontSize: '0.72rem', color: '#d97706', borderColor: '#d97706' }}
-                  onClick={() => setRolePermissions(getDefaultPermissions('EDIT'))}
-                >
-                  All Edit
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-outline"
-                  style={{ padding: '0.2rem 0.5rem', fontSize: '0.72rem', color: '#2563eb', borderColor: '#2563eb' }}
-                  onClick={() => setRolePermissions(getDefaultPermissions('CREATE'))}
-                >
-                  All Create
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-outline"
                   style={{ padding: '0.2rem 0.5rem', fontSize: '0.72rem', color: '#7c3aed', borderColor: '#7c3aed' }}
                   onClick={() => setRolePermissions(getDefaultPermissions('VIEW'))}
                 >
@@ -915,9 +936,9 @@ export const UserManagementModule: React.FC = () => {
             </div>
 
             <div style={{ marginBottom: '0.5rem' }}>
-              <h4 style={{ fontSize: '0.9rem', fontWeight: 800, margin: '0 0 0.25rem 0' }}>Feature Access Permission Matrix</h4>
+              <h4 style={{ fontSize: '0.9rem', fontWeight: 800, margin: '0 0 0.25rem 0' }}>Feature Access Permission Matrix (Multi-Select)</h4>
               <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: 0 }}>
-                Configure access levels for each module. Permissions dictate ability to create new records, edit existing records, view data, or delete/block items.
+                Configure granular action permissions per module. Multi-select checkboxes allow fine-tuning access for View, Create, Edit, Delete, and Approval authorization.
               </p>
             </div>
 
@@ -927,31 +948,41 @@ export const UserManagementModule: React.FC = () => {
                 <thead>
                   <tr style={{ backgroundColor: 'var(--bg-tertiary)' }}>
                     <th style={{ minWidth: '220px' }}>Feature / Module</th>
-                    <th style={{ width: '130px', textAlign: 'center', color: '#059669' }}>
+                    <th style={{ width: '105px', textAlign: 'center', color: '#059669' }}>
                       🟢 Full Access
-                      <div style={{ fontSize: '0.68rem', fontWeight: 500, color: 'var(--text-muted)' }}>Edit, Create, Delete, View</div>
+                      <div style={{ fontSize: '0.65rem', fontWeight: 500, color: 'var(--text-muted)' }}>All Actions</div>
                     </th>
-                    <th style={{ width: '125px', textAlign: 'center', color: '#d97706' }}>
-                      🟡 Edit
-                      <div style={{ fontSize: '0.68rem', fontWeight: 500, color: 'var(--text-muted)' }}>Edit & View Only</div>
-                    </th>
-                    <th style={{ width: '125px', textAlign: 'center', color: '#2563eb' }}>
-                      🔵 Create
-                      <div style={{ fontSize: '0.68rem', fontWeight: 500, color: 'var(--text-muted)' }}>Create & View Only</div>
-                    </th>
-                    <th style={{ width: '120px', textAlign: 'center', color: '#7c3aed' }}>
+                    <th style={{ width: '90px', textAlign: 'center', color: '#7c3aed' }}>
                       🟣 View
-                      <div style={{ fontSize: '0.68rem', fontWeight: 500, color: 'var(--text-muted)' }}>View Only (Read)</div>
+                      <div style={{ fontSize: '0.65rem', fontWeight: 500, color: 'var(--text-muted)' }}>Read Only</div>
                     </th>
-                    <th style={{ width: '110px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    <th style={{ width: '95px', textAlign: 'center', color: '#2563eb' }}>
+                      🔵 Create
+                      <div style={{ fontSize: '0.65rem', fontWeight: 500, color: 'var(--text-muted)' }}>Add New</div>
+                    </th>
+                    <th style={{ width: '90px', textAlign: 'center', color: '#d97706' }}>
+                      🟡 Edit
+                      <div style={{ fontSize: '0.65rem', fontWeight: 500, color: 'var(--text-muted)' }}>Modify</div>
+                    </th>
+                    <th style={{ width: '95px', textAlign: 'center', color: 'var(--danger)' }}>
+                      🔴 Delete
+                      <div style={{ fontSize: '0.65rem', fontWeight: 500, color: 'var(--text-muted)' }}>Remove</div>
+                    </th>
+                    <th style={{ width: '95px', textAlign: 'center', color: '#ea580c' }}>
+                      🟠 Approve
+                      <div style={{ fontSize: '0.65rem', fontWeight: 500, color: 'var(--text-muted)' }}>Authorize</div>
+                    </th>
+                    <th style={{ width: '95px', textAlign: 'center', color: 'var(--text-muted)' }}>
                       ⚪ No Access
-                      <div style={{ fontSize: '0.68rem', fontWeight: 500, color: 'var(--text-muted)' }}>Hidden / Blocked</div>
+                      <div style={{ fontSize: '0.65rem', fontWeight: 500, color: 'var(--text-muted)' }}>Blocked</div>
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {RBAC_FEATURES.map(feature => {
-                    const currentLevel = rolePermissions[feature.key] || 'NO_ACCESS';
+                    const activeActions = normalizePermsToActions(rolePermissions[feature.key]);
+                    const isFull = ALL_ACTIONS.every(a => activeActions.includes(a));
+                    const isNoAccess = activeActions.length === 0;
 
                     return (
                       <tr key={feature.key}>
@@ -967,64 +998,83 @@ export const UserManagementModule: React.FC = () => {
 
                         {/* Full Access */}
                         <td style={{ textAlign: 'center' }}>
-                          <label style={{ display: 'flex', justifyContent: 'center', cursor: 'pointer', margin: 0, padding: '0.4rem' }}>
+                          <label style={{ display: 'flex', justifyContent: 'center', cursor: 'pointer', margin: 0, padding: '0.35rem' }}>
                             <input
-                              type="radio"
-                              name={`rbac_${feature.key}`}
-                              checked={currentLevel === 'FULL_ACCESS'}
-                              onChange={() => handlePermissionChange(feature.key, 'FULL_ACCESS')}
+                              type="checkbox"
+                              checked={isFull}
+                              onChange={() => handleToggleAction(feature.key, 'FULL_ACCESS')}
                               style={{ width: '17px', height: '17px', cursor: 'pointer', accentColor: '#059669' }}
-                            />
-                          </label>
-                        </td>
-
-                        {/* Edit */}
-                        <td style={{ textAlign: 'center' }}>
-                          <label style={{ display: 'flex', justifyContent: 'center', cursor: 'pointer', margin: 0, padding: '0.4rem' }}>
-                            <input
-                              type="radio"
-                              name={`rbac_${feature.key}`}
-                              checked={currentLevel === 'EDIT'}
-                              onChange={() => handlePermissionChange(feature.key, 'EDIT')}
-                              style={{ width: '17px', height: '17px', cursor: 'pointer', accentColor: '#d97706' }}
-                            />
-                          </label>
-                        </td>
-
-                        {/* Create */}
-                        <td style={{ textAlign: 'center' }}>
-                          <label style={{ display: 'flex', justifyContent: 'center', cursor: 'pointer', margin: 0, padding: '0.4rem' }}>
-                            <input
-                              type="radio"
-                              name={`rbac_${feature.key}`}
-                              checked={currentLevel === 'CREATE'}
-                              onChange={() => handlePermissionChange(feature.key, 'CREATE')}
-                              style={{ width: '17px', height: '17px', cursor: 'pointer', accentColor: '#2563eb' }}
                             />
                           </label>
                         </td>
 
                         {/* View */}
                         <td style={{ textAlign: 'center' }}>
-                          <label style={{ display: 'flex', justifyContent: 'center', cursor: 'pointer', margin: 0, padding: '0.4rem' }}>
+                          <label style={{ display: 'flex', justifyContent: 'center', cursor: 'pointer', margin: 0, padding: '0.35rem' }}>
                             <input
-                              type="radio"
-                              name={`rbac_${feature.key}`}
-                              checked={currentLevel === 'VIEW'}
-                              onChange={() => handlePermissionChange(feature.key, 'VIEW')}
+                              type="checkbox"
+                              checked={activeActions.includes('VIEW')}
+                              onChange={() => handleToggleAction(feature.key, 'VIEW')}
                               style={{ width: '17px', height: '17px', cursor: 'pointer', accentColor: '#7c3aed' }}
+                            />
+                          </label>
+                        </td>
+
+                        {/* Create */}
+                        <td style={{ textAlign: 'center' }}>
+                          <label style={{ display: 'flex', justifyContent: 'center', cursor: 'pointer', margin: 0, padding: '0.35rem' }}>
+                            <input
+                              type="checkbox"
+                              checked={activeActions.includes('CREATE')}
+                              onChange={() => handleToggleAction(feature.key, 'CREATE')}
+                              style={{ width: '17px', height: '17px', cursor: 'pointer', accentColor: '#2563eb' }}
+                            />
+                          </label>
+                        </td>
+
+                        {/* Edit */}
+                        <td style={{ textAlign: 'center' }}>
+                          <label style={{ display: 'flex', justifyContent: 'center', cursor: 'pointer', margin: 0, padding: '0.35rem' }}>
+                            <input
+                              type="checkbox"
+                              checked={activeActions.includes('EDIT')}
+                              onChange={() => handleToggleAction(feature.key, 'EDIT')}
+                              style={{ width: '17px', height: '17px', cursor: 'pointer', accentColor: '#d97706' }}
+                            />
+                          </label>
+                        </td>
+
+                        {/* Delete */}
+                        <td style={{ textAlign: 'center' }}>
+                          <label style={{ display: 'flex', justifyContent: 'center', cursor: 'pointer', margin: 0, padding: '0.35rem' }}>
+                            <input
+                              type="checkbox"
+                              checked={activeActions.includes('DELETE')}
+                              onChange={() => handleToggleAction(feature.key, 'DELETE')}
+                              style={{ width: '17px', height: '17px', cursor: 'pointer', accentColor: 'var(--danger)' }}
+                            />
+                          </label>
+                        </td>
+
+                        {/* Approve */}
+                        <td style={{ textAlign: 'center' }}>
+                          <label style={{ display: 'flex', justifyContent: 'center', cursor: 'pointer', margin: 0, padding: '0.35rem' }}>
+                            <input
+                              type="checkbox"
+                              checked={activeActions.includes('APPROVE')}
+                              onChange={() => handleToggleAction(feature.key, 'APPROVE')}
+                              style={{ width: '17px', height: '17px', cursor: 'pointer', accentColor: '#ea580c' }}
                             />
                           </label>
                         </td>
 
                         {/* No Access */}
                         <td style={{ textAlign: 'center' }}>
-                          <label style={{ display: 'flex', justifyContent: 'center', cursor: 'pointer', margin: 0, padding: '0.4rem' }}>
+                          <label style={{ display: 'flex', justifyContent: 'center', cursor: 'pointer', margin: 0, padding: '0.35rem' }}>
                             <input
-                              type="radio"
-                              name={`rbac_${feature.key}`}
-                              checked={currentLevel === 'NO_ACCESS'}
-                              onChange={() => handlePermissionChange(feature.key, 'NO_ACCESS')}
+                              type="checkbox"
+                              checked={isNoAccess}
+                              onChange={() => handleToggleAction(feature.key, 'NO_ACCESS')}
                               style={{ width: '17px', height: '17px', cursor: 'pointer', accentColor: '#6b7280' }}
                             />
                           </label>
@@ -1072,21 +1122,35 @@ export const UserManagementModule: React.FC = () => {
                 {customRoles.map(r => {
                   const deptObj = departments.find(d => d.id === r.departmentId);
                   const perms = r.permissions || {};
-                  const fullCount = Object.values(perms).filter(p => p === 'FULL_ACCESS').length;
-                  const editCount = Object.values(perms).filter(p => p === 'EDIT').length;
-                  const createCount = Object.values(perms).filter(p => p === 'CREATE').length;
-                  const viewCount = Object.values(perms).filter(p => p === 'VIEW').length;
+                  let fullCount = 0;
+                  let viewCount = 0;
+                  let createCount = 0;
+                  let editCount = 0;
+                  let deleteCount = 0;
+                  let approveCount = 0;
+
+                  Object.values(perms).forEach(p => {
+                    const acts = normalizePermsToActions(p);
+                    if (ALL_ACTIONS.every(a => acts.includes(a))) fullCount++;
+                    if (acts.includes('VIEW')) viewCount++;
+                    if (acts.includes('CREATE')) createCount++;
+                    if (acts.includes('EDIT')) editCount++;
+                    if (acts.includes('DELETE')) deleteCount++;
+                    if (acts.includes('APPROVE')) approveCount++;
+                  });
 
                   return (
                     <tr key={r.id}>
-                      <td style={{ fontWeight: 700 }}>{r.name}</td>
+                      <td style={{ fontWeight: 700 }}>{r.name || r.roleName}</td>
                       <td style={{ fontSize: '0.85rem' }}>{deptObj ? `${deptObj.name} (${deptObj.code})` : 'Global'}</td>
                       <td>
                         <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
                           {fullCount > 0 && <span className="badge badge-success" style={{ fontSize: '0.72rem' }}>{fullCount} Full Access</span>}
-                          {editCount > 0 && <span className="badge badge-warning" style={{ fontSize: '0.72rem' }}>{editCount} Edit</span>}
-                          {createCount > 0 && <span className="badge badge-info" style={{ fontSize: '0.72rem' }}>{createCount} Create</span>}
                           {viewCount > 0 && <span className="badge badge-neutral" style={{ fontSize: '0.72rem' }}>{viewCount} View</span>}
+                          {createCount > 0 && <span className="badge badge-info" style={{ fontSize: '0.72rem' }}>{createCount} Create</span>}
+                          {editCount > 0 && <span className="badge badge-warning" style={{ fontSize: '0.72rem' }}>{editCount} Edit</span>}
+                          {deleteCount > 0 && <span className="badge badge-danger" style={{ fontSize: '0.72rem' }}>{deleteCount} Delete</span>}
+                          {approveCount > 0 && <span className="badge" style={{ backgroundColor: '#ffedd5', color: '#c2410c', fontSize: '0.72rem' }}>{approveCount} Approve</span>}
                         </div>
                       </td>
                       <td style={{ textAlign: 'center' }}>
@@ -1096,12 +1160,13 @@ export const UserManagementModule: React.FC = () => {
                             style={{ padding: '0.25rem 0.5rem', fontSize: '0.78rem' }} 
                             onClick={() => { 
                               setEditingRole(r); 
-                              setRoleName(r.name || ''); 
+                              setRoleName(r.name || r.roleName || ''); 
                               setRoleDeptId(r.departmentId || ''); 
-                              setRolePermissions({
-                                ...getDefaultPermissions('NO_ACCESS'),
-                                ...(r.permissions || {})
-                              }); 
+                              const loadedPerms: Record<string, PermissionAction[]> = {};
+                              RBAC_FEATURES.forEach(f => {
+                                loadedPerms[f.key] = normalizePermsToActions(r.permissions?.[f.key]);
+                              });
+                              setRolePermissions(loadedPerms); 
                             }}
                           >
                             <Edit2 size={13} /> Edit Matrix

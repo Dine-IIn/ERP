@@ -3,10 +3,8 @@ import { useERP } from '../../context/ERPContext';
 import { AutocompleteSelect, AutocompleteOption } from '../common/AutocompleteSelect';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { SingleWOPrintView, WOListPrintView } from '../printTemplates/WOPrintTemplates';
-import { openLiveModuleSheet } from '../../utils/sheetFolderManager';
 import { Wrench, Plus, Trash2, Sliders, CheckCircle, Search, Printer, FileSpreadsheet, ArrowLeft, X, Package, Filter, Zap, Layers, FolderTree, FolderPlus, ChevronRight, ChevronDown, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw } from 'lucide-react';
 import { WorkOrder, WOStage, WOStatus, WOCustomComponent, BOM, BOMComponent } from '../../types/erp';
-import { ExportFieldSelectorModal, FieldOption } from '../common/ExportFieldSelectorModal';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
 import { getExplodedBOMSummary } from '../../utils/nestedBOMHelper';
 
@@ -20,8 +18,7 @@ export const WorkOrderModule: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   const [isStageModalOpen, setIsStageModalOpen] = useState(false);
-  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
-  const [selectedWO, setSelectedWO] = useState<WorkOrder | null>(null);
+    const [selectedWO, setSelectedWO] = useState<WorkOrder | null>(null);
   const [printModalOpen, setPrintModalOpen] = useState(false);
   const [printData, setPrintData] = useState<any>(null);
 
@@ -451,53 +448,13 @@ export const WorkOrderModule: React.FC = () => {
     setPrintModalOpen(true);
   };
 
-  const handleRefreshLiveSheet = () => {
-    const data = filteredWOs.map(w => ({
-      workOrderNo: w.workOrderNo || w.woNumber || '',
-      soNumber: w.soNumber || '-',
-      machineModel: w.machineModel,
-      quantity: w.quantity || w.targetQuantity || 1,
-      stage: w.stage || 'PLANNED',
-      status: w.status || 'IN_PROGRESS',
-      assignedLead: w.assignedLead || '',
-      startDate: w.startDate || '',
-      targetCompletionDate: w.targetCompletionDate || '',
-      remarks: w.remarks || ''
-    }));
-
-    const headers: { key: keyof typeof data[0]; label: string }[] = [
-      { key: 'workOrderNo', label: 'Work Order No' },
-      { key: 'soNumber', label: 'Linked SO No' },
-      { key: 'machineModel', label: 'Machine Model' },
-      { key: 'quantity', label: 'Build Quantity' },
-      { key: 'stage', label: 'Assembly Stage' },
-      { key: 'status', label: 'Status' },
-      { key: 'assignedLead', label: 'Assigned Lead' },
-      { key: 'startDate', label: 'Start Date' },
-      { key: 'targetCompletionDate', label: 'Target Date' },
-      { key: 'remarks', label: 'Remarks / Notes' }
-    ];
-
-    openLiveModuleSheet('WorkOrders', 'GEC_ERP_Work_Orders_Live', data, headers);
-  };
-
   const filteredCustomComponents = customComponents.filter(c =>
     (c.itemCode || '').toLowerCase().includes(compSearchTerm.toLowerCase()) ||
     (c.itemName || '').toLowerCase().includes(compSearchTerm.toLowerCase()) ||
     (c.subAssemblyTag || '').toLowerCase().includes(compSearchTerm.toLowerCase())
   );
 
-  const availableWOExportFields: FieldOption<WorkOrder>[] = [
-    { key: 'workOrderNo', label: 'Work Order No' },
-    { key: 'soNumber', label: 'SO Number' },
-    { key: 'machineModel', label: 'Item / Machine Model' },
-    { key: 'quantity', label: 'Build Quantity' },
-    { key: 'startDate', label: 'Start Date' },
-    { key: 'targetCompletionDate', label: 'Target Completion' },
-    { key: 'stage', label: 'Assembly Stage' },
-    { key: 'status', label: 'Status' }
-  ];
-
+  
   // Table Keyboard Navigation
   const { selectedIndex, setSelectedIndex } = useTableKeyboardNav(
     filteredWOs,
@@ -522,16 +479,10 @@ export const WorkOrderModule: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <button type="button" className="btn btn-outline" onClick={handleRefreshLiveSheet} title="Sync and maintain live CSV sheet">
-            <RefreshCw size={14} /> Live Sheet
-          </button>
           <button type="button" className="btn btn-outline" onClick={handlePrintWOList} title="Print filtered work orders list report">
             <Printer size={14} /> Print Report
           </button>
-          <button className="btn btn-outline" onClick={() => setIsExportModalOpen(true)}>
-            <FileSpreadsheet size={14} /> Export Custom
-          </button>
-          {!activePanelOpen && (
+                    {!activePanelOpen && (
             <button className="btn btn-primary" onClick={handleOpenModal}>
               <Plus size={16} /> Create Machine Work Order
             </button>
@@ -1419,15 +1370,6 @@ export const WorkOrderModule: React.FC = () => {
       </PrintManagerModal>
 
       {/* Custom Export Field Modal */}
-      <ExportFieldSelectorModal<WorkOrder>
-        isOpen={isExportModalOpen}
-        onClose={() => setIsExportModalOpen(false)}
-        title="Custom Export Work Orders Live Sheet"
-        subfolder="WorkOrders"
-        fileName="GEC_Filtered_Work_Orders_Live"
-        data={filteredWOs}
-        availableFields={availableWOExportFields}
-      />
-    </div>
+          </div>
   );
 };

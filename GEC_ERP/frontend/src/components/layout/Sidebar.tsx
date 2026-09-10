@@ -3,7 +3,7 @@ import { useERP } from '../../context/ERPContext';
 import { 
   LayoutDashboard, Package, Users, Contact, Warehouse, Truck, 
   ShoppingCart, FileCheck, Wrench, ShieldCheck, Layers, Shield, Cpu, LogOut, Sun, Moon, FileText, ShoppingBag,
-  AlertTriangle, ClipboardList, Factory, Send, FileSpreadsheet
+  AlertTriangle, ClipboardList, Factory, Send, FileSpreadsheet, ShieldAlert
 } from 'lucide-react';
 
 interface NavItem {
@@ -27,6 +27,7 @@ export const Sidebar: React.FC = () => {
   const activeSOCount = salesOrders.filter(s => s.status === 'CONFIRMED').length;
 
   const navItems: NavItem[] = [
+    ...(currentUser?.isSuperAdmin ? [{ key: 'superadmin-analytics', label: 'SuperAdmin Analytics', icon: <ShieldAlert size={16} color="#7c3aed" /> }] : []),
     { key: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={16} /> },
     { key: 'planning', label: 'Planning', icon: <FileSpreadsheet size={16} /> },
     { key: 'shortage', label: 'Shortage Planning', icon: <AlertTriangle size={16} color="var(--warning)" /> },
