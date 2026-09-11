@@ -150,6 +150,19 @@ export interface UserActivityLog {
   timestamp: string;
 }
 
+export interface SystemErrorLog {
+  id: string;
+  message: string;
+  source?: string;
+  lineno?: number;
+  colno?: number;
+  stack?: string;
+  timestamp: string;
+  severity: 'FATAL' | 'ERROR' | 'WARNING';
+  userAgent?: string;
+  resolved?: boolean;
+}
+
 export interface BackupRecord {
   id: string;
   fileName: string;

@@ -26,8 +26,10 @@ export const Sidebar: React.FC = () => {
   const activeWOCount = workOrders.filter(w => w.status === 'IN_PROGRESS').length;
   const activeSOCount = salesOrders.filter(s => s.status === 'CONFIRMED').length;
 
+  const isSuperAdminUser = currentUser?.isSuperAdmin === true || currentUser?.username?.toLowerCase() === 'superadmin';
+
   const navItems: NavItem[] = [
-    ...(currentUser?.isSuperAdmin ? [{ key: 'superadmin-analytics', label: 'SuperAdmin Analytics', icon: <ShieldAlert size={16} color="#7c3aed" /> }] : []),
+    ...(isSuperAdminUser ? [{ key: 'superadmin-analytics', label: 'SuperAdmin Analytics', icon: <ShieldAlert size={16} color="#7c3aed" /> }] : []),
     { key: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={16} /> },
     { key: 'planning', label: 'Planning', icon: <FileSpreadsheet size={16} /> },
     { key: 'shortage', label: 'Shortage Planning', icon: <AlertTriangle size={16} color="var(--warning)" /> },

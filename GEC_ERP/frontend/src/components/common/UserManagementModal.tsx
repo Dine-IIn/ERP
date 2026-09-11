@@ -28,11 +28,12 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
     );
   }
 
-  // Filter out Super Admin if current user is not Super Admin
+  // Filter out Super Admin if current user is not strictly Super Admin
+  const isCurrentUserSuperAdmin = currentUser?.username?.toLowerCase() === 'superadmin' && currentUser?.isSuperAdmin === true;
   const visibleUsers = users.filter(u => {
-    const isSuper = u.isSuperAdmin || u.username.toLowerCase() === 'superadmin';
+    const isSuper = u.username?.toLowerCase() === 'superadmin' || u.isSuperAdmin === true;
     if (isSuper) {
-      return currentUser?.isSuperAdmin === true;
+      return isCurrentUserSuperAdmin;
     }
     return true;
   });

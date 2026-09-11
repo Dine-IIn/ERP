@@ -4,7 +4,7 @@ import {
   PurchaseOrder, GoodsReceivedNotice, WorkOrder, 
   QCInspection, QCType, MachineAssembly, BOM, SalesOrder, Role, Department, CustomRole,
   JobCard, FloorStation, FinishedGoodUnit, DispatchRecord, UserActivityLog, BackupRecord, RBAC_FEATURES,
-  JobCardMaterialReissue, POItem, POStatus
+  JobCardMaterialReissue, POItem, POStatus, SystemErrorLog
 } from '../types/erp';
 import { 
   INITIAL_USERS, INITIAL_CUSTOMERS, INITIAL_VENDORS, INITIAL_ITEM_CATEGORIES, INITIAL_VENDOR_CATEGORIES, INITIAL_ITEMS, 
@@ -248,6 +248,9 @@ interface ERPContextType {
   // Audit Logs & Backups
   auditLogs: UserActivityLog[];
   addAuditLog: (action: string, module: string, details: string) => void;
+  systemErrors: SystemErrorLog[];
+  addSystemError: (err: Omit<SystemErrorLog, 'id' | 'timestamp' | 'userAgent'>) => void;
+  clearSystemErrors: () => void;
   backups: BackupRecord[];
   createBackup: () => BackupRecord;
   deleteBackup: (id: string) => void;
@@ -335,10 +338,32 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [users, setUsers] = useState<User[]>(() => {
     const loaded = getStored<User[]>('users', INITIAL_USERS);
-    return loaded.map(u => ({
-      ...u,
-      password: u.password || (u.username.toLowerCase() === 'superadmin' ? 'GEC_SuperAdmin#2026!Secured$' : 'admin')
-    }));
+    // Sanitize any existing localStorage data so 'admin' is NEVER isSuperAdmin, and 'superadmin' ALWAYS exists and IS isSuperAdmin
+    const hasSuperAdmin = loaded.some(u => u.username.toLowerCase() === 'superadmin');
+    let sanitized = loaded.map(u => {
+      const isSuper = u.username.toLowerCase() === 'superadmin';
+      return {
+        ...u,
+        isSuperAdmin: isSuper,
+        password: u.password || (isSuper ? 'GEC_SuperAdmin#2026!Secured$' : (u.username.toLowerCase() === 'admin' ? 'admin' : 'password'))
+      };
+    });
+
+    if (!hasSuperAdmin) {
+      sanitized = [
+        {
+          id: 'usr-superadmin',
+          username: 'superadmin',
+          fullName: 'GEC System Super Admin',
+          role: 'Admin',
+          email: 'superadmin@gecmachines.com',
+          password: 'GEC_SuperAdmin#2026!Secured$',
+          isSuperAdmin: true
+        },
+        ...sanitized
+      ];
+    }
+    return sanitized;
   });
   const [departments, setDepartments] = useState<Department[]>(() => getStored('departments', [
     { id: 'dept-1', code: 'PROD', name: 'Production', headName: 'Rajesh Sharma', description: 'Assembly & Machining' },
@@ -352,7 +377,30 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     return stored;
   });
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    const stored = getStored<User | null>('currentUser', null);
+    if (!stored) return null;
+
+    // Persistent 15-minute Session Timeout Check
+    const timeoutMs = 15 * 60 * 1000;
+    const lastActivityStr = localStorage.getItem('gec_erp_lastActivityTime');
+    if (lastActivityStr) {
+      const lastTime = parseInt(lastActivityStr, 10);
+      if (!isNaN(lastTime) && Date.now() - lastTime > timeoutMs) {
+        localStorage.removeItem('gec_erp_currentUser');
+        localStorage.removeItem('gec_erp_lastActivityTime');
+        return null;
+      }
+    }
+
+    // Still within 15 minutes: refresh activity timestamp & restore user
+    localStorage.setItem('gec_erp_lastActivityTime', Date.now().toString());
+    const isSuper = stored.username?.toLowerCase() === 'superadmin';
+    return {
+      ...stored,
+      isSuperAdmin: isSuper
+    };
+  });
   const [items, setItems] = useState<Item[]>(() => getStored('items', INITIAL_ITEMS));
   const [itemCategories, setItemCategories] = useState<string[]>(() => getStored('itemCategories', INITIAL_ITEM_CATEGORIES));
   const [customers, setCustomers] = useState<Customer[]>(() => getStored('customers', INITIAL_CUSTOMERS));
@@ -401,13 +449,76 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAuditLogs(prev => [newLog, ...prev.slice(0, 999)]);
   };
 
+  const [systemErrors, setSystemErrors] = useState<SystemErrorLog[]>(() => getStored('systemErrors', []));
+
+  useEffect(() => setStored('systemErrors', systemErrors), [systemErrors]);
+
+  const addSystemError = (err: Omit<SystemErrorLog, 'id' | 'timestamp' | 'userAgent'>) => {
+    const newErr: SystemErrorLog = {
+      ...err,
+      id: `err-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      timestamp: new Date().toISOString(),
+      userAgent: navigator.userAgent
+    };
+    setSystemErrors(prev => [newErr, ...prev.slice(0, 199)]);
+  };
+
+  const clearSystemErrors = () => {
+    setSystemErrors([]);
+    localStorage.removeItem('gec_erp_systemErrors');
+  };
+
+  // Global window error listener for runtime crashes & unhandled exceptions
+  useEffect(() => {
+    const handleGlobalError = (event: ErrorEvent) => {
+      addSystemError({
+        message: event.message || 'Unhandled Client Exception',
+        source: event.filename,
+        lineno: event.lineno,
+        colno: event.colno,
+        stack: event.error?.stack || '',
+        severity: 'FATAL'
+      });
+    };
+
+    const handleRejection = (event: PromiseRejectionEvent) => {
+      addSystemError({
+        message: typeof event.reason === 'string' ? event.reason : (event.reason?.message || 'Unhandled Promise Rejection'),
+        stack: event.reason?.stack || '',
+        severity: 'ERROR'
+      });
+    };
+
+    window.addEventListener('error', handleGlobalError);
+    window.addEventListener('unhandledrejection', handleRejection);
+
+    return () => {
+      window.removeEventListener('error', handleGlobalError);
+      window.removeEventListener('unhandledrejection', handleRejection);
+    };
+  }, []);
+
   const [backupSettings, setBackupSettings] = useState<BackupSettings>(() => getStored('backupSettings', {
     cycleValue: 2,
     cycleUnit: 'Days',
     retentionLife: 'Infinite'
   }));
 
-  const [activeModule, setActiveModuleState] = useState<string>('dashboard');
+  const [activeModule, setActiveModuleState] = useState<string>(() => {
+    const timeoutMs = 15 * 60 * 1000;
+    const lastActivityStr = localStorage.getItem('gec_erp_lastActivityTime');
+    if (lastActivityStr) {
+      const lastTime = parseInt(lastActivityStr, 10);
+      if (!isNaN(lastTime) && Date.now() - lastTime > timeoutMs) {
+        return 'dashboard';
+      }
+    }
+    const storedUser = getStored<User | null>('currentUser', null);
+    if (storedUser && (storedUser.username?.toLowerCase() === 'superadmin' || storedUser.isSuperAdmin)) {
+      return 'superadmin-analytics';
+    }
+    return 'dashboard';
+  });
   const [theme, setTheme] = useState<'dark' | 'light'>(() => getStored('theme', 'dark'));
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedWOIdForEdit, setSelectedWOIdForEdit] = useState<string | null>(null);
@@ -470,27 +581,35 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSearchTerm('');
   };
 
-  // 15-min Inactivity Auto-Logout for Web & Desktop (Tauri)
+  // 15-min Persistent Inactivity Auto-Logout for Web & Desktop (Tauri)
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser) {
+      localStorage.removeItem('gec_erp_lastActivityTime');
+      return;
+    }
 
     const timeoutMinutes = 15;
     const timeoutMs = timeoutMinutes * 60 * 1000;
-    let lastActivityTime = Date.now();
 
     const recordActivity = () => {
-      lastActivityTime = Date.now();
+      localStorage.setItem('gec_erp_lastActivityTime', Date.now().toString());
     };
 
+    recordActivity();
+
     const checkInterval = setInterval(() => {
-      if (Date.now() - lastActivityTime >= timeoutMs) {
+      const lastActivityStr = localStorage.getItem('gec_erp_lastActivityTime');
+      const lastTime = lastActivityStr ? parseInt(lastActivityStr, 10) : Date.now();
+
+      if (Date.now() - lastTime >= timeoutMs) {
         alert(`🔒 Inactive Session Timeout: You have been automatically logged out due to ${timeoutMinutes} minutes of inactivity.`);
         setCurrentUser(null);
         localStorage.removeItem('gec_erp_currentUser');
+        localStorage.removeItem('gec_erp_lastActivityTime');
       }
     }, 10000);
 
-    const events = ['mousemove', 'mousedown', 'keydown', 'click', 'scroll', 'touchstart', 'focus'];
+    const events = ['mousemove', 'mousedown', 'keydown', 'click', 'scroll', 'touchstart', 'focus', 'beforeunload'];
     events.forEach(ev => window.addEventListener(ev, recordActivity, { passive: true }));
 
     return () => {
@@ -518,15 +637,18 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             role: 'Admin',
             email: 'superadmin@gecmachines.com',
             password: expectedSuperPass,
-            isSuperAdmin: true
           }),
+          isSuperAdmin: true,
           ...(deviceType === 'desktop' ? { desktopSessionId: newSessionId } : { mobileSessionId: newSessionId })
         };
 
         setUsers(prev => {
-          const exists = prev.some(u => u.id === updatedSuperUser.id);
-          return exists ? prev.map(u => u.id === updatedSuperUser.id ? updatedSuperUser : u) : [updatedSuperUser, ...prev];
+          const exists = prev.some(u => u.username.toLowerCase() === 'superadmin');
+          return exists 
+            ? prev.map(u => u.username.toLowerCase() === 'superadmin' ? updatedSuperUser : { ...u, isSuperAdmin: false }) 
+            : [updatedSuperUser, ...prev.map(u => ({ ...u, isSuperAdmin: false }))];
         });
+        localStorage.setItem('gec_erp_lastActivityTime', Date.now().toString());
         setCurrentUser(updatedSuperUser);
         setActiveModule('superadmin-analytics');
         return { success: true, message: 'Super Admin logged in successfully' };
@@ -542,13 +664,15 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const newSessionId = `sess-${Date.now()}-${Math.random()}`;
         const updatedUser: User = {
           ...found,
+          isSuperAdmin: false,
           ...(deviceType === 'desktop' ? { desktopSessionId: newSessionId } : { mobileSessionId: newSessionId })
         };
 
-        setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+        setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : (u.username.toLowerCase() === 'superadmin' ? { ...u, isSuperAdmin: true } : { ...u, isSuperAdmin: false })));
+        localStorage.setItem('gec_erp_lastActivityTime', Date.now().toString());
         setCurrentUser(updatedUser);
         setActiveModule('dashboard');
-        return { success: true, message: 'Logged in successfully' };
+        return { success: true, message: `Welcome back, ${updatedUser.fullName}!` };
       }
     }
 
@@ -575,6 +699,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const logout = () => {
     setCurrentUser(null);
     localStorage.removeItem('gec_erp_currentUser');
+    localStorage.removeItem('gec_erp_lastActivityTime');
   };
 
   const addUser = (userData: Omit<User, 'id'>) => {
@@ -2122,6 +2247,9 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       dispatchFinishedGood,
       auditLogs,
       addAuditLog,
+      systemErrors,
+      addSystemError,
+      clearSystemErrors,
       backups,
       createBackup,
       deleteBackup,

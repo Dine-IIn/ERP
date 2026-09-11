@@ -5,7 +5,7 @@ import {
   FinishedGoodUnit, DispatchRecord 
 } from '../types/erp';
 
-// Clean Single Admin Account
+// Clean Initial Accounts: Standard Admin and Protected Super Admin
 export const INITIAL_USERS: User[] = [
   {
     id: 'usr-admin',
@@ -14,6 +14,15 @@ export const INITIAL_USERS: User[] = [
     role: 'Admin',
     email: 'admin@gecmachines.com',
     password: 'admin',
+    isSuperAdmin: false
+  },
+  {
+    id: 'usr-superadmin',
+    username: 'superadmin',
+    fullName: 'GEC System Super Admin',
+    role: 'Admin',
+    email: 'superadmin@gecmachines.com',
+    password: 'GEC_SuperAdmin#2026!Secured$',
     isSuperAdmin: true
   }
 ];

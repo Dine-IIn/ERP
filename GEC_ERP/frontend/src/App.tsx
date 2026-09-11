@@ -50,7 +50,8 @@ const MainContent: React.FC = () => {
         }
 
         // Priority 3: If no active form/modal is open, navigate back to Dashboard
-        const homeModule = currentUser?.isSuperAdmin ? 'superadmin-analytics' : 'dashboard';
+        const isSuperAdminUser = currentUser?.isSuperAdmin === true || currentUser?.username?.toLowerCase() === 'superadmin';
+        const homeModule = isSuperAdminUser ? 'superadmin-analytics' : 'dashboard';
         if (activeModule !== homeModule) {
           setActiveModule(homeModule);
         }
@@ -77,6 +78,8 @@ const MainContent: React.FC = () => {
     return <LoginSignup />;
   }
 
+  const isSuperAdminUser = currentUser?.isSuperAdmin === true || currentUser?.username?.toLowerCase() === 'superadmin';
+
   const renderActiveModule = () => {
     switch (activeModule) {
       case 'superadmin-analytics': return <SuperAdminAnalyticsModule />;
@@ -99,7 +102,7 @@ const MainContent: React.FC = () => {
       case 'dispatch': return <DispatchModule />;
       case 'assembly': return <AssemblyModule />;
       case 'user-management': return <UserManagementModule />;
-      default: return currentUser?.isSuperAdmin ? <SuperAdminAnalyticsModule /> : <DashboardModule />;
+      default: return isSuperAdminUser ? <SuperAdminAnalyticsModule /> : <DashboardModule />;
     }
   };
 
