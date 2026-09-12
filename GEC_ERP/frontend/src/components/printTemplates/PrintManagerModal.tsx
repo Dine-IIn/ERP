@@ -9,6 +9,7 @@ interface PrintManagerModalProps {
   title: string;
   children: React.ReactNode;
   documentRefNumber?: string;
+  orientation?: 'portrait' | 'landscape';
 }
 
 export const PrintManagerModal: React.FC<PrintManagerModalProps> = ({
@@ -16,12 +17,30 @@ export const PrintManagerModal: React.FC<PrintManagerModalProps> = ({
   onClose,
   title,
   children,
-  documentRefNumber
+  documentRefNumber,
+  orientation = 'portrait'
 }) => {
   if (!isOpen) return null;
 
   const handlePrint = () => {
+    let styleTag: HTMLStyleElement | null = null;
+    if (orientation === 'landscape') {
+      styleTag = document.createElement('style');
+      styleTag.id = 'print-orientation-override';
+      styleTag.innerHTML = '@page { size: A4 landscape !important; margin: 6mm 8mm !important; }';
+      document.head.appendChild(styleTag);
+      document.body.classList.add('print-landscape');
+    }
+
     window.print();
+
+    const cleanup = () => {
+      if (styleTag) styleTag.remove();
+      document.body.classList.remove('print-landscape');
+      window.removeEventListener('afterprint', cleanup);
+    };
+    window.addEventListener('afterprint', cleanup);
+    setTimeout(cleanup, 2000);
   };
 
   return (

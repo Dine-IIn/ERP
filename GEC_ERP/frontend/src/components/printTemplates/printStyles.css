@@ -1,24 +1,29 @@
+/* Screen display rule: Hide direct print container completely on screen */
+#direct-print-area {
+  display: none;
+}
+
 /* Professional Print & PDF Styles */
 @media print {
   body * {
     visibility: hidden;
   }
-  #printable-area, #printable-area * {
+  #printable-area, #printable-area *, #direct-print-area, #direct-print-area * {
     visibility: visible;
   }
-  #printable-area {
+  #printable-area, #direct-print-area {
+    display: block !important;
     position: absolute;
     left: 0;
     top: 0;
     width: 100%;
     margin: 0;
-    padding: 12mm 15mm;
+    padding: 0.15rem !important;
     background: #ffffff !important;
-    color: #111827 !important;
+    color: #000000 !important;
   }
   @page {
-    size: A4 portrait;
-    margin: 10mm;
+    margin: 2mm 3mm;
   }
   .page-break {
     page-break-before: always;

@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
+import { PlanningPrintReport } from '../printTemplates/PlanningPrintTemplates';
 import { 
   FileSpreadsheet, Search, Printer, RefreshCw, Filter, 
-  AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, Package, Layers, X, CheckSquare, Square
+  AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, Package, Layers, X, CheckSquare, Square, Eye
 } from 'lucide-react';
 import { Item, FIXED_ITEM_CLASSES, WorkOrder, BOM, JobCard, PurchaseOrder, JobworkChallan } from '../../types/erp';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
@@ -323,6 +324,10 @@ export const PlanningModule: React.FC = () => {
   const totalShortageItemsCount = planningData.filter(d => d.shortage > 0).length;
   const totalMinShortageItemsCount = planningData.filter(d => d.minShortage > 0).length;
 
+  const handleQuickPrint = () => {
+    window.print();
+  };
+
   return (
     <div className="module-layout-container" style={{ flex: 1, minHeight: 0, height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingRight: '0.25rem' }}>
       {/* Top Header */}
@@ -350,9 +355,24 @@ export const PlanningModule: React.FC = () => {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          <button type="button" className="btn btn-primary" onClick={() => setPrintModalOpen(true)} title="Print formatted planning table">
-            <Printer size={14} /> Print Planning Report
+        <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <button 
+            type="button" 
+            className="btn btn-primary" 
+            onClick={handleQuickPrint} 
+            title="Print Planning Report (Choose Landscape or Portrait in dialog)"
+            style={{ fontSize: '0.8rem', padding: '0.45rem 0.85rem' }}
+          >
+            <Printer size={15} /> Print Planning Report
+          </button>
+          <button 
+            type="button" 
+            className="btn btn-outline" 
+            onClick={() => setPrintModalOpen(true)} 
+            title="Preview Planning Document before printing"
+            style={{ fontSize: '0.8rem', padding: '0.45rem 0.75rem' }}
+          >
+            <Eye size={14} /> Preview
           </button>
         </div>
       </div>
@@ -723,70 +743,33 @@ export const PlanningModule: React.FC = () => {
         </table>
       </div>
 
-      {/* Print Manager Modal */}
+      {/* Hidden Direct Print Area (Used by Quick Direct Print) */}
+      <div id="direct-print-area">
+        <PlanningPrintReport 
+          data={filteredData} 
+          filters={{
+            selectedClasses,
+            selectedProcessType,
+            searchTerm: cleanSearchTerm
+          }}
+        />
+      </div>
+
+      {/* Print Preview Modal */}
       {printModalOpen && (
         <PrintManagerModal
           isOpen={printModalOpen}
           onClose={() => setPrintModalOpen(false)}
           title="Planning & Material Demand Matrix"
         >
-          <div style={{ padding: '1.5rem', color: '#000000', backgroundColor: '#ffffff', fontFamily: 'sans-serif' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #000000', paddingBottom: '0.75rem', marginBottom: '1rem' }}>
-              <div>
-                <h1 style={{ fontSize: '1.4rem', fontWeight: 900, margin: 0 }}>GEC PLASTICS & MOULDING MACHINERY</h1>
-                <h2 style={{ fontSize: '1.05rem', fontWeight: 700, margin: '0.2rem 0 0 0', color: '#2563eb' }}>
-                  Material & Production Planning Demand Report
-                </h2>
-                <div style={{ fontSize: '0.75rem', color: '#555555', marginTop: '0.25rem' }}>
-                  Generated on: {new Date().toLocaleString()} &bull; Total Filtered Items: {filteredData.length}
-                </div>
-              </div>
-              <div style={{ textAlign: 'right', fontSize: '0.75rem', color: '#555555' }}>
-                <div>Production Planning & Inventory Control</div>
-                <div>Class Filter: {selectedClasses.length > 0 ? selectedClasses.join(', ') : 'ALL'}</div>
-                <div>Process: {selectedProcessType}</div>
-              </div>
-            </div>
-
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.68rem' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#f1f5f9', borderBottom: '1.5px solid #000000' }}>
-                  <th style={{ padding: '4px', textAlign: 'left', border: '1px solid #cbd5e1' }}>Part Code</th>
-                  <th style={{ padding: '4px', textAlign: 'left', border: '1px solid #cbd5e1' }}>Item Code</th>
-                  <th style={{ padding: '4px', textAlign: 'left', border: '1px solid #cbd5e1' }}>Description</th>
-                  <th style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>WO Required</th>
-                  <th style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>Pend JobCard</th>
-                  <th style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>Total Required</th>
-                  <th style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>Curr Stock</th>
-                  <th style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>Pend PO</th>
-                  <th style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>Pend JobWork</th>
-                  <th style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>Pend QC</th>
-                  <th style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>Shortage</th>
-                  <th style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>Min Level</th>
-                  <th style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>Min Level Shortage</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredData.map(row => (
-                  <tr key={row.item.id} style={{ borderBottom: '1px solid #e2e8f0', backgroundColor: row.shortage > 0 ? '#fee2e2' : undefined }}>
-                    <td style={{ padding: '4px', border: '1px solid #cbd5e1', fontFamily: 'monospace' }}>{row.partCode}</td>
-                    <td style={{ padding: '4px', border: '1px solid #cbd5e1', fontFamily: 'monospace', fontWeight: 700 }}>{row.itemCode}</td>
-                    <td style={{ padding: '4px', border: '1px solid #cbd5e1' }}>{row.name}</td>
-                    <td style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>{row.pendingWO}</td>
-                    <td style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>{row.pendingJobCard}</td>
-                    <td style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1', fontWeight: 700 }}>{row.totalRequired}</td>
-                    <td style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1', fontWeight: 700 }}>{row.currentStock}</td>
-                    <td style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>{row.pendingPO}</td>
-                    <td style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>{row.pendingJW}</td>
-                    <td style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>{row.pendingQC}</td>
-                    <td style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1', fontWeight: 800, color: row.shortage > 0 ? '#dc2626' : '#16a34a' }}>{row.shortage}</td>
-                    <td style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>{row.minStockLevel}</td>
-                    <td style={{ padding: '4px', textAlign: 'center', border: '1px solid #cbd5e1' }}>{row.minShortage}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <PlanningPrintReport 
+            data={filteredData} 
+            filters={{
+              selectedClasses,
+              selectedProcessType,
+              searchTerm: cleanSearchTerm
+            }}
+          />
         </PrintManagerModal>
       )}
     </div>
