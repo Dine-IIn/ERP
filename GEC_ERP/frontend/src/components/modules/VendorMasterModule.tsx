@@ -4,13 +4,13 @@ import { BulkUploadModal } from '../common/BulkUploadModal';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { VendorListPrintView } from '../printTemplates/ItemMasterPrintTemplates';
 import { Users, Plus, Edit2, Trash2, Upload, Search, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown, ArrowLeft, X, Printer, RefreshCw } from 'lucide-react';
-import { Vendor } from '../../types/erp';
+import { Vendor, generateNextVendorCode } from '../../types/erp';
 import { parseVendorsSheet } from '../../utils/csvParser';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
 
-const templateCSV = `Code,Name,Category,ContactPerson,Phone,Email,City,GSTIN,PAN,BankName,AccountNumber,IFSC\nVEND-GEC-099,Apex Nitriding Works,Raw Material Supplier,Rakesh Shah,9825099887,contact@apexnitride.com,Ahmedabad,24AAAPA1122K1Z5,AAAPA1122K,HDFC Bank,502000887766,HDFC0000123`;
+const templateCSV = `VendorCode,VendorName,ContactPerson,Phone,Email,City,GSTIN,PAN\nVEN0000001,Apex Nitriding Works,Rakesh Shah,9825099887,contact@apexnitride.com,Ahmedabad,24AAAPA1122K1Z5,AAAPA1122K`;
 
-type SortField = 'vendorCode' | 'name' | 'city' | 'phone' | 'category';
+type SortField = 'vendorCode' | 'name' | 'city' | 'phone';
 
 export const VendorMasterModule: React.FC = () => {
   const { 
@@ -20,7 +20,7 @@ export const VendorMasterModule: React.FC = () => {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
-    const [printModalOpen, setPrintModalOpen] = useState(false);
+  const [printModalOpen, setPrintModalOpen] = useState(false);
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
 
   // Single Column Sorting State
@@ -30,11 +30,10 @@ export const VendorMasterModule: React.FC = () => {
   const [formData, setFormData] = useState({
     vendorCode: '',
     name: '',
-    category: 'Raw Material Supplier',
     contactPerson: '',
     phone: '',
     email: '',
-    city: 'Ahmedabad',
+    city: '',
     gstin: '',
     pan: '',
     bankName: '',
@@ -60,9 +59,9 @@ export const VendorMasterModule: React.FC = () => {
       !cleanSearchTerm ||
       v.name.toLowerCase().includes(cleanSearchTerm) ||
       v.vendorCode.toLowerCase().includes(cleanSearchTerm) ||
-      v.city.toLowerCase().includes(cleanSearchTerm) ||
-      v.contactPerson.toLowerCase().includes(cleanSearchTerm) ||
-      v.gstin.toLowerCase().includes(cleanSearchTerm)
+      (v.city && v.city.toLowerCase().includes(cleanSearchTerm)) ||
+      (v.contactPerson && v.contactPerson.toLowerCase().includes(cleanSearchTerm)) ||
+      (v.gstin && v.gstin.toLowerCase().includes(cleanSearchTerm))
     )
     .sort((a, b) => {
       let valA: any = a[sortField] || '';
@@ -82,13 +81,12 @@ export const VendorMasterModule: React.FC = () => {
   const handleOpenAddModal = () => {
     setEditingVendor(null);
     setFormData({
-      vendorCode: `VEND-GEC-${String(vendors.length + 1).padStart(3, '0')}`,
+      vendorCode: generateNextVendorCode(vendors),
       name: '',
-      category: 'Raw Material Supplier',
       contactPerson: '',
       phone: '',
       email: '',
-      city: 'Ahmedabad',
+      city: '',
       gstin: '',
       pan: '',
       bankName: '',
@@ -103,12 +101,11 @@ export const VendorMasterModule: React.FC = () => {
     setFormData({
       vendorCode: v.vendorCode,
       name: v.name,
-      category: v.category || 'Raw Material Supplier',
-      contactPerson: v.contactPerson,
-      phone: v.phone,
-      email: v.email,
-      city: v.city,
-      gstin: v.gstin,
+      contactPerson: v.contactPerson || '',
+      phone: v.phone || '',
+      email: v.email || '',
+      city: v.city || '',
+      gstin: v.gstin || '',
       pan: v.pan || '',
       bankName: v.bankName || '',
       accountNumber: v.accountNumber || '',
@@ -193,7 +190,7 @@ export const VendorMasterModule: React.FC = () => {
           </div>
 
           <form ref={formRef} onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1fr', gap: '1rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1rem' }}>
               <div>
                 <label>Vendor Code</label>
                 <input type="text" required className="input-field" value={formData.vendorCode} onChange={(e) => setFormData({ ...formData, vendorCode: e.target.value })} />
@@ -202,42 +199,31 @@ export const VendorMasterModule: React.FC = () => {
                 <label>Vendor / Supplier Name</label>
                 <input type="text" required className="input-field" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
               </div>
-              <div>
-                <label>Category</label>
-                <select className="input-field" value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })}>
-                  <option value="Raw Material Supplier">Raw Material Supplier</option>
-                  <option value="Machining Jobworker">Machining Jobworker</option>
-                  <option value="Heat Treatment Contractor">Heat Treatment Contractor</option>
-                  <option value="Bought-Out Component Vendor">Bought-Out Component Vendor</option>
-                  <option value="Electrical & Automation">Electrical & Automation</option>
-                  <option value="Consumables & Tools">Consumables & Tools</option>
-                </select>
-              </div>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '0.75rem' }}>
               <div>
                 <label>Contact Person</label>
-                <input type="text" required className="input-field" value={formData.contactPerson} onChange={(e) => setFormData({ ...formData, contactPerson: e.target.value })} />
+                <input type="text" className="input-field" value={formData.contactPerson} onChange={(e) => setFormData({ ...formData, contactPerson: e.target.value })} />
               </div>
               <div>
                 <label>Phone Number</label>
-                <input type="text" required className="input-field" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} />
+                <input type="text" className="input-field" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} />
               </div>
               <div>
                 <label>Email Address</label>
-                <input type="email" required className="input-field" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
+                <input type="email" className="input-field" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
               </div>
               <div>
                 <label>City</label>
-                <input type="text" required className="input-field" value={formData.city} onChange={(e) => setFormData({ ...formData, city: e.target.value })} />
+                <input type="text" className="input-field" placeholder="Enter City (e.g. Rajkot)" value={formData.city} onChange={(e) => setFormData({ ...formData, city: e.target.value })} />
               </div>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
               <div>
                 <label>GSTIN</label>
-                <input type="text" required className="input-field" value={formData.gstin} onChange={(e) => setFormData({ ...formData, gstin: e.target.value })} />
+                <input type="text" className="input-field" placeholder="24AAAAA0000A1Z5" value={formData.gstin} onChange={(e) => setFormData({ ...formData, gstin: e.target.value })} />
               </div>
               <div>
                 <label>PAN (Optional)</label>
@@ -310,12 +296,13 @@ export const VendorMasterModule: React.FC = () => {
                       Vendor Name {sortField === 'name' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
                     </div>
                   </th>
-                  <th onClick={() => handleSortToggle('category')} style={{ cursor: 'pointer' }}>
+                  <th>Contact Person</th>
+                  <th onClick={() => handleSortToggle('phone')} style={{ cursor: 'pointer' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                      Category {sortField === 'category' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
+                      Phone No {sortField === 'phone' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
                     </div>
                   </th>
-                  <th>Contact Person</th>
+                  <th>Email Address</th>
                   <th onClick={() => handleSortToggle('city')} style={{ cursor: 'pointer' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                       City {sortField === 'city' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
@@ -328,7 +315,7 @@ export const VendorMasterModule: React.FC = () => {
               <tbody>
                 {filteredVendors.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                    <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
                       No vendors found matching search criteria.
                     </td>
                   </tr>
@@ -352,12 +339,11 @@ export const VendorMasterModule: React.FC = () => {
                           {v.vendorCode}
                         </td>
                         <td style={{ fontWeight: 600 }}>{v.name}</td>
-                        <td>
-                          <span className="badge badge-secondary" style={{ fontSize: '0.72rem' }}>{v.category || 'Supplier'}</span>
-                        </td>
-                        <td>{v.contactPerson} ({v.phone})</td>
-                        <td>{v.city}</td>
-                        <td style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{v.gstin}</td>
+                        <td>{v.contactPerson || '-'}</td>
+                        <td>{v.phone || '-'}</td>
+                        <td style={{ fontSize: '0.85rem' }}>{v.email || '-'}</td>
+                        <td>{v.city || '-'}</td>
+                        <td style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{v.gstin || '-'}</td>
                         <td onClick={(e) => e.stopPropagation()}>
                           <div style={{ display: 'flex', gap: '0.35rem' }}>
                             <button className="btn btn-outline" style={{ padding: '0.25rem 0.45rem' }} onClick={() => handleOpenEditModal(v)}>

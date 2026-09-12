@@ -6,7 +6,7 @@ import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { SingleJobworkPrintView, JobworkListPrintView } from '../printTemplates/JobworkPrintTemplates';
 import { TabularShortagePrintView } from '../printTemplates/ShortagePrintTemplates';
 import { Truck, Plus, ArrowRightLeft, CheckCircle, Search, Printer, FileSpreadsheet, ArrowUp, ArrowDown, ArrowUpDown, RefreshCw, AlertTriangle, Layers, X, CheckCircle2 } from 'lucide-react';
-import { JobworkChallan, Item } from '../../types/erp';
+import { JobworkChallan, Item, ItemProcessCard, VendorDebitChallan, generateNextJobworkNumber } from '../../types/erp';
 
 type JWSortKey = 'challanNo' | 'vendorName' | 'itemName' | 'processRequired' | 'sentQuantity' | 'receivedQuantity' | 'scrapQuantity' | 'pendingBalance' | 'expectedReturnDate' | 'status';
 
@@ -15,6 +15,7 @@ export const ExternalInventoryModule: React.FC = () => {
     jobworks, vendors, items, workOrders, boms, grns, addJobworkChallan, recordJobworkReturn, searchTerm, setSearchTerm 
   } = useERP();
 
+  const [activeMainTab, setActiveMainTab] = useState<'CHALLANS' | 'DEBIT_NOTES' | 'SHORTAGE'>('CHALLANS');
   const [isIssueModalOpen, setIsIssueModalOpen] = useState(false);
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
   const [isShortageWizardOpen, setIsShortageWizardOpen] = useState(false);
@@ -202,13 +203,11 @@ export const ExternalInventoryModule: React.FC = () => {
 
   const handleOpenShortageJWModal = (item: Item) => {
     const shortage = getJobworkItemShortage(item);
-    
-    // Find BOM component raw material if available, else default to item itself
     const matchingBOM = boms.find(b => b.id === item.id || b.bomCode === item.itemCode || b.machineModel?.toLowerCase() === item.name.toLowerCase());
     const rawItemId = matchingBOM?.components?.[0]?.itemId || item.id;
 
     setIssueData({
-      challanNo: `JW-GEC-2026-${String(jobworks.length + 1).padStart(3, '0')}`,
+      challanNo: generateNextJobworkNumber(jobworks),
       vendorId: '',
       itemId: rawItemId,
       producedItemId: item.id,
@@ -223,7 +222,7 @@ export const ExternalInventoryModule: React.FC = () => {
 
   const handleOpenIssueModal = () => {
     setIssueData({
-      challanNo: `JW-GEC-2026-${String(jobworks.length + 1).padStart(3, '0')}`,
+      challanNo: generateNextJobworkNumber(jobworks),
       vendorId: '',
       itemId: '',
       producedItemId: '',

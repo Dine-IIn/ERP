@@ -95,7 +95,127 @@ export type ItemCategory = string;
 
 export type QCTrigger = 'ON_GRN' | 'DURING_ASSEMBLY' | 'NO_QC' | '';
 
-export type MaterialProcessType = 'In-house' | 'Job work' | 'Brought out' | 'Job work + Brought out' | '';
+export type MaterialProcessSource = 'In-house' | 'Job work' | 'Bought out';
+export type MaterialProcessType = 'In-house' | 'Job work' | 'Bought out' | 'Job work + Bought out' | '';
+
+export interface ProcessDefinition {
+  id: string;
+  name: string;
+  shortCode: string; // e.g. "LC", "VMC", "TRN", "HT", "GRD", "PLT", "PC", "EDM", "FAB", "MCH", "BOR", "DRL", "POL"
+  description?: string;
+  defaultRate?: number;
+  defaultUOM?: string;
+  isSystem?: boolean;
+  createdAt?: string;
+}
+
+export const SYSTEM_PROCESS_DEFINITIONS: Record<string, { name: string; description: string }> = {
+  'MCH': { name: 'Machining / Milling', description: 'Heavy CNC/VMC Face & Profile Milling, Edge Truing & Squaring' },
+  'BOR': { name: 'Precision Boring', description: 'CNC Line Boring, Tie Bar Hole Boring & Pivot Seat Machining (H7)' },
+  'TRN': { name: 'CNC Turning / Lathe', description: 'CNC Precision Turning, Facing, Threading, OD/ID Grooving & Step Turning' },
+  'DRL': { name: 'Drilling & Tapping', description: 'CNC PCD Hole Pattern Drilling, Tapping, Counterboring & Reaming' },
+  'HT': { name: 'Heat Treatment', description: 'Stress Relieving, Induction Surface Hardening (50-55 HRC), Gas Nitriding' },
+  'GRD': { name: 'Surface & Cylindrical Grinding', description: 'Precision Ra 0.4 Micron Surface, Diameter & Gear Tooth Profile Grinding' },
+  'POL': { name: 'Honing & Polishing', description: 'Mirror Finish Internal Bore Honing, Buffing & Lapping' },
+  'PLT': { name: 'Plating & Surface Treatment', description: 'Hard Chrome Plating, Manganese Phosphating, Blackening & Anti-Rust Coating' },
+  'LC': { name: 'Laser Cutting', description: 'CNC Sheet metal & plate precision fiber laser cutting' },
+  'VMC': { name: 'VMC Machining', description: '4-Axis Vertical Machining Center boring & milling' },
+  'PC': { name: 'Powder Coating / PU Painting', description: 'Industrial grade 7-tank pretreatment powder coating' },
+  'EDM': { name: 'Wire EDM / Spark Erosion', description: 'Precision die profile wire cut electric discharge machining' },
+  'FAB': { name: 'Base Fabrication & Stress Relieving', description: 'Heavy MIG welding with vibration stress relief' },
+  'ASSY': { name: 'Sub-Assembly & Fitting', description: 'Mechanical sub-assembly integration, alignment & pin fitment' }
+};
+
+export function getProcessTooltip(shortCode?: string, name?: string, customProcs?: ProcessDefinition[]): string {
+  if (!shortCode && !name) return 'Process Operation';
+  const codeKey = (shortCode || '').trim().toUpperCase();
+  
+  // 1. Check custom process definitions passed in
+  if (customProcs && customProcs.length > 0) {
+    const custom = customProcs.find(p => p.shortCode.toUpperCase() === codeKey || p.name.toLowerCase() === (name || '').toLowerCase());
+    if (custom) {
+      return `${custom.shortCode} - ${custom.name}${custom.description ? `: ${custom.description}` : ''}`;
+    }
+  }
+
+  // 2. Check standard system definitions
+  if (SYSTEM_PROCESS_DEFINITIONS[codeKey]) {
+    const def = SYSTEM_PROCESS_DEFINITIONS[codeKey];
+    return `${codeKey} - ${def.name}: ${def.description}`;
+  }
+
+  // 3. Fallback to name or short code
+  if (name && shortCode && name.toUpperCase() !== shortCode.toUpperCase()) {
+    return `${shortCode} - ${name}`;
+  }
+  return name || shortCode || 'Process Operation';
+}
+
+export interface ItemProcessStep {
+  stepNumber: number;
+  processId: string;
+  processName: string;
+  processShortCode: string;
+  vendorIds: string[]; // Vendors authorized for this specific step
+  estimatedDays?: number;
+  costPerUnit?: number;
+  remarks?: string;
+}
+
+export interface ItemProcessCard {
+  id: string;
+  itemId: string; // Base target item ID (Finished Item)
+  itemCode: string;
+  itemName: string;
+  rawItemId?: string; // Raw Item ID
+  rawItemCode?: string; // Raw Item Code
+  rawItemName?: string; // Raw Item Name
+  targetParentProductId?: string; // Product / Machine model on which this component goes
+  targetParentProductName?: string;
+  steps: ItemProcessStep[];
+  lastUpdated?: string;
+  notes?: string;
+}
+
+export interface IntermediateProcessItem {
+  id: string;
+  baseItemId: string;
+  baseItemCode: string;
+  baseItemName: string;
+  processCardId: string;
+  completedStepNumbers: number[];
+  processCodeSuffix: string; // e.g. "-LC-VMC"
+  fullItemCode: string; // e.g. "GEC-SHAFT-01-LC-VMC"
+  inHouseStock: number;
+  externalStock: number;
+  unit: string;
+  currentStepIndex: number;
+  nextStepNumber?: number;
+  nextProcessName?: string;
+  nextAllowedVendorIds?: string[];
+  unitPrice?: number;
+}
+
+export interface VendorDebitChallan {
+  id: string;
+  challanNo: string; // e.g. "DN-2026-0001"
+  sourceType: 'GRN' | 'QC' | 'JOBWORK';
+  sourceReferenceNo: string; // e.g. GRN Number or QC Inspection Number
+  vendorId: string;
+  vendorName: string;
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  rejectedQty: number;
+  unit: string;
+  unitPrice: number;
+  totalLossAmount: number;
+  defectReason: string;
+  reworkProcessRequired?: string;
+  status: 'PENDING_DEBIT' | 'DEBITED' | 'REPLACED_CREDIT';
+  createdAt: string;
+  createdBy?: string;
+}
 
 export interface ItemMappedVendor {
   vendorId: string;
@@ -131,11 +251,15 @@ export interface Item {
   note?: string;
   processType?: MaterialProcessType;
   materialProcessType?: MaterialProcessType;
+  materialProcessSources?: MaterialProcessSource[]; // Multi-select: ['In-house', 'Job work', 'Bought out']
   mappedVendors?: ItemMappedVendor[];
   specification?: string;
   isDirectJobworkShipment?: boolean;
   isBlocked?: boolean;
   blockedAt?: string;
+  isProcessItem?: boolean;
+  baseItemId?: string;
+  processCodeSuffix?: string;
 }
 
 export interface UserActivityLog {
@@ -205,6 +329,8 @@ export interface Vendor {
   accountNumber?: string;
   ifscCode?: string;
   creditDays?: number;
+  isBlocked?: boolean;
+  blockedAt?: string;
   website?: string;
   note?: string;
   address?: string;
@@ -428,6 +554,15 @@ export interface JobworkChallan {
   issueDate: string;
   expectedReturnDate: string;
   status: string;
+  jobworkType?: 'COMPLETE' | 'PROCESS_WISE';
+  processCardId?: string;
+  startStepNumber?: number;
+  endStepNumber?: number;
+  processStepsIncluded?: string[];
+  processCodeSuffix?: string;
+  intermediateItemCode?: string;
+  isRework?: boolean;
+  reworkProcessName?: string;
   items?: any[];
   itemId?: string;
   itemCode?: string;
@@ -443,18 +578,27 @@ export interface JobworkChallan {
   notes?: string;
 }
 
-export type GRNRejectionDisposition = 'SCRAP' | 'IN_HOUSE_REWORK' | 'VENDOR_REWORK' | 'VENDOR_RETURN';
+export type GRNRejectionDisposition = 'SCRAP' | 'IN_HOUSE_REWORK' | 'VENDOR_REWORK' | 'VENDOR_RETURN' | 'VENDOR_LOSS_DEBIT';
 
 export interface GRNItem {
+  id?: string;
   poItemId?: string;
   itemId?: string;
   itemCode?: string;
   itemName?: string;
+  partCode?: string;
+  isSelected?: boolean;
+  prevReceived?: number;
+  maxCanReceiveNow?: number;
   receivedQty?: number;
   acceptedQty?: number;
   rejectedQty?: number;
   rejectionDisposition?: GRNRejectionDisposition;
   rejectionReason?: string;
+  rejectionAction?: 'NONE' | 'PROCESS_REWORK' | 'VENDOR_LOSS_DEBIT';
+  reworkProcessName?: string;
+  lossAmount?: number;
+  debitChallanNo?: string;
   unit?: string;
   purchaseUOM?: string;
   conversionFactor?: number;
@@ -469,6 +613,9 @@ export interface GRNItem {
   directJWProduceItemName?: string;
   directJWVendorId?: string;
   directJWVendorName?: string;
+  isProcessWise?: boolean;
+  processCodeSuffix?: string;
+  intermediateItemCode?: string;
 }
 
 export type GRNLineItem = GRNItem;
@@ -554,6 +701,7 @@ export interface JobCard {
   status: JobCardStatus;
   type: JobCardType;
   exchangeParts?: JobCardExchangePart[];
+  reissues?: JobCardMaterialReissue[];
   assignedOperator?: string;
   startDate: string;
   completionDate?: string;
@@ -629,10 +777,15 @@ export interface JobCardMaterialReissue {
   notes?: string;
 }
 
-// Letter-Encoded PO Number Generator: PO + Month (2 letters) + Year (2 letters) + 4-digit Seq
+// Letter-Encoded Document Number Generator: PREFIX + Month (2 letters) + Year (2 letters) + 4-digit Seq
 // Mapping: 0->A, 1->B, 2->C, 3->D, 4->E, 5->F, 6->G, 7->H, 8->I, 9->J
-// Example: Sept 2026 -> 09 (AJ), 26 (CG) -> POAJCG0001
-export const generateNextPONumber = (existingPOs: { poNumber?: string }[] = [], date: Date = new Date()): string => {
+// Example: Sept 2026 -> 09 (AJ), 26 (CG) -> POAJCG0001, JWAJCG0001, QCAJCG0001, JCAJCG0001
+export const generateNextDocNumber = (
+  prefixType: string,
+  existingList: any[] = [],
+  fieldKeys: string | string[] = 'code',
+  date: Date = new Date()
+): string => {
   const DIGIT_MAP: Record<string, string> = {
     '0': 'A', '1': 'B', '2': 'C', '3': 'D', '4': 'E',
     '5': 'F', '6': 'G', '7': 'H', '8': 'I', '9': 'J'
@@ -645,15 +798,21 @@ export const generateNextPONumber = (existingPOs: { poNumber?: string }[] = [], 
 
   const monthCode = encodeDigits(monthStr);
   const yearCode = encodeDigits(yearStr);
-  const prefix = `PO${monthCode}${yearCode}`; // e.g. "POAJCG"
+  const prefix = `${prefixType}${monthCode}${yearCode}`; // e.g. "POAJCG", "JWAJCG", "QCAJCG"
 
+  const keys = Array.isArray(fieldKeys) ? fieldKeys : [fieldKeys];
   let maxSeq = 0;
-  existingPOs.forEach(po => {
-    if (po.poNumber && po.poNumber.startsWith(prefix)) {
-      const seqPart = po.poNumber.slice(prefix.length).split('-')[0];
-      const num = parseInt(seqPart, 10);
-      if (!isNaN(num) && num > maxSeq) {
-        maxSeq = num;
+
+  existingList.forEach(item => {
+    if (!item) return;
+    for (const k of keys) {
+      const val = item[k];
+      if (typeof val === 'string' && val.startsWith(prefix)) {
+        const seqPart = val.slice(prefix.length).split('-')[0].split('/')[0];
+        const num = parseInt(seqPart, 10);
+        if (!isNaN(num) && num > maxSeq) {
+          maxSeq = num;
+        }
       }
     }
   });
@@ -661,4 +820,79 @@ export const generateNextPONumber = (existingPOs: { poNumber?: string }[] = [], 
   const nextSeq = maxSeq + 1;
   return `${prefix}${String(nextSeq).padStart(4, '0')}`;
 };
+
+export const generateNextPONumber = (existingPOs: any[] = [], date: Date = new Date()): string => {
+  return generateNextDocNumber('PO', existingPOs, ['poNumber'], date);
+};
+
+export const generateNextJobworkNumber = (existingJWs: any[] = [], date: Date = new Date()): string => {
+  return generateNextDocNumber('JW', existingJWs, ['challanNo', 'jobworkNumber'], date);
+};
+
+export const generateNextQCNumber = (existingQCs: any[] = [], date: Date = new Date()): string => {
+  return generateNextDocNumber('QC', existingQCs, ['qcNumber', 'inspectionNo'], date);
+};
+
+export const generateNextJobCardNumber = (existingJCs: any[] = [], date: Date = new Date()): string => {
+  return generateNextDocNumber('JC', existingJCs, ['jobCardNumber', 'jobCardNo', 'id'], date);
+};
+
+export const generateNextWorkOrderNumber = (existingWOs: any[] = [], date: Date = new Date()): string => {
+  return generateNextDocNumber('WO', existingWOs, ['workOrderNo', 'woNumber'], date);
+};
+
+export const generateNextSalesOrderNumber = (existingSOs: any[] = [], date: Date = new Date()): string => {
+  return generateNextDocNumber('SO', existingSOs, ['soNumber', 'orderNumber'], date);
+};
+
+export const generateNextGRNNumber = (existingGRNs: any[] = [], date: Date = new Date()): string => {
+  return generateNextDocNumber('GRN', existingGRNs, ['grnNumber'], date);
+};
+
+export const generateNextDispatchNumber = (existingDSPs: any[] = [], date: Date = new Date()): string => {
+  return generateNextDocNumber('DSP', existingDSPs, ['dispatchNumber', 'gatepassNo', 'invoiceNo'], date);
+};
+
+export const generateNextBOMNumber = (existingBOMs: any[] = [], date: Date = new Date()): string => {
+  return generateNextDocNumber('BOM', existingBOMs, ['bomCode'], date);
+};
+
+export const generateNextDebitChallanNumber = (existingDebits: any[] = [], date: Date = new Date()): string => {
+  return generateNextDocNumber('DN', existingDebits, ['challanNo', 'debitChallanNo'], date);
+};
+
+export const generateNextItemCode = (existingItems: any[] = []): string => {
+  let maxNum = 0;
+  existingItems.forEach(item => {
+    const code = item.itemCode || item.code || '';
+    const match = code.match(/GEC(\d+)/i) || code.match(/(\d+)/);
+    if (match && match[1]) {
+      const num = parseInt(match[1], 10);
+      if (!isNaN(num) && num > maxNum) {
+        maxNum = num;
+      }
+    }
+  });
+  const nextNum = maxNum + 1;
+  return `GEC${String(nextNum).padStart(7, '0')}`;
+};
+
+export const generateNextVendorCode = (existingVendors: any[] = []): string => {
+  let maxNum = 0;
+  existingVendors.forEach(v => {
+    const code = v.vendorCode || v.code || '';
+    const match = code.match(/VEN(\d+)/i) || code.match(/(\d+)/);
+    if (match && match[1]) {
+      const num = parseInt(match[1], 10);
+      if (!isNaN(num) && num > maxNum) {
+        maxNum = num;
+      }
+    }
+  });
+  const nextNum = maxNum + 1;
+  return `VEN${String(nextNum).padStart(7, '0')}`;
+};
+
+
+
 

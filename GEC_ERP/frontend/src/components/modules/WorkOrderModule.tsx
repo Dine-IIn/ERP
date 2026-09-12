@@ -4,7 +4,7 @@ import { AutocompleteSelect, AutocompleteOption } from '../common/AutocompleteSe
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { SingleWOPrintView, WOListPrintView } from '../printTemplates/WOPrintTemplates';
 import { Wrench, Plus, Trash2, Sliders, CheckCircle, Search, Printer, FileSpreadsheet, ArrowLeft, X, Package, Filter, Zap, Layers, FolderTree, FolderPlus, ChevronRight, ChevronDown, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw } from 'lucide-react';
-import { WorkOrder, WOStage, WOStatus, WOCustomComponent, BOM, BOMComponent } from '../../types/erp';
+import { WorkOrder, WOStage, WOStatus, WOCustomComponent, BOM, BOMComponent, generateNextWorkOrderNumber } from '../../types/erp';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
 import { getExplodedBOMSummary } from '../../utils/nestedBOMHelper';
 
@@ -204,7 +204,7 @@ export const WorkOrderModule: React.FC = () => {
     const defaultBOM = boms[0];
     setSelectedBomId(defaultBOM?.id || '');
     setWoForm({
-      workOrderNo: `WO-GEC-${String(workOrders.length + 1).padStart(3, '0')}`,
+      workOrderNo: generateNextWorkOrderNumber(workOrders),
       machineModel: defaultBOM?.machineModel || 'GEC-250T Servo Hydraulic Injection Moulding Machine',
       quantity: 1,
       targetCompletionDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
@@ -927,9 +927,9 @@ export const WorkOrderModule: React.FC = () => {
                             </td>
                             <td>
                               <span className={`badge ${
-                                itemObj?.processType === 'Brought out' ? 'badge-primary' :
+                                itemObj?.processType === 'Bought out' || itemObj?.processType === 'Job work + Bought out' ? 'badge-primary' :
                                 itemObj?.processType === 'In-house' ? 'badge-success' :
-                                itemObj?.processType === 'Job work' ? 'badge-warning' : 'badge-neutral'
+                                itemObj?.processType === 'Job work' ? 'badge-purple' : 'badge-neutral'
                               }`} style={{ fontSize: '0.72rem' }}>
                                 {itemObj?.processType || '-'}
                               </span>
@@ -1036,9 +1036,9 @@ export const WorkOrderModule: React.FC = () => {
                                 </td>
                                 <td>
                                   <span className={`badge ${
-                                    itemObj?.processType === 'Brought out' ? 'badge-primary' :
+                                    itemObj?.processType === 'Bought out' || itemObj?.processType === 'Job work + Bought out' ? 'badge-primary' :
                                     itemObj?.processType === 'In-house' ? 'badge-success' :
-                                    itemObj?.processType === 'Job work' ? 'badge-warning' : 'badge-neutral'
+                                    itemObj?.processType === 'Job work' ? 'badge-purple' : 'badge-neutral'
                                   }`} style={{ fontSize: '0.72rem' }}>
                                     {itemObj?.processType || '-'}
                                   </span>
@@ -1134,9 +1134,9 @@ export const WorkOrderModule: React.FC = () => {
                           </td>
                           <td>
                             <span className={`badge ${
-                              itemObj?.processType === 'Brought out' ? 'badge-primary' :
+                              itemObj?.processType === 'Bought out' || itemObj?.processType === 'Job work + Bought out' ? 'badge-primary' :
                               itemObj?.processType === 'In-house' ? 'badge-success' :
-                              itemObj?.processType === 'Job work' ? 'badge-warning' : 'badge-neutral'
+                              itemObj?.processType === 'Job work' ? 'badge-purple' : 'badge-neutral'
                             }`} style={{ fontSize: '0.72rem' }}>
                               {itemObj?.processType || '-'}
                             </span>

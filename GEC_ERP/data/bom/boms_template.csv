@@ -1,0 +1,8 @@
+BOMCode,MachineModel,Version,ItemCode,ItemName,SubAssemblyTag,QtyPerMachine,Unit,ScrapPercent,EstHoursPerUnit
+BOM-GEC-250T,GEC-250T Servo Hydraulic Plastic Injection Moulding Machine,Rev 1.0,GEC-SA-CLP-250T,Clamping Unit Sub-Assembly 250T,Clamping Unit,1,SET,0,16
+BOM-GEC-250T,GEC-250T Servo Hydraulic Plastic Injection Moulding Machine,Rev 1.0,GEC-SA-INJ-250T,Injection Unit Sub-Assembly 250T,Injection Unit,1,SET,0,14
+BOM-GEC-250T,GEC-250T Servo Hydraulic Plastic Injection Moulding Machine,Rev 1.0,GEC-HY-PUMP-50KW,Variable Displacement Hydraulic Piston Pump 50kW,Hydraulic Powerpack,1,PCS,0,4
+BOM-GEC-250T,GEC-250T Servo Hydraulic Plastic Injection Moulding Machine,Rev 1.0,GEC-EL-PLC-S7,Siemens S7-1200 CPU 1214C PLC,Electrical Cabinet,1,PCS,0,6
+BOM-GEC-250T,GEC-250T Servo Hydraulic Plastic Injection Moulding Machine,Rev 1.0,GEC-BO-VALVE-01,Directional Control Valve D03,Hydraulic Powerpack,4,PCS,0,2
+BOM-SA-CLP-250T,Clamping Unit Sub-Assembly 250T,Rev 1.0,GEC-MC-TB80-250T,Tie Bar 80mm Finished Machined,Clamping Unit,4,PCS,0,8
+BOM-SA-CLP-250T,Clamping Unit Sub-Assembly 250T,Rev 1.0,GEC-RM-ROD80-EN8,Tie Bar Raw Rod 80mm EN8D,Clamping Unit,4,PCS,5,10

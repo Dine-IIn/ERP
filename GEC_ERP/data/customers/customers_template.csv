@@ -1,0 +1,4 @@
+CustomerCode,CustomerName,ContactPerson,Phone,Email,Address,City,State,GSTIN,PAN,BankName,AccountNumber,IFSCCode
+CUST-GEC-001,Supreme Polymers Private Limited,Ketan Dave,9879000001,purchase@supremepolymers.com,Survey 45 Shapar Industrial Zone,Rajkot,Gujarat,24AAACS7777E1Z5,AAACS7777E,Kotak Mahindra Bank,1234567890,KKBK0000123
+CUST-GEC-002,PlastoPack Moulding Solutions,Sunil Nair,9879000002,info@plastopack.com,Plot 88 GIDC Sanand,Ahmedabad,Gujarat,24AAACP8888F1Z6,AAACP8888F,Bank of Baroda,01230200001234,BARB0SANAND
+CUST-GEC-003,Delta Automotive Components,Harish Rao,9879000003,commercial@deltaauto.com,Bhosari Industrial Estate,Pune,Maharashtra,27AAACD9999G1Z7,AAACD9999G,HDFC Bank,50200098765432,HDFC0000456

@@ -4,13 +4,20 @@ import {
   PurchaseOrder, GoodsReceivedNotice, WorkOrder, 
   QCInspection, QCType, MachineAssembly, BOM, SalesOrder, Role, Department, CustomRole,
   JobCard, FloorStation, FinishedGoodUnit, DispatchRecord, UserActivityLog, BackupRecord, RBAC_FEATURES,
-  JobCardMaterialReissue, POItem, POStatus, SystemErrorLog
+  JobCardMaterialReissue, POItem, POStatus, SystemErrorLog,
+  ProcessDefinition, ItemProcessCard, IntermediateProcessItem, VendorDebitChallan,
+  MaterialProcessSource,
+  generateNextPONumber, generateNextJobworkNumber, generateNextQCNumber,
+  generateNextJobCardNumber, generateNextWorkOrderNumber, generateNextSalesOrderNumber,
+  generateNextGRNNumber, generateNextDispatchNumber, generateNextBOMNumber,
+  generateNextDebitChallanNumber
 } from '../types/erp';
 import { 
   INITIAL_USERS, INITIAL_CUSTOMERS, INITIAL_VENDORS, INITIAL_ITEM_CATEGORIES, INITIAL_VENDOR_CATEGORIES, INITIAL_ITEMS, 
   INITIAL_BOMS, INITIAL_SALES_ORDERS, INITIAL_JOBWORK_CHALLANS, INITIAL_PURCHASE_ORDERS, INITIAL_GRNS, 
   INITIAL_WORK_ORDERS, INITIAL_QC_INSPECTIONS, INITIAL_ASSEMBLIES, INITIAL_ASSEMBLY_STAGES,
-  INITIAL_JOB_CARDS, INITIAL_FLOOR_STATIONS, INITIAL_FINISHED_GOODS, INITIAL_DISPATCH_RECORDS
+  INITIAL_JOB_CARDS, INITIAL_FLOOR_STATIONS, INITIAL_FINISHED_GOODS, INITIAL_DISPATCH_RECORDS,
+  INITIAL_PROCESS_DEFINITIONS, INITIAL_ITEM_PROCESS_CARDS, INITIAL_VENDOR_DEBIT_CHALLANS, INITIAL_INTERMEDIATE_PROCESS_ITEMS
 } from '../data/initialData';
 
 export const DEFAULT_UNIFIED_ROLES: CustomRole[] = [
@@ -245,6 +252,27 @@ interface ERPContextType {
   reallocateFinishedGood: (finishedGoodId: string, targetSOId: string) => void;
   dispatchFinishedGood: (dispatchData: Omit<DispatchRecord, 'id' | 'dispatchNo'>) => void;
 
+  // Process Master & Item Routing Cards
+  processDefinitions: ProcessDefinition[];
+  addProcessDefinition: (proc: Omit<ProcessDefinition, 'id' | 'createdAt'>) => { success: boolean; message: string };
+  updateProcessDefinition: (proc: ProcessDefinition) => { success: boolean; message: string };
+  deleteProcessDefinition: (id: string) => { success: boolean; message: string };
+  itemProcessCards: ItemProcessCard[];
+  saveItemProcessCard: (card: Omit<ItemProcessCard, 'id' | 'lastUpdated'> & { id?: string }) => { success: boolean; message: string };
+  deleteItemProcessCard: (id: string) => void;
+  
+  // Vendor Debit Notes & Loss Challans
+  vendorDebitChallans: VendorDebitChallan[];
+  createVendorDebitChallan: (challan: Omit<VendorDebitChallan, 'id' | 'challanNo' | 'createdAt'>) => VendorDebitChallan;
+  updateVendorDebitChallan: (challan: VendorDebitChallan) => void;
+  deleteVendorDebitChallan: (id: string) => void;
+  approveVendorDebitChallan: (id: string) => void;
+  rejectVendorDebitChallan: (id: string) => void;
+
+  // Intermediate Process Items & Dynamic Stock
+  intermediateProcessItems: IntermediateProcessItem[];
+  allInventoryItems: Item[];
+
   // Audit Logs & Backups
   auditLogs: UserActivityLog[];
   addAuditLog: (action: string, module: string, details: string) => void;
@@ -258,6 +286,16 @@ interface ERPContextType {
   restoreBackup: (backupData: any) => { success: boolean; message: string };
   updateBackupSettings: (settings: BackupSettings) => void;
   resetOperationalData: () => { success: boolean; message: string };
+  resetInventory: () => { success: boolean; message: string };
+
+  // Super Admin Mass Ingestion Methods
+  massUpsertItems: (items: Item[], mode: 'APPEND' | 'OVERWRITE') => void;
+  massUpsertBOMs: (boms: BOM[], mode: 'APPEND' | 'OVERWRITE') => void;
+  massUpsertVendors: (vendors: Vendor[], mode: 'APPEND' | 'OVERWRITE') => void;
+  massUpsertCustomers: (customers: Customer[], mode: 'APPEND' | 'OVERWRITE') => void;
+  massUpsertProcesses: (procs: ProcessDefinition[], mode: 'APPEND' | 'OVERWRITE') => void;
+  massUpsertItemProcessCards: (cards: ItemProcessCard[], mode: 'APPEND' | 'OVERWRITE') => void;
+  massUpdateInventory: (updates: { itemId?: string; itemCode: string; inHouseStock: number; externalStock: number; location?: string; unitPrice?: number; minStockQty?: number }[]) => void;
 
   // Operational methods
   addJobworkChallan: (challan: Omit<JobworkChallan, 'id' | 'pendingBalance' | 'status'>) => void;
@@ -401,7 +439,33 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isSuperAdmin: isSuper
     };
   });
-  const [items, setItems] = useState<Item[]>(() => getStored('items', INITIAL_ITEMS));
+  const [items, setItems] = useState<Item[]>(() => {
+    const rawItems = getStored<Item[]>('items', INITIAL_ITEMS);
+    return rawItems.map(it => {
+      const rawSources = it.materialProcessSources || (it.processType ? (it.processType === 'Job work + Bought out' ? ['Job work', 'Bought out'] : [it.processType]) : []);
+      const cleanSources = Array.from(new Set(
+        rawSources.map(s => ((s as string) === 'Brought out' ? 'Bought out' : s) as MaterialProcessSource)
+      ));
+      let cleanProcessType = it.processType;
+      if (cleanProcessType === ('Brought out' as any)) {
+        cleanProcessType = 'Bought out';
+      }
+      if (cleanSources.includes('Job work') && cleanSources.includes('Bought out')) {
+        cleanProcessType = 'Job work + Bought out';
+      } else if (cleanSources.includes('Job work')) {
+        cleanProcessType = 'Job work';
+      } else if (cleanSources.includes('Bought out')) {
+        cleanProcessType = 'Bought out';
+      } else if (cleanSources.includes('In-house')) {
+        cleanProcessType = 'In-house';
+      }
+      return {
+        ...it,
+        materialProcessSources: cleanSources,
+        processType: cleanProcessType
+      };
+    });
+  });
   const [itemCategories, setItemCategories] = useState<string[]>(() => getStored('itemCategories', INITIAL_ITEM_CATEGORIES));
   const [customers, setCustomers] = useState<Customer[]>(() => getStored('customers', INITIAL_CUSTOMERS));
   const [vendors, setVendors] = useState<Vendor[]>(() => getStored('vendors', INITIAL_VENDORS));
@@ -433,6 +497,168 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   ]));
   const [backups, setBackups] = useState<BackupRecord[]>(() => getStored('backups', []));
+
+  // Process Master, Process Cards & Debit Challans States
+  const [processDefinitions, setProcessDefinitions] = useState<ProcessDefinition[]>(() => {
+    const loaded = getStored<ProcessDefinition[]>('processDefinitions', INITIAL_PROCESS_DEFINITIONS);
+    if (!loaded || loaded.length === 0) return INITIAL_PROCESS_DEFINITIONS;
+    return loaded;
+  });
+  const [itemProcessCards, setItemProcessCards] = useState<ItemProcessCard[]>(() => getStored('itemProcessCards', INITIAL_ITEM_PROCESS_CARDS));
+  const [vendorDebitChallans, setVendorDebitChallans] = useState<VendorDebitChallan[]>(() => getStored('vendorDebitChallans', INITIAL_VENDOR_DEBIT_CHALLANS));
+  const [intermediateProcessItems, setIntermediateProcessItems] = useState<IntermediateProcessItem[]>(() => getStored('intermediateProcessItems', INITIAL_INTERMEDIATE_PROCESS_ITEMS));
+
+  useEffect(() => setStored('processDefinitions', processDefinitions), [processDefinitions]);
+  useEffect(() => setStored('itemProcessCards', itemProcessCards), [itemProcessCards]);
+  useEffect(() => setStored('vendorDebitChallans', vendorDebitChallans), [vendorDebitChallans]);
+  useEffect(() => setStored('intermediateProcessItems', intermediateProcessItems), [intermediateProcessItems]);
+
+  // Computed All Inventory Items (Base items including 0 stock + Intermediate items ONLY when stock > 0)
+  const allInventoryItems = React.useMemo<Item[]>(() => {
+    const baseList: Item[] = [...items];
+    intermediateProcessItems.forEach(ip => {
+      if ((ip.inHouseStock || 0) > 0 || (ip.externalStock || 0) > 0) {
+        const base = items.find(it => it.id === ip.baseItemId);
+        baseList.push({
+          id: ip.id,
+          itemCode: ip.fullItemCode,
+          name: `${ip.baseItemName} [${ip.processCodeSuffix.replace(/^-/, '')}]`,
+          category: base?.category || 'Machined Component',
+          unit: ip.unit || base?.unit || 'Nos',
+          inHouseStock: ip.inHouseStock || 0,
+          externalStock: ip.externalStock || 0,
+          unitPrice: ip.unitPrice || base?.unitPrice || 0,
+          location: base?.location || 'Floor WIP Rack',
+          isProcessItem: true,
+          baseItemId: ip.baseItemId,
+          processCodeSuffix: ip.processCodeSuffix
+        });
+      }
+    });
+    return baseList;
+  }, [items, intermediateProcessItems]);
+
+  // Process Definition Operations
+  const addProcessDefinition = (proc: Omit<ProcessDefinition, 'id' | 'createdAt'>) => {
+    const cleanShort = proc.shortCode.trim().toUpperCase();
+    const exists = processDefinitions.some(p => p.shortCode.toUpperCase() === cleanShort || p.name.toLowerCase() === proc.name.trim().toLowerCase());
+    if (exists) {
+      return { success: false, message: `Process with name "${proc.name}" or short code "${cleanShort}" already exists.` };
+    }
+    const newProc: ProcessDefinition = {
+      ...proc,
+      id: `proc-${Date.now()}`,
+      shortCode: cleanShort,
+      name: proc.name.trim(),
+      createdAt: new Date().toISOString()
+    };
+    setProcessDefinitions(prev => [...prev, newProc]);
+    addAuditLog('CREATE_PROCESS', 'Process Master', `Created process definition: ${newProc.name} (${newProc.shortCode})`);
+    return { success: true, message: `Process "${newProc.name}" added successfully.` };
+  };
+
+  const updateProcessDefinition = (proc: ProcessDefinition) => {
+    const cleanShort = proc.shortCode.trim().toUpperCase();
+    const conflict = processDefinitions.some(p => p.id !== proc.id && (p.shortCode.toUpperCase() === cleanShort || p.name.toLowerCase() === proc.name.trim().toLowerCase()));
+    if (conflict) {
+      return { success: false, message: `Another process with name "${proc.name}" or code "${cleanShort}" already exists.` };
+    }
+    setProcessDefinitions(prev => prev.map(p => p.id === proc.id ? { ...proc, shortCode: cleanShort, name: proc.name.trim() } : p));
+    addAuditLog('UPDATE_PROCESS', 'Process Master', `Updated process: ${proc.name} (${cleanShort})`);
+    return { success: true, message: `Process "${proc.name}" updated successfully.` };
+  };
+
+  const deleteProcessDefinition = (id: string) => {
+    const target = processDefinitions.find(p => p.id === id);
+    if (!target) return { success: false, message: 'Process not found.' };
+
+    // Strict Safe-Deletion Check: verify if used in any item process card
+    const usedInCard = itemProcessCards.find(c => c.steps.some(s => s.processId === id || s.processShortCode === target.shortCode));
+    if (usedInCard) {
+      return { 
+        success: false, 
+        message: `Cannot delete "${target.name} (${target.shortCode})". It is currently configured in the Process Card for Item "${usedInCard.itemCode} - ${usedInCard.itemName}".` 
+      };
+    }
+
+    // Check active job works
+    const usedInJW = jobworks.find(j => j.status !== 'COMPLETED' && (j.processRequired?.includes(target.name) || j.processCodeSuffix?.includes(target.shortCode)));
+    if (usedInJW) {
+      return { 
+        success: false, 
+        message: `Cannot delete "${target.name}". It is in active use on Job Work Challan "${usedInJW.challanNo}".` 
+      };
+    }
+
+    setProcessDefinitions(prev => prev.filter(p => p.id !== id));
+    addAuditLog('DELETE_PROCESS', 'Process Master', `Deleted process definition ${target.name} (${target.shortCode})`);
+    return { success: true, message: `Process "${target.name}" deleted successfully.` };
+  };
+
+  const saveItemProcessCard = (cardData: Omit<ItemProcessCard, 'id' | 'lastUpdated'> & { id?: string }) => {
+    const existingId = cardData.id || itemProcessCards.find(c => c.itemId === cardData.itemId)?.id;
+    const nowIso = new Date().toISOString();
+
+    if (existingId) {
+      const updated: ItemProcessCard = {
+        ...cardData,
+        id: existingId,
+        lastUpdated: nowIso
+      };
+      setItemProcessCards(prev => prev.map(c => c.id === existingId ? updated : c));
+      addAuditLog('UPDATE_PROCESS_CARD', 'Process Routing', `Updated process card for item ${cardData.itemCode} with ${cardData.steps.length} sequential steps.`);
+      return { success: true, message: `Process Card for ${cardData.itemCode} updated successfully.` };
+    } else {
+      const newCard: ItemProcessCard = {
+        ...cardData,
+        id: `pcard-${Date.now()}`,
+        lastUpdated: nowIso
+      };
+      setItemProcessCards(prev => [newCard, ...prev]);
+      addAuditLog('CREATE_PROCESS_CARD', 'Process Routing', `Configured new process routing card for item ${cardData.itemCode} (${cardData.steps.length} steps).`);
+      return { success: true, message: `Process Card for ${cardData.itemCode} created successfully.` };
+    }
+  };
+
+  const deleteItemProcessCard = (id: string) => {
+    const target = itemProcessCards.find(c => c.id === id);
+    setItemProcessCards(prev => prev.filter(c => c.id !== id));
+    if (target) {
+      addAuditLog('DELETE_PROCESS_CARD', 'Process Routing', `Removed process card for item ${target.itemCode}`);
+    }
+  };
+
+  const createVendorDebitChallan = (challanData: Omit<VendorDebitChallan, 'id' | 'challanNo' | 'createdAt'>) => {
+    const nextNo = generateNextDebitChallanNumber(vendorDebitChallans);
+    const newChallan: VendorDebitChallan = {
+      ...challanData,
+      id: `dn-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      challanNo: nextNo,
+      createdAt: new Date().toISOString(),
+      createdBy: currentUser?.fullName || currentUser?.username || 'System'
+    };
+    setVendorDebitChallans(prev => [newChallan, ...prev]);
+    addAuditLog('CREATE_DEBIT_CHALLAN', 'Vendor Rejection & Loss', `Generated Debit Note ${newChallan.challanNo} against ${newChallan.vendorName} for ₹${newChallan.totalLossAmount.toLocaleString()} (${newChallan.rejectedQty} ${newChallan.unit} of ${newChallan.itemCode}).`);
+    return newChallan;
+  };
+
+  const updateVendorDebitChallan = (challan: VendorDebitChallan) => {
+    setVendorDebitChallans(prev => prev.map(c => c.id === challan.id ? challan : c));
+  };
+
+  const deleteVendorDebitChallan = (id: string) => {
+    setVendorDebitChallans(prev => prev.filter(c => c.id !== id));
+  };
+
+  const approveVendorDebitChallan = (id: string) => {
+    setVendorDebitChallans(prev => prev.map(c => c.id === id ? { ...c, status: 'DEBITED' } : c));
+    addAuditLog('APPROVE_DEBIT_CHALLAN', 'Vendor Rejection & Loss', `Approved debit challan ${id}`);
+  };
+
+  const rejectVendorDebitChallan = (id: string) => {
+    setVendorDebitChallans(prev => prev.map(c => c.id === id ? { ...c, status: 'REPLACED_CREDIT' } : c));
+    addAuditLog('REJECT_DEBIT_CHALLAN', 'Vendor Rejection & Loss', `Marked debit challan ${id} as credit replaced`);
+  };
 
   const addAuditLog = (action: string, module: string, details: string) => {
     const newLog: UserActivityLog = {
@@ -1058,7 +1284,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const newWO: WorkOrder = {
       id: `wo-${Date.now()}`,
-      workOrderNo: `WO-GEC-${String(workOrders.length + 1).padStart(3, '0')}`,
+      workOrderNo: generateNextWorkOrderNumber(workOrders),
       soId: targetSO.id,
       soNumber: targetSO.soNumber,
       customerName: targetSO.customerName,
@@ -1141,7 +1367,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newJC: JobCard = {
       ...jc,
       id: `jc-${Date.now()}`,
-      jobCardNo: `JC-${new Date().getFullYear()}-${String(jobCards.length + 1).padStart(3, '0')}`
+      jobCardNo: generateNextJobCardNumber(jobCards)
     };
     setJobCards(prev => [newJC, ...prev]);
   };
@@ -1265,11 +1491,55 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return true;
   };
 
+  const reissueJobCardMaterial = (
+    jobCardId: string, 
+    reissueItems: { itemId: string; qty: number; reason: 'VENDOR_REWORK' | 'SCRAP' | 'IN_HOUSE_REWORK' | 'OTHER'; notes?: string }[]
+  ) => {
+    const jc = jobCards.find(j => j.id === jobCardId);
+    if (!jc) return;
+
+    const newReissues: JobCardMaterialReissue[] = reissueItems.map((it, idx) => {
+      const itm = items.find(i => i.id === it.itemId);
+      return {
+        id: `rei-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
+        reissueNo: `REI-${Date.now().toString().slice(-4)}`,
+        jobCardId,
+        jobCardNo: jc.jobCardNo,
+        woNumber: jc.woNumber,
+        itemId: it.itemId,
+        itemCode: itm ? (itm as any).itemCode : '',
+        itemName: itm ? (itm as any).name : '',
+        quantity: it.qty,
+        unit: itm?.unit || 'PCS',
+        workerName: currentUser?.fullName || currentUser?.username || 'Production Team',
+        supervisorName: currentUser?.fullName || 'Supervisor',
+        reason: it.reason,
+        issuedDate: new Date().toISOString().split('T')[0],
+        status: 'ISSUED',
+        notes: it.notes
+      };
+    });
+
+    setJobCards(prev => prev.map(j => {
+      if (j.id === jobCardId) {
+        return {
+          ...j,
+          reissues: [...(j.reissues || []), ...newReissues]
+        };
+      }
+      return j;
+    }));
+
+    addAuditLog('MATERIAL_REISSUE', 'Job Cards', `Reissued extra materials for Job Card ${jc.jobCardNo}`);
+  };
+
   const createExchangeJobCard = (woId: string, returnParts: any[], newParts: any[]) => {
     const targetWO = workOrders.find(w => w.id === woId);
+    
+    // Create an Exchange / Deviation Job Card to reflect return & re-issue of parts
     const exchangeParts = [
       ...returnParts.map(p => ({
-        itemId: p.itemId || '',
+        itemId: p.itemId,
         itemCode: p.itemCode || '',
         itemName: p.itemName || '',
         action: 'RETURN_TO_STORE' as const,
@@ -1277,7 +1547,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         unit: p.unit || 'PCS'
       })),
       ...newParts.map(p => ({
-        itemId: p.itemId || '',
+        itemId: p.itemId,
         itemCode: p.itemCode || '',
         itemName: p.itemName || '',
         action: 'ISSUE_FROM_STORE' as const,
@@ -1288,7 +1558,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const exchangeJC: JobCard = {
       id: `jc-ex-${Date.now()}`,
-      jobCardNo: `JC-EX-${new Date().getFullYear()}-${String(jobCards.length + 1).padStart(3, '0')}`,
+      jobCardNo: generateNextJobCardNumber(jobCards),
       woId,
       woNumber: targetWO?.workOrderNo,
       itemId: targetWO?.woComponents?.[0]?.itemId || 'itm-custom',
@@ -1299,7 +1569,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       completedQuantity: 0,
       status: 'OPEN',
       type: 'EXCHANGE',
-      exchangeParts,
+      exchangeParts: exchangeParts as any,
       assignedOperator: targetWO?.assignedLead || 'Shopfloor Lead',
       startDate: new Date().toISOString().split('T')[0],
       remarks: `Customer demanded revision: Return ${returnParts.length} parts to store, issue ${newParts.length} new parts from store`,
@@ -1387,7 +1657,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newDispatch: DispatchRecord = {
       ...dispatchData,
       id: `disp-${Date.now()}`,
-      dispatchNo: `DSP-GEC-${new Date().getFullYear()}-${String(dispatchRecords.length + 1).padStart(3, '0')}`
+      dispatchNo: generateNextDispatchNumber(dispatchRecords)
     };
 
     setDispatchRecords(prev => [newDispatch, ...prev]);
@@ -1558,7 +1828,16 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setFinishedGoods([]);
       setDispatchRecords([]);
 
-      // 2. Preserve Item Master, BOMs, Customers, Vendors, and Admin users only
+      // 2. Clear operational pending stock quantities on items (pendingQCStock, externalStock)
+      const cleanedItems = items.map(it => ({
+        ...it,
+        pendingQCStock: 0,
+        externalStock: 0
+      }));
+      setItems(cleanedItems);
+      setStored('items', cleanedItems);
+
+      // 3. Preserve Item Master, BOMs, Customers, Vendors, and Admin users only
       const preservedAdmins = users.filter(u => 
         u.role === 'Admin' || 
         u.isSuperAdmin || 
@@ -1568,7 +1847,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const finalAdmins = preservedAdmins.length > 0 ? preservedAdmins : INITIAL_USERS.filter(u => u.role === 'Admin');
       setUsers(finalAdmins);
 
-      // 3. Clear stored operational keys in localStorage
+      // 4. Clear stored operational keys in localStorage
       setStored('salesOrders', []);
       setStored('workOrders', []);
       setStored('jobCards', []);
@@ -1582,13 +1861,33 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setStored('dispatchRecords', []);
       setStored('users', finalAdmins);
 
-      addAuditLog('SYSTEM_RESET', 'System Administration', 'Operational reset executed. Item Master, BOMs, Customers, Vendors, Departments, and Admin user accounts preserved.');
+      addAuditLog('SYSTEM_RESET', 'System Administration', 'Operational reset executed. Item Master, BOMs, Process Master, Customers, Vendors, Departments, and Admin user accounts preserved.');
       return { 
         success: true, 
-        message: 'System Reset Complete: All operational transactions (Orders, Job Cards, POs, Challans, GRNs, Assembly & QC) have been reset. Item Master, BOMs, Customers, Vendors, and Admin accounts are intact.' 
+        message: 'System Reset Complete: All operational transactions (Orders, Job Cards, POs, Challans, GRNs, Assembly & QC) have been reset. Item Master, BOMs, Process Master, Customers, Vendors, and Admin accounts are intact.' 
       };
     } catch (err: any) {
       return { success: false, message: `System reset error: ${err?.message || 'Unknown error'}` };
+    }
+  };
+
+  const resetInventory = (): { success: boolean; message: string } => {
+    try {
+      const zeroedItems = items.map(it => ({
+        ...it,
+        inHouseStock: 0,
+        externalStock: 0,
+        pendingQCStock: 0
+      }));
+      setItems(zeroedItems);
+      setStored('items', zeroedItems);
+      addAuditLog('INVENTORY_RESET', 'System Administration', 'Inventory reset executed. All item in-house, external, and pending QC stocks zeroed.');
+      return {
+        success: true,
+        message: 'Inventory Reset Complete: All in-house stock, external stock, and pending QC quantities have been set to 0. Item definitions, BOMs, and Process Master data are preserved.'
+      };
+    } catch (err: any) {
+      return { success: false, message: `Inventory reset error: ${err?.message || 'Unknown error'}` };
     }
   };
 
@@ -2059,10 +2358,11 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
 
     // 2. Add QC Inspection record
+    const nextQCNo = generateNextQCNumber(qcInspections);
     const newQC: QCInspection = {
       id: `qc-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-      inspectionNo: `QC-INSP-${Date.now().toString().slice(-4)}`,
-      qcNumber: `QC-GEC-${String(qcInspections.length + 1).padStart(3, '0')}`,
+      inspectionNo: nextQCNo,
+      qcNumber: nextQCNo,
       referenceType: 'GRN',
       referenceNo: payload.grnNumber || payload.grnId || 'DIRECT',
       grnId: payload.grnId,
@@ -2136,6 +2436,165 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateAssemblyProgress = (id: string, progressPercentage: number, status: MachineAssembly['status']) => {
     setAssemblies(prev => prev.map(a => a.id === id ? { ...a, progressPercentage, status } : a));
+  };
+
+  // Super Admin Mass Ingestion Methods
+  const massUpsertItems = (newItems: Item[], mode: 'APPEND' | 'OVERWRITE') => {
+    if (mode === 'OVERWRITE') {
+      setItems(newItems);
+      addAuditLog('MASS_OVERWRITE_ITEMS', 'Super Admin Data Hub', `Overwrote Item Master with ${newItems.length} records.`);
+    } else {
+      setItems(prev => {
+        const result = [...prev];
+        newItems.forEach(newItem => {
+          const matchIdx = result.findIndex(i => 
+            i.id === newItem.id ||
+            (newItem.partCode && i.partCode && i.partCode.trim().toUpperCase() === newItem.partCode.trim().toUpperCase()) ||
+            i.itemCode.trim().toUpperCase() === newItem.itemCode.trim().toUpperCase()
+          );
+
+          if (matchIdx >= 0) {
+            result[matchIdx] = {
+              ...result[matchIdx],
+              ...newItem,
+              id: result[matchIdx].id,
+              itemCode: result[matchIdx].itemCode || newItem.itemCode,
+              isBlocked: false
+            };
+          } else {
+            result.push(newItem);
+          }
+        });
+        return result;
+      });
+      addAuditLog('MASS_UPSERT_ITEMS', 'Super Admin Data Hub', `Upserted/merged ${newItems.length} items without duplicates.`);
+    }
+  };
+
+  const massUpsertBOMs = (newBOMs: BOM[], mode: 'APPEND' | 'OVERWRITE') => {
+    if (mode === 'OVERWRITE') {
+      setBOMs(newBOMs);
+      addAuditLog('MASS_OVERWRITE_BOMS', 'Super Admin Data Hub', `Overwrote BOM Master with ${newBOMs.length} BOMs.`);
+    } else {
+      setBOMs(prev => {
+        const bomMap = new Map(prev.map(b => [b.bomCode.toUpperCase(), b]));
+        newBOMs.forEach(bom => {
+          bomMap.set(bom.bomCode.toUpperCase(), bom);
+        });
+        return Array.from(bomMap.values());
+      });
+      addAuditLog('MASS_UPSERT_BOMS', 'Super Admin Data Hub', `Upserted/merged ${newBOMs.length} BOMs.`);
+    }
+  };
+
+  const massUpsertVendors = (newVendors: Vendor[], mode: 'APPEND' | 'OVERWRITE') => {
+    if (mode === 'OVERWRITE') {
+      setVendors(newVendors);
+      addAuditLog('MASS_OVERWRITE_VENDORS', 'Super Admin Data Hub', `Overwrote Vendor Master with ${newVendors.length} vendors.`);
+    } else {
+      setVendors(prev => {
+        const result = [...prev];
+        newVendors.forEach(newV => {
+          const matchIdx = result.findIndex(v => 
+            (newV.vendorCode && v.vendorCode && v.vendorCode.toUpperCase() === newV.vendorCode.toUpperCase()) ||
+            (newV.gstin && v.gstin && v.gstin.toUpperCase() === newV.gstin.toUpperCase()) ||
+            v.name.trim().toLowerCase() === newV.name.trim().toLowerCase()
+          );
+          if (matchIdx >= 0) {
+            result[matchIdx] = {
+              ...result[matchIdx],
+              ...newV,
+              id: result[matchIdx].id
+            };
+          } else {
+            result.push(newV);
+          }
+        });
+        return result;
+      });
+      addAuditLog('MASS_UPSERT_VENDORS', 'Super Admin Data Hub', `Upserted/merged ${newVendors.length} vendors.`);
+    }
+  };
+
+  const massUpsertCustomers = (newCustomers: Customer[], mode: 'APPEND' | 'OVERWRITE') => {
+    if (mode === 'OVERWRITE') {
+      setCustomers(newCustomers);
+      addAuditLog('MASS_OVERWRITE_CUSTOMERS', 'Super Admin Data Hub', `Overwrote Customer Master with ${newCustomers.length} customers.`);
+    } else {
+      setCustomers(prev => {
+        const cMap = new Map(prev.map(c => [c.customerCode.toUpperCase(), c]));
+        newCustomers.forEach(c => {
+          cMap.set(c.customerCode.toUpperCase(), {
+            ...(cMap.get(c.customerCode.toUpperCase()) || {}),
+            ...c
+          });
+        });
+        return Array.from(cMap.values());
+      });
+      addAuditLog('MASS_UPSERT_CUSTOMERS', 'Super Admin Data Hub', `Upserted/merged ${newCustomers.length} customers.`);
+    }
+  };
+
+  const massUpsertProcesses = (newProcs: ProcessDefinition[], mode: 'APPEND' | 'OVERWRITE') => {
+    if (mode === 'OVERWRITE') {
+      setProcessDefinitions(newProcs);
+      addAuditLog('MASS_OVERWRITE_PROCESSES', 'Super Admin Data Hub', `Overwrote Process Master with ${newProcs.length} operations.`);
+    } else {
+      setProcessDefinitions(prev => {
+        const pMap = new Map(prev.map(p => [p.shortCode.toUpperCase(), p]));
+        newProcs.forEach(p => {
+          pMap.set(p.shortCode.toUpperCase(), {
+            ...(pMap.get(p.shortCode.toUpperCase()) || {}),
+            ...p
+          });
+        });
+        return Array.from(pMap.values());
+      });
+      addAuditLog('MASS_UPSERT_PROCESSES', 'Super Admin Data Hub', `Upserted/merged ${newProcs.length} process operations.`);
+    }
+  };
+
+  const massUpsertItemProcessCards = (newCards: ItemProcessCard[], mode: 'APPEND' | 'OVERWRITE') => {
+    if (mode === 'OVERWRITE') {
+      setItemProcessCards(newCards);
+      addAuditLog('MASS_OVERWRITE_PROCESS_CARDS', 'Super Admin Data Hub', `Overwrote Process Routing Cards with ${newCards.length} routes.`);
+    } else {
+      setItemProcessCards(prev => {
+        const cardMap = new Map<string, ItemProcessCard>();
+        prev.forEach(c => {
+          const key = (c.itemCode || c.itemId).toUpperCase();
+          cardMap.set(key, c);
+        });
+        newCards.forEach(c => {
+          const key = (c.itemCode || c.itemId).toUpperCase();
+          cardMap.set(key, {
+            ...(cardMap.get(key) || {}),
+            ...c,
+            id: cardMap.get(key)?.id || c.id,
+            lastUpdated: new Date().toISOString().split('T')[0]
+          });
+        });
+        return Array.from(cardMap.values());
+      });
+      addAuditLog('MASS_UPSERT_PROCESS_CARDS', 'Super Admin Data Hub', `Upserted ${newCards.length} Process Routing Cards.`);
+    }
+  };
+
+  const massUpdateInventory = (updates: { itemId?: string; itemCode: string; inHouseStock: number; externalStock: number; location?: string; unitPrice?: number; minStockQty?: number }[]) => {
+    const updateMap = new Map(updates.map(u => [u.itemCode.toUpperCase(), u]));
+    setItems(prev => prev.map(item => {
+      const up = updateMap.get(item.itemCode.toUpperCase());
+      if (!up) return item;
+      return {
+        ...item,
+        inHouseStock: up.inHouseStock !== undefined ? up.inHouseStock : item.inHouseStock,
+        externalStock: up.externalStock !== undefined ? up.externalStock : item.externalStock,
+        location: up.location || item.location,
+        unitPrice: up.unitPrice !== undefined ? up.unitPrice : item.unitPrice,
+        minStockQty: up.minStockQty !== undefined ? up.minStockQty : item.minStockQty
+      };
+    }));
+    addAuditLog('MASS_UPDATE_INVENTORY', 'Super Admin Data Hub', `Updated stock balances for ${updates.length} items.`);
   };
 
   return (
@@ -2246,6 +2705,21 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       reallocateFinishedGood,
       dispatchFinishedGood,
       auditLogs,
+      processDefinitions,
+      addProcessDefinition,
+      updateProcessDefinition,
+      deleteProcessDefinition,
+      itemProcessCards,
+      saveItemProcessCard,
+      deleteItemProcessCard,
+      vendorDebitChallans,
+      createVendorDebitChallan,
+      updateVendorDebitChallan,
+      deleteVendorDebitChallan,
+      approveVendorDebitChallan,
+      rejectVendorDebitChallan,
+      intermediateProcessItems,
+      allInventoryItems,
       addAuditLog,
       systemErrors,
       addSystemError,
@@ -2257,6 +2731,14 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       restoreBackup,
       updateBackupSettings,
       resetOperationalData,
+      resetInventory,
+      massUpsertItems,
+      massUpsertBOMs,
+      massUpsertVendors,
+      massUpsertCustomers,
+      massUpsertProcesses,
+      massUpsertItemProcessCards,
+      massUpdateInventory,
       addJobworkChallan,
       recordJobworkReturn,
       addPurchaseOrder,

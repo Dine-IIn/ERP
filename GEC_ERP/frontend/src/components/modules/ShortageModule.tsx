@@ -82,20 +82,23 @@ export const ShortageModule: React.FC = () => {
   const isBoughtOutItem = (item: Item) => {
     const p = (item.processType || (item as any).materialProcessType || '').toLowerCase();
     const cat = (item.category || '').toUpperCase();
-    return p.includes('brought out') || p.includes('bought out') || p.includes('brought_out') || p.includes('job work + brought out') || p.includes('jobwork + brought out') || cat === 'BO';
+    const sources = (item.materialProcessSources || []).map(s => s.toLowerCase());
+    return p.includes('bought out') || p.includes('brought out') || cat === 'BO' || sources.includes('bought out') || sources.includes('brought out');
   };
 
   // Helper to test if item is Job Work
   const isJobWorkItem = (item: Item) => {
     const p = (item.processType || (item as any).materialProcessType || '').toLowerCase();
-    return p.includes('job work') || p.includes('jobwork') || p.includes('job work + brought out') || p.includes('jobwork + brought out');
+    const sources = (item.materialProcessSources || []).map(s => s.toLowerCase());
+    return p.includes('job work') || p.includes('jobwork') || sources.includes('job work') || sources.includes('jobwork');
   };
 
   // Helper to test if item is In-House
   const isInHouseItem = (item: Item) => {
     const p = (item.processType || (item as any).materialProcessType || '').toLowerCase();
     const cat = (item.category || '').toUpperCase();
-    return p.includes('in-house') || p.includes('inhouse') || cat === 'MF' || cat === 'AS' || cat === 'FAS' || cat === 'SA' || cat === 'FP' || cat === 'FG';
+    const sources = (item.materialProcessSources || []).map(s => s.toLowerCase());
+    return p.includes('in-house') || p.includes('inhouse') || cat === 'MF' || cat === 'AS' || cat === 'FAS' || cat === 'SA' || cat === 'FP' || cat === 'FG' || sources.includes('in-house');
   };
 
   // -------------------------------------------------------------
@@ -112,15 +115,21 @@ export const ShortageModule: React.FC = () => {
       // Standalone / Raw material item calculation
       const inHouse = item.inHouseStock || 0;
       const minStock = item.minStockQty !== undefined ? item.minStockQty : (item.reorderLevel || 0);
-      const netShortage = Math.max(0, (targetQty + minStock) - inHouse);
+      const openPO = getOpenPOQuantity(item, item.itemCode);
+      const pendingJW = jobworks
+        .filter(jw => jw.status !== 'COMPLETED' && jw.status !== 'CANCELLED')
+        .reduce((sum, jw) => (jw.itemId === item.id || jw.itemCode === item.itemCode) ? sum + (jw.pendingBalance ?? jw.sentQuantity ?? 0) : sum, 0);
+      const pendingQC = item.pendingQCStock || 0;
+      const totalPipelineSupply = inHouse + openPO + pendingJW + pendingQC;
+      const netShortage = Math.max(0, (targetQty + minStock) - totalPipelineSupply);
       return {
         item,
         matchingBOM: null,
         targetQty,
         maxBuildable: inHouse,
-        constrainingComponent: inHouse < (targetQty + minStock) ? `${item.itemCode} (Direct Stock Shortage)` : undefined,
+        constrainingComponent: totalPipelineSupply < (targetQty + minStock) ? `${item.itemCode} (Direct Stock Shortage)` : undefined,
         components: [],
-        hasShortage: netShortage > 0 || (inHouse <= minStock)
+        hasShortage: netShortage > 0 || (totalPipelineSupply <= minStock)
       };
     }
 
@@ -168,7 +177,13 @@ export const ShortageModule: React.FC = () => {
       const inHouse = childItem ? (childItem.inHouseStock || 0) : 0;
       const external = childItem ? (childItem.externalStock || 0) : 0;
       const minStock = childItem ? (childItem.minStockQty !== undefined ? childItem.minStockQty : (childItem.reorderLevel || 0)) : 0;
-      const netShortage = Math.max(0, (totalReq + minStock) - inHouse);
+      const openPO = getOpenPOQuantity(childItem, comp.itemCode);
+      const pendingJW = jobworks
+        .filter(jw => jw.status !== 'COMPLETED' && jw.status !== 'CANCELLED')
+        .reduce((sum, jw) => (jw.itemId === comp.itemId || jw.itemCode === comp.itemCode) ? sum + (jw.pendingBalance ?? jw.sentQuantity ?? 0) : sum, 0);
+      const pendingQC = childItem?.pendingQCStock || 0;
+      const totalPipelineSupply = inHouse + openPO + pendingJW + pendingQC;
+      const netShortage = Math.max(0, (totalReq + minStock) - totalPipelineSupply);
       const pSource = childItem?.processType || 'In-house';
 
       const buildableUnits = Math.floor(inHouse / Math.max(1, qtyPer));
@@ -370,14 +385,68 @@ export const ShortageModule: React.FC = () => {
     }
   });
 
+  // Also include Job Card Demand in consolidated shortage
+  const activeJCs = jobCards.filter(j => j.status !== 'COMPLETED' && j.status !== 'CANCELLED' && !(j as any).isDeleted);
+  activeJCs.forEach(jc => {
+    const remainingJCQty = Math.max(0, (jc.targetQuantity || 1) - (jc.completedQuantity || 0));
+    if (remainingJCQty <= 0) return;
+    const key = jc.itemCode || jc.itemId || 'unknown';
+    const itemObj = items.find(i => i.id === jc.itemId || i.itemCode === jc.itemCode);
+    const inHouse = itemObj ? (itemObj.inHouseStock || 0) : 0;
+    const external = itemObj ? (itemObj.externalStock || 0) : 0;
+    const pSource = itemObj?.processType || 'In-house';
+    const cat = itemObj?.category || 'Component';
+
+    if (!consolidatedMap.has(key)) {
+      consolidatedMap.set(key, {
+        itemId: itemObj?.id || jc.itemId || '',
+        itemCode: jc.itemCode || itemObj?.itemCode || '',
+        itemName: jc.itemName || itemObj?.name || '',
+        category: cat,
+        processType: pSource,
+        unit: itemObj?.unit || 'PCS',
+        totalRequired: remainingJCQty,
+        inHouseStock: inHouse,
+        externalStock: external,
+        netShortage: 0,
+        isShortage: false,
+        itemObj,
+        requiredByWOs: [{
+          woId: jc.id,
+          woNumber: jc.jobCardNo || jc.id,
+          machineModel: `Job Card: ${jc.itemName || jc.itemCode}`,
+          requiredQty: remainingJCQty
+        }]
+      });
+    } else {
+      const existing = consolidatedMap.get(key)!;
+      existing.totalRequired += remainingJCQty;
+      existing.requiredByWOs.push({
+        woId: jc.id,
+        woNumber: jc.jobCardNo || jc.id,
+        machineModel: `Job Card: ${jc.itemName || jc.itemCode}`,
+        requiredQty: remainingJCQty
+      });
+    }
+  });
+
   const consolidatedShortageList = Array.from(consolidatedMap.values()).map(c => {
     const minStock = c.itemObj ? (c.itemObj.minStockQty !== undefined ? c.itemObj.minStockQty : (c.itemObj.reorderLevel || 0)) : 0;
-    const netShortage = Math.max(0, (c.totalRequired + minStock) - c.inHouseStock);
+    const openPO = getOpenPOQuantity(c.itemObj, c.itemCode);
+    const pendingJW = jobworks
+      .filter(jw => jw.status !== 'COMPLETED' && jw.status !== 'CANCELLED')
+      .reduce((sum, jw) => (jw.itemId === c.itemId || jw.itemCode === c.itemCode) ? sum + (jw.pendingBalance ?? jw.sentQuantity ?? 0) : sum, 0);
+    const pendingQC = c.itemObj?.pendingQCStock || 0;
+    const totalPipelineSupply = c.inHouseStock + openPO + pendingJW + pendingQC;
+    const netShortage = Math.max(0, (c.totalRequired + minStock) - totalPipelineSupply);
     return {
       ...c,
       minStockQty: minStock,
       netShortage,
-      isShortage: netShortage > 0
+      isShortage: netShortage > 0,
+      openPO,
+      pendingJW,
+      pendingQC
     };
   });
 
@@ -385,9 +454,9 @@ export const ShortageModule: React.FC = () => {
   const activeTabConsolidatedShortages = consolidatedShortageList.filter(c => {
     let matchesTab = true;
     if (activeTab === 'PO_SHORTAGE') {
-      matchesTab = isBoughtOutItem(c.itemObj || c as any) || c.processType === 'Brought out' || c.processType === 'Job work + Brought out' || c.category === 'BO';
+      matchesTab = isBoughtOutItem(c.itemObj || c as any) || c.processType === 'Bought out' || c.processType === 'Job work + Bought out' || c.category === 'BO';
     } else if (activeTab === 'JOBWORK_SHORTAGE') {
-      matchesTab = isJobWorkItem(c.itemObj || c as any) || c.processType === 'Job work' || c.processType === 'Job work + Brought out';
+      matchesTab = isJobWorkItem(c.itemObj || c as any) || c.processType === 'Job work' || c.processType === 'Job work + Bought out';
     } else if (activeTab === 'JOBCARD_SHORTAGE') {
       matchesTab = isInHouseItem(c.itemObj || c as any) || c.processType === 'In-house' || c.category === 'MF' || c.category === 'AS' || c.category === 'FAS' || c.category === 'SA';
     }
@@ -421,7 +490,13 @@ export const ShortageModule: React.FC = () => {
       const inHouse = itemObj ? itemObj.inHouseStock : 0;
       const external = itemObj ? itemObj.externalStock : 0;
       const minStock = itemObj ? (itemObj.minStockQty !== undefined ? itemObj.minStockQty : (itemObj.reorderLevel || 0)) : 0;
-      const netShortage = Math.max(0, (totalReq + minStock) - inHouse);
+      const openPO = getOpenPOQuantity(itemObj, comp.itemCode);
+      const pendingJW = jobworks
+        .filter(jw => jw.status !== 'COMPLETED' && jw.status !== 'CANCELLED')
+        .reduce((sum, jw) => (jw.itemId === comp.itemId || jw.itemCode === comp.itemCode) ? sum + (jw.pendingBalance ?? jw.sentQuantity ?? 0) : sum, 0);
+      const pendingQC = itemObj?.pendingQCStock || 0;
+      const totalPipelineSupply = inHouse + openPO + pendingJW + pendingQC;
+      const netShortage = Math.max(0, (totalReq + minStock) - totalPipelineSupply);
       const pSource = itemObj?.processType || 'In-house';
 
       return {
@@ -446,10 +521,10 @@ export const ShortageModule: React.FC = () => {
 
   const filteredWOShortages = relevantWOs.map(wo => getWOShortageData(wo)).filter(data => {
     if (activeTab === 'PO_SHORTAGE') {
-      return data.components.some(c => c.isShortage && (c.processType === 'Brought out' || c.processType === 'Job work + Brought out'));
+      return data.components.some(c => c.isShortage && (c.processType === 'Bought out' || c.processType === 'Job work + Bought out'));
     }
     if (activeTab === 'JOBWORK_SHORTAGE') {
-      return data.components.some(c => c.isShortage && (c.processType === 'Job work' || c.processType === 'Job work + Brought out'));
+      return data.components.some(c => c.isShortage && (c.processType === 'Job work' || c.processType === 'Job work + Bought out'));
     }
     if (activeTab === 'JOBCARD_SHORTAGE') {
       return data.components.some(c => c.isShortage && c.processType === 'In-house');
@@ -464,7 +539,7 @@ export const ShortageModule: React.FC = () => {
   // ACTION HANDLERS
   // -------------------------------------------------------------
   const handleRaisePO = (item: Item, netShortage: number, wo?: WorkOrder) => {
-    if (item.processType === 'Job work + Brought out') {
+    if (item.processType === 'Job work + Bought out') {
       const moq = item.minOrderQty || 1;
       const half = Math.floor(netShortage / 2);
       setDualModalData({
@@ -506,7 +581,7 @@ export const ShortageModule: React.FC = () => {
   };
 
   const handleIssueJobwork = (item: Item, netShortage: number, wo?: WorkOrder) => {
-    if (item.processType === 'Job work + Brought out') {
+    if (item.processType === 'Job work + Bought out') {
       const moq = item.minOrderQty || 1;
       const half = Math.floor(netShortage / 2);
       setDualModalData({
@@ -1050,7 +1125,7 @@ export const ShortageModule: React.FC = () => {
                                     <td style={{ fontWeight: 600 }}>{comp.itemName}</td>
                                     <td><span className="badge badge-neutral" style={{ fontSize: '0.72rem' }}>{comp.category}</span></td>
                                     <td>
-                                      <span className={`badge ${comp.processType === 'Brought out' ? 'badge-primary' : comp.processType === 'In-house' ? 'badge-success' : 'badge-warning'}`} style={{ fontSize: '0.72rem' }}>
+                                      <span className={`badge ${comp.processType === 'Bought out' || comp.processType === 'Job work + Bought out' ? 'badge-primary' : comp.processType === 'In-house' ? 'badge-success' : comp.processType === 'Job work' ? 'badge-purple' : 'badge-neutral'}`} style={{ fontSize: '0.72rem' }}>
                                         {comp.processType}
                                       </span>
                                     </td>

@@ -12,7 +12,8 @@ type POSortField = 'poNumber' | 'vendorName' | 'orderDate' | 'deliveryDate' | 'p
 
 export const PurchaseOrderModule: React.FC = () => {
   const { 
-    purchaseOrders, vendors, items, workOrders, boms, addPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder, 
+    purchaseOrders, vendors, items, workOrders, boms, jobCards, jobworks, qcInspections,
+    addPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder, 
     updatePOStatus, sendPODraftsForApproval, resubmitPOForApproval, currentUser, searchTerm, setSearchTerm 
   } = useERP();
   
@@ -128,17 +129,71 @@ export const PurchaseOrderModule: React.FC = () => {
     return demand;
   };
 
-  // Calculate Net Effective Item Shortage: z + shortage = x + y  =>  shortage = (x + y) - z
+  // Helper: Item Job Card Demand (Materials required for active Job Cards)
+  const getItemJobCardDemand = (itemId: string, itemCode: string) => {
+    const activeJCs = jobCards.filter(jc => jc.status !== 'COMPLETED' && jc.status !== 'CANCELLED' && !(jc as any).isDeleted);
+    let demand = 0;
+    activeJCs.forEach(jc => {
+      const remainingJCQty = Math.max(0, (jc.targetQuantity || 1) - (jc.completedQuantity || 0));
+      if (remainingJCQty <= 0) return;
+
+      if (jc.itemId === itemId || jc.itemCode === itemCode) {
+        demand += remainingJCQty;
+      }
+
+      if (jc.components && jc.components.length > 0) {
+        jc.components.forEach(comp => {
+          if (comp.itemId === itemId || comp.itemCode === itemCode) {
+            const qtyPer = comp.qtyPerUnit !== undefined ? comp.qtyPerUnit : (comp.totalRequiredQty ? comp.totalRequiredQty / (jc.targetQuantity || 1) : 1);
+            demand += qtyPer * remainingJCQty;
+          }
+        });
+      }
+    });
+    return demand;
+  };
+
+  // Helper: Item Job Work Demand (Raw material components needed for open jobwork challans)
+  const getItemJobworkDemand = (itemId: string, itemCode: string) => {
+    const activeJWs = jobworks.filter(jw => jw.status !== 'COMPLETED' && jw.status !== 'CANCELLED');
+    let demand = 0;
+    activeJWs.forEach(jw => {
+      if (jw.itemId === itemId || jw.itemCode === itemCode) {
+        const bal = jw.pendingBalance !== undefined ? jw.pendingBalance : (jw.sentQuantity || 0);
+        demand += bal;
+      }
+    });
+    return demand;
+  };
+
+  // Helper: Pipeline Pending Supplies
+  const getItemPipelineSupply = (item: Item) => {
+    const pendingPOQty = getOpenPOQuantity(item);
+    const pendingJWQty = jobworks
+      .filter(jw => jw.status !== 'COMPLETED' && jw.status !== 'CANCELLED')
+      .reduce((sum, jw) => (jw.itemId === item.id || jw.itemCode === item.itemCode) ? sum + (jw.pendingBalance ?? jw.sentQuantity ?? 0) : sum, 0);
+    const pendingQCQty = item.pendingQCStock || 0;
+    return {
+      pendingPOQty,
+      pendingJWQty,
+      pendingQCQty,
+      totalPipeline: pendingPOQty + pendingJWQty + pendingQCQty
+    };
+  };
+
+  // Calculate Net Effective Item Shortage:
+  // Shortage = (WO Demand + Job Card Demand + Jobwork Demand + Min Stock Level) - (Current In-House Stock + Pending PO Qty)
   const getItemEffectiveShortage = (item: Item) => {
-    const totalCurrentStock = (item.inHouseStock || 0) + (item.externalStock || 0);
-    const demandQty = getItemWorkOrderDemand(item.id, item.itemCode);
+    const inHouseStock = item.inHouseStock || 0;
+    const pendingPOQty = getOpenPOQuantity(item);
+    const woDemand = getItemWorkOrderDemand(item.id, item.itemCode);
+    const jcDemand = getItemJobCardDemand(item.id, item.itemCode);
+    const jwDemand = getItemJobworkDemand(item.id, item.itemCode);
     const minStock = item.minStockQty !== undefined ? item.minStockQty : (item.reorderLevel || 0);
 
-    const pendingPOQty = getOpenPOQuantity(item);
-
-    const totalRequirement = demandQty + minStock;
-    const totalAvailable = totalCurrentStock + pendingPOQty;
-    const netShortage = Math.max(0, totalRequirement - totalAvailable);
+    const totalDemand = minStock + jwDemand + jcDemand + woDemand;
+    const totalSupply = inHouseStock + pendingPOQty;
+    const netShortage = Math.max(0, totalDemand - totalSupply);
     return netShortage;
   };
 
@@ -146,7 +201,8 @@ export const PurchaseOrderModule: React.FC = () => {
   const isBoughtOutItem = (item: Item) => {
     const p = (item.processType || (item as any).materialProcessType || '').toLowerCase();
     const cat = (item.category || '').toUpperCase();
-    return p.includes('brought out') || p.includes('bought out') || p.includes('brought_out') || cat === 'BO';
+    const sources = (item.materialProcessSources || []).map(s => s.toLowerCase());
+    return p.includes('bought out') || p.includes('brought out') || cat === 'BO' || sources.includes('bought out') || sources.includes('brought out');
   };
 
   // ONLY Bought-Out items with net shortage > 0 can have PO created
@@ -553,10 +609,11 @@ export const PurchaseOrderModule: React.FC = () => {
 
   // Build rows for Tabular Shortage Matrix
   const getWizardTableRows = () => {
-    const term = wizardSearchTerm.trim().toLowerCase();
-
     return wizardShortageItemsFiltered.map((item, idx) => {
-      const reqQty = getItemWorkOrderDemand(item.id, item.itemCode);
+      const woReq = getItemWorkOrderDemand(item.id, item.itemCode);
+      const jcReq = getItemJobCardDemand(item.id, item.itemCode);
+      const jwReq = getItemJobworkDemand(item.id, item.itemCode);
+      const reqQty = woReq + jcReq + jwReq;
       const minStock = item.minStockQty !== undefined ? item.minStockQty : (item.reorderLevel || 0);
       const currentStock = (item.inHouseStock || 0) + (item.externalStock || 0);
       const inPO = getOpenPOQuantity(item);
@@ -1368,7 +1425,7 @@ export const PurchaseOrderModule: React.FC = () => {
                   <option value="" disabled>-- Select Item to Order --</option>
                   {items.map(it => (
                     <option key={it.id} value={it.id}>
-                      {it.itemCode} - {it.name} [{it.category}] ({it.processType || 'Brought out'})
+                      {it.itemCode} - {it.name} [{it.category}] ({it.processType || 'Bought out'})
                     </option>
                   ))}
                 </select>

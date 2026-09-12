@@ -4,7 +4,7 @@ import { AutocompleteSelect, AutocompleteOption } from '../common/AutocompleteSe
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { SingleSOPrintView, SOListPrintView } from '../printTemplates/SOPrintTemplates';
 import { ShoppingBag, Plus, ArrowRight, CheckCircle2, Search, Printer, FileSpreadsheet, ArrowLeft, X, Edit2, Trash2, RefreshCw } from 'lucide-react';
-import { SalesOrder } from '../../types/erp';
+import { SalesOrder, generateNextSalesOrderNumber } from '../../types/erp';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
 import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Modal } from '../common/Modal';
@@ -67,7 +67,7 @@ export const SalesOrderModule: React.FC = () => {
 
   const handleOpenModal = () => {
     setSoForm({
-      soNumber: `SO-GEC-${String(salesOrders.length + 1).padStart(3, '0')}`,
+      soNumber: generateNextSalesOrderNumber(salesOrders),
       customerId: '',
       customerName: '',
       machineModel: '',

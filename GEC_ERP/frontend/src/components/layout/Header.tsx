@@ -94,8 +94,11 @@ export const Header: React.FC = () => {
       case 'vendor-master': return 'Vendor & Supplier Directory';
       case 'bom-master': return 'Bill of Materials (BOM) Master';
       case 'sales-orders': return 'Sales Orders (SO)';
+      case 'inventory': return 'Inventory Master (In-House & External Store)';
       case 'inhouse-inventory': return 'In-House Store Inventory';
-      case 'external-inventory': return 'External Jobwork';
+      case 'external-inventory': return 'External Vendor Inventory';
+      case 'external-jobwork': return 'Job Work (Challans & Vendor Processing)';
+      case 'jobwork': return 'Job Work (Challans & Vendor Processing)';
       case 'purchase-orders': return 'Purchase Orders (PO)';
       case 'grn': return 'Goods Received Notices (GRN)';
       case 'work-orders': return 'Work Orders & Production';

@@ -247,22 +247,7 @@ export const QualityControlModule: React.FC = () => {
     setPrintModalOpen(true);
   };
 
-  // Manual/Adhoc Modal functions
-  const handleOpenManualModal = () => {
-    setEditingQC(null);
-    setManualQcForm({
-      qcNumber: `QC-GEC-2026-${String(qcInspections.length + 1).padStart(3, '0')}`,
-      type: 'INCOMING_PO',
-      referenceNo: 'GRN-GEC-2026-001',
-      itemId: items[0]?.id || '',
-      inspectedQuantity: 1,
-      passedQuantity: 1,
-      failedQuantity: 0,
-      disposition: 'PASSED',
-      defectReason: ''
-    });
-    setIsManualModalOpen(true);
-  };
+
 
   const handleOpenEditManualModal = (q: QCInspection) => {
     setEditingQC(q);
@@ -356,9 +341,6 @@ export const QualityControlModule: React.FC = () => {
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
           <button type="button" className="btn btn-outline" onClick={handlePrintQCList} title="Print filtered QC inspection report">
             <Printer size={14} /> Print Report
-          </button>
-          <button className="btn btn-outline" onClick={handleOpenManualModal} title="Record ad-hoc quality inspection">
-            <Plus size={15} /> Ad-hoc Inspection
           </button>
         </div>
       </div>
@@ -913,7 +895,7 @@ export const QualityControlModule: React.FC = () => {
           <div className="card" style={{ maxWidth: '600px', width: '100%', padding: '1.25rem', backgroundColor: 'var(--bg-card)', borderRadius: '0.5rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
               <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
-                {editingQC ? `Edit QC Report (${editingQC.qcNumber || editingQC.inspectionNo})` : 'Record Ad-hoc Quality Inspection'}
+                Edit QC Report ({editingQC?.qcNumber || editingQC?.inspectionNo || ''})
               </h3>
               <button type="button" className="btn btn-outline" style={{ padding: '0.25rem 0.5rem' }} onClick={() => setIsManualModalOpen(false)}>
                 <X size={15} />

@@ -9,7 +9,8 @@ import { Item } from '../../types/erp';
 type StockSortKey = 'itemCode' | 'name' | 'category' | 'location' | 'inHouseStock' | 'reorderLevel' | 'unitPrice' | 'totalValuation';
 
 export const InHouseInventoryModule: React.FC = () => {
-  const { items, searchTerm, setSearchTerm, adjustItemStock } = useERP();
+  const { items, allInventoryItems, searchTerm, setSearchTerm, adjustItemStock } = useERP();
+  const inventoryList = allInventoryItems && allInventoryItems.length > 0 ? allInventoryItems : items;
 
   const [sortField, setSortField] = useState<StockSortKey>('itemCode');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
@@ -58,7 +59,7 @@ export const InHouseInventoryModule: React.FC = () => {
   const isHistorySearch = searchTerm.toLowerCase().includes('@history');
   const cleanSearchTerm = searchTerm.replace(/@history/gi, '').trim().toLowerCase();
 
-  const filteredItems = items
+  const filteredItems = inventoryList
     .filter(item =>
       !cleanSearchTerm ||
       item.itemCode.toLowerCase().includes(cleanSearchTerm) ||
@@ -83,8 +84,8 @@ export const InHouseInventoryModule: React.FC = () => {
       return 0;
     });
 
-  const totalStockValue = items.reduce((sum, item) => sum + (item.inHouseStock * (item.unitPrice || 0)), 0);
-  const lowStockCount = items.filter(i => i.inHouseStock <= (i.reorderLevel || 0)).length;
+  const totalStockValue = inventoryList.reduce((sum, item) => sum + (item.inHouseStock * (item.unitPrice || 0)), 0);
+  const lowStockCount = inventoryList.filter(i => !i.isProcessItem && i.inHouseStock <= (i.reorderLevel || 0)).length;
 
   return (
     <div className="module-layout-container">
@@ -190,6 +191,11 @@ export const InHouseInventoryModule: React.FC = () => {
                 <tr key={item.id} onDoubleClick={() => handleOpenAdjustModal(item)} style={{ cursor: 'pointer' }} title="Double-click to adjust stock count">
                   <td style={{ fontWeight: 700, color: 'var(--accent-primary)' }}>
                     {item.itemCode}
+                    {item.isProcessItem && (
+                      <span className="badge" style={{ marginLeft: '0.4rem', fontSize: '0.65rem', backgroundColor: '#e0e7ff', color: '#4338ca', fontWeight: 700 }}>
+                        PROCESS WIP
+                      </span>
+                    )}
                   </td>
                   <td>
                     <div style={{ fontWeight: 600 }}>{item.name}</div>

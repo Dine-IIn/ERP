@@ -67,7 +67,7 @@ export const parseItemsSheet = (csvText: string, existingItems: Item[]): BulkUpl
       itemCode,
       name,
       category,
-      processType: 'Brought out',
+      processType: 'Bought out',
       unit,
       purchaseUOM,
       conversionFactor,
@@ -98,31 +98,51 @@ export const parseVendorsSheet = (csvText: string, existingVendors: Vendor[]): B
 
   const existingCodes = new Set(existingVendors.map(v => v.vendorCode.toLowerCase()));
 
+  let maxSeq = 0;
+  existingVendors.forEach(v => {
+    const match = v.vendorCode.match(/VEN(\d+)/i) || v.vendorCode.match(/(\d+)/);
+    if (match && match[1]) {
+      const n = parseInt(match[1], 10);
+      if (!isNaN(n) && n > maxSeq) maxSeq = n;
+    }
+  });
+  let autoCodeIndex = maxSeq + 1;
+
   dataRows.forEach((cols, idx) => {
     const rowNum = hasHeader ? idx + 2 : idx + 1;
     const rawData = cols.join(', ');
 
-    if (cols.length < 2 || !cols[0] || !cols[1]) {
+    if (!cols || cols.length === 0 || cols.every(c => !c.trim())) return;
+
+    let vendorCode = (cols[0] || '').trim().toUpperCase();
+    let name = (cols[1] || '').trim();
+
+    // If only name provided in col 0
+    if (!name && vendorCode && !vendorCode.startsWith('VEN') && !vendorCode.startsWith('VEND')) {
+      name = vendorCode;
+      vendorCode = '';
+    }
+
+    if (!name) {
       rejectedRows.push({
         rowNumber: rowNum,
         rawData,
-        reasons: ['Vendor Code and Vendor Name are mandatory']
+        reasons: ['Vendor Name is mandatory']
       });
       return;
     }
 
-    const vendorCode = cols[0].toUpperCase();
-    const name = cols[1];
-    const category = cols[2] || 'CNC Machining Shop';
-    const contactPerson = cols[3] || 'Manager';
-    const phone = cols[4] || '';
-    const email = cols[5] || '';
-    const city = cols[6] || 'Ahmedabad';
-    const gstin = cols[7] || '';
-    const pan = cols[8] || '';
-    const bankName = cols[9] || '';
-    const accountNumber = cols[10] || '';
-    const ifscCode = cols[11] || '';
+    if (!vendorCode) {
+      vendorCode = `VEN${String(autoCodeIndex).padStart(7, '0')}`;
+      autoCodeIndex++;
+    }
+
+    const contactPerson = cols[2] || '';
+    const phone = cols[3] || '';
+    const email = cols[4] || '';
+    const city = cols[5] || '';
+    const gstin = (cols[6] || '').trim().toUpperCase();
+    const pan = (cols[7] || '').trim().toUpperCase() || undefined;
 
     if (existingCodes.has(vendorCode.toLowerCase())) {
       skippedRows.push({
@@ -133,19 +153,17 @@ export const parseVendorsSheet = (csvText: string, existingVendors: Vendor[]): B
       return;
     }
 
+    existingCodes.add(vendorCode.toLowerCase());
+
     successRows.push({
       vendorCode,
       name,
-      category,
       contactPerson,
       phone,
       email,
       city,
       gstin,
-      pan,
-      bankName,
-      accountNumber,
-      ifscCode
+      pan
     });
   });
 

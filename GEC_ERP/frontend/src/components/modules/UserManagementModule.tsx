@@ -7,7 +7,7 @@ export const UserManagementModule: React.FC = () => {
   const { 
     users, currentUser, departments, customRoles, addUser, updateUser, deleteUser, updateUserRole,
     addDepartment, updateDepartment, deleteDepartment, addRole, updateRole, deleteRole,
-    auditLogs, addAuditLog, backups, createBackup, deleteBackup, downloadBackup, restoreBackup, resetOperationalData
+    auditLogs, addAuditLog, backups, createBackup, deleteBackup, downloadBackup, restoreBackup, resetOperationalData, resetInventory
   } = useERP();
 
   const [activeTab, setActiveTab] = useState<'USERS' | 'DEPARTMENTS' | 'ROLES' | 'AUDIT_LOGS' | 'BACKUPS'>('USERS');
@@ -1625,16 +1625,57 @@ export const UserManagementModule: React.FC = () => {
             </table>
           </div>
 
-          {/* Operational Data Reset (Keep Item Master, BOMs, Vendors, Customers & Admin Accounts) */}
+          {/* Inventory Reset (Zero All Stock Levels, Keep Item Master & Specs) */}
+          <div className="card" style={{ padding: '1.25rem', backgroundColor: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.35)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginTop: '1rem' }}>
+            <div style={{ maxWidth: '750px' }}>
+              <h4 style={{ fontSize: '0.98rem', fontWeight: 800, margin: 0, color: '#2563eb', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <RefreshCw size={17} />
+                Reset Inventory (Zero All Stock Levels)
+              </h4>
+              <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: '0.35rem 0 0 0', lineHeight: 1.45 }}>
+                Sets all <strong>In-House Store Stock, External Vendor Stock, and Quarantine QC Stock to zero (0)</strong> across all items in Item Master.<br />
+                <strong style={{ color: 'var(--success)' }}>STRICTLY PRESERVED:</strong> All Item Master records, part codes, specifications, prices, multi-level BOMs, and Process Master cards remain 100% intact.
+              </p>
+            </div>
+
+            <button 
+              className="btn btn-primary" 
+              style={{ backgroundColor: '#2563eb', borderColor: '#2563eb', color: '#ffffff', fontWeight: 700, padding: '0.55rem 1.25rem' }}
+              onClick={() => {
+                if (!currentUser || currentUser.role !== 'Admin') {
+                  alert('Only System Administrators have authorization to perform inventory reset.');
+                  return;
+                }
+                const confirmed = window.confirm(
+                  '⚠️ CONFIRM INVENTORY RESET:\n\n' +
+                  'Are you sure you want to reset all inventory stock levels to zero (0)?\n\n' +
+                  '• In-House Store Stock → 0\n' +
+                  '• External Vendor Stock → 0\n' +
+                  '• Quarantine QC Stock → 0\n\n' +
+                  '• PRESERVED: Item Master, Part Numbers, Descriptions, BOMs, Process Master, Vendors & Customers\n\n' +
+                  'Click OK to proceed.'
+                );
+                if (confirmed) {
+                  const res = resetInventory();
+                  alert(res.message);
+                  setMessage({ text: res.message, type: 'success' });
+                }
+              }}
+            >
+              <RefreshCw size={15} /> Reset Inventory
+            </button>
+          </div>
+
+          {/* Operational Data Reset (Keep Item Master, BOM Master, Process Master, Vendors, Customers & Admin Accounts) */}
           <div className="card" style={{ padding: '1.25rem', backgroundColor: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.35)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginTop: '1rem' }}>
             <div style={{ maxWidth: '750px' }}>
               <h4 style={{ fontSize: '0.98rem', fontWeight: 800, margin: 0, color: '#d97706', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                 <RefreshCw size={17} />
-                Reset Operational Data (Keep Item Master, BOM Master, Vendors, Customers & Admin Accounts)
+                Reset Operational Data (Keep Item Master, BOM Master, Process Master, Vendors, Customers & Admin Accounts)
               </h4>
               <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: '0.35rem 0 0 0', lineHeight: 1.45 }}>
                 Clears all transactional operations (<strong>Sales Orders, Work Orders, Job Cards, Purchase Orders, Goods Receipt Notices, Jobwork Challans, QC Inspections, Machine Assembly Line, and Finished Goods/Dispatches</strong>).<br />
-                <strong style={{ color: 'var(--success)' }}>STRICTLY PRESERVED:</strong> Item Master, Multi-Level BOMs, Customer Master, Vendor Master, and Admin user accounts are preserved.
+                <strong style={{ color: 'var(--success)' }}>STRICTLY PRESERVED:</strong> Item Master, Multi-Level BOMs, Process Master (Manufacturing Processes & Steps), Customer Master, Vendor Master, and Admin user accounts are preserved.
               </p>
             </div>
 
@@ -1650,7 +1691,7 @@ export const UserManagementModule: React.FC = () => {
                   '⚠️ CONFIRM OPERATIONAL RESET:\n\n' +
                   'Are you sure you want to reset all operational data?\n\n' +
                   '• CLEARED: Sales Orders, Work Orders, Job Cards, POs, GRNs, Jobwork Challans, QC, Assembly & Dispatches\n' +
-                  '• PRESERVED: Item Master, BOMs, Customers, Vendors, Departments & Admin Users\n\n' +
+                  '• PRESERVED: Item Master, BOMs, Process Master, Customers, Vendors, Departments & Admin Users\n\n' +
                   'Click OK to proceed with the reset.'
                 );
                 if (confirmed) {

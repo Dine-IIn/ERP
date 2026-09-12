@@ -4,13 +4,13 @@ import { AutocompleteSelect, AutocompleteOption } from '../common/AutocompleteSe
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { SingleGRNPrintView, GRNListPrintView } from '../printTemplates/GRNPrintTemplates';
 import { FileCheck, Plus, CheckCircle, Search, Printer, FileSpreadsheet, Truck, ShoppingCart, ArrowLeft, X, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw, Edit2 } from 'lucide-react';
-import { GRNLineItem, GoodsReceivedNotice } from '../../types/erp';
+import { GRNLineItem, GoodsReceivedNotice, generateNextGRNNumber } from '../../types/erp';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
 
 type SortField = 'grnNumber' | 'poNumber' | 'vendorName' | 'invoiceNo' | 'receivedDate';
 
 export const GRNModule: React.FC = () => {
-  const { grns, purchaseOrders, jobworks, items, vendors, setActiveModule, currentUser, addGRN, updateGRN, approveGRN, searchTerm, setSearchTerm } = useERP();
+  const { grns, purchaseOrders, jobworks, items, vendors, setActiveModule, currentUser, addGRN, updateGRN, approveGRN, searchTerm, setSearchTerm, processDefinitions, itemProcessCards, createVendorDebitChallan } = useERP();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingGRN, setEditingGRN] = useState<GoodsReceivedNotice | null>(null);
     const [printModalOpen, setPrintModalOpen] = useState(false);
@@ -43,30 +43,32 @@ export const GRNModule: React.FC = () => {
 
   const filteredGRNs = grns
     .filter(g => {
-      const isHistory = g.status === 'STORED' || g.status === 'QC_APPROVED';
-      if (!isHistorySearch && isHistory) {
-        // default show active unless @history
+      const isCompleted = g.status === 'QC_APPROVED' || g.status === 'STORED' || (g.status as string) === 'COMPLETED';
+      if (!isHistorySearch && isCompleted) {
+        return false;
       }
       const matchesSearch = !cleanSearchTerm || (
         g.grnNumber.toLowerCase().includes(cleanSearchTerm) ||
         g.poNumber.toLowerCase().includes(cleanSearchTerm) ||
-        g.vendorName.toLowerCase().includes(cleanSearchTerm) ||
-        (g.invoiceNo && g.invoiceNo.toLowerCase().includes(cleanSearchTerm)) ||
-        (g.items && g.items.some(i => (i.itemCode || '').toLowerCase().includes(cleanSearchTerm) || (i.itemName || '').toLowerCase().includes(cleanSearchTerm)))
+        (g.vendorName && g.vendorName.toLowerCase().includes(cleanSearchTerm)) ||
+        (g.invoiceNo && g.invoiceNo.toLowerCase().includes(cleanSearchTerm))
       );
-      if (!matchesSearch) return false;
 
-      if (startDateFilter && g.receivedDate < startDateFilter) return false;
-      if (endDateFilter && g.receivedDate > endDateFilter) return false;
+      // Date filter
+      let matchesDate = true;
+      if (startDateFilter && g.receivedDate < startDateFilter) matchesDate = false;
+      if (endDateFilter && g.receivedDate > endDateFilter) matchesDate = false;
 
-      return true;
+      return matchesSearch && matchesDate;
     })
     .sort((a, b) => {
       let valA: any = a[sortField] || '';
       let valB: any = b[sortField] || '';
 
-      if (typeof valA === 'string') valA = valA.toLowerCase();
-      if (typeof valB === 'string') valB = valB.toLowerCase();
+      if (typeof valA === 'string') {
+        valA = valA.toLowerCase();
+        valB = valB.toLowerCase();
+      }
 
       if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
       if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
@@ -84,10 +86,6 @@ export const GRNModule: React.FC = () => {
     setPrintModalOpen(true);
   };
 
-  // Source Type: 'PO' (Vendor PO) or 'JOBWORK' (Jobwork Challan Return)
-  const [inwardSourceType, setInwardSourceType] = useState<'PO' | 'JOBWORK'>('PO');
-  const [selectedSourceId, setSelectedSourceId] = useState('');
-
   const [grnForm, setGrnForm] = useState({
     grnNumber: '',
     invoiceNo: '',
@@ -95,11 +93,14 @@ export const GRNModule: React.FC = () => {
     receivedDate: new Date().toISOString().split('T')[0]
   });
 
-  const [grnItems, setGrnItems] = useState<any[]>([]);
+  // Source Type: 'PO' (Vendor PO) or 'JOBWORK' (Jobwork Challan Return)
+  const [inwardSourceType, setInwardSourceType] = useState<'PO' | 'JOBWORK'>('PO');
+  const [selectedSourceId, setSelectedSourceId] = useState<string>('');
+  const [grnItems, setGrnItems] = useState<GRNLineItem[]>([]);
 
   // Autocomplete options
   const poOptions: AutocompleteOption[] = purchaseOrders
-    .filter(po => po.status !== 'GOODS_RECEIVED' && po.status !== 'CANCELLED')
+    .filter(p => p.status !== 'CANCELLED' && p.status !== 'GOODS_RECEIVED' && p.status !== 'REJECTED')
     .map(po => ({
       value: po.id,
       label: `${po.poNumber} (${po.vendorName})`,
@@ -117,7 +118,7 @@ export const GRNModule: React.FC = () => {
   const handleOpenModal = () => {
     setEditingGRN(null);
     setGrnForm({
-      grnNumber: `GRN-GEC-${String(grns.length + 1).padStart(3, '0')}`,
+      grnNumber: generateNextGRNNumber(grns),
       invoiceNo: '',
       invoiceDate: new Date().toISOString().split('T')[0],
       receivedDate: new Date().toISOString().split('T')[0]
@@ -301,6 +302,31 @@ export const GRNModule: React.FC = () => {
         vendorName = jobObj.vendorName;
       }
     }
+
+    // Generate Vendor Debit Notes for any items with financial loss debit disposition
+    selectedItemsToReceive.forEach(it => {
+      if (it.rejectedQty && it.rejectedQty > 0 && it.rejectionAction === 'VENDOR_LOSS_DEBIT') {
+        const itemObj = items.find(i => i.id === it.itemId || i.itemCode === it.itemCode);
+        const uPrice = it.unitPrice || itemObj?.unitPrice || 0;
+        const totalLoss = it.lossAmount || (it.rejectedQty * uPrice);
+        createVendorDebitChallan({
+          sourceType: 'GRN',
+          sourceReferenceNo: grnForm.grnNumber,
+          vendorId,
+          vendorName,
+          itemId: it.itemId || itemObj?.id || '',
+          itemCode: it.itemCode || itemObj?.itemCode || '',
+          itemName: it.itemName || itemObj?.name || '',
+          rejectedQty: it.rejectedQty,
+          unit: it.unit || itemObj?.unit || 'PCS',
+          unitPrice: uPrice,
+          totalLossAmount: totalLoss,
+          defectReason: it.rejectionReason || 'Dimensional non-conformance / vendor defect',
+          reworkProcessRequired: it.reworkProcessName,
+          status: 'PENDING_DEBIT'
+        });
+      }
+    });
 
     addGRN({
       grnNumber: grnForm.grnNumber,
@@ -585,6 +611,77 @@ export const GRNModule: React.FC = () => {
                               </div>
                             </div>
 
+                            {/* Unified Rejection & Defect Disposition Panel */}
+                            {(item.rejectedQty || 0) > 0 && (
+                              <div style={{ marginTop: '0.65rem', padding: '0.65rem 0.85rem', backgroundColor: 'rgba(239, 68, 68, 0.08)', borderRadius: '0.375rem', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+                                <div style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--danger)', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                  ⚠️ Rejection & Defect Disposition for {item.rejectedQty} {item.unit} Rejected Units:
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: (item.rejectionAction === 'PROCESS_REWORK' || item.rejectionAction === 'VENDOR_LOSS_DEBIT' || !item.rejectionAction) ? '1.5fr 1.5fr 2fr' : '1.5fr 2fr', gap: '0.65rem' }}>
+                                  <div>
+                                    <label style={{ fontSize: '0.7rem', fontWeight: 700 }}>Action Required / Disposition *</label>
+                                    <select
+                                      className="input-field"
+                                      style={{ fontSize: '0.78rem', padding: '0.3rem' }}
+                                      value={item.rejectionAction || 'VENDOR_LOSS_DEBIT'}
+                                      onChange={(e) => {
+                                        const act = e.target.value as any;
+                                        setGrnItems(prev => prev.map(it => it.itemId === item.itemId ? { ...it, rejectionAction: act, rejectionDisposition: act } : it));
+                                      }}
+                                    >
+                                      <option value="VENDOR_LOSS_DEBIT">📉 Generate Vendor Debit Note (Financial Loss)</option>
+                                      <option value="PROCESS_REWORK">🔄 Route to Process-Wise Rework</option>
+                                      <option value="IN_HOUSE_REWORK">🟡 In-House Shop Floor Rework</option>
+                                      <option value="SCRAP">🔴 Damaged / Scrap (Write-Off)</option>
+                                      <option value="NONE">📦 Vendor Replacement / Return</option>
+                                    </select>
+                                  </div>
+
+                                  {item.rejectionAction === 'PROCESS_REWORK' ? (
+                                    <div>
+                                      <label style={{ fontSize: '0.7rem', fontWeight: 700 }}>Rework Process Step *</label>
+                                      <select
+                                        className="input-field"
+                                        style={{ fontSize: '0.78rem', padding: '0.3rem' }}
+                                        value={item.reworkProcessName || ''}
+                                        onChange={(e) => {
+                                          const pName = e.target.value;
+                                          setGrnItems(prev => prev.map(it => it.itemId === item.itemId ? { ...it, reworkProcessName: pName } : it));
+                                        }}
+                                      >
+                                        <option value="">-- Choose Rework Process --</option>
+                                        {processDefinitions.map(p => (
+                                          <option key={p.id} value={p.name}>{p.name} ({p.shortCode})</option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                  ) : (item.rejectionAction === 'VENDOR_LOSS_DEBIT' || !item.rejectionAction) ? (
+                                    <div>
+                                      <label style={{ fontSize: '0.7rem', fontWeight: 700 }}>Financial Loss Value (₹)</label>
+                                      <div style={{ padding: '0.35rem 0.5rem', backgroundColor: 'var(--bg-card)', borderRadius: '0.25rem', fontWeight: 800, fontSize: '0.85rem', color: 'var(--danger)', fontFamily: 'monospace' }}>
+                                        ₹{((item.rejectedQty || 0) * (item.unitPrice || 0)).toLocaleString()}
+                                      </div>
+                                    </div>
+                                  ) : null}
+
+                                  <div>
+                                    <label style={{ fontSize: '0.7rem', fontWeight: 700 }}>Dimensional Defect / Failure Reason *</label>
+                                    <input
+                                      type="text"
+                                      placeholder="e.g. Bore undersize by 0.05mm, Surface scratches"
+                                      className="input-field"
+                                      style={{ fontSize: '0.78rem', padding: '0.3rem' }}
+                                      value={item.rejectionReason || ''}
+                                      onChange={(e) => {
+                                        const r = e.target.value;
+                                        setGrnItems(prev => prev.map(it => it.itemId === item.itemId ? { ...it, rejectionReason: r } : it));
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
                             {/* Checkbox: Send Direct to Job Work */}
                             <div style={{ marginTop: '0.75rem', padding: '0.65rem 0.85rem', backgroundColor: 'var(--bg-subtle, rgba(0,0,0,0.02))', borderRadius: '0.375rem', border: '1px solid var(--border-color)' }}>
                               <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem', color: 'var(--accent-primary)' }}>
@@ -630,55 +727,119 @@ export const GRNModule: React.FC = () => {
                                       <label style={{ fontSize: '0.72rem', fontWeight: 700, display: 'block', marginBottom: '0.2rem' }}>
                                         Item to Create / Produce (Output Item) *
                                       </label>
-                                      <select
-                                        className="input-field"
-                                        required
-                                        style={{ fontSize: '0.82rem', padding: '0.35rem' }}
-                                        value={item.directJWProduceItemId || ''}
-                                        onChange={(e) => {
-                                          const pId = e.target.value;
-                                          const pItem = items.find(i => i.id === pId);
-                                          setGrnItems(prev => prev.map(it => it.itemId === item.itemId ? {
-                                            ...it,
-                                            directJWProduceItemId: pId,
-                                            directJWProduceItemCode: pItem?.itemCode,
-                                            directJWProduceItemName: pItem?.name
-                                          } : it));
-                                        }}
-                                      >
-                                        <option value="">-- Choose Item to Create --</option>
-                                        {items.map(it => (
-                                          <option key={it.id} value={it.id}>
-                                            {it.itemCode} - {it.name} {it.partCode ? `[Part: ${it.partCode}]` : ''}
-                                          </option>
-                                        ))}
-                                      </select>
+                                      {(() => {
+                                        const rawObj = items.find(i => i.id === item.itemId || i.itemCode === item.itemCode);
+                                        const matchingCards = itemProcessCards.filter(c => 
+                                          c.rawItemId === item.itemId || 
+                                          c.rawItemCode === item.itemCode ||
+                                          (rawObj && (c.rawItemId === rawObj.id || c.rawItemCode === rawObj.itemCode))
+                                        );
+                                        const produceItems = items.filter(it => 
+                                          matchingCards.some(c => c.itemId === it.id || c.itemCode === it.itemCode)
+                                        );
+                                        const candidateItems = produceItems.length > 0 ? produceItems : items;
+
+                                        return (
+                                          <select
+                                            className="input-field"
+                                            required
+                                            style={{ fontSize: '0.82rem', padding: '0.35rem' }}
+                                            value={item.directJWProduceItemId || ''}
+                                            onChange={(e) => {
+                                              const pId = e.target.value;
+                                              const pItem = items.find(i => i.id === pId);
+                                              setGrnItems(prev => prev.map(it => it.itemId === item.itemId ? {
+                                                ...it,
+                                                directJWProduceItemId: pId,
+                                                directJWProduceItemCode: pItem?.itemCode,
+                                                directJWProduceItemName: pItem?.name,
+                                                directJWVendorId: '',
+                                                directJWVendorName: ''
+                                              } : it));
+                                            }}
+                                          >
+                                            <option value="">
+                                              {produceItems.length > 0 
+                                                ? `-- Choose Item to Create (${produceItems.length} Process Card Matches) --` 
+                                                : '-- Choose Item to Create --'}
+                                            </option>
+                                            {candidateItems.map(it => (
+                                              <option key={it.id} value={it.id}>
+                                                {it.itemCode} - {it.name} {it.partCode ? `[Part: ${it.partCode}]` : ''}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        );
+                                      })()}
                                     </div>
 
                                     <div>
                                       <label style={{ fontSize: '0.72rem', fontWeight: 700, display: 'block', marginBottom: '0.2rem' }}>
-                                        Job Work Vendor (Mapped to Item Master) *
+                                        Job Work Vendor (Process Card Authorized) *
                                       </label>
-                                      <select
-                                        className="input-field"
-                                        required
-                                        style={{ fontSize: '0.82rem', padding: '0.35rem' }}
-                                        value={item.directJWVendorId || ''}
-                                        onChange={(e) => {
-                                          const vId = e.target.value;
-                                          const vObj = vendors.find(v => v.id === vId);
-                                          setGrnItems(prev => prev.map(it => it.itemId === item.itemId ? {
-                                            ...it,
-                                            directJWVendorId: vId,
-                                            directJWVendorName: vObj?.name
-                                          } : it));
-                                        }}
-                                      >
-                                        <option value="">-- Choose Job Work Vendor --</option>
-                                        {vendors.map(v => (
-                                          <option key={v.id} value={v.id}>{v.name} ({v.vendorCode})</option>
-                                        ))}
-                                      </select>
+                                      {(() => {
+                                        const rawObj = items.find(i => i.id === item.itemId || i.itemCode === item.itemCode);
+                                        const matchingCard = itemProcessCards.find(c => 
+                                          (c.itemId === item.directJWProduceItemId || c.itemCode === item.directJWProduceItemCode) &&
+                                          (c.rawItemId === item.itemId || c.rawItemCode === item.itemCode || (rawObj && (c.rawItemId === rawObj.id || c.rawItemCode === rawObj.itemCode)))
+                                        ) || itemProcessCards.find(c => c.itemId === item.directJWProduceItemId || c.itemCode === item.directJWProduceItemCode);
+
+                                        // Extract authorized vendors from Process Card step(s) in priority sequence
+                                        const step1VendorIds = matchingCard?.steps?.[0]?.vendorIds || [];
+                                        const allStepVendorIds = matchingCard?.steps ? Array.from(new Set(matchingCard.steps.flatMap(s => s.vendorIds || []))) : [];
+                                        const primaryVendorIds = step1VendorIds.length > 0 ? step1VendorIds : allStepVendorIds;
+
+                                        const processCardVendors = primaryVendorIds
+                                          .map(vId => vendors.find(v => v.id === vId))
+                                          .filter((v): v is typeof vendors[0] => !!v);
+
+                                        // Fallback to Item Master mapped vendors if no vendor configured in process card
+                                        const targetProduceItem = items.find(i => i.id === item.directJWProduceItemId);
+                                        const mappedVendorIds = (targetProduceItem?.mappedVendors || []).map(mv => mv.vendorId);
+                                        const itemMasterVendors = vendors.filter(v => mappedVendorIds.includes(v.id));
+
+                                        const allowedVendors = processCardVendors.length > 0 ? processCardVendors : itemMasterVendors;
+                                        const isFromProcessCard = processCardVendors.length > 0;
+
+                                        return (
+                                          <select
+                                            className="input-field"
+                                            required
+                                            disabled={!item.directJWProduceItemId}
+                                            style={{ 
+                                              fontSize: '0.82rem', 
+                                              padding: '0.35rem',
+                                              backgroundColor: !item.directJWProduceItemId ? 'var(--bg-tertiary)' : 'var(--bg-card)',
+                                              cursor: !item.directJWProduceItemId ? 'not-allowed' : 'default'
+                                            }}
+                                            value={item.directJWVendorId || ''}
+                                            onChange={(e) => {
+                                              const vId = e.target.value;
+                                              const vObj = vendors.find(v => v.id === vId);
+                                              setGrnItems(prev => prev.map(it => it.itemId === item.itemId ? {
+                                                ...it,
+                                                directJWVendorId: vId,
+                                                directJWVendorName: vObj?.name
+                                              } : it));
+                                            }}
+                                          >
+                                            {!item.directJWProduceItemId ? (
+                                              <option value="">-- First Select Item to Produce --</option>
+                                            ) : allowedVendors.length === 0 ? (
+                                              <option value="" disabled>-- No Vendors Configured in Process Card or Item Master --</option>
+                                            ) : (
+                                              <>
+                                                <option value="">-- Choose Job Work Vendor ({allowedVendors.length} {isFromProcessCard ? 'Process Card' : 'Item Master'} matches) --</option>
+                                                {allowedVendors.map((v, vIdx) => (
+                                                  <option key={v.id} value={v.id}>
+                                                    {isFromProcessCard ? `Priority #${vIdx + 1}: ` : ''}{v.name} ({v.vendorCode})
+                                                  </option>
+                                                ))}
+                                              </>
+                                            )}
+                                          </select>
+                                        );
+                                      })()}
                                     </div>
                                   </div>
 
@@ -694,47 +855,6 @@ export const GRNModule: React.FC = () => {
                                 </div>
                               )}
                             </div>
-
-                            {/* Rejection Disposition Options */}
-                            {item.rejectedQty > 0 && (
-                              <div style={{ marginTop: '0.65rem', padding: '0.6rem', backgroundColor: 'rgba(239, 68, 68, 0.08)', borderRadius: '0.375rem', border: '1px solid rgba(239, 68, 68, 0.25)', display: 'grid', gridTemplateColumns: '1.5fr 2fr', gap: '0.65rem', alignItems: 'center' }}>
-                                <div>
-                                  <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--danger)', display: 'block', marginBottom: '0.2rem' }}>
-                                    ⚠️ Rejection Action / Disposition:
-                                  </label>
-                                  <select 
-                                    className="input-field" 
-                                    style={{ fontSize: '0.78rem', padding: '0.3rem', borderColor: 'var(--danger)', fontWeight: 600 }}
-                                    value={item.rejectionDisposition || 'SCRAP'}
-                                    onChange={(e) => {
-                                      const disp = e.target.value;
-                                      setGrnItems(prev => prev.map(it => it.itemId === item.itemId ? { ...it, rejectionDisposition: disp } : it));
-                                    }}
-                                  >
-                                    <option value="SCRAP">🔴 Damaged / Scrap (Write-Off)</option>
-                                    <option value="IN_HOUSE_REWORK">🟡 Send for In-House Shop Floor Rework</option>
-                                    <option value="VENDOR_REWORK">🔵 Send Back to Vendor for Rework (PO Kept Open)</option>
-                                    <option value="VENDOR_RETURN">🟣 Return to Vendor (Debit Note / Return)</option>
-                                  </select>
-                                </div>
-                                <div>
-                                  <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '0.2rem' }}>
-                                    Rejection Reason / Notes:
-                                  </label>
-                                  <input 
-                                    type="text" 
-                                    placeholder="e.g. Thread damage, dimension off by 0.5mm, transport breakage"
-                                    className="input-field"
-                                    style={{ fontSize: '0.78rem', padding: '0.3rem' }}
-                                    value={item.rejectionReason || ''}
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setGrnItems(prev => prev.map(it => it.itemId === item.itemId ? { ...it, rejectionReason: val } : it));
-                                    }}
-                                  />
-                                </div>
-                              </div>
-                            )}
                           </>
                         )}
                       </div>

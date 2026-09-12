@@ -4,35 +4,66 @@ import { ShoppingCart, Search, FileSpreadsheet } from 'lucide-react';
 import { MRPShortageItem } from '../../types/erp';
 
 export const MRPPlanningModule: React.FC = () => {
-  const { items, purchaseOrders, workOrders, setActiveModule, addPurchaseOrder, vendors, searchTerm, setSearchTerm } = useERP();
+  const { items, purchaseOrders, workOrders, jobCards, jobworks, setActiveModule, addPurchaseOrder, vendors, searchTerm, setSearchTerm } = useERP();
 
-  // Explode required components from active Work Orders (Standard BOM + Custom Extra WO tools)
-  const activeWOs = workOrders.filter(w => w.status === 'IN_PROGRESS');
+  // Explode required components from active Work Orders and Job Cards
+  const activeWOs = workOrders.filter(w => w.status === 'IN_PROGRESS' || w.status === 'PLANNED');
+  const activeJCs = jobCards.filter(jc => jc.status !== 'COMPLETED' && jc.status !== 'CANCELLED' && !(jc as any).isDeleted);
+  const activeJWs = jobworks.filter(jw => jw.status !== 'COMPLETED' && jw.status !== 'CANCELLED');
 
   const mrpResults: MRPShortageItem[] = items
     .filter(item => item.category !== 'Final Machine Unit')
     .map(item => {
-      // Calculate total required across active Work Orders
+      // 1. Calculate total required across active Work Orders
       let requiredForActiveWOs = 0;
       activeWOs.forEach(wo => {
-        const woComp = (wo.woComponents || []).find(c => c.itemId === item.id);
+        const woComp = (wo.woComponents || []).find(c => c.itemId === item.id || c.itemCode === item.itemCode);
         if (woComp) {
           requiredForActiveWOs += woComp.qtyRequired;
         }
       });
 
-      // Default baseline build target calculation fallback
-      const required = Math.max(requiredForActiveWOs, 1);
-      const inHouse = item.inHouseStock;
+      // 2. Calculate Job Card component demand
+      let requiredForActiveJCs = 0;
+      activeJCs.forEach(jc => {
+        const remaining = Math.max(0, (jc.targetQuantity || 1) - (jc.completedQuantity || 0));
+        if (jc.itemId === item.id || jc.itemCode === item.itemCode) {
+          requiredForActiveJCs += remaining;
+        }
+        if (jc.components) {
+          jc.components.forEach(c => {
+            if (c.itemId === item.id || c.itemCode === item.itemCode) {
+              requiredForActiveJCs += (c.qtyPerUnit || 1) * remaining;
+            }
+          });
+        }
+      });
+
+      // 3. Calculate Job Work demand
+      let requiredForActiveJWs = 0;
+      activeJWs.forEach(jw => {
+        if (jw.itemId === item.id || jw.itemCode === item.itemCode) {
+          requiredForActiveJWs += (jw.pendingBalance !== undefined ? jw.pendingBalance : (jw.sentQuantity || 0));
+        }
+      });
+
+      const totalRequired = requiredForActiveWOs + requiredForActiveJCs + requiredForActiveJWs;
+      const required = Math.max(totalRequired, (item.minStockQty || item.reorderLevel || 0));
+      const inHouse = item.inHouseStock || 0;
 
       const openPOQty = purchaseOrders
-        .filter(p => p.status === 'ISSUED' || p.status === 'PARTIALLY_RECEIVED')
+        .filter(p => p.status === 'ISSUED' || p.status === 'PARTIALLY_RECEIVED' || p.status === 'APPROVED' || p.status === 'SENT')
         .reduce((sum, po) => {
-          const poLine = po.items.find(i => i.itemId === item.id);
-          return sum + (poLine ? (poLine.quantity - poLine.receivedQty) : 0);
+          const poLine = po.items.find(i => i.itemId === item.id || i.itemCode === item.itemCode);
+          return sum + (poLine ? ((poLine.quantity || poLine.orderedQty || 0) - (poLine.receivedQty || 0)) : 0);
         }, 0);
 
-      const netShortage = Math.max(0, required - (inHouse + openPOQty));
+      const pendingJWQty = activeJWs
+        .reduce((sum, jw) => (jw.itemId === item.id || jw.itemCode === item.itemCode) ? sum + (jw.pendingBalance ?? jw.sentQuantity ?? 0) : sum, 0);
+      const pendingQCQty = item.pendingQCStock || 0;
+
+      const totalPipeline = openPOQty + pendingJWQty + pendingQCQty;
+      const netShortage = Math.max(0, required - (inHouse + totalPipeline));
 
       let action: MRPShortageItem['suggestedAction'] = 'STOCK_SUFFICIENT';
       if (netShortage > 0) {

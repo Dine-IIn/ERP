@@ -337,8 +337,10 @@ tbody tr:hover {
   white-space: nowrap;
 }
 
+.badge-primary { background-color: rgba(37, 99, 235, 0.15) !important; color: #3b82f6 !important; border: 1px solid var(--accent-primary) !important; }
 .badge-success { background-color: rgba(16, 185, 129, 0.15) !important; color: var(--success) !important; border: 1px solid var(--success) !important; }
 .badge-warning { background-color: rgba(245, 158, 11, 0.15) !important; color: var(--warning) !important; border: 1px solid var(--warning) !important; }
+.badge-purple, .badge-jobwork { background-color: rgba(139, 92, 246, 0.2) !important; color: #a855f7 !important; border: 1px solid #8b5cf6 !important; }
 .badge-danger  { background-color: rgba(239, 68, 68, 0.15) !important;  color: var(--danger) !important;  border: 1px solid var(--danger) !important; }
 .badge-info    { background-color: rgba(6, 182, 212, 0.15) !important;  color: var(--info) !important;    border: 1px solid var(--info) !important; }
 .badge-neutral { background-color: var(--bg-tertiary) !important; color: var(--text-secondary) !important; border: 1px solid var(--border-color) !important; }

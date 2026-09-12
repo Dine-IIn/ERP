@@ -6,7 +6,7 @@ import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { ItemMasterListPrintView } from '../printTemplates/ItemMasterPrintTemplates';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
 import { Plus, Edit2, Trash2, Upload, Search, FileSpreadsheet, Settings, Filter, Edit3, ArrowUp, ArrowDown, ArrowUpDown, ArrowLeft, X, Printer, RefreshCw, Layers, RotateCcw, ShieldAlert } from 'lucide-react';
-import { Item, ItemCategory, QCTrigger, MaterialProcessType, ItemMappedVendor, FIXED_ITEM_CLASSES } from '../../types/erp';
+import { Item, ItemCategory, QCTrigger, MaterialProcessType, MaterialProcessSource, ItemMappedVendor, FIXED_ITEM_CLASSES } from '../../types/erp';
 import { parseItemsSheet } from '../../utils/csvParser';
 
 type ItemSortKey = 'itemCode' | 'partCode' | 'oldItemCode' | 'name' | 'category' | 'location' | 'processType' | 'leadTimeDays' | 'unit' | 'inHouseStock' | 'externalStock' | 'unitPrice';
@@ -61,7 +61,8 @@ export const ItemMasterModule: React.FC = () => {
     unitPrice: 0,
     location: '',
     note: '',
-    processType: '' as MaterialProcessType, // Compulsory & empty by default
+    processType: '' as MaterialProcessType,
+    materialProcessSources: [] as MaterialProcessSource[],
     leadTimeDays: 10,
     weightKg: 0,
     testReportRequired: false,
@@ -98,7 +99,11 @@ export const ItemMasterModule: React.FC = () => {
       (item.note && item.note.toLowerCase().includes(queryClean));
 
     const matchesCategory = selectedCategoriesFilter.length === 0 || selectedCategoriesFilter.includes(item.category);
-    const matchesProcess = selectedProcessFilter === 'ALL' || item.processType === selectedProcessFilter;
+    const matchesProcess = selectedProcessFilter === 'ALL' || (
+      item.materialProcessSources && item.materialProcessSources.length > 0
+        ? item.materialProcessSources.includes(selectedProcessFilter as MaterialProcessSource)
+        : item.processType === selectedProcessFilter || (item.processType === 'Job work + Bought out' && (selectedProcessFilter === 'Bought out' || selectedProcessFilter === 'Job work'))
+    );
     
     const minP = minPriceFilter ? Number(minPriceFilter) : 0;
     const maxP = maxPriceFilter ? Number(maxPriceFilter) : Infinity;
@@ -144,7 +149,11 @@ export const ItemMasterModule: React.FC = () => {
       unitPrice: item.unitPrice !== undefined ? item.unitPrice : 0,
       location: item.location || '',
       note: item.note || '',
-      processType: (item.processType || '') as MaterialProcessType,
+      processType: (item.processType === ('Brought out' as any) ? 'Bought out' : (item.processType || '')) as MaterialProcessType,
+      materialProcessSources: Array.from(new Set(
+        (item.materialProcessSources || (item.processType ? (item.processType === 'Job work + Bought out' ? ['Job work', 'Bought out'] : [item.processType as MaterialProcessSource]) : []))
+          .map(s => ((s as string) === 'Brought out' ? 'Bought out' : s) as MaterialProcessSource)
+      )),
       leadTimeDays: item.leadTimeDays !== undefined ? item.leadTimeDays : 10,
       weightKg: item.weightKg !== undefined ? item.weightKg : 0,
       testReportRequired: item.testReportRequired || false,
@@ -175,11 +184,12 @@ export const ItemMasterModule: React.FC = () => {
       unitPrice: 0,
       location: 'Store Rack A',
       note: '',
-      processType: '', // Empty by default (compulsory)
+      processType: '' as MaterialProcessType,
+      materialProcessSources: [],
       leadTimeDays: 10,
       weightKg: 0,
       testReportRequired: false,
-      qcTrigger: '', // Empty by default (compulsory)
+      qcTrigger: '' as QCTrigger, // Compulsory & empty by default
       isDirectJobworkShipment: false
     });
     setSelectedVendorToAdd('');
@@ -269,14 +279,30 @@ export const ItemMasterModule: React.FC = () => {
       leadTimeDays: Number(formData.leadTimeDays) || 0
     };
 
+    const derivedProcessType: MaterialProcessType = (payload.materialProcessSources && payload.materialProcessSources.length > 0)
+      ? (payload.materialProcessSources.includes('Job work') && payload.materialProcessSources.includes('Bought out')
+          ? 'Job work + Bought out'
+          : payload.materialProcessSources.includes('Bought out')
+          ? 'Bought out'
+          : payload.materialProcessSources.includes('Job work')
+          ? 'Job work'
+          : 'In-house')
+      : 'In-house';
+
+    const cleanPayload = {
+      ...payload,
+      processType: derivedProcessType,
+      materialProcessSources: payload.materialProcessSources || [derivedProcessType as MaterialProcessSource]
+    };
+
     if (editingItem) {
       updateItem({
         ...editingItem,
-        ...payload
+        ...cleanPayload
       });
     } else {
       addItem({
-        ...payload
+        ...cleanPayload
       });
     }
     setIsModalOpen(false);
@@ -369,21 +395,51 @@ export const ItemMasterModule: React.FC = () => {
             </div>
 
             <div className="form-grid-4">
-              <div>
-                <label style={{ fontWeight: 700, color: 'var(--accent-primary)' }}>Material Process Source *</label>
-                <select 
-                  className="input-field" 
-                  required
-                  style={{ border: '2px solid var(--accent-primary)', fontWeight: 600 }}
-                  value={formData.processType} 
-                  onChange={(e) => setFormData({ ...formData, processType: e.target.value as MaterialProcessType })}
-                >
-                  <option value="" disabled>-- Select Process Source --</option>
-                  <option value="In-house">In-house (Manufactured in Plant)</option>
-                  <option value="Job work">Job work (Sent Out for Processing)</option>
-                  <option value="Brought out">Brought out (Direct Purchase)</option>
-                  <option value="Job work + Brought out">Job work + Brought out (Dual Source)</option>
-                </select>
+              <div style={{ gridColumn: 'span 2' }}>
+                <label style={{ fontWeight: 700, marginBottom: '0.35rem' }}>
+                  Material Process Source * (Multi-Select)
+                </label>
+                <div style={{ 
+                  display: 'flex', 
+                  flexDirection: 'row', 
+                  alignItems: 'center', 
+                  gap: '1.25rem', 
+                  flexWrap: 'wrap',
+                  padding: '0.45rem 0.75rem', 
+                  backgroundColor: 'var(--bg-tertiary)', 
+                  borderRadius: '0.375rem', 
+                  border: '1px solid var(--border-color)',
+                  minHeight: '38px'
+                }}>
+                  {(['In-house', 'Job work', 'Bought out'] as MaterialProcessSource[]).map(src => {
+                    const isChecked = formData.materialProcessSources?.includes(src);
+                    return (
+                      <label key={src} style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.82rem', cursor: 'pointer', margin: 0, fontWeight: isChecked ? 700 : 400, color: 'var(--text-primary)' }}>
+                        <input
+                          type="checkbox"
+                          checked={isChecked || false}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            const current = formData.materialProcessSources || [];
+                            const updated = checked ? [...current, src] : current.filter(s => s !== src);
+                            const derivedType: MaterialProcessType = updated.includes('Job work') && updated.includes('Bought out')
+                              ? 'Job work + Bought out'
+                              : updated.includes('Bought out')
+                              ? 'Bought out'
+                              : updated.includes('Job work')
+                              ? 'Job work'
+                              : updated.includes('In-house')
+                              ? 'In-house'
+                              : '';
+                            setFormData({ ...formData, materialProcessSources: updated, processType: derivedType });
+                          }}
+                          style={{ width: '15px', height: '15px', cursor: 'pointer' }}
+                        />
+                        <span>{src}</span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
               <div>
                 <label style={{ fontWeight: 700, color: 'var(--accent-primary)' }}>Item Class *</label>
@@ -486,9 +542,9 @@ export const ItemMasterModule: React.FC = () => {
             </div>
 
             {/* Dynamic Purchasing & Pricing Row */}
-            {(formData.processType === 'Brought out' || formData.processType === 'Job work + Brought out' || formData.processType === 'Job work') && (
+            {(formData.processType === 'Bought out' || formData.processType === 'Job work + Bought out' || formData.processType === 'Job work') && (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', padding: '0.875rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: '0.5rem', border: '1px solid var(--border-color)' }}>
-                {(formData.processType === 'Brought out' || formData.processType === 'Job work + Brought out' || formData.processType === 'Job work') && (
+                {(formData.processType === 'Bought out' || formData.processType === 'Job work + Bought out' || formData.processType === 'Job work') && (
                   <div>
                     <label style={{ fontWeight: 700 }}>Min Purchase Order Qty (MOQ)</label>
                     <input 
@@ -510,7 +566,7 @@ export const ItemMasterModule: React.FC = () => {
                     />
                   </div>
                 )}
-                {(formData.processType === 'Brought out' || formData.processType === 'Job work + Brought out') && (
+                {(formData.processType === 'Bought out' || formData.processType === 'Job work + Bought out') && (
                   <div>
                     <label style={{ fontWeight: 700 }}>Unit Purchase Price (₹)</label>
                     <input 
@@ -536,47 +592,49 @@ export const ItemMasterModule: React.FC = () => {
               </div>
             )}
 
-            {/* Vendor Priority Mapping */}
-            <div style={{ padding: '0.875rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: '0.5rem', border: '1px solid var(--border-color)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                <h4 style={{ fontSize: '0.85rem', fontWeight: 700, margin: 0, color: 'var(--text-secondary)' }}>
-                  Preferred Vendors & Priority Sequence
-                </h4>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <select className="input-field" style={{ padding: '0.2rem 0.5rem', fontSize: '0.78rem' }} value={selectedVendorToAdd} onChange={(e) => setSelectedVendorToAdd(e.target.value)}>
-                    <option value="">-- Select Vendor to Map --</option>
-                    {vendors.map(v => (
-                      <option key={v.id} value={v.id}>{v.name} ({v.vendorCode})</option>
-                    ))}
-                  </select>
-                  <button type="button" className="btn btn-outline" style={{ padding: '0.2rem 0.5rem', fontSize: '0.78rem' }} onClick={handleAddVendorToItem}>
-                    + Add Vendor
-                  </button>
+            {/* Vendor Priority Mapping (Only available if 'Bought out' is selected in Material Process Source) */}
+            {formData.materialProcessSources?.includes('Bought out') && (
+              <div style={{ padding: '0.875rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: '0.5rem', border: '1px solid var(--border-color)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <h4 style={{ fontSize: '0.85rem', fontWeight: 700, margin: 0, color: 'var(--text-secondary)' }}>
+                    Preferred Vendors & Priority Sequence (Bought Out Supply)
+                  </h4>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <select className="input-field" style={{ padding: '0.2rem 0.5rem', fontSize: '0.78rem' }} value={selectedVendorToAdd} onChange={(e) => setSelectedVendorToAdd(e.target.value)}>
+                      <option value="">-- Select Vendor to Map --</option>
+                      {vendors.map(v => (
+                        <option key={v.id} value={v.id}>{v.name} ({v.vendorCode})</option>
+                      ))}
+                    </select>
+                    <button type="button" className="btn btn-outline" style={{ padding: '0.2rem 0.5rem', fontSize: '0.78rem' }} onClick={handleAddVendorToItem}>
+                      + Add Vendor
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              {formData.mappedVendors.length === 0 ? (
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                  No mapped vendors yet. Add vendors above to establish Priority #1, #2 auto-allocation.
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                  {formData.mappedVendors.map((mv, idx) => (
-                    <div key={mv.vendorId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.35rem 0.6rem', backgroundColor: 'var(--bg-card)', borderRadius: '0.25rem' }}>
-                      <span style={{ fontSize: '0.82rem', fontWeight: 600 }}>
-                        <span className="badge badge-info" style={{ marginRight: '0.5rem' }}>Priority #{idx + 1}</span>
-                        {mv.vendorName}
-                      </span>
-                      <div style={{ display: 'flex', gap: '0.25rem' }}>
-                        <button type="button" className="btn btn-outline" style={{ padding: '0.15rem 0.35rem', fontSize: '0.7rem' }} disabled={idx === 0} onClick={() => handleMoveVendorPriority(idx, 'up')}>▲</button>
-                        <button type="button" className="btn btn-outline" style={{ padding: '0.15rem 0.35rem', fontSize: '0.7rem' }} disabled={idx === formData.mappedVendors.length - 1} onClick={() => handleMoveVendorPriority(idx, 'down')}>▼</button>
-                        <button type="button" className="btn btn-outline" style={{ padding: '0.15rem 0.35rem', fontSize: '0.7rem', color: 'var(--danger)' }} onClick={() => handleRemoveMappedVendor(mv.vendorId)}>✕</button>
+                {formData.mappedVendors.length === 0 ? (
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                    No mapped vendors yet. Add vendors above to establish Priority #1, #2 auto-allocation.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                    {formData.mappedVendors.map((mv, idx) => (
+                      <div key={mv.vendorId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.35rem 0.6rem', backgroundColor: 'var(--bg-card)', borderRadius: '0.25rem' }}>
+                        <span style={{ fontSize: '0.82rem', fontWeight: 600 }}>
+                          <span className="badge badge-info" style={{ marginRight: '0.5rem' }}>Priority #{idx + 1}</span>
+                          {mv.vendorName}
+                        </span>
+                        <div style={{ display: 'flex', gap: '0.25rem' }}>
+                          <button type="button" className="btn btn-outline" style={{ padding: '0.15rem 0.35rem', fontSize: '0.7rem' }} disabled={idx === 0} onClick={() => handleMoveVendorPriority(idx, 'up')}>▲</button>
+                          <button type="button" className="btn btn-outline" style={{ padding: '0.15rem 0.35rem', fontSize: '0.7rem' }} disabled={idx === formData.mappedVendors.length - 1} onClick={() => handleMoveVendorPriority(idx, 'down')}>▼</button>
+                          <button type="button" className="btn btn-outline" style={{ padding: '0.15rem 0.35rem', fontSize: '0.7rem', color: 'var(--danger)' }} onClick={() => handleRemoveMappedVendor(mv.vendorId)}>✕</button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Direct Jobwork Shipment Option */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.75rem 1rem', backgroundColor: 'rgba(245, 158, 11, 0.08)', borderRadius: '0.5rem', border: '1px solid rgba(245, 158, 11, 0.3)' }}>
@@ -751,13 +809,50 @@ export const ItemMasterModule: React.FC = () => {
                           {item.location || '-'}
                         </td>
                         <td>
-                          <span className={`badge ${
-                            item.processType === 'Brought out' ? 'badge-primary' :
-                            item.processType === 'In-house' ? 'badge-success' :
-                            item.processType === 'Job work' ? 'badge-warning' : 'badge-neutral'
-                          }`}>
-                            {item.processType || '-'}
-                          </span>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                            {(() => {
+                              const rawSources = (item.materialProcessSources && item.materialProcessSources.length > 0)
+                                ? item.materialProcessSources
+                                : item.processType === 'Job work + Bought out'
+                                ? ['Job work', 'Bought out']
+                                : item.processType
+                                ? [item.processType as MaterialProcessSource]
+                                : [];
+                              const sources: MaterialProcessSource[] = Array.from(new Set(
+                                rawSources.map(s => ((s as string) === 'Brought out' ? 'Bought out' : s) as MaterialProcessSource)
+                              ));
+                              if (sources.length === 0 && (!item.mappedVendors || item.mappedVendors.length === 0)) {
+                                return <span className="badge badge-neutral" style={{ fontSize: '0.68rem' }}>-</span>;
+                              }
+                              return (
+                                <>
+                                  {sources.map(src => (
+                                    <span key={src} className={`badge ${
+                                      src === 'Bought out' ? 'badge-primary' :
+                                      src === 'In-house' ? 'badge-success' :
+                                      src === 'Job work' ? 'badge-purple' : 'badge-neutral'
+                                    }`} style={{ fontSize: '0.68rem', padding: '0.15rem 0.35rem' }}>
+                                      {src}
+                                    </span>
+                                  ))}
+                                  {item.mappedVendors && item.mappedVendors.length > 0 && (
+                                    <div style={{ width: '100%', marginTop: '0.2rem', display: 'flex', gap: '0.2rem', flexWrap: 'wrap' }}>
+                                      {item.mappedVendors.map((mv, mIdx) => (
+                                        <span 
+                                          key={mIdx} 
+                                          className="badge badge-info" 
+                                          style={{ fontSize: '0.62rem', padding: '0.08rem 0.3rem', cursor: 'help' }}
+                                          title={`Assigned Vendor (Priority #${mIdx + 1}): ${mv.vendorName} (${mv.vendorId})`}
+                                        >
+                                          🏢 {mv.vendorName.length > 16 ? mv.vendorName.slice(0, 15) + '…' : mv.vendorName}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()}
+                          </div>
                         </td>
                         <td style={{ fontSize: '0.82rem', fontWeight: 600 }}>{item.leadTimeDays || 10} Days</td>
                         <td>{item.unit}</td>

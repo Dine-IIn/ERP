@@ -4,7 +4,7 @@ import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { SingleBOMPrintView, BOMListPrintView } from '../printTemplates/BOMPrintTemplates';
 import { BOMUploadModal } from '../common/BOMUploadModal';
 import { Plus, Trash2, Edit2, Search, Printer, FileSpreadsheet, Upload, ArrowUpDown, ArrowUp, ArrowDown, Layers, Filter, Eye, Zap, ArrowLeft, X, RefreshCw } from 'lucide-react';
-import { BOM, BOMComponent, Item } from '../../types/erp';
+import { BOM, BOMComponent, Item, generateNextBOMNumber } from '../../types/erp';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
 import { isCircularDependency, getExplodedBOMSummary } from '../../utils/nestedBOMHelper';
 
@@ -182,7 +182,7 @@ export const BOMMasterModule: React.FC = () => {
     setSelectedBOM(null);
     setBomHistoryStack([]);
     setBomForm({
-      bomCode: `BOM-GEC-2026-${String(boms.length + 1).padStart(2, '0')}`,
+      bomCode: generateNextBOMNumber(boms),
       machineModel: '', // Empty by default (compulsory)
       version: 'Rev 1.0',
       description: ''
@@ -804,9 +804,9 @@ export const BOMMasterModule: React.FC = () => {
                               </td>
                               <td>
                                 <span className={`badge ${
-                                  itemObj?.processType === 'Brought out' ? 'badge-primary' :
+                                  itemObj?.processType === 'Bought out' || itemObj?.processType === 'Job work + Bought out' ? 'badge-primary' :
                                   itemObj?.processType === 'In-house' ? 'badge-success' :
-                                  itemObj?.processType === 'Job work' ? 'badge-warning' : 'badge-neutral'
+                                  itemObj?.processType === 'Job work' ? 'badge-purple' : 'badge-neutral'
                                 }`} style={{ fontSize: '0.72rem' }}>
                                   {itemObj?.processType || '-'}
                                 </span>
@@ -880,9 +880,9 @@ export const BOMMasterModule: React.FC = () => {
                                 </td>
                                 <td>
                                   <span className={`badge ${
-                                    itemObj?.processType === 'Brought out' ? 'badge-primary' :
+                                    itemObj?.processType === 'Bought out' || itemObj?.processType === 'Job work + Bought out' ? 'badge-primary' :
                                     itemObj?.processType === 'In-house' ? 'badge-success' :
-                                    itemObj?.processType === 'Job work' ? 'badge-warning' : 'badge-neutral'
+                                    itemObj?.processType === 'Job work' ? 'badge-purple' : 'badge-neutral'
                                   }`} style={{ fontSize: '0.72rem' }}>
                                     {itemObj?.processType || '-'}
                                   </span>
@@ -905,14 +905,16 @@ export const BOMMasterModule: React.FC = () => {
               <table>
                 <thead>
                   <tr>
+                    <th>Item Code</th>
                     <th onClick={() => handleSortToggle('bomCode')} style={{ cursor: 'pointer' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                        BOM Code {sortField === 'bomCode' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
+                        Part Code {sortField === 'bomCode' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
                       </div>
                     </th>
+                    <th>Old Code</th>
                     <th onClick={() => handleSortToggle('machineModel')} style={{ cursor: 'pointer' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                        Target Machine / Parent Item {sortField === 'machineModel' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
+                        Parent Assembly / Model Name {sortField === 'machineModel' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
                       </div>
                     </th>
                     <th onClick={() => handleSortToggle('version')} style={{ cursor: 'pointer' }}>
@@ -922,19 +924,25 @@ export const BOMMasterModule: React.FC = () => {
                     </th>
                     <th>Total Components</th>
                     <th>Last Updated</th>
-                    <th>Actions</th>
+                    <th style={{ textAlign: 'right' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredBOMs.length === 0 ? (
                     <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                      <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
                         No Bill of Materials found matching your search and category filter.
                       </td>
                     </tr>
                   ) : (
                     filteredBOMs.map((b, idx) => {
                       const isNavSelected = selectedIndex === idx;
+                      const parentItem = items.find(i => 
+                        (i.partCode && i.partCode.toUpperCase() === b.bomCode.toUpperCase()) ||
+                        i.itemCode.toUpperCase() === b.bomCode.toUpperCase() ||
+                        i.name.toLowerCase() === b.machineModel.toLowerCase() ||
+                        (i.oldItemCode && i.oldItemCode.toUpperCase() === b.bomCode.toUpperCase())
+                      );
 
                       return (
                         <tr
@@ -950,16 +958,24 @@ export const BOMMasterModule: React.FC = () => {
                           title="Click row to open and inspect BOM components below filter bar"
                         >
                           <td style={{ fontWeight: 700, color: 'var(--accent-primary)', fontFamily: 'monospace' }}>
-                            {b.bomCode}
+                            {parentItem?.itemCode || b.bomCode}
+                          </td>
+                          <td style={{ fontFamily: 'monospace', fontWeight: 600 }}>
+                            {parentItem?.partCode || b.bomCode}
+                          </td>
+                          <td style={{ fontSize: '0.82rem', color: parentItem?.oldItemCode ? 'var(--warning)' : 'var(--text-muted)', fontFamily: 'monospace' }}>
+                            {parentItem?.oldItemCode || '-'}
                           </td>
                           <td style={{ fontWeight: 600 }}>{b.machineModel}</td>
                           <td>
                             <span className="badge badge-primary" style={{ fontSize: '0.72rem' }}>{b.version}</span>
                           </td>
                           <td style={{ fontWeight: 700 }}>{b.components.length} Items</td>
-                          <td style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>{b.lastUpdated || '2026-08-29'}</td>
-                          <td onClick={(e) => e.stopPropagation()}>
-                            <div style={{ display: 'flex', gap: '0.35rem' }}>
+                          <td style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                            {b.lastUpdated ? (b.lastUpdated.includes('T') ? b.lastUpdated.split('T')[0] : b.lastUpdated) : '2026-08-29'}
+                          </td>
+                          <td onClick={(e) => e.stopPropagation()} style={{ textAlign: 'right' }}>
+                            <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end' }}>
                               <button className="btn btn-outline" style={{ padding: '0.25rem 0.45rem' }} title="Print BOM Specification Sheet" onClick={() => handlePrintSingleBOM(b)}>
                                 <Printer size={14} />
                               </button>
