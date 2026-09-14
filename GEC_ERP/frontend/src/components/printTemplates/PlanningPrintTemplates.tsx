@@ -37,16 +37,13 @@ interface PlanningPrintReportProps {
 }
 
 export const PlanningPrintReport: React.FC<PlanningPrintReportProps> = ({ data }) => {
-  const totalRequiredSum = data.reduce((acc, d) => acc + (d.totalRequired || 0), 0);
-  const totalShortageSum = data.reduce((acc, d) => acc + (d.shortage || 0), 0);
-
   const thBaseStyle: React.CSSProperties = {
     padding: '4px 2px',
     fontWeight: 800,
     verticalAlign: 'middle',
-    border: '1px solid #64748b',
-    borderBottom: '1.5px solid #000000',
+    border: '1px solid #000000',
     backgroundColor: '#f1f5f9',
+    color: '#000000',
     backgroundClip: 'padding-box',
     boxSizing: 'border-box'
   };
@@ -54,7 +51,8 @@ export const PlanningPrintReport: React.FC<PlanningPrintReportProps> = ({ data }
   const tdBaseStyle: React.CSSProperties = {
     padding: '3.5px 2px',
     verticalAlign: 'middle',
-    border: '1px solid #cbd5e1',
+    border: '1px solid #000000',
+    color: '#000000',
     backgroundClip: 'padding-box',
     boxSizing: 'border-box'
   };
@@ -79,7 +77,7 @@ export const PlanningPrintReport: React.FC<PlanningPrintReportProps> = ({ data }
         width: '100%',
         borderCollapse: 'collapse',
         fontSize: '9pt',
-        border: '1.5px solid #000000',
+        border: '1px solid #000000',
         tableLayout: 'fixed'
       }}>
         <thead style={{ fontSize: '5.8pt', lineHeight: '1.2', letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
@@ -103,14 +101,13 @@ export const PlanningPrintReport: React.FC<PlanningPrintReportProps> = ({ data }
         <tbody style={{ fontSize: '8.5pt' }}>
           {data.length === 0 ? (
             <tr>
-              <td colSpan={14} style={{ textAlign: 'center', padding: '12px', color: '#6b7280', fontStyle: 'italic', border: '1px solid #cbd5e1' }}>
+              <td colSpan={14} style={{ textAlign: 'center', padding: '12px', color: '#000000', fontStyle: 'italic', border: '1px solid #000000' }}>
                 No items match the active filters or search criteria.
               </td>
             </tr>
           ) : (
             data.map((row, idx) => {
               const hasShortage = (row.shortage || 0) > 0;
-              const hasMinShortage = (row.minShortage || 0) > 0;
               const isEven = idx % 2 === 0;
               const rowBg = hasShortage ? '#fee2e2' : (isEven ? '#ffffff' : '#f8fafc');
 
@@ -119,13 +116,13 @@ export const PlanningPrintReport: React.FC<PlanningPrintReportProps> = ({ data }
                   key={row.item?.id || idx}
                   style={{ backgroundColor: rowBg }}
                 >
-                  <td style={{ ...tdBaseStyle, textAlign: 'center', color: '#64748b', fontSize: '8pt' }}>
+                  <td style={{ ...tdBaseStyle, textAlign: 'center', color: '#000000', fontSize: '8pt' }}>
                     {idx + 1}
                   </td>
-                  <td style={{ ...tdBaseStyle, textAlign: 'left', fontFamily: 'monospace', fontWeight: 700, color: '#1e293b', fontSize: '8pt', whiteSpace: 'nowrap' }}>
+                  <td style={{ ...tdBaseStyle, textAlign: 'left', fontFamily: 'monospace', fontWeight: 700, color: '#000000', fontSize: '8pt', whiteSpace: 'nowrap' }}>
                     {row.partCode || '-'}
                   </td>
-                  <td style={{ ...tdBaseStyle, textAlign: 'left', fontFamily: 'monospace', fontWeight: 700, color: '#0f172a', fontSize: '8pt', whiteSpace: 'nowrap' }}>
+                  <td style={{ ...tdBaseStyle, textAlign: 'left', fontFamily: 'monospace', fontWeight: 700, color: '#000000', fontSize: '8pt', whiteSpace: 'nowrap' }}>
                     {row.itemCode}
                   </td>
                   <td style={{ 
@@ -140,43 +137,43 @@ export const PlanningPrintReport: React.FC<PlanningPrintReportProps> = ({ data }
                   }}>
                     {row.name}
                   </td>
-                  <td style={{ ...tdBaseStyle, textAlign: 'right', color: '#334155' }}>
+                  <td style={{ ...tdBaseStyle, textAlign: 'center', color: '#000000' }}>
                     {row.pendingWO || 0}
                   </td>
-                  <td style={{ ...tdBaseStyle, textAlign: 'right', color: '#334155' }}>
+                  <td style={{ ...tdBaseStyle, textAlign: 'center', color: '#000000' }}>
                     {row.pendingJobCard || 0}
                   </td>
-                  <td style={{ ...tdBaseStyle, textAlign: 'right', fontWeight: 800, color: '#0f172a' }}>
+                  <td style={{ ...tdBaseStyle, textAlign: 'center', fontWeight: 800, color: '#000000' }}>
                     {row.totalRequired || 0}
                   </td>
-                  <td style={{ ...tdBaseStyle, textAlign: 'right', fontWeight: 700, color: '#0f172a' }}>
+                  <td style={{ ...tdBaseStyle, textAlign: 'center', fontWeight: 700, color: '#000000' }}>
                     {row.currentStock || 0}
                   </td>
-                  <td style={{ ...tdBaseStyle, textAlign: 'right', color: '#334155' }}>
+                  <td style={{ ...tdBaseStyle, textAlign: 'center', color: '#000000' }}>
                     {row.pendingPO || 0}
                   </td>
-                  <td style={{ ...tdBaseStyle, textAlign: 'right', color: '#334155' }}>
+                  <td style={{ ...tdBaseStyle, textAlign: 'center', color: '#000000' }}>
                     {row.pendingJW || 0}
                   </td>
-                  <td style={{ ...tdBaseStyle, textAlign: 'right', color: '#334155' }}>
+                  <td style={{ ...tdBaseStyle, textAlign: 'center', color: '#000000' }}>
                     {row.pendingQC || 0}
                   </td>
                   <td style={{ 
                     ...tdBaseStyle, 
-                    textAlign: 'right', 
+                    textAlign: 'center', 
                     fontWeight: 900, 
-                    color: hasShortage ? '#b91c1c' : '#15803d'
+                    color: '#000000'
                   }}>
                     {row.shortage || 0}
                   </td>
-                  <td style={{ ...tdBaseStyle, textAlign: 'right', color: '#475569' }}>
+                  <td style={{ ...tdBaseStyle, textAlign: 'center', color: '#000000' }}>
                     {row.minStockLevel || 0}
                   </td>
                   <td style={{ 
                     ...tdBaseStyle, 
-                    textAlign: 'right', 
-                    fontWeight: hasMinShortage ? 800 : 500,
-                    color: hasMinShortage ? '#b91c1c' : '#475569'
+                    textAlign: 'center', 
+                    fontWeight: (row.minShortage || 0) > 0 ? 800 : 500,
+                    color: '#000000'
                   }}>
                     {row.minShortage || 0}
                   </td>
@@ -185,45 +182,6 @@ export const PlanningPrintReport: React.FC<PlanningPrintReportProps> = ({ data }
             })
           )}
         </tbody>
-        {data.length > 0 && (
-          <tfoot style={{ fontSize: '8pt' }}>
-            <tr style={{ backgroundColor: '#e2e8f0' }}>
-              <td colSpan={4} style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'right' }}>
-                TOTALS ({data.length} Items):
-              </td>
-              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'right' }}>
-                {data.reduce((s, r) => s + (r.pendingWO || 0), 0)}
-              </td>
-              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'right' }}>
-                {data.reduce((s, r) => s + (r.pendingJobCard || 0), 0)}
-              </td>
-              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'right' }}>
-                {totalRequiredSum}
-              </td>
-              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'right' }}>
-                {data.reduce((s, r) => s + (r.currentStock || 0), 0)}
-              </td>
-              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'right' }}>
-                {data.reduce((s, r) => s + (r.pendingPO || 0), 0)}
-              </td>
-              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'right' }}>
-                {data.reduce((s, r) => s + (r.pendingJW || 0), 0)}
-              </td>
-              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'right' }}>
-                {data.reduce((s, r) => s + (r.pendingQC || 0), 0)}
-              </td>
-              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'right', color: totalShortageSum > 0 ? '#b91c1c' : '#15803d' }}>
-                {totalShortageSum}
-              </td>
-              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'right' }}>
-                {data.reduce((s, r) => s + (r.minStockLevel || 0), 0)}
-              </td>
-              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'right' }}>
-                {data.reduce((s, r) => s + (r.minShortage || 0), 0)}
-              </td>
-            </tr>
-          </tfoot>
-        )}
       </table>
     </div>
   );

@@ -84,43 +84,79 @@ export const PlanningModule: React.FC = () => {
       j.status !== 'COMPLETED' && j.status !== 'CANCELLED' && !(j as any).isDeleted
     );
 
-    // Helper: Multi-level BOM demand explosion for a given item
+    // Helper: Multi-level Tree/Graph BOM demand explosion with shortage pruning
     const calculateWOItemDemand = (targetItemId: string, targetItemCode: string) => {
       let totalDemand = 0;
 
       const explodeDemand = (
         components: Array<{ itemId?: string; itemCode?: string; qtyPerMachine?: number; qtyRequired?: number }>,
-        multiplier: number,
+        parentMultiplier: number,
         visited: Set<string>
       ) => {
         components.forEach(comp => {
           const cItemId = comp.itemId || '';
           const cItemCode = comp.itemCode || '';
           const qtyPer = comp.qtyPerMachine !== undefined ? comp.qtyPerMachine : (comp.qtyRequired || 1);
-          const totalCompQty = qtyPer * multiplier;
+          const requiredQtyForThisParent = qtyPer * parentMultiplier;
 
+          // 1. Direct requirement for this component at the current BOM level
           if (
             (targetItemId && cItemId && cItemId === targetItemId) ||
             (targetItemCode && cItemCode && cItemCode.toLowerCase() === targetItemCode.toLowerCase())
           ) {
-            totalDemand += totalCompQty;
+            totalDemand += requiredQtyForThisParent;
           }
 
-          // Check for nested sub-assembly BOM
+          // 2. Check for nested sub-assembly BOM (e.g. Sub-assemblies / in-house manufactured parts)
           const childItem = items.find(i => 
             (cItemId && i.id === cItemId) || 
             (cItemCode && i.itemCode.toLowerCase() === cItemCode.toLowerCase())
           );
+
           if (childItem) {
             const subBOM = boms.find(b => 
               b.id === childItem.id || 
               b.bomCode?.toLowerCase() === childItem.itemCode.toLowerCase() || 
               b.machineModel?.toLowerCase() === childItem.name?.toLowerCase()
             );
+
             if (subBOM && subBOM.components && subBOM.components.length > 0 && !visited.has(subBOM.id)) {
-              const nextVisited = new Set(visited);
-              nextVisited.add(subBOM.id);
-              explodeDemand(subBOM.components, totalCompQty, nextVisited);
+              // Calculate available supply for this intermediate component:
+              // Physical store stock + Active Job Cards in production + Active Jobwork in progress
+              const childStock = childItem.inHouseStock || 0;
+              
+              const childActiveJC = activeJCs.reduce((sum, jc) => {
+                if (
+                  (jc.itemId && jc.itemId === childItem.id) ||
+                  (jc.itemCode && jc.itemCode.toLowerCase() === childItem.itemCode.toLowerCase())
+                ) {
+                  return sum + Math.max(0, (jc.targetQuantity || 1) - (jc.completedQuantity || 0));
+                }
+                return sum;
+              }, 0);
+
+              const childActiveJW = activeJWs.reduce((sum, jw) => {
+                if (
+                  (jw.itemId && jw.itemId === childItem.id) ||
+                  (jw.itemCode && jw.itemCode.toLowerCase() === childItem.itemCode.toLowerCase())
+                ) {
+                  return sum + (jw.pendingBalance !== undefined ? jw.pendingBalance : (jw.sentQuantity || 0));
+                }
+                return sum;
+              }, 0);
+
+              const availableChildSupply = childStock + childActiveJC + childActiveJW;
+
+              // Net unfulfilled shortage of this intermediate sub-assembly
+              const childShortage = Math.max(0, requiredQtyForThisParent - availableChildSupply);
+
+              // TREE PRUNING: If shortage == 0 (supply covers requirement), do NOT explode below childItem!
+              // If shortage > 0, explode sub-BOM only for the unfulfilled shortage quantity.
+              if (childShortage > 0) {
+                const nextVisited = new Set(visited);
+                nextVisited.add(subBOM.id);
+                explodeDemand(subBOM.components, childShortage, nextVisited);
+              }
             }
           }
         });

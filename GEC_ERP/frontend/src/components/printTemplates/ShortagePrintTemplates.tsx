@@ -53,9 +53,9 @@ export const ConsolidatedItemWiseShortagePrintReport: React.FC<ConsolidatedItemW
     padding: '4px 2px',
     fontWeight: 800,
     verticalAlign: 'middle',
-    border: '1px solid #64748b',
-    borderBottom: '1.5px solid #000000',
+    border: '1px solid #000000',
     backgroundColor: '#f1f5f9',
+    color: '#000000',
     backgroundClip: 'padding-box',
     boxSizing: 'border-box'
   };
@@ -63,7 +63,8 @@ export const ConsolidatedItemWiseShortagePrintReport: React.FC<ConsolidatedItemW
   const tdBaseStyle: React.CSSProperties = {
     padding: '3.5px 2px',
     verticalAlign: 'middle',
-    border: '1px solid #cbd5e1',
+    border: '1px solid #000000',
+    color: '#000000',
     backgroundClip: 'padding-box',
     boxSizing: 'border-box'
   };
@@ -193,37 +194,37 @@ export const ConsolidatedItemWiseShortagePrintReport: React.FC<ConsolidatedItemW
                   }}>
                     {demandSummary || '-'}
                   </td>
-                  <td style={{ ...tdBaseStyle, textAlign: 'right', fontWeight: 800, color: '#0f172a' }}>
+                  <td style={{ ...tdBaseStyle, textAlign: 'center', fontWeight: 800, color: '#000000' }}>
                     {row.totalRequired || 0}
                   </td>
-                  <td style={{ ...tdBaseStyle, textAlign: 'right', fontWeight: 700, color: '#0f172a' }}>
+                  <td style={{ ...tdBaseStyle, textAlign: 'center', fontWeight: 700, color: '#000000' }}>
                     {row.inHouseStock || 0}
                   </td>
-                  <td style={{ ...tdBaseStyle, textAlign: 'right', color: '#334155' }}>
+                  <td style={{ ...tdBaseStyle, textAlign: 'center', color: '#000000' }}>
                     {row.pendingPO || 0}
                   </td>
-                  <td style={{ ...tdBaseStyle, textAlign: 'right', color: '#334155' }}>
+                  <td style={{ ...tdBaseStyle, textAlign: 'center', color: '#000000' }}>
                     {row.pendingJW || 0}
                   </td>
-                  <td style={{ ...tdBaseStyle, textAlign: 'right', color: '#334155' }}>
+                  <td style={{ ...tdBaseStyle, textAlign: 'center', color: '#000000' }}>
                     {row.pendingQC || 0}
                   </td>
                   <td style={{ 
                     ...tdBaseStyle, 
-                    textAlign: 'right', 
+                    textAlign: 'center', 
                     fontWeight: 900, 
-                    color: hasShortage ? '#b91c1c' : '#15803d'
+                    color: '#000000'
                   }}>
                     {row.shortage || 0}
                   </td>
-                  <td style={{ ...tdBaseStyle, textAlign: 'right', color: '#475569' }}>
+                  <td style={{ ...tdBaseStyle, textAlign: 'center', color: '#000000' }}>
                     {row.minStockLevel || 0}
                   </td>
                   <td style={{ 
                     ...tdBaseStyle, 
-                    textAlign: 'right', 
+                    textAlign: 'center', 
                     fontWeight: hasMinShortage ? 800 : 500,
-                    color: hasMinShortage ? '#b91c1c' : '#475569'
+                    color: '#000000'
                   }}>
                     {row.minShortage || 0}
                   </td>
@@ -238,28 +239,28 @@ export const ConsolidatedItemWiseShortagePrintReport: React.FC<ConsolidatedItemW
               <td colSpan={7} style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'right' }}>
                 TOTALS ({data.length} Components):
               </td>
-              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'right' }}>
+              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'center', color: '#000000' }}>
                 {totalRequiredSum}
               </td>
-              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'right' }}>
+              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'center', color: '#000000' }}>
                 {data.reduce((s, r) => s + (r.inHouseStock || 0), 0)}
               </td>
-              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'right' }}>
+              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'center', color: '#000000' }}>
                 {data.reduce((s, r) => s + (r.pendingPO || 0), 0)}
               </td>
-              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'right' }}>
+              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'center', color: '#000000' }}>
                 {data.reduce((s, r) => s + (r.pendingJW || 0), 0)}
               </td>
-              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'right' }}>
+              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'center', color: '#000000' }}>
                 {data.reduce((s, r) => s + (r.pendingQC || 0), 0)}
               </td>
-              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'right', color: totalShortageSum > 0 ? '#b91c1c' : '#15803d' }}>
+              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'center', color: '#000000' }}>
                 {totalShortageSum}
               </td>
-              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'right' }}>
+              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'center', color: '#000000' }}>
                 {data.reduce((s, r) => s + (r.minStockLevel || 0), 0)}
               </td>
-              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'right' }}>
+              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'center', color: '#000000' }}>
                 {data.reduce((s, r) => s + (r.minShortage || 0), 0)}
               </td>
             </tr>

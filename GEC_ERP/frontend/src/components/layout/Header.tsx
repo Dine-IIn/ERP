@@ -345,43 +345,93 @@ export const Header: React.FC = () => {
 
       {/* Right Separate Indicators for User & Server */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-        {/* User / Network Mode Indicator */}
-        <div style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '0.35rem',
-          padding: '0.3rem 0.65rem',
-          borderRadius: '9999px',
-          backgroundColor: isUserOnline ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
-          border: `1px solid ${isUserOnline ? 'var(--success)' : '#f59e0b'}`,
-          color: isUserOnline ? 'var(--success)' : '#f59e0b',
-          fontSize: '0.73rem',
-          fontWeight: 700
-        }} title={isUserOnline ? 'Internet connection active' : 'LAN Mode (Working offline on local network)'}>
-          {isUserOnline ? <Globe size={13} /> : <Wifi size={13} />}
-          <span>{isUserOnline ? 'Internet: Online' : 'LAN Offline Ready'}</span>
-        </div>
+        {/* User Connection Status: Online | LAN | Offline */}
+        {(() => {
+          let userStatusText = 'Online';
+          let userBg = 'rgba(16, 185, 129, 0.12)';
+          let userBorder = 'var(--success)';
+          let userColor = 'var(--success)';
+          let userIcon = <Wifi size={13} />;
 
-        {/* Central Server Connection Status Indicator */}
-        <div style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '0.35rem',
-          padding: '0.3rem 0.65rem',
-          borderRadius: '9999px',
-          backgroundColor: isServerOnline ? 'rgba(59, 130, 246, 0.12)' : 'rgba(239, 68, 68, 0.12)',
-          border: `1px solid ${isServerOnline ? 'var(--accent-primary)' : 'var(--danger)'}`,
-          color: isServerOnline ? 'var(--accent-primary)' : 'var(--danger)',
-          fontSize: '0.73rem',
-          fontWeight: 700
-        }} title={`Connected to central server in ${serverNetworkMode} mode (${serverDbStatus})`}>
-          {isServerOnline ? <Server size={13} /> : <AlertCircle size={13} />}
-          <span>
-            {isServerOnline 
-              ? `Server: Online (${serverNetworkMode === 'CLOUD' ? 'Domain' : serverNetworkMode})` 
-              : 'Server: Offline (Cached)'}
-          </span>
-        </div>
+          if (!navigator.onLine) {
+            userStatusText = 'Offline';
+            userBg = 'rgba(239, 68, 68, 0.12)';
+            userBorder = 'var(--danger)';
+            userColor = 'var(--danger)';
+            userIcon = <WifiOff size={13} />;
+          } else if (!isUserOnline) {
+            userStatusText = 'LAN';
+            userBg = 'rgba(245, 158, 11, 0.12)';
+            userBorder = '#f59e0b';
+            userColor = '#f59e0b';
+            userIcon = <Wifi size={13} />;
+          }
+
+          return (
+            <div 
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                padding: '0.3rem 0.65rem',
+                borderRadius: '9999px',
+                backgroundColor: userBg,
+                border: `1px solid ${userBorder}`,
+                color: userColor,
+                fontSize: '0.73rem',
+                fontWeight: 700
+              }} 
+              title={`User Network: ${userStatusText} (${userStatusText === 'LAN' ? 'Local Network without external internet' : (userStatusText === 'Online' ? 'Active Internet Connection' : 'No Network Connection')})`}
+            >
+              {userIcon}
+              <span>User: {userStatusText}</span>
+            </div>
+          );
+        })()}
+
+        {/* Server Connection Status: Online | LAN | Offline */}
+        {(() => {
+          let serverStatusText = 'Online';
+          let serverBg = 'rgba(16, 185, 129, 0.12)';
+          let serverBorder = 'var(--success)';
+          let serverColor = 'var(--success)';
+          let serverIcon = <Server size={13} />;
+
+          if (!isServerOnline) {
+            serverStatusText = 'Offline';
+            serverBg = 'rgba(239, 68, 68, 0.12)';
+            serverBorder = 'var(--danger)';
+            serverColor = 'var(--danger)';
+            serverIcon = <AlertCircle size={13} />;
+          } else if (serverNetworkMode === 'LAN' || serverNetworkMode === 'LOCALHOST') {
+            serverStatusText = 'LAN';
+            serverBg = 'rgba(59, 130, 246, 0.12)';
+            serverBorder = 'var(--accent-primary)';
+            serverColor = 'var(--accent-primary)';
+            serverIcon = <Server size={13} />;
+          }
+
+          return (
+            <div 
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                padding: '0.3rem 0.65rem',
+                borderRadius: '9999px',
+                backgroundColor: serverBg,
+                border: `1px solid ${serverBorder}`,
+                color: serverColor,
+                fontSize: '0.73rem',
+                fontWeight: 700
+              }} 
+              title={isServerOnline ? `Central Server is LIVE in ${serverStatusText} Mode (${serverDbStatus})` : 'Server: Offline (Read-Only cached data access. Create, edit, delete is disabled until server reconnects)'}
+            >
+              {serverIcon}
+              <span>Server: {serverStatusText}</span>
+            </div>
+          );
+        })()}
       </div>
     </header>
   );
