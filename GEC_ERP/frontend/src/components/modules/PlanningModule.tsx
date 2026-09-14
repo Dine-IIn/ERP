@@ -155,33 +155,6 @@ export const PlanningModule: React.FC = () => {
       return totalDemand;
     };
 
-    // Helper: Job Card input & target demand
-    const calculateJCItemDemand = (targetItemId: string, targetItemCode: string) => {
-      let totalDemand = 0;
-      activeJCs.forEach(jc => {
-        const remainingJCQty = Math.max(0, (jc.targetQuantity || 1) - (jc.completedQuantity || 0));
-        if (remainingJCQty <= 0) return;
-
-        if (jc.components && jc.components.length > 0) {
-          jc.components.forEach(comp => {
-            if (
-              (targetItemId && comp.itemId && comp.itemId === targetItemId) ||
-              (targetItemCode && comp.itemCode && comp.itemCode.toLowerCase() === targetItemCode.toLowerCase())
-            ) {
-              const qtyPer = comp.qtyPerUnit !== undefined ? comp.qtyPerUnit : (comp.totalRequiredQty ? comp.totalRequiredQty / (jc.targetQuantity || 1) : 1);
-              totalDemand += qtyPer * remainingJCQty;
-            }
-          });
-        } else if (
-          (targetItemId && jc.itemId && jc.itemId === targetItemId) ||
-          (targetItemCode && jc.itemCode && jc.itemCode.toLowerCase() === targetItemCode.toLowerCase())
-        ) {
-          totalDemand += remainingJCQty;
-        }
-      });
-      return totalDemand;
-    };
-
     return items.map(item => {
       const partCode = item.partCode || '-';
       const itemCode = item.itemCode;
@@ -204,11 +177,19 @@ export const PlanningModule: React.FC = () => {
         });
       });
 
-      // 2. Pending WO Demand (Live multi-level BOM explosion)
+      // 2. Pending WO Demand (Live multi-level BOM explosion from active Work Orders)
       const pendingWO = calculateWOItemDemand(item.id, item.itemCode);
 
-      // 3. Pending Job Card Demand (Live component lines requirement)
-      const pendingJobCard = calculateJCItemDemand(item.id, item.itemCode);
+      // 3. Pending Job Card (Quantity of this item currently in production / being assembled on active Job Cards)
+      const pendingJobCard = activeJCs.reduce((sum, jc) => {
+        if (
+          (jc.itemId && jc.itemId === item.id) ||
+          (jc.itemCode && jc.itemCode.toLowerCase() === item.itemCode.toLowerCase())
+        ) {
+          return sum + Math.max(0, (jc.targetQuantity || 1) - (jc.completedQuantity || 0));
+        }
+        return sum;
+      }, 0);
 
       // 4. Pending QC (Live from active QC inspection queue)
       const openQCs = qcInspections.filter(q => 
@@ -233,17 +214,14 @@ export const PlanningModule: React.FC = () => {
         }
       });
 
-      // 6. Total Required (Demand from WO + Job Cards)
-      const totalRequired = pendingWO + pendingJobCard;
+      // 6. Total Required = Pending WO (Job Card is creating this item, not demanding it)
+      const totalRequired = pendingWO;
 
-      // 7. Total Pipeline Supply
-      const totalPipelineSupply = currentStock + pendingPO + pendingJW + pendingQC;
+      // 7. Shortage = max(0, Total Required - Current Stock)
+      const shortage = Math.max(0, totalRequired - currentStock);
 
-      // 8. Shortage = max(0, Total Required - Total Pipeline Supply)
-      const shortage = Math.max(0, totalRequired - totalPipelineSupply);
-
-      // 9. Min Level Shortage = max(0, (Total Required + Min Stock Level) - Total Pipeline Supply)
-      const minShortage = Math.max(0, (totalRequired + minStockLevel) - totalPipelineSupply);
+      // 8. Min Level Shortage = max(0, (Total Required + Min Level) - Current Stock)
+      const minShortage = Math.max(0, (totalRequired + minStockLevel) - currentStock);
 
       // Process source representation
       const pSources: string[] = item.materialProcessSources && item.materialProcessSources.length > 0
@@ -365,15 +343,7 @@ export const PlanningModule: React.FC = () => {
           >
             <Printer size={15} /> Print Planning Report
           </button>
-          <button 
-            type="button" 
-            className="btn btn-outline" 
-            onClick={() => setPrintModalOpen(true)} 
-            title="Preview Planning Document before printing"
-            style={{ fontSize: '0.8rem', padding: '0.45rem 0.75rem' }}
-          >
-            <Eye size={14} /> Preview
-          </button>
+
         </div>
       </div>
 

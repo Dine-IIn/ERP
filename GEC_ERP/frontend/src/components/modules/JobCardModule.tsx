@@ -181,7 +181,80 @@ export const JobCardModule: React.FC = () => {
     i.category === 'FG'
   );
 
+  // Helper to check if an item is used in a Work Order (top-level, woComponents, or sub-BOMs)
+  const isItemUsedInWorkOrder = (targetItem: Item | undefined, wo: any): boolean => {
+    if (!targetItem) return true;
+    
+    // Direct match on WO machine / item
+    if (
+      (wo.itemId && wo.itemId === targetItem.id) ||
+      (wo.itemCode && targetItem.itemCode && wo.itemCode.toLowerCase() === targetItem.itemCode.toLowerCase()) ||
+      (wo.machineModel && (
+        wo.machineModel.toLowerCase() === targetItem.name.toLowerCase() ||
+        wo.machineModel.toLowerCase() === targetItem.itemCode.toLowerCase()
+      ))
+    ) {
+      return true;
+    }
+
+    const targetCode = (targetItem.itemCode || '').trim().toLowerCase();
+    const targetId = targetItem.id;
+
+    // Recursive search through component tree
+    const searchInComponents = (
+      components: Array<{ itemId?: string; itemCode?: string }>,
+      visited = new Set<string>()
+    ): boolean => {
+      for (const comp of components) {
+        const cId = comp.itemId || '';
+        const cCode = (comp.itemCode || '').trim().toLowerCase();
+
+        if ((targetId && cId && cId === targetId) || (targetCode && cCode && cCode === targetCode)) {
+          return true;
+        }
+
+        const childItem = items.find(i => (cId && i.id === cId) || (cCode && i.itemCode.toLowerCase() === cCode));
+        if (childItem) {
+          const subBOM = boms.find(b => 
+            b.id === childItem.id || 
+            b.bomCode?.toLowerCase() === childItem.itemCode.toLowerCase() || 
+            b.machineModel?.toLowerCase() === childItem.name?.toLowerCase() ||
+            b.machineModel?.toLowerCase() === childItem.itemCode?.toLowerCase()
+          );
+          if (subBOM && subBOM.components && subBOM.components.length > 0 && !visited.has(subBOM.id)) {
+            visited.add(subBOM.id);
+            if (searchInComponents(subBOM.components, visited)) {
+              return true;
+            }
+          }
+        }
+      }
+      return false;
+    };
+
+    if (wo.woComponents && wo.woComponents.length > 0) {
+      if (searchInComponents(wo.woComponents)) return true;
+    }
+
+    const bom = boms.find(b => 
+      b.id === wo.bomId || 
+      b.bomCode?.toLowerCase() === (wo.bomCode || '').toLowerCase() || 
+      b.machineModel?.toLowerCase() === (wo.machineModel || '').toLowerCase()
+    );
+    if (bom && bom.components && bom.components.length > 0) {
+      if (searchInComponents(bom.components, new Set([bom.id]))) return true;
+    }
+
+    return false;
+  };
+
   const selectedItemObj = items.find(i => i.id === selectedItemId);
+
+  // Filter Work Orders that specifically use the selected assembly / sub-assembly
+  const relevantWorkOrders = workOrders
+    .filter(w => w.status !== 'COMPLETED' && w.status !== 'CANCELLED')
+    .filter(w => !selectedItemObj || isItemUsedInWorkOrder(selectedItemObj, w));
+
 
   const handleSort = (field: JCSortKey) => {
     if (sortField === field) {
@@ -591,8 +664,8 @@ export const JobCardModule: React.FC = () => {
 
       {/* Tabular Shortage Job Card Wizard View */}
       {isShortageWizardOpen ? (
-        <div className="card" style={{ padding: '1.25rem', backgroundColor: 'var(--bg-card)', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+        <div className="card" style={{ padding: '1rem 1.25rem', backgroundColor: 'var(--bg-card)', display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', flexWrap: 'wrap', gap: '0.75rem', flexShrink: 0 }}>
             <div>
               <h3 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <AlertTriangle size={18} color="var(--warning)" />
@@ -619,7 +692,7 @@ export const JobCardModule: React.FC = () => {
           </div>
 
           {/* Search Bar for Shortage Items */}
-          <div style={{ position: 'relative', width: '100%' }}>
+          <div style={{ position: 'relative', width: '100%', flexShrink: 0 }}>
             <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
             <input
               type="text"
@@ -641,7 +714,7 @@ export const JobCardModule: React.FC = () => {
               </div>
             </div>
           ) : (
-            <div className="table-container" style={{ maxHeight: '500px', overflowY: 'auto' }}>
+            <div className="table-container" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
               <table>
                 <thead>
                   <tr>
@@ -1049,7 +1122,17 @@ export const JobCardModule: React.FC = () => {
               className="input-field" 
               required
               value={selectedItemId} 
-              onChange={(e) => setSelectedItemId(e.target.value)}
+              onChange={(e) => {
+                const newId = e.target.value;
+                setSelectedItemId(newId);
+                const newItem = items.find(i => i.id === newId);
+                if (selectedWOId && newItem) {
+                  const selWO = workOrders.find(w => w.id === selectedWOId);
+                  if (selWO && !isItemUsedInWorkOrder(newItem, selWO)) {
+                    setSelectedWOId('');
+                  }
+                }
+              }}
             >
               <option value="" disabled>-- Select Assembly / Sub-Assembly Item --</option>
               {buildableItems.map(item => (
@@ -1093,10 +1176,15 @@ export const JobCardModule: React.FC = () => {
               <label style={{ fontSize: '0.82rem', fontWeight: 700 }}>Linked Work Order (Optional)</label>
               <select className="input-field" value={selectedWOId} onChange={(e) => setSelectedWOId(e.target.value)}>
                 <option value="">-- No Direct WO (General Sub-Assembly Batch) --</option>
-                {workOrders.map(w => (
+                {relevantWorkOrders.map(w => (
                   <option key={w.id} value={w.id}>{w.workOrderNo || w.woNumber} ({w.machineModel})</option>
                 ))}
               </select>
+              {selectedItemObj && relevantWorkOrders.length === 0 && (
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                  ℹ️ No active Work Orders currently require this item.
+                </div>
+              )}
             </div>
           </div>
 

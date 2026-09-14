@@ -1,0 +1,303 @@
+ItemCode,InHouseStock,ExternalStock,Location,UnitPrice,MinStockQty
+1000310100,2,0,Final Assembly Bay,185000,1
+1000310400,2,0,Final Assembly Bay,210000,1
+1000110100,5,0,Sub-Assembly Section,12500,1
+1000210100,5,0,Sub-Assembly Section,12500,1
+2000210100,5,0,Sub-Assembly Section,12500,1
+2000210200,5,0,Sub-Assembly Section,12500,1
+2000300100,5,0,Sub-Assembly Section,12500,1
+2000300200,5,0,Sub-Assembly Section,12500,1
+2000300300,5,0,Sub-Assembly Section,12500,1
+4001000100,50,0,Raw Material Yard,1200,10
+4001001200,50,0,Raw Material Yard,1200,10
+4001002300,50,0,Raw Material Yard,1200,10
+4001003600,50,0,Raw Material Yard,1200,10
+4001004200,50,0,Raw Material Yard,1200,10
+4001004800,50,0,Raw Material Yard,1200,10
+4001005400,50,0,Raw Material Yard,1200,10
+4001006300,50,0,Raw Material Yard,1200,10
+4001006900,50,0,Raw Material Yard,1200,10
+4001007500,50,0,Raw Material Yard,1200,10
+4001009600,50,0,Raw Material Yard,1200,10
+4001011200,50,0,Raw Material Yard,1200,10
+4001012500,50,0,Raw Material Yard,1200,10
+4001013300,50,0,Raw Material Yard,1200,10
+4001013500,50,0,Raw Material Yard,1200,10
+4001013600,50,0,Raw Material Yard,1200,10
+3000000100,2,0,Final Assembly Bay,185000,1
+3000000200,2,0,Final Assembly Bay,185000,1
+2000300400,5,0,Sub-Assembly Section,12500,1
+2000300500,5,0,Sub-Assembly Section,12500,1
+2000300600,5,0,Sub-Assembly Section,12500,1
+2000300700,5,0,Sub-Assembly Section,12500,1
+2000300800,5,0,Sub-Assembly Section,12500,1
+2000300900,5,0,Sub-Assembly Section,12500,1
+7000100100,5,0,Sub-Assembly Section,12500,1
+7000200100,5,0,Sub-Assembly Section,12500,1
+7000300100,5,0,Sub-Assembly Section,12500,1
+7000400100,5,0,Sub-Assembly Section,12500,1
+3000000400,2,0,Final Assembly Bay,185000,1
+3000000500,2,0,Final Assembly Bay,185000,1
+3000000600,2,0,Final Assembly Bay,185000,1
+3000000700,2,0,Final Assembly Bay,185000,1
+3000000800,2,0,Final Assembly Bay,185000,1
+3000000900,2,0,Final Assembly Bay,185000,1
+3000001000,2,0,Final Assembly Bay,185000,1
+4110006500,15,0,Machine Shop Bay,2400,3
+4110006600,15,0,Machine Shop Bay,2400,3
+4110006700,15,0,Machine Shop Bay,2400,3
+4110006800,15,0,Machine Shop Bay,2400,3
+4110006900,15,0,Machine Shop Bay,2400,3
+4110007000,15,0,Machine Shop Bay,2400,3
+4110007100,15,0,Machine Shop Bay,2400,3
+4110007200,15,0,Machine Shop Bay,2400,3
+4110007300,15,0,Machine Shop Bay,2400,3
+4110007400,15,0,Machine Shop Bay,2400,3
+4110007500,15,0,Machine Shop Bay,2400,3
+4110007600,15,0,Machine Shop Bay,2400,3
+4110007700,15,0,Machine Shop Bay,2400,3
+4110007800,15,0,Machine Shop Bay,2400,3
+4110007900,15,0,Machine Shop Bay,2400,3
+4110008000,15,0,Machine Shop Bay,2400,3
+4110008100,15,0,Machine Shop Bay,2400,3
+4110008200,15,0,Machine Shop Bay,2400,3
+3130800100,10,0,General Stores,500,2
+3130800200,10,0,General Stores,500,2
+3130800300,10,0,General Stores,500,2
+3131100100,10,0,General Stores,500,2
+3131100200,10,0,General Stores,500,2
+3131100300,10,0,General Stores,500,2
+3131100400,10,0,General Stores,500,2
+3131100500,10,0,General Stores,500,2
+3131100600,10,0,General Stores,500,2
+3131100700,10,0,General Stores,500,2
+3131100800,10,0,General Stores,500,2
+3131100900,10,0,General Stores,500,2
+3131101000,10,0,General Stores,500,2
+3131101100,10,0,General Stores,500,2
+3131101200,10,0,General Stores,500,2
+3131101300,10,0,General Stores,500,2
+3131300100,10,0,General Stores,500,2
+6160100100,25,0,Warehouse Rack BO,350,5
+6160100200,25,0,Warehouse Rack BO,350,5
+6160100300,25,0,Warehouse Rack BO,350,5
+6160100400,25,0,Warehouse Rack BO,350,5
+6160100500,25,0,Warehouse Rack BO,350,5
+6170100100,25,0,Warehouse Rack BO,350,5
+6170100200,25,0,Warehouse Rack BO,350,5
+6180100100,25,0,Warehouse Rack BO,350,5
+6180200100,25,0,Warehouse Rack BO,350,5
+6190100100,25,0,Warehouse Rack BO,350,5
+6190100200,25,0,Warehouse Rack BO,350,5
+6240100100,25,0,Warehouse Rack BO,350,5
+6010400100,25,0,Warehouse Rack BO,350,5
+6020100100,25,0,Warehouse Rack BO,350,5
+6030100100,25,0,Warehouse Rack BO,350,5
+6210100100,25,0,Warehouse Rack BO,350,5
+6210100175,25,0,Warehouse Rack BO,350,5
+6210100350,25,0,Warehouse Rack BO,350,5
+6220100100,25,0,Warehouse Rack BO,350,5
+6220200100,25,0,Warehouse Rack BO,350,5
+7340100100,25,0,Warehouse Rack BO,350,5
+7340100200,25,0,Warehouse Rack BO,350,5
+6150100100,25,0,Warehouse Rack BO,350,5
+6150200100,25,0,Warehouse Rack BO,350,5
+6150300100,25,0,Warehouse Rack BO,350,5
+6150400100,25,0,Warehouse Rack BO,350,5
+6141100100,25,0,Warehouse Rack BO,350,5
+6141200100,25,0,Warehouse Rack BO,350,5
+7330200100,25,0,Warehouse Rack BO,350,5
+7910500100,25,0,Warehouse Rack BO,350,5
+7910300100,25,0,Warehouse Rack BO,350,5
+2000110100,5,0,Sub-Assembly Section,12500,1
+2000110200,5,0,Sub-Assembly Section,12500,1
+7000100200,5,0,Sub-Assembly Section,12500,1
+4110000100,15,0,Machine Shop Bay,2400,3
+4110000200,15,0,Machine Shop Bay,2400,3
+4110000300,15,0,Machine Shop Bay,2400,3
+4110000400,15,0,Machine Shop Bay,2400,3
+4110000500,15,0,Machine Shop Bay,2400,3
+4110000600,15,0,Machine Shop Bay,2400,3
+4110000700,15,0,Machine Shop Bay,2400,3
+4110000800,15,0,Machine Shop Bay,2400,3
+4110000900,15,0,Machine Shop Bay,2400,3
+4110001000,15,0,Machine Shop Bay,2400,3
+4110001100,15,0,Machine Shop Bay,2400,3
+4110001200,15,0,Machine Shop Bay,2400,3
+4110001300,15,0,Machine Shop Bay,2400,3
+4110001400,15,0,Machine Shop Bay,2400,3
+4110001500,15,0,Machine Shop Bay,2400,3
+4110001600,15,0,Machine Shop Bay,2400,3
+4110001700,15,0,Machine Shop Bay,2400,3
+4110001800,15,0,Machine Shop Bay,2400,3
+4110001900,15,0,Machine Shop Bay,2400,3
+4110002000,15,0,Machine Shop Bay,2400,3
+4110002100,15,0,Machine Shop Bay,2400,3
+4110002200,15,0,Machine Shop Bay,2400,3
+4110002300,15,0,Machine Shop Bay,2400,3
+4110002400,15,0,Machine Shop Bay,2400,3
+4110002500,15,0,Machine Shop Bay,2400,3
+4010100200,15,0,Machine Shop Bay,2400,3
+4020100100,15,0,Machine Shop Bay,2400,3
+4010100800,15,0,Machine Shop Bay,2400,3
+4030100100,15,0,Machine Shop Bay,2400,3
+4030200100,15,0,Machine Shop Bay,2400,3
+4040100100,15,0,Machine Shop Bay,2400,3
+4040100700,15,0,Machine Shop Bay,2400,3
+4040200100,15,0,Machine Shop Bay,2400,3
+4040200700,15,0,Machine Shop Bay,2400,3
+7220100100,25,0,Warehouse Rack BO,350,5
+7270053065,25,0,Warehouse Rack BO,350,5
+7190105900,25,0,Warehouse Rack BO,350,5
+6110100100,25,0,Warehouse Rack BO,350,5
+2000210300,5,0,Sub-Assembly Section,12500,1
+7000100300,25,0,Warehouse Rack BO,350,5
+4020100700,15,0,Machine Shop Bay,2400,3
+4110002600,15,0,Machine Shop Bay,2400,3
+4110002700,15,0,Machine Shop Bay,2400,3
+4110002800,15,0,Machine Shop Bay,2400,3
+7000100400,15,0,Machine Shop Bay,2400,3
+4110002900,15,0,Machine Shop Bay,2400,3
+4110003000,15,0,Machine Shop Bay,2400,3
+4110003100,15,0,Machine Shop Bay,2400,3
+4110003200,15,0,Machine Shop Bay,2400,3
+4110003300,15,0,Machine Shop Bay,2400,3
+4110003400,15,0,Machine Shop Bay,2400,3
+7220100200,25,0,Warehouse Rack BO,350,5
+7230063100,25,0,Warehouse Rack BO,350,5
+7240097095,25,0,Warehouse Rack BO,350,5
+7240097050,25,0,Warehouse Rack BO,350,5
+7250042050,25,0,Warehouse Rack BO,350,5
+7260073050,25,0,Warehouse Rack BO,350,5
+7270053050,25,0,Warehouse Rack BO,350,5
+7290003040,25,0,Warehouse Rack BO,350,5
+7290005090,25,0,Warehouse Rack BO,350,5
+7000100500,15,0,Machine Shop Bay,2400,3
+4110003500,15,0,Machine Shop Bay,2400,3
+4110003600,15,0,Machine Shop Bay,2400,3
+4110003700,15,0,Machine Shop Bay,2400,3
+4020101000,15,0,Machine Shop Bay,2400,3
+4020101100,15,0,Machine Shop Bay,2400,3
+7280095115,25,0,Warehouse Rack BO,350,5
+7200100100,25,0,Warehouse Rack BO,350,5
+7200100200,25,0,Warehouse Rack BO,350,5
+6110100300,25,0,Warehouse Rack BO,350,5
+4110003800,15,0,Machine Shop Bay,2400,3
+4110003900,15,0,Machine Shop Bay,2400,3
+4110004000,15,0,Machine Shop Bay,2400,3
+4110004100,15,0,Machine Shop Bay,2400,3
+4110004200,15,0,Machine Shop Bay,2400,3
+4110004300,15,0,Machine Shop Bay,2400,3
+4110004400,15,0,Machine Shop Bay,2400,3
+4110004500,15,0,Machine Shop Bay,2400,3
+4110004600,15,0,Machine Shop Bay,2400,3
+4110004700,15,0,Machine Shop Bay,2400,3
+4110004800,15,0,Machine Shop Bay,2400,3
+4110004900,15,0,Machine Shop Bay,2400,3
+4110005000,15,0,Machine Shop Bay,2400,3
+3131000100,10,0,General Stores,500,2
+4110005100,15,0,Machine Shop Bay,2400,3
+4110005200,15,0,Machine Shop Bay,2400,3
+4110005300,15,0,Machine Shop Bay,2400,3
+4110005400,15,0,Machine Shop Bay,2400,3
+4110005500,15,0,Machine Shop Bay,2400,3
+4110005600,15,0,Machine Shop Bay,2400,3
+4110005700,15,0,Machine Shop Bay,2400,3
+4110005800,15,0,Machine Shop Bay,2400,3
+4110005900,15,0,Machine Shop Bay,2400,3
+4110006000,15,0,Machine Shop Bay,2400,3
+4110006100,15,0,Machine Shop Bay,2400,3
+4110006200,15,0,Machine Shop Bay,2400,3
+4110006300,15,0,Machine Shop Bay,2400,3
+4110006400,15,0,Machine Shop Bay,2400,3
+4005000100,5,0,Sub-Assembly Area,1200,2
+4005000200,5,0,Sub-Assembly Area,1200,2
+4005001200,5,0,Sub-Assembly Area,1200,2
+4005001300,5,0,Sub-Assembly Area,1200,2
+4005002300,5,0,Sub-Assembly Area,1200,2
+4005002400,5,0,Sub-Assembly Area,1200,2
+4005003600,5,0,Sub-Assembly Area,1200,2
+4005003700,5,0,Sub-Assembly Area,1200,2
+4005004200,5,0,Sub-Assembly Area,1200,2
+4005004300,5,0,Sub-Assembly Area,1200,2
+4005004800,5,0,Sub-Assembly Area,1200,2
+4005004900,5,0,Sub-Assembly Area,1200,2
+4005005400,5,0,Sub-Assembly Area,1200,2
+4005005500,5,0,Sub-Assembly Area,1200,2
+4005006300,5,0,Sub-Assembly Area,1200,2
+4005006400,5,0,Sub-Assembly Area,1200,2
+4005006900,5,0,Sub-Assembly Area,1200,2
+4005007000,5,0,Sub-Assembly Area,1200,2
+4005007500,5,0,Sub-Assembly Area,1200,2
+4005009600,5,0,Sub-Assembly Area,1200,2
+4005009800,5,0,Sub-Assembly Area,1200,2
+4005011200,5,0,Sub-Assembly Area,1200,2
+4005012500,5,0,Sub-Assembly Area,1200,2
+4005013300,5,0,Sub-Assembly Area,1200,2
+4005002900,5,0,Sub-Assembly Area,1200,2
+4005013500,5,0,Sub-Assembly Area,1200,2
+4005013600,5,0,Sub-Assembly Area,1200,2
+4001000200,5,0,Raw Materials Store,1200,2
+4001001300,5,0,Raw Materials Store,1200,2
+4001002400,5,0,Raw Materials Store,1200,2
+4001003700,5,0,Raw Materials Store,1200,2
+4001004300,5,0,Raw Materials Store,1200,2
+4001004900,5,0,Raw Materials Store,1200,2
+4001005500,5,0,Raw Materials Store,1200,2
+4001006400,5,0,Raw Materials Store,1200,2
+4001007000,5,0,Raw Materials Store,1200,2
+4001009800,5,0,Raw Materials Store,1200,2
+4001002900,5,0,Raw Materials Store,1200,2
+1000110200,5,0,Sub-Assembly Area,1200,2
+1000210200,5,0,Sub-Assembly Area,1200,2
+3000001800,5,0,Sub-Assembly Area,1200,2
+3000002000,5,0,Sub-Assembly Area,1200,2
+2000301100,5,0,Sub-Assembly Area,1200,2
+2000301300,5,0,Sub-Assembly Area,1200,2
+2000301400,5,0,Sub-Assembly Area,1200,2
+2000301500,5,0,Sub-Assembly Area,1200,2
+2000301600,5,0,Sub-Assembly Area,1200,2
+7000100600,5,0,Sub-Assembly Area,1200,2
+7000200200,5,0,Sub-Assembly Area,1200,2
+7000300200,5,0,Sub-Assembly Area,1200,2
+3000002200,5,0,Sub-Assembly Area,1200,2
+3000002300,5,0,Sub-Assembly Area,1200,2
+4110008700,5,0,Sub-Assembly Area,1200,2
+4110008800,5,0,Sub-Assembly Area,1200,2
+4110008900,5,0,Sub-Assembly Area,1200,2
+4110009000,5,0,Sub-Assembly Area,1200,2
+4110009100,5,0,Sub-Assembly Area,1200,2
+3131101400,5,0,Sub-Assembly Area,1200,2
+3131300200,5,0,Sub-Assembly Area,1200,2
+6030100200,5,0,Bought-out Bay,1200,2
+6210100130,5,0,Bought-out Bay,1200,2
+6210100200,5,0,Bought-out Bay,1200,2
+6150100300,5,0,Bought-out Bay,1200,2
+6150200300,5,0,Bought-out Bay,1200,2
+6150300300,5,0,Bought-out Bay,1200,2
+2000110300,5,0,Sub-Assembly Area,1200,2
+2000110400,5,0,Sub-Assembly Area,1200,2
+4110009200,5,0,Sub-Assembly Area,1200,2
+4110009300,5,0,Sub-Assembly Area,1200,2
+4110009400,5,0,Sub-Assembly Area,1200,2
+4110009500,5,0,Sub-Assembly Area,1200,2
+4110009600,5,0,Sub-Assembly Area,1200,2
+4110009700,5,0,Sub-Assembly Area,1200,2
+4110009800,5,0,Sub-Assembly Area,1200,2
+4110009900,5,0,Sub-Assembly Area,1200,2
+4110010000,5,0,Sub-Assembly Area,1200,2
+4110010100,5,0,Sub-Assembly Area,1200,2
+4110010200,5,0,Sub-Assembly Area,1200,2
+4110010300,5,0,Sub-Assembly Area,1200,2
+4110010400,5,0,Sub-Assembly Area,1200,2
+4110010500,5,0,Sub-Assembly Area,1200,2
+4010100300,5,0,Sub-Assembly Area,1200,2
+4020100200,5,0,Sub-Assembly Area,1200,2
+4010100900,5,0,Sub-Assembly Area,1200,2
+4030100200,5,0,Sub-Assembly Area,1200,2
+4040100200,5,0,Sub-Assembly Area,1200,2
+4040100800,5,0,Sub-Assembly Area,1200,2
+4040200200,5,0,Sub-Assembly Area,1200,2
+4040200800,5,0,Sub-Assembly Area,1200,2
+7270053070,5,0,Bought-out Bay,1200,2
+6110100400,5,0,Bought-out Bay,1200,2

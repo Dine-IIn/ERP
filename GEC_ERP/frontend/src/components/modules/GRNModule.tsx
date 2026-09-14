@@ -194,6 +194,37 @@ export const GRNModule: React.FC = () => {
       const targetJob = jobworks.find(j => j.id === id);
       if (targetJob) {
         const pendingQty = targetJob.pendingBalance || targetJob.sentQuantity || 1;
+        const matchedItem = items.find(i => i.id === targetJob.itemId || i.itemCode === targetJob.itemCode);
+        const producedItem = items.find(i => i.id === targetJob.producedItemId || i.itemCode === targetJob.producedItemCode);
+
+        // Find Process Card for this item
+        const matchingCard = itemProcessCards.find(c => 
+          c.itemId === targetJob.producedItemId || 
+          c.itemCode.toLowerCase() === (targetJob.producedItemCode || '').toLowerCase() ||
+          c.itemId === targetJob.itemId || 
+          c.itemCode.toLowerCase() === (targetJob.itemCode || '').toLowerCase() ||
+          (c.rawItemId && c.rawItemId === targetJob.itemId) ||
+          (c.rawItemCode && c.rawItemCode.toLowerCase() === (targetJob.itemCode || '').toLowerCase())
+        );
+
+        // Determine step received
+        let receivedStepNum = targetJob.stepNumber || 1;
+        if (!targetJob.stepNumber && matchingCard?.steps) {
+          const matchStep = matchingCard.steps.find(s => 
+            s.processName.toLowerCase() === (targetJob.processRequired || '').toLowerCase() ||
+            s.processShortCode.toLowerCase() === (targetJob.processRequired || '').toLowerCase()
+          );
+          if (matchStep) receivedStepNum = matchStep.stepNumber;
+        }
+
+        // Auto-increment to next step for direct job work
+        const nextStepNum = (matchingCard?.steps && receivedStepNum < matchingCard.steps.length) 
+          ? receivedStepNum + 1 
+          : receivedStepNum;
+        const nextStep = matchingCard?.steps?.find(s => s.stepNumber === nextStepNum) || matchingCard?.steps?.[0];
+        const defaultProduceId = matchingCard?.itemId || targetJob.producedItemId || targetJob.itemId;
+        const defaultProduceItem = items.find(i => i.id === defaultProduceId) || producedItem || matchedItem;
+
         setGrnItems([{
           itemId: targetJob.itemId || 'item-jobwork',
           itemCode: targetJob.itemCode || 'JOBWORK-RET',
@@ -206,6 +237,16 @@ export const GRNModule: React.FC = () => {
           rejectedQty: 0,
           rejectionDisposition: 'SCRAP',
           rejectionReason: '',
+          unit: matchedItem?.unit || producedItem?.unit || 'PCS',
+          isDirectJobwork: false,
+          directJWQty: 0,
+          directJWProduceItemId: defaultProduceId,
+          directJWProduceItemCode: defaultProduceItem?.itemCode || matchingCard?.itemCode,
+          directJWProduceItemName: defaultProduceItem?.name || matchingCard?.itemName,
+          directJWStepNumber: nextStepNum,
+          directJWProcessName: nextStep ? (nextStep.processName || nextStep.processShortCode) : '',
+          directJWVendorId: '',
+          directJWVendorName: '',
           remarks: 'Jobwork physical dimensions verified against drawing specs'
         }]);
       }
@@ -690,11 +731,21 @@ export const GRNModule: React.FC = () => {
                                   checked={!!item.isDirectJobwork}
                                   onChange={(e) => {
                                     const isDirect = e.target.checked;
-                                    setGrnItems(prev => prev.map(it => it.itemId === item.itemId ? {
-                                      ...it,
-                                      isDirectJobwork: isDirect,
-                                      directJWQty: isDirect ? (it.directJWQty || it.acceptedQty || it.receivedQty || 0) : 0
-                                    } : it));
+                                    setGrnItems(prev => prev.map(it => {
+                                      if (it.itemId !== item.itemId) return it;
+                                      const pCard = itemProcessCards.find(c => c.itemId === it.directJWProduceItemId || c.itemCode === it.directJWProduceItemCode || (c.rawItemId && c.rawItemId === it.itemId));
+                                      const curStep = pCard?.steps?.find(s => s.stepNumber === (it.directJWStepNumber || 1)) || pCard?.steps?.[0];
+                                      const p1VendorId = (curStep?.vendorIds && curStep.vendorIds.length > 0) ? curStep.vendorIds[0] : it.directJWVendorId;
+                                      const p1VendorName = vendors.find(v => v.id === p1VendorId)?.name || it.directJWVendorName;
+
+                                      return {
+                                        ...it,
+                                        isDirectJobwork: isDirect,
+                                        directJWQty: isDirect ? (it.directJWQty || it.acceptedQty || it.receivedQty || 0) : 0,
+                                        directJWVendorId: isDirect ? (it.directJWVendorId || p1VendorId || '') : '',
+                                        directJWVendorName: isDirect ? (it.directJWVendorName || p1VendorName || '') : ''
+                                      };
+                                    }));
                                   }}
                                   style={{ width: '15px', height: '15px', cursor: 'pointer' }}
                                 />
@@ -703,145 +754,233 @@ export const GRNModule: React.FC = () => {
 
                               {item.isDirectJobwork && (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', marginTop: '0.65rem' }}>
-                                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 2fr 2fr', gap: '0.75rem' }}>
-                                    <div>
-                                      <label style={{ fontSize: '0.72rem', fontWeight: 700, display: 'block', marginBottom: '0.2rem' }}>
-                                        Direct JW Qty (Max: {item.acceptedQty || item.receivedQty}) *
-                                      </label>
-                                      <input 
-                                        type="number" 
-                                        min="1" 
-                                        max={item.acceptedQty || item.receivedQty} 
-                                        className="input-field" 
-                                        style={{ fontSize: '0.82rem', padding: '0.35rem', fontWeight: 700 }} 
-                                        value={item.directJWQty === 0 ? '' : item.directJWQty} 
-                                        onChange={(e) => {
-                                          const maxAllowed = Number(item.acceptedQty || item.receivedQty || 0);
-                                          const dQty = Math.min(maxAllowed, Math.max(0, Number(e.target.value)));
-                                          setGrnItems(prev => prev.map(it => it.itemId === item.itemId ? { ...it, directJWQty: dQty } : it));
-                                        }} 
-                                      />
-                                    </div>
+                                  {(() => {
+                                    const rawObj = items.find(i => i.id === item.itemId || i.itemCode === item.itemCode);
+                                    const matchingCard = itemProcessCards.find(c => 
+                                      c.itemId === item.directJWProduceItemId || 
+                                      c.itemCode === item.directJWProduceItemCode ||
+                                      (c.rawItemId && c.rawItemId === item.itemId) ||
+                                      (c.rawItemCode && c.rawItemCode === item.itemCode) ||
+                                      (rawObj && (c.rawItemId === rawObj.id || c.rawItemCode === rawObj.itemCode)) ||
+                                      (rawObj && (c.itemId === rawObj.id || c.itemCode === rawObj.itemCode))
+                                    );
 
-                                    <div>
-                                      <label style={{ fontSize: '0.72rem', fontWeight: 700, display: 'block', marginBottom: '0.2rem' }}>
-                                        Item to Create / Produce (Output Item) *
-                                      </label>
-                                      {(() => {
-                                        const rawObj = items.find(i => i.id === item.itemId || i.itemCode === item.itemCode);
-                                        const matchingCards = itemProcessCards.filter(c => 
-                                          c.rawItemId === item.itemId || 
-                                          c.rawItemCode === item.itemCode ||
-                                          (rawObj && (c.rawItemId === rawObj.id || c.rawItemCode === rawObj.itemCode))
-                                        );
-                                        const produceItems = items.filter(it => 
-                                          matchingCards.some(c => c.itemId === it.id || c.itemCode === it.itemCode)
-                                        );
-                                        const candidateItems = produceItems.length > 0 ? produceItems : items;
+                                    // Determine current step and next step
+                                    const totalSteps = matchingCard?.steps?.length || 1;
+                                    const currentStepNumber = item.directJWStepNumber || 1;
+                                    const activeStep = matchingCard?.steps?.find(s => s.stepNumber === currentStepNumber) || matchingCard?.steps?.[0];
 
-                                        return (
-                                          <select
-                                            className="input-field"
-                                            required
-                                            style={{ fontSize: '0.82rem', padding: '0.35rem' }}
-                                            value={item.directJWProduceItemId || ''}
-                                            onChange={(e) => {
-                                              const pId = e.target.value;
-                                              const pItem = items.find(i => i.id === pId);
-                                              setGrnItems(prev => prev.map(it => it.itemId === item.itemId ? {
-                                                ...it,
-                                                directJWProduceItemId: pId,
-                                                directJWProduceItemCode: pItem?.itemCode,
-                                                directJWProduceItemName: pItem?.name,
-                                                directJWVendorId: '',
-                                                directJWVendorName: ''
-                                              } : it));
-                                            }}
-                                          >
-                                            <option value="">
-                                              {produceItems.length > 0 
-                                                ? `-- Choose Item to Create (${produceItems.length} Process Card Matches) --` 
-                                                : '-- Choose Item to Create --'}
-                                            </option>
-                                            {candidateItems.map(it => (
-                                              <option key={it.id} value={it.id}>
-                                                {it.itemCode} - {it.name} {it.partCode ? `[Part: ${it.partCode}]` : ''}
-                                              </option>
-                                            ))}
-                                          </select>
-                                        );
-                                      })()}
-                                    </div>
+                                    // Filter vendors strictly for THIS active process step
+                                    const activeStepVendorKeys = new Set((activeStep?.vendorIds || (activeStep as any)?.vendors || []).map((v: string) => v.trim().toLowerCase()));
+                                    const stepVendors = (activeStep && activeStepVendorKeys.size > 0)
+                                      ? vendors.filter(v => 
+                                          activeStepVendorKeys.has(v.id.toLowerCase()) || 
+                                          (v.vendorCode && activeStepVendorKeys.has(v.vendorCode.toLowerCase())) || 
+                                          (v.name && activeStepVendorKeys.has(v.name.toLowerCase()))
+                                        )
+                                      : [];
 
-                                    <div>
-                                      <label style={{ fontSize: '0.72rem', fontWeight: 700, display: 'block', marginBottom: '0.2rem' }}>
-                                        Job Work Vendor (Process Card Authorized) *
-                                      </label>
-                                      {(() => {
-                                        const rawObj = items.find(i => i.id === item.itemId || i.itemCode === item.itemCode);
-                                        const matchingCard = itemProcessCards.find(c => 
-                                          (c.itemId === item.directJWProduceItemId || c.itemCode === item.directJWProduceItemCode) &&
-                                          (c.rawItemId === item.itemId || c.rawItemCode === item.itemCode || (rawObj && (c.rawItemId === rawObj.id || c.rawItemCode === rawObj.itemCode)))
-                                        ) || itemProcessCards.find(c => c.itemId === item.directJWProduceItemId || c.itemCode === item.directJWProduceItemCode);
+                                    const isFromJobwork = inwardSourceType === 'JOBWORK';
 
-                                        // Extract authorized vendors from Process Card step(s) in priority sequence
-                                        const step1VendorIds = matchingCard?.steps?.[0]?.vendorIds || [];
-                                        const allStepVendorIds = matchingCard?.steps ? Array.from(new Set(matchingCard.steps.flatMap(s => s.vendorIds || []))) : [];
-                                        const primaryVendorIds = step1VendorIds.length > 0 ? step1VendorIds : allStepVendorIds;
+                                    return (
+                                      <>
+                                        {/* Multi-Step Process Card Stage Progression Tracker (Read-Only) */}
+                                        {matchingCard && matchingCard.steps && matchingCard.steps.length > 0 && (
+                                          <div style={{ padding: '0.6rem 0.75rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: '0.375rem', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                                                🔄 Automatic Process Stage Progression ({totalSteps} Total Steps):
+                                              </span>
+                                              {activeStep && (
+                                                <span className="badge badge-primary" style={{ fontSize: '0.72rem', fontWeight: 800 }}>
+                                                  🚀 Auto-Routed to Step {activeStep.stepNumber}: {activeStep.processName} ({activeStep.processShortCode})
+                                                </span>
+                                              )}
+                                            </div>
 
-                                        const processCardVendors = primaryVendorIds
-                                          .map(vId => vendors.find(v => v.id === vId))
-                                          .filter((v): v is typeof vendors[0] => !!v);
+                                            {/* Read-Only Step Badges */}
+                                            <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                                              {matchingCard.steps.map((st, sIdx) => {
+                                                const isCurrent = st.stepNumber === currentStepNumber;
+                                                const isPassed = st.stepNumber < currentStepNumber;
+                                                const stVendorCount = (st.vendorIds || []).length;
 
-                                        // Fallback to Item Master mapped vendors if no vendor configured in process card
-                                        const targetProduceItem = items.find(i => i.id === item.directJWProduceItemId);
-                                        const mappedVendorIds = (targetProduceItem?.mappedVendors || []).map(mv => mv.vendorId);
-                                        const itemMasterVendors = vendors.filter(v => mappedVendorIds.includes(v.id));
+                                                return (
+                                                  <div
+                                                    key={st.stepNumber || sIdx}
+                                                    style={{ 
+                                                      padding: '0.25rem 0.55rem', 
+                                                      fontSize: '0.72rem', 
+                                                      borderRadius: '0.25rem',
+                                                      fontWeight: isCurrent ? 800 : 500,
+                                                      backgroundColor: isCurrent ? 'var(--accent-primary)' : isPassed ? 'rgba(16, 185, 129, 0.12)' : 'var(--bg-card)',
+                                                      color: isCurrent ? '#ffffff' : isPassed ? 'var(--success)' : 'var(--text-muted)',
+                                                      border: `1px solid ${isCurrent ? 'var(--accent-primary)' : isPassed ? 'var(--success)' : 'var(--border-color)'}`,
+                                                      display: 'inline-flex',
+                                                      alignItems: 'center',
+                                                      cursor: 'default',
+                                                      userSelect: 'none'
+                                                    }}
+                                                  >
+                                                    {isPassed ? '✓ ' : isCurrent ? '🚀 ' : ''}Step {st.stepNumber}: {st.processShortCode || st.processName}
+                                                    <span style={{ opacity: 0.8, fontSize: '0.65rem', marginLeft: '0.25rem' }}>
+                                                      ({stVendorCount}v)
+                                                    </span>
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          </div>
+                                        )}
 
-                                        const allowedVendors = processCardVendors.length > 0 ? processCardVendors : itemMasterVendors;
-                                        const isFromProcessCard = processCardVendors.length > 0;
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 2fr 2fr', gap: '0.75rem' }}>
+                                          <div>
+                                            <label style={{ fontSize: '0.72rem', fontWeight: 700, display: 'block', marginBottom: '0.2rem' }}>
+                                              Direct JW Qty (Max: {item.acceptedQty || item.receivedQty}) *
+                                            </label>
+                                            <input 
+                                              type="number" 
+                                              min="1" 
+                                              max={item.acceptedQty || item.receivedQty} 
+                                              className="input-field" 
+                                              style={{ fontSize: '0.82rem', padding: '0.35rem', fontWeight: 700 }} 
+                                              value={item.directJWQty === 0 ? '' : item.directJWQty} 
+                                              onChange={(e) => {
+                                                const maxAllowed = Number(item.acceptedQty || item.receivedQty || 0);
+                                                const dQty = Math.min(maxAllowed, Math.max(0, Number(e.target.value)));
+                                                setGrnItems(prev => prev.map(it => it.itemId === item.itemId ? { ...it, directJWQty: dQty } : it));
+                                              }} 
+                                            />
+                                          </div>
 
-                                        return (
-                                          <select
-                                            className="input-field"
-                                            required
-                                            disabled={!item.directJWProduceItemId}
-                                            style={{ 
-                                              fontSize: '0.82rem', 
-                                              padding: '0.35rem',
-                                              backgroundColor: !item.directJWProduceItemId ? 'var(--bg-tertiary)' : 'var(--bg-card)',
-                                              cursor: !item.directJWProduceItemId ? 'not-allowed' : 'default'
-                                            }}
-                                            value={item.directJWVendorId || ''}
-                                            onChange={(e) => {
-                                              const vId = e.target.value;
-                                              const vObj = vendors.find(v => v.id === vId);
-                                              setGrnItems(prev => prev.map(it => it.itemId === item.itemId ? {
-                                                ...it,
-                                                directJWVendorId: vId,
-                                                directJWVendorName: vObj?.name
-                                              } : it));
-                                            }}
-                                          >
-                                            {!item.directJWProduceItemId ? (
-                                              <option value="">-- First Select Item to Produce --</option>
-                                            ) : allowedVendors.length === 0 ? (
-                                              <option value="" disabled>-- No Vendors Configured in Process Card or Item Master --</option>
+                                          {/* Item to Create / Produce (Output Item) */}
+                                          <div>
+                                            <label style={{ fontSize: '0.72rem', fontWeight: 700, display: 'block', marginBottom: '0.2rem' }}>
+                                              Item to Create / Produce (Output Item) *
+                                            </label>
+                                            {isFromJobwork && item.directJWProduceItemId ? (
+                                              /* When receiving from Jobwork, the output item is automatically the same item progressing through its process card */
+                                              <div style={{ padding: '0.4rem 0.6rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: '0.375rem', border: '1px solid var(--border-color)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                <span style={{ fontWeight: 700, color: 'var(--accent-primary)', fontFamily: 'monospace' }}>
+                                                  {item.directJWProduceItemCode || item.itemCode}
+                                                </span>
+                                                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                                                  (Progressing Stage)
+                                                </span>
+                                              </div>
                                             ) : (
-                                              <>
-                                                <option value="">-- Choose Job Work Vendor ({allowedVendors.length} {isFromProcessCard ? 'Process Card' : 'Item Master'} matches) --</option>
-                                                {allowedVendors.map((v, vIdx) => (
-                                                  <option key={v.id} value={v.id}>
-                                                    {isFromProcessCard ? `Priority #${vIdx + 1}: ` : ''}{v.name} ({v.vendorCode})
-                                                  </option>
-                                                ))}
-                                              </>
+                                              (() => {
+                                                const matchingCards = itemProcessCards.filter(c => 
+                                                  c.rawItemId === item.itemId || 
+                                                  c.rawItemCode === item.itemCode ||
+                                                  (rawObj && (c.rawItemId === rawObj.id || c.rawItemCode === rawObj.itemCode))
+                                                );
+                                                const produceItems = items.filter(it => 
+                                                  matchingCards.some(c => c.itemId === it.id || c.itemCode === it.itemCode)
+                                                );
+                                                const candidateItems = produceItems.length > 0 ? produceItems : items;
+
+                                                return (
+                                                  <select
+                                                    className="input-field"
+                                                    required
+                                                    style={{ fontSize: '0.82rem', padding: '0.35rem' }}
+                                                    value={item.directJWProduceItemId || ''}
+                                                    onChange={(e) => {
+                                                      const pId = e.target.value;
+                                                      const pItem = items.find(i => i.id === pId);
+                                                      const card = itemProcessCards.find(c => c.itemId === pId || c.itemCode === pItem?.itemCode);
+                                                      const step1 = card?.steps?.[0];
+
+                                                      setGrnItems(prev => prev.map(it => it.itemId === item.itemId ? {
+                                                        ...it,
+                                                        directJWProduceItemId: pId,
+                                                        directJWProduceItemCode: pItem?.itemCode,
+                                                        directJWProduceItemName: pItem?.name,
+                                                        directJWStepNumber: 1,
+                                                        directJWProcessName: step1 ? (step1.processName || step1.processShortCode) : '',
+                                                        directJWVendorId: '',
+                                                        directJWVendorName: ''
+                                                      } : it));
+                                                    }}
+                                                  >
+                                                    <option value="">
+                                                      {produceItems.length > 0 
+                                                        ? `-- Choose Item to Create (${produceItems.length} Process Card Matches) --` 
+                                                        : '-- Choose Item to Create --'}
+                                                    </option>
+                                                    {candidateItems.map(it => (
+                                                      <option key={it.id} value={it.id}>
+                                                        {it.itemCode} - {it.name} {it.partCode ? `[Part: ${it.partCode}]` : ''}
+                                                      </option>
+                                                    ))}
+                                                  </select>
+                                                );
+                                              })()
                                             )}
-                                          </select>
-                                        );
-                                      })()}
-                                    </div>
-                                  </div>
+                                          </div>
+
+                                          {/* Job Work Vendor strictly filtered to Active Process Step */}
+                                          <div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.2rem' }}>
+                                              <label style={{ fontSize: '0.72rem', fontWeight: 700 }}>
+                                                Vendor for Step {activeStep?.stepNumber || 1} *
+                                              </label>
+                                              {stepVendors.length > 0 ? (
+                                                <span style={{ fontSize: '0.68rem', color: 'var(--success)', fontWeight: 600 }}>
+                                                  ✓ {stepVendors.length} Step {activeStep?.stepNumber || 1} vendor(s)
+                                                </span>
+                                              ) : (
+                                                <span style={{ fontSize: '0.68rem', color: 'var(--danger)', fontWeight: 600 }}>
+                                                  ⚠️ No vendors for Step {activeStep?.stepNumber || 1}
+                                                </span>
+                                              )}
+                                            </div>
+
+                                            <select
+                                              className="input-field"
+                                              required
+                                              disabled={!item.directJWProduceItemId}
+                                              style={{ 
+                                                fontSize: '0.82rem', 
+                                                padding: '0.35rem',
+                                                backgroundColor: !item.directJWProduceItemId ? 'var(--bg-tertiary)' : 'var(--bg-card)',
+                                                cursor: !item.directJWProduceItemId ? 'not-allowed' : 'default'
+                                              }}
+                                              value={item.directJWVendorId || ''}
+                                              onChange={(e) => {
+                                                const vId = e.target.value;
+                                                const vObj = vendors.find(v => v.id === vId);
+                                                setGrnItems(prev => prev.map(it => it.itemId === item.itemId ? {
+                                                  ...it,
+                                                  directJWVendorId: vId,
+                                                  directJWVendorName: vObj?.name
+                                                } : it));
+                                              }}
+                                            >
+                                              {!item.directJWProduceItemId ? (
+                                                <option value="">-- First Select Item to Produce --</option>
+                                              ) : stepVendors.length === 0 ? (
+                                                <option value="" disabled>-- No authorized vendors for Step {activeStep?.stepNumber || 1} in Process Master --</option>
+                                              ) : (
+                                                <>
+                                                  <option value="">-- Choose Vendor ({stepVendors.length} authorized) --</option>
+                                                  {stepVendors.map((v, vIdx) => {
+                                                    const priorityLabel = vIdx === 0 ? 'Priority #1 (Primary)' : vIdx === 1 ? 'Priority #2 (Secondary)' : `Priority #${vIdx + 1} (Fallback)`;
+                                                    return (
+                                                      <option key={v.id} value={v.id}>
+                                                        ⭐ {priorityLabel}: {v.name} ({v.vendorCode})
+                                                      </option>
+                                                    );
+                                                  })}
+                                                </>
+                                              )}
+                                            </select>
+                                          </div>
+                                        </div>
+                                      </>
+                                    );
+                                  })()}
 
                                   {/* Route Breakdown Summary Badge */}
                                   <div style={{ fontSize: '0.72rem', backgroundColor: 'var(--bg-card)', padding: '0.4rem 0.6rem', borderRadius: '0.25rem', border: '1px dashed var(--accent-primary)', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>

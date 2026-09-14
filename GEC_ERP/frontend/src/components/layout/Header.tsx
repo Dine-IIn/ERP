@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useERP } from '../../context/ERPContext';
-import { Search, Wifi, WifiOff, Server, AlertCircle } from 'lucide-react';
+import { Search, Wifi, WifiOff, Server, AlertCircle, Globe } from 'lucide-react';
+import { apiClient } from '../../services/apiClient';
 export const Header: React.FC = () => {
   const { 
     activeModule, setActiveModule, searchTerm, setSearchTerm, currentUser,
@@ -57,31 +58,32 @@ export const Header: React.FC = () => {
     };
   }, []);
 
-  // Server health ping check every 6 seconds
+  const [serverNetworkMode, setServerNetworkMode] = useState<'LAN' | 'CLOUD' | 'LOCALHOST' | 'OFFLINE'>('LAN');
+  const [serverDbStatus, setServerDbStatus] = useState<string>('Checking...');
+
+  // Dynamic server health & hybrid network mode check
   useEffect(() => {
     const checkServerHealth = async () => {
       try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2500);
-        // Ping Express host server endpoint
-        const res = await fetch('http://localhost:5000/api/health', { 
-          method: 'GET',
-          signal: controller.signal 
-        }).catch(() => null);
-        clearTimeout(timeoutId);
-
-        if (res && res.ok) {
+        const result = await apiClient.checkHealth();
+        if (result.online) {
           setIsServerOnline(true);
+          setServerNetworkMode(result.mode);
+          setServerDbStatus(result.data?.isPostgresConnected ? 'PostgreSQL Live' : 'Hybrid Cache');
         } else {
           setIsServerOnline(false);
+          setServerNetworkMode('OFFLINE');
+          setServerDbStatus('Offline');
         }
       } catch {
         setIsServerOnline(false);
+        setServerNetworkMode('OFFLINE');
+        setServerDbStatus('Offline');
       }
     };
 
     checkServerHealth();
-    const interval = setInterval(checkServerHealth, 6000);
+    const interval = setInterval(checkServerHealth, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -343,24 +345,24 @@ export const Header: React.FC = () => {
 
       {/* Right Separate Indicators for User & Server */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-        {/* User Connection Status Indicator */}
+        {/* User / Network Mode Indicator */}
         <div style={{
           display: 'inline-flex',
           alignItems: 'center',
           gap: '0.35rem',
           padding: '0.3rem 0.65rem',
           borderRadius: '9999px',
-          backgroundColor: isUserOnline ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
-          border: `1px solid ${isUserOnline ? 'var(--success)' : 'var(--danger)'}`,
-          color: isUserOnline ? 'var(--success)' : 'var(--danger)',
+          backgroundColor: isUserOnline ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+          border: `1px solid ${isUserOnline ? 'var(--success)' : '#f59e0b'}`,
+          color: isUserOnline ? 'var(--success)' : '#f59e0b',
           fontSize: '0.73rem',
           fontWeight: 700
-        }}>
-          {isUserOnline ? <Wifi size={13} /> : <WifiOff size={13} />}
-          <span>User: {isUserOnline ? 'Online' : 'Offline'}</span>
+        }} title={isUserOnline ? 'Internet connection active' : 'LAN Mode (Working offline on local network)'}>
+          {isUserOnline ? <Globe size={13} /> : <Wifi size={13} />}
+          <span>{isUserOnline ? 'Internet: Online' : 'LAN Offline Ready'}</span>
         </div>
 
-        {/* Server Connection Status Indicator */}
+        {/* Central Server Connection Status Indicator */}
         <div style={{
           display: 'inline-flex',
           alignItems: 'center',
@@ -372,9 +374,13 @@ export const Header: React.FC = () => {
           color: isServerOnline ? 'var(--accent-primary)' : 'var(--danger)',
           fontSize: '0.73rem',
           fontWeight: 700
-        }}>
+        }} title={`Connected to central server in ${serverNetworkMode} mode (${serverDbStatus})`}>
           {isServerOnline ? <Server size={13} /> : <AlertCircle size={13} />}
-          <span>Server: {isServerOnline ? 'Online' : 'Offline'}</span>
+          <span>
+            {isServerOnline 
+              ? `Server: Online (${serverNetworkMode === 'CLOUD' ? 'Domain' : serverNetworkMode})` 
+              : 'Server: Offline (Cached)'}
+          </span>
         </div>
       </div>
     </header>

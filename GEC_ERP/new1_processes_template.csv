@@ -1,0 +1,8 @@
+ShortCode,ProcessName,Description,DefaultRate,DefaultUOM
+CUT,Band Saw Raw Material Cutting,Precision cutting of raw round and square steel bars,150.00,PCS
+LATHE,CNC Turning & Facing,CNC lathe turning roughing and finishing dimensions,850.00,PCS
+GRIND,Cylindrical & Surface Grinding,Precision grinding up to 5 micron tolerance,650.00,PCS
+HT,Hardening & Tempering Heat Treatment,Through hardening to 45-48 HRC,1200.00,PCS
+CHROME,Hard Chrome Plating 50 Micron,Corrosion resistance and wear proofing plating,1500.00,PCS
+FAB,Base Machine Fabrication & Welding,Heavy structural welding and stress relieving,8500.00,PCS
+ASSY,Sub-Assembly & Mechanical Fitment,Mechanical fitment of toggles tiebars and platen,4500.00,PCS

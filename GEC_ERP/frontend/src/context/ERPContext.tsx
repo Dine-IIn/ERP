@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { apiClient } from '../services/apiClient';
 import { 
   User, Item, Customer, Vendor, JobworkChallan, 
   PurchaseOrder, GoodsReceivedNotice, WorkOrder, 
@@ -374,6 +375,15 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const [isServerHydrated, setIsServerHydrated] = useState(false);
+
+  const syncEntityHelper = (key: string, data: any) => {
+    setStored(key, data);
+    if (isServerHydrated) {
+      apiClient.syncEntity(key, data);
+    }
+  };
+
   const [users, setUsers] = useState<User[]>(() => {
     const loaded = getStored<User[]>('users', INITIAL_USERS);
     // Sanitize any existing localStorage data so 'admin' is NEVER isSuperAdmin, and 'superadmin' ALWAYS exists and IS isSuperAdmin
@@ -508,10 +518,10 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [vendorDebitChallans, setVendorDebitChallans] = useState<VendorDebitChallan[]>(() => getStored('vendorDebitChallans', INITIAL_VENDOR_DEBIT_CHALLANS));
   const [intermediateProcessItems, setIntermediateProcessItems] = useState<IntermediateProcessItem[]>(() => getStored('intermediateProcessItems', INITIAL_INTERMEDIATE_PROCESS_ITEMS));
 
-  useEffect(() => setStored('processDefinitions', processDefinitions), [processDefinitions]);
-  useEffect(() => setStored('itemProcessCards', itemProcessCards), [itemProcessCards]);
-  useEffect(() => setStored('vendorDebitChallans', vendorDebitChallans), [vendorDebitChallans]);
-  useEffect(() => setStored('intermediateProcessItems', intermediateProcessItems), [intermediateProcessItems]);
+  useEffect(() => syncEntityHelper('processDefinitions', processDefinitions), [processDefinitions, isServerHydrated]);
+  useEffect(() => syncEntityHelper('itemProcessCards', itemProcessCards), [itemProcessCards, isServerHydrated]);
+  useEffect(() => syncEntityHelper('vendorDebitChallans', vendorDebitChallans), [vendorDebitChallans, isServerHydrated]);
+  useEffect(() => syncEntityHelper('intermediateProcessItems', intermediateProcessItems), [intermediateProcessItems, isServerHydrated]);
 
   // Computed All Inventory Items (Base items including 0 stock + Intermediate items ONLY when stock > 0)
   const allInventoryItems = React.useMemo<Item[]>(() => {
@@ -761,32 +771,76 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setActiveModuleState('bom-master');
   };
 
-  useEffect(() => setStored('users', users), [users]);
-  useEffect(() => setStored('departments', departments), [departments]);
-  useEffect(() => setStored('customRoles', customRoles), [customRoles]);
+  // Initial Bootstrap Sync from Central Server
+  useEffect(() => {
+    let isMounted = true;
+    const bootstrapSync = async () => {
+      try {
+        const res = await apiClient.fetchFullSync();
+        if (res.success && res.data && isMounted) {
+          const d = res.data;
+          if (Array.isArray(d.items) && d.items.length > 0) setItems(d.items);
+          if (Array.isArray(d.customers) && d.customers.length > 0) setCustomers(d.customers);
+          if (Array.isArray(d.vendors) && d.vendors.length > 0) setVendors(d.vendors);
+          if (Array.isArray(d.boms) && d.boms.length > 0) setBOMs(d.boms);
+          if (Array.isArray(d.salesOrders) && d.salesOrders.length > 0) setSalesOrders(d.salesOrders);
+          if (Array.isArray(d.workOrders) && d.workOrders.length > 0) setWorkOrders(d.workOrders);
+          if (Array.isArray(d.jobCards) && d.jobCards.length > 0) setJobCards(d.jobCards);
+          if (Array.isArray(d.purchaseOrders) && d.purchaseOrders.length > 0) setPurchaseOrders(d.purchaseOrders);
+          if (Array.isArray(d.grns) && d.grns.length > 0) setGRNs(d.grns);
+          if (Array.isArray(d.jobworks) && d.jobworks.length > 0) setJobworks(d.jobworks);
+          if (Array.isArray(d.qcInspections) && d.qcInspections.length > 0) setQCInspections(d.qcInspections);
+          if (Array.isArray(d.assemblies) && d.assemblies.length > 0) setAssemblies(d.assemblies);
+          if (Array.isArray(d.floorStations) && d.floorStations.length > 0) setFloorStations(d.floorStations);
+          if (Array.isArray(d.finishedGoods) && d.finishedGoods.length > 0) setFinishedGoods(d.finishedGoods);
+          if (Array.isArray(d.dispatchRecords) && d.dispatchRecords.length > 0) setDispatchRecords(d.dispatchRecords);
+          if (Array.isArray(d.processDefinitions) && d.processDefinitions.length > 0) setProcessDefinitions(d.processDefinitions);
+          if (Array.isArray(d.itemProcessCards) && d.itemProcessCards.length > 0) setItemProcessCards(d.itemProcessCards);
+          if (Array.isArray(d.vendorDebitChallans) && d.vendorDebitChallans.length > 0) setVendorDebitChallans(d.vendorDebitChallans);
+          if (Array.isArray(d.intermediateProcessItems) && d.intermediateProcessItems.length > 0) setIntermediateProcessItems(d.intermediateProcessItems);
+          if (Array.isArray(d.departments) && d.departments.length > 0) setDepartments(d.departments);
+          if (Array.isArray(d.customRoles) && d.customRoles.length > 0) setCustomRoles(d.customRoles);
+          if (Array.isArray(d.users) && d.users.length > 0) setUsers(d.users);
+          setIsServerHydrated(true);
+        } else {
+          setIsServerHydrated(true);
+        }
+      } catch (e) {
+        setIsServerHydrated(true);
+      }
+    };
+    bootstrapSync();
+    return () => { isMounted = false; };
+  }, []);
+
+
+
+  useEffect(() => syncEntityHelper('users', users), [users, isServerHydrated]);
+  useEffect(() => syncEntityHelper('departments', departments), [departments, isServerHydrated]);
+  useEffect(() => syncEntityHelper('customRoles', customRoles), [customRoles, isServerHydrated]);
   useEffect(() => setStored('currentUser', currentUser), [currentUser]);
-  useEffect(() => setStored('items', items), [items]);
-  useEffect(() => setStored('itemCategories', itemCategories), [itemCategories]);
-  useEffect(() => setStored('customers', customers), [customers]);
-  useEffect(() => setStored('vendors', vendors), [vendors]);
-  useEffect(() => setStored('vendorCategories', vendorCategories), [vendorCategories]);
-  useEffect(() => setStored('boms', boms), [boms]);
-  useEffect(() => setStored('salesOrders', salesOrders), [salesOrders]);
-  useEffect(() => setStored('jobworks', jobworks), [jobworks]);
-  useEffect(() => setStored('purchaseOrders', purchaseOrders), [purchaseOrders]);
-  useEffect(() => setStored('grns', grns), [grns]);
-  useEffect(() => setStored('workOrders', workOrders), [workOrders]);
-  useEffect(() => setStored('qcInspections', qcInspections), [qcInspections]);
-  useEffect(() => setStored('assemblies', assemblies), [assemblies]);
-  useEffect(() => setStored('assemblyStages', assemblyStages), [assemblyStages]);
-  useEffect(() => setStored('jobCards', jobCards), [jobCards]);
-  useEffect(() => setStored('jobCardMaterialReissues', jobCardMaterialReissues), [jobCardMaterialReissues]);
-  useEffect(() => setStored('floorStations', floorStations), [floorStations]);
-  useEffect(() => setStored('finishedGoods', finishedGoods), [finishedGoods]);
-  useEffect(() => setStored('dispatchRecords', dispatchRecords), [dispatchRecords]);
-  useEffect(() => setStored('auditLogs', auditLogs), [auditLogs]);
-  useEffect(() => setStored('backups', backups), [backups]);
-  useEffect(() => setStored('backupSettings', backupSettings), [backupSettings]);
+  useEffect(() => syncEntityHelper('items', items), [items, isServerHydrated]);
+  useEffect(() => syncEntityHelper('itemCategories', itemCategories), [itemCategories, isServerHydrated]);
+  useEffect(() => syncEntityHelper('customers', customers), [customers, isServerHydrated]);
+  useEffect(() => syncEntityHelper('vendors', vendors), [vendors, isServerHydrated]);
+  useEffect(() => syncEntityHelper('vendorCategories', vendorCategories), [vendorCategories, isServerHydrated]);
+  useEffect(() => syncEntityHelper('boms', boms), [boms, isServerHydrated]);
+  useEffect(() => syncEntityHelper('salesOrders', salesOrders), [salesOrders, isServerHydrated]);
+  useEffect(() => syncEntityHelper('jobworks', jobworks), [jobworks, isServerHydrated]);
+  useEffect(() => syncEntityHelper('purchaseOrders', purchaseOrders), [purchaseOrders, isServerHydrated]);
+  useEffect(() => syncEntityHelper('grns', grns), [grns, isServerHydrated]);
+  useEffect(() => syncEntityHelper('workOrders', workOrders), [workOrders, isServerHydrated]);
+  useEffect(() => syncEntityHelper('qcInspections', qcInspections), [qcInspections, isServerHydrated]);
+  useEffect(() => syncEntityHelper('assemblies', assemblies), [assemblies, isServerHydrated]);
+  useEffect(() => syncEntityHelper('assemblyStages', assemblyStages), [assemblyStages, isServerHydrated]);
+  useEffect(() => syncEntityHelper('jobCards', jobCards), [jobCards, isServerHydrated]);
+  useEffect(() => syncEntityHelper('jobCardMaterialReissues', jobCardMaterialReissues), [jobCardMaterialReissues, isServerHydrated]);
+  useEffect(() => syncEntityHelper('floorStations', floorStations), [floorStations, isServerHydrated]);
+  useEffect(() => syncEntityHelper('finishedGoods', finishedGoods), [finishedGoods, isServerHydrated]);
+  useEffect(() => syncEntityHelper('dispatchRecords', dispatchRecords), [dispatchRecords, isServerHydrated]);
+  useEffect(() => syncEntityHelper('auditLogs', auditLogs), [auditLogs, isServerHydrated]);
+  useEffect(() => syncEntityHelper('backups', backups), [backups, isServerHydrated]);
+  useEffect(() => syncEntityHelper('backupSettings', backupSettings), [backupSettings, isServerHydrated]);
   useEffect(() => setStored('theme', theme), [theme]);
 
   useEffect(() => {
@@ -2203,7 +2257,9 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           qty: directQty,
           producedItemId: grnItem.directJWProduceItemId,
           producedItemCode: grnItem.directJWProduceItemCode,
-          producedItemName: grnItem.directJWProduceItemName
+          producedItemName: grnItem.directJWProduceItemName,
+          stepNumber: grnItem.directJWStepNumber,
+          processRequired: grnItem.directJWProcessName
         });
 
         // Map vendor to the produced item in item master
@@ -2238,7 +2294,8 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         producedItemId: firstLine?.producedItemId,
         producedItemCode: firstLine?.producedItemCode,
         producedItemName: firstLine?.producedItemName,
-        processRequired: 'Direct Jobwork from Inward GRN',
+        processRequired: firstLine?.processRequired || (firstLine?.stepNumber ? `Step ${firstLine.stepNumber} Processing` : 'Direct Jobwork from Inward GRN'),
+        stepNumber: firstLine?.stepNumber,
         sentQuantity: group.lines.reduce((s, l) => s + l.qty, 0),
         receivedQuantity: 0,
         scrapQuantity: 0,
@@ -2247,7 +2304,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         expectedReturnDate: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
         status: 'ISSUED',
         items: group.lines,
-        notes: `Direct shipment generated from GRN ${grnData.grnNumber}`
+        notes: `Direct shipment generated from GRN ${grnData.grnNumber} (Step ${firstLine?.stepNumber || 1})`
       };
       setJobworks(prev => [autoChallan, ...prev]);
       addAuditLog('AUTO_JOBWORK_CHALLAN', 'Goods Received', `Generated direct Job Work Challan ${autoChallan.challanNo} for vendor ${group.vendorName}`);

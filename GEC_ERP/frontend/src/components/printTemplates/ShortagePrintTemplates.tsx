@@ -1,5 +1,276 @@
 import React from 'react';
 import { GECPrintHeader, GECPrintSignatory } from './WOPrintTemplates';
+import './printStyles.css';
+
+export interface ConsolidatedComponentRow {
+  srNo: number;
+  partCode: string;
+  itemCode: string;
+  itemName: string;
+  category: string;
+  processType: string;
+  unit: string;
+  totalRequired: number;
+  inHouseStock: number;
+  pendingPO: number;
+  pendingJW: number;
+  pendingQC: number;
+  shortage: number;
+  minStockLevel: number;
+  minShortage: number;
+  requiredByItems?: Array<{
+    itemCode: string;
+    targetQty: number;
+    requiredQty: number;
+  }>;
+}
+
+export interface SelectedParentItemMeta {
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  category?: string;
+  targetQuantity: number;
+  maxBuildableQty: number;
+  constrainingComponent?: string;
+}
+
+export interface ConsolidatedItemWiseShortagePrintProps {
+  data: ConsolidatedComponentRow[];
+  selectedItems: SelectedParentItemMeta[];
+  filterLabel?: string;
+}
+
+export const ConsolidatedItemWiseShortagePrintReport: React.FC<ConsolidatedItemWiseShortagePrintProps> = ({
+  data,
+  selectedItems,
+  filterLabel = 'Consolidated Item-Wise Shortage Analysis'
+}) => {
+  const totalRequiredSum = data.reduce((acc, d) => acc + (d.totalRequired || 0), 0);
+  const totalShortageSum = data.reduce((acc, d) => acc + (d.shortage || 0), 0);
+
+  const thBaseStyle: React.CSSProperties = {
+    padding: '4px 2px',
+    fontWeight: 800,
+    verticalAlign: 'middle',
+    border: '1px solid #64748b',
+    borderBottom: '1.5px solid #000000',
+    backgroundColor: '#f1f5f9',
+    backgroundClip: 'padding-box',
+    boxSizing: 'border-box'
+  };
+
+  const tdBaseStyle: React.CSSProperties = {
+    padding: '3.5px 2px',
+    verticalAlign: 'middle',
+    border: '1px solid #cbd5e1',
+    backgroundClip: 'padding-box',
+    boxSizing: 'border-box'
+  };
+
+  return (
+    <div 
+      className="planning-print-root"
+      style={{
+        width: '100%',
+        backgroundColor: '#ffffff',
+        color: '#000000',
+        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+        fontSize: '9pt',
+        lineHeight: '1.25',
+        padding: '0.1rem'
+      }}
+    >
+      {/* Document Header */}
+      <div style={{ marginBottom: '6px', borderBottom: '1.5px solid #000000', paddingBottom: '4px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <span style={{ fontSize: '11pt', fontWeight: 900, letterSpacing: '-0.02em', textTransform: 'uppercase' }}>
+              CONSOLIDATED ITEM-WISE SHORTAGE & CAPACITY REPORT
+            </span>
+            <span style={{ marginLeft: '8px', fontSize: '7.5pt', color: '#475569' }}>
+              (Total Demand of {selectedItems.length} Selected Planned Items / Assemblies)
+            </span>
+          </div>
+          <div style={{ fontSize: '7.5pt', color: '#475569', fontWeight: 600 }}>
+            Generated: {new Date().toLocaleString()}
+          </div>
+        </div>
+
+        {/* Selected Assemblies Scope Banner */}
+        {selectedItems.length > 0 && (
+          <div style={{ marginTop: '4px', padding: '3px 6px', backgroundColor: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '7.5pt', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+            <span style={{ fontWeight: 800, color: '#0f172a' }}>Planned Items:</span>
+            {selectedItems.map((it, idx) => (
+              <span key={idx} style={{ padding: '1px 5px', backgroundColor: '#e2e8f0', borderRadius: '3px', fontWeight: 700 }}>
+                {it.itemCode} {it.itemName ? `- ${it.itemName}` : ''} (Target: {it.targetQuantity} | Max: <strong style={{ color: it.maxBuildableQty >= it.targetQuantity ? '#15803d' : '#b91c1c' }}>{it.maxBuildableQty}</strong>)
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* High-Density Consolidated Component Table */}
+      <table style={{
+        width: '100%',
+        borderCollapse: 'collapse',
+        fontSize: '9pt',
+        border: '1.5px solid #000000',
+        tableLayout: 'fixed'
+      }}>
+        <thead style={{ fontSize: '5.8pt', lineHeight: '1.2', letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
+          <tr style={{ minHeight: '26px' }}>
+            <th style={{ ...thBaseStyle, width: '2.5%', textAlign: 'center' }}>#</th>
+            <th style={{ ...thBaseStyle, width: '9.5%', textAlign: 'left' }}>Part<br/>Code</th>
+            <th style={{ ...thBaseStyle, width: '10%', textAlign: 'left' }}>Item<br/>Code</th>
+            <th style={{ ...thBaseStyle, width: '24%', textAlign: 'left' }}>Item<br/>Description</th>
+            <th style={{ ...thBaseStyle, width: '4.5%', textAlign: 'center' }}>Class</th>
+            <th style={{ ...thBaseStyle, width: '6%', textAlign: 'center' }}>Source</th>
+            <th style={{ ...thBaseStyle, width: '8.5%', textAlign: 'left' }}>Demand<br/>From</th>
+            <th style={{ ...thBaseStyle, width: '5.5%', textAlign: 'center' }}>Total<br/>Req</th>
+            <th style={{ ...thBaseStyle, width: '5.5%', textAlign: 'center' }}>Curr<br/>Stock</th>
+            <th style={{ ...thBaseStyle, width: '4.5%', textAlign: 'center' }}>Pend<br/>PO</th>
+            <th style={{ ...thBaseStyle, width: '5%', textAlign: 'center' }}>Pend<br/>JobWork</th>
+            <th style={{ ...thBaseStyle, width: '4.5%', textAlign: 'center' }}>Pend<br/>QC</th>
+            <th style={{ ...thBaseStyle, width: '5.5%', textAlign: 'center' }}>Short<br/>age</th>
+            <th style={{ ...thBaseStyle, width: '4.5%', textAlign: 'center' }}>Min<br/>Level</th>
+            <th style={{ ...thBaseStyle, width: '5.5%', textAlign: 'center' }}>Min Level<br/>Shortage</th>
+          </tr>
+        </thead>
+        <tbody style={{ fontSize: '8.5pt' }}>
+          {data.length === 0 ? (
+            <tr>
+              <td colSpan={15} style={{ textAlign: 'center', padding: '12px', color: '#6b7280', fontStyle: 'italic', border: '1px solid #cbd5e1' }}>
+                No components or shortages match the selected items or filter criteria.
+              </td>
+            </tr>
+          ) : (
+            data.map((row, idx) => {
+              const hasShortage = (row.shortage || 0) > 0;
+              const hasMinShortage = (row.minShortage || 0) > 0;
+              const isEven = idx % 2 === 0;
+              const rowBg = hasShortage ? '#fee2e2' : (isEven ? '#ffffff' : '#f8fafc');
+              const demandSummary = (row.requiredByItems || [])
+                .map(r => `${r.itemCode}: ${r.requiredQty}`)
+                .join(', ');
+
+              return (
+                <tr key={idx} style={{ backgroundColor: rowBg }}>
+                  <td style={{ ...tdBaseStyle, textAlign: 'center', color: '#64748b', fontSize: '8pt' }}>
+                    {idx + 1}
+                  </td>
+                  <td style={{ ...tdBaseStyle, textAlign: 'left', fontFamily: 'monospace', fontWeight: 700, color: '#1e293b', fontSize: '8pt', whiteSpace: 'nowrap' }}>
+                    {row.partCode || '-'}
+                  </td>
+                  <td style={{ ...tdBaseStyle, textAlign: 'left', fontFamily: 'monospace', fontWeight: 700, color: '#0f172a', fontSize: '8pt', whiteSpace: 'nowrap' }}>
+                    {row.itemCode}
+                  </td>
+                  <td style={{ 
+                    ...tdBaseStyle, 
+                    textAlign: 'left',
+                    color: '#000000', 
+                    fontWeight: 600, 
+                    fontSize: '8pt', 
+                    whiteSpace: 'normal',
+                    wordBreak: 'break-word',
+                    lineHeight: '1.2'
+                  }}>
+                    {row.itemName}
+                  </td>
+                  <td style={{ ...tdBaseStyle, textAlign: 'center', fontSize: '7.5pt', fontWeight: 600, color: '#475569' }}>
+                    {row.category || '-'}
+                  </td>
+                  <td style={{ ...tdBaseStyle, textAlign: 'center', fontSize: '7.5pt', color: '#334155' }}>
+                    {row.processType || 'In-house'}
+                  </td>
+                  <td style={{ 
+                    ...tdBaseStyle, 
+                    textAlign: 'left',
+                    fontSize: '7pt', 
+                    color: '#475569',
+                    whiteSpace: 'normal',
+                    wordBreak: 'break-word'
+                  }}>
+                    {demandSummary || '-'}
+                  </td>
+                  <td style={{ ...tdBaseStyle, textAlign: 'right', fontWeight: 800, color: '#0f172a' }}>
+                    {row.totalRequired || 0}
+                  </td>
+                  <td style={{ ...tdBaseStyle, textAlign: 'right', fontWeight: 700, color: '#0f172a' }}>
+                    {row.inHouseStock || 0}
+                  </td>
+                  <td style={{ ...tdBaseStyle, textAlign: 'right', color: '#334155' }}>
+                    {row.pendingPO || 0}
+                  </td>
+                  <td style={{ ...tdBaseStyle, textAlign: 'right', color: '#334155' }}>
+                    {row.pendingJW || 0}
+                  </td>
+                  <td style={{ ...tdBaseStyle, textAlign: 'right', color: '#334155' }}>
+                    {row.pendingQC || 0}
+                  </td>
+                  <td style={{ 
+                    ...tdBaseStyle, 
+                    textAlign: 'right', 
+                    fontWeight: 900, 
+                    color: hasShortage ? '#b91c1c' : '#15803d'
+                  }}>
+                    {row.shortage || 0}
+                  </td>
+                  <td style={{ ...tdBaseStyle, textAlign: 'right', color: '#475569' }}>
+                    {row.minStockLevel || 0}
+                  </td>
+                  <td style={{ 
+                    ...tdBaseStyle, 
+                    textAlign: 'right', 
+                    fontWeight: hasMinShortage ? 800 : 500,
+                    color: hasMinShortage ? '#b91c1c' : '#475569'
+                  }}>
+                    {row.minShortage || 0}
+                  </td>
+                </tr>
+              );
+            })
+          )}
+        </tbody>
+        {data.length > 0 && (
+          <tfoot style={{ fontSize: '8pt' }}>
+            <tr style={{ backgroundColor: '#e2e8f0' }}>
+              <td colSpan={7} style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'right' }}>
+                TOTALS ({data.length} Components):
+              </td>
+              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'right' }}>
+                {totalRequiredSum}
+              </td>
+              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'right' }}>
+                {data.reduce((s, r) => s + (r.inHouseStock || 0), 0)}
+              </td>
+              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'right' }}>
+                {data.reduce((s, r) => s + (r.pendingPO || 0), 0)}
+              </td>
+              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'right' }}>
+                {data.reduce((s, r) => s + (r.pendingJW || 0), 0)}
+              </td>
+              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'right' }}>
+                {data.reduce((s, r) => s + (r.pendingQC || 0), 0)}
+              </td>
+              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'right', color: totalShortageSum > 0 ? '#b91c1c' : '#15803d' }}>
+                {totalShortageSum}
+              </td>
+              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'right' }}>
+                {data.reduce((s, r) => s + (r.minStockLevel || 0), 0)}
+              </td>
+              <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'right' }}>
+                {data.reduce((s, r) => s + (r.minShortage || 0), 0)}
+              </td>
+            </tr>
+          </tfoot>
+        )}
+      </table>
+
+      <GECPrintSignatory preparedBy="Shortage Planner" checkedBy="Store & Materials Lead" authorizedBy="Plant Head" />
+    </div>
+  );
+};
 
 export interface ItemWiseShortagePrintItem {
   itemId: string;
@@ -22,7 +293,7 @@ export interface ItemWiseShortagePrintItem {
   }>;
 }
 
-// 1. Item-Wise Shortage & Capacity Planning Report
+// 1. Item-Wise Shortage & Capacity Planning Report (Legacy / Grouped View)
 export const ItemWiseShortagePrintView: React.FC<{
   selectedItemsData: ItemWiseShortagePrintItem[];
   filterLabel?: string;
@@ -301,4 +572,3 @@ export const TabularShortagePrintView: React.FC<{
     <GECPrintSignatory preparedBy="Materials Planner" checkedBy="Store & Purchase Lead" authorizedBy="Operations Head" />
   </div>
 );
-

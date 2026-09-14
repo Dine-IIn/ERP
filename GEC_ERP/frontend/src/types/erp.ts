@@ -574,7 +574,8 @@ export interface JobworkChallan {
   sentQuantity?: number;
   receivedQuantity?: number;
   scrapQuantity?: number;
-  pendingBalance?: number;
+  pendingBalance: number;
+  stepNumber?: number;
   notes?: string;
 }
 
@@ -613,6 +614,8 @@ export interface GRNItem {
   directJWProduceItemName?: string;
   directJWVendorId?: string;
   directJWVendorName?: string;
+  directJWStepNumber?: number;
+  directJWProcessName?: string;
   isProcessWise?: boolean;
   processCodeSuffix?: string;
   intermediateItemCode?: string;

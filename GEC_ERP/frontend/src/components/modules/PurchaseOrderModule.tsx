@@ -1063,6 +1063,19 @@ export const PurchaseOrderModule: React.FC = () => {
                               <Trash2 size={14} />
                             </button>
                           )}
+                          {po.status === 'DRAFT' && !po.isDeleted && (
+                            <button 
+                              className="btn btn-warning" 
+                              style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem', color: '#fff', backgroundColor: '#d97706', borderColor: '#d97706', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+                              title="Send this single Draft PO for Approval"
+                              onClick={() => {
+                                sendPODraftsForApproval([po.id]);
+                                alert(`✅ Draft PO ${po.poNumber} has been submitted for Approval!`);
+                              }}
+                            >
+                              <Send size={12} /> Send for Approval
+                            </button>
+                          )}
                           {po.status === 'REJECTED' && (
                             <button 
                               className="btn btn-primary" 
@@ -1374,6 +1387,39 @@ export const PurchaseOrderModule: React.FC = () => {
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
               <button type="button" className="btn btn-secondary" onClick={() => { setIsEditPOModalOpen(false); setEditingPO(null); }}>Cancel (ESC)</button>
+              {editingPO.status === 'DRAFT' && (
+                <button 
+                  type="button" 
+                  className="btn btn-warning" 
+                  style={{ color: '#fff', backgroundColor: '#d97706', borderColor: '#d97706', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }} 
+                  onClick={() => {
+                    for (const it of editingPO.items) {
+                      const itemObj = items.find(i => i.id === it.itemId || i.itemCode === it.itemCode);
+                      const moq = itemObj?.minOrderQty || 1;
+                      const qty = it.quantity || it.orderedQty || 0;
+                      if (qty < moq) {
+                        alert(`⚠️ Item "${it.itemCode}" has a Minimum Order Quantity (MOQ) of ${moq} ${it.unit || 'units'}. Quantity cannot be less than ${moq}.`);
+                        return;
+                      }
+                    }
+                    const subtotal = editingPO.items.reduce((sum, item) => sum + ((item.quantity || item.orderedQty || 1) * (item.unitPrice || 0)), 0);
+                    const taxAmount = Math.round(subtotal * 0.18);
+                    const totalAmount = subtotal + taxAmount;
+                    updatePurchaseOrder({
+                      ...editingPO,
+                      status: 'WAITING_FOR_APPROVAL',
+                      subtotal,
+                      taxAmount,
+                      totalAmount
+                    });
+                    setIsEditPOModalOpen(false);
+                    setEditingPO(null);
+                    alert(`✅ Draft PO ${editingPO.poNumber} saved and submitted for Approval!`);
+                  }}
+                >
+                  <Send size={14} /> Save & Send for Approval
+                </button>
+              )}
               {editingPO.status === 'REJECTED' ? (
                 <button type="button" className="btn btn-primary" style={{ backgroundColor: 'var(--success)', borderColor: 'var(--success)' }} onClick={handleResubmitPO}>
                   ✓ Resubmit for Approval

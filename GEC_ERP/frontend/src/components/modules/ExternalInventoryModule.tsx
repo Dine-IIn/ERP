@@ -5,14 +5,15 @@ import { AutocompleteSelect, AutocompleteOption } from '../common/AutocompleteSe
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { SingleJobworkPrintView, JobworkListPrintView } from '../printTemplates/JobworkPrintTemplates';
 import { TabularShortagePrintView } from '../printTemplates/ShortagePrintTemplates';
-import { Truck, Plus, ArrowRightLeft, CheckCircle, Search, Printer, FileSpreadsheet, ArrowUp, ArrowDown, ArrowUpDown, RefreshCw, AlertTriangle, Layers, X, CheckCircle2 } from 'lucide-react';
+import { Truck, Plus, ArrowRightLeft, CheckCircle, Search, Printer, FileSpreadsheet, ArrowUp, ArrowDown, ArrowUpDown, RefreshCw, AlertTriangle, Layers, X, CheckCircle2, ClipboardList, ShoppingCart } from 'lucide-react';
 import { JobworkChallan, Item, ItemProcessCard, VendorDebitChallan, generateNextJobworkNumber } from '../../types/erp';
 
 type JWSortKey = 'challanNo' | 'vendorName' | 'itemName' | 'processRequired' | 'sentQuantity' | 'receivedQuantity' | 'scrapQuantity' | 'pendingBalance' | 'expectedReturnDate' | 'status';
 
 export const ExternalInventoryModule: React.FC = () => {
   const { 
-    jobworks, vendors, items, workOrders, boms, grns, addJobworkChallan, recordJobworkReturn, searchTerm, setSearchTerm 
+    jobworks, vendors, items, workOrders, boms, grns, addJobworkChallan, recordJobworkReturn, searchTerm, setSearchTerm,
+    itemProcessCards, setActiveModule 
   } = useERP();
 
   const [activeMainTab, setActiveMainTab] = useState<'CHALLANS' | 'DEBIT_NOTES' | 'SHORTAGE'>('CHALLANS');
@@ -35,6 +36,7 @@ export const ExternalInventoryModule: React.FC = () => {
   const [startDateFilter, setStartDateFilter] = useState<string>('');
   const [endDateFilter, setEndDateFilter] = useState<string>('');
 
+  const [selectedStepNumber, setSelectedStepNumber] = useState<number>(1);
   const [issueData, setIssueData] = useState({
     challanNo: '',
     vendorId: '',
@@ -62,22 +64,87 @@ export const ExternalInventoryModule: React.FC = () => {
   };
 
   const selectedTargetItem = items.find(i => i.id === issueData.producedItemId) || items.find(i => i.id === issueData.itemId);
-  const mappedVendorIds = (selectedTargetItem?.mappedVendors || []).map(mv => mv.vendorId).filter(Boolean);
-  const mappedVendorNames = (selectedTargetItem?.mappedVendors || []).map(mv => mv.vendorName?.trim().toLowerCase()).filter(Boolean);
+  
+  // Find Process Card for the selected target/raw item from Process Master
+  const selectedItemProcessCard = selectedTargetItem ? itemProcessCards.find(c => 
+    c.itemId === selectedTargetItem.id || 
+    c.itemCode.toLowerCase() === selectedTargetItem.itemCode.toLowerCase() ||
+    (c.rawItemId && c.rawItemId === selectedTargetItem.id) ||
+    (c.rawItemCode && c.rawItemCode.toLowerCase() === selectedTargetItem.itemCode.toLowerCase())
+  ) : null;
 
-  const availableVendors = (selectedTargetItem?.mappedVendors && selectedTargetItem.mappedVendors.length > 0)
+  // Multi-step Process Card: Helper to detect the current process step stage from GRN/Jobwork records
+  const getAutoDetectedStepNumber = (item: Item | undefined, card: typeof selectedItemProcessCard): number => {
+    if (!item || !card || !card.steps || card.steps.length === 0) return 1;
+    if (card.steps.length === 1) return card.steps[0].stepNumber || 1;
+
+    // Check existing challans and completed returns for this item
+    const itemJobworks = jobworks.filter(j => 
+      (j.producedItemId && (j.producedItemId === item.id || j.producedItemId === card.itemId)) ||
+      j.itemId === item.id || j.itemCode.toLowerCase() === item.itemCode.toLowerCase() ||
+      (card.rawItemId && j.itemId === card.rawItemId)
+    );
+
+    // If there is an active pending challan, check its step
+    const pendingJW = itemJobworks.find(j => j.status === 'PENDING' && (j.pendingBalance || 0) > 0);
+    if (pendingJW) {
+      const matchStep = card.steps.find(s => 
+        s.processName.toLowerCase() === (pendingJW.processRequired || '').toLowerCase() ||
+        (pendingJW as any).stepNumber === s.stepNumber
+      );
+      if (matchStep) return matchStep.stepNumber;
+    }
+
+    // Check completed challans to advance to next step
+    const completedJWs = itemJobworks.filter(j => j.status === 'COMPLETED' || (j.receivedQuantity || 0) > 0);
+    let highestCompletedStep = 0;
+    completedJWs.forEach(cj => {
+      const matchStep = card.steps.find(s => 
+        s.processName.toLowerCase() === (cj.processRequired || '').toLowerCase() ||
+        (cj as any).stepNumber === s.stepNumber
+      );
+      if (matchStep && matchStep.stepNumber > highestCompletedStep) {
+        highestCompletedStep = matchStep.stepNumber;
+      }
+    });
+
+    if (highestCompletedStep > 0 && highestCompletedStep < card.steps.length) {
+      return highestCompletedStep + 1;
+    }
+
+    return card.steps[0].stepNumber || 1;
+  };
+
+  // Determine active step from multi-step Process Card
+  const activeProcessStep = selectedItemProcessCard && selectedItemProcessCard.steps && selectedItemProcessCard.steps.length > 0
+    ? (selectedItemProcessCard.steps.find(s => s.stepNumber === selectedStepNumber) || selectedItemProcessCard.steps[0])
+    : null;
+
+  // Extract authorized vendor keys for ONLY the current active process step
+  const processVendorKeys = new Set<string>();
+  if (activeProcessStep) {
+    (activeProcessStep.vendorIds || (activeProcessStep as any).vendors || []).forEach((v: string) => {
+      if (v) processVendorKeys.add(v.trim().toLowerCase());
+    });
+  }
+
+  // Strictly filter vendors to only those listed in the current step of Process Master
+  const availableVendors = (activeProcessStep && processVendorKeys.size > 0)
     ? vendors.filter(v => 
-        mappedVendorIds.includes(v.id) || 
-        (v.name && mappedVendorNames.includes(v.name.trim().toLowerCase())) || 
-        (v.vendorCode && mappedVendorNames.includes(v.vendorCode.trim().toLowerCase()))
+        processVendorKeys.has(v.id.toLowerCase()) || 
+        (v.vendorCode && processVendorKeys.has(v.vendorCode.toLowerCase())) || 
+        (v.name && processVendorKeys.has(v.name.toLowerCase()))
       )
-    : vendors;
+    : [];
 
-  const vendorOptions: AutocompleteOption[] = availableVendors.map(v => ({
-    value: v.id,
-    label: v.name,
-    sublabel: `${v.vendorCode} | ${v.category} | ${v.city}`
-  }));
+  const vendorOptions: AutocompleteOption[] = availableVendors.map((v, vIdx) => {
+    const priorityTag = vIdx === 0 ? 'Priority #1 (Primary)' : vIdx === 1 ? 'Priority #2 (Secondary)' : `Priority #${vIdx + 1} (Fallback)`;
+    return {
+      value: v.id,
+      label: `⭐ ${priorityTag}: ${v.name}`,
+      sublabel: `${v.vendorCode} | Step ${activeProcessStep?.stepNumber || 1}: ${activeProcessStep?.processName || ''} | ${v.city}`
+    };
+  });
 
   const itemOptions: AutocompleteOption[] = items.map(i => ({
     value: i.id,
@@ -181,7 +248,8 @@ export const ExternalInventoryModule: React.FC = () => {
   // Shortage Calculation for Jobwork Items
   const isJobworkItem = (item: Item) => {
     const p = (item.processType || (item as any).materialProcessType || '').toLowerCase();
-    return p.includes('job work') || p.includes('jobwork');
+    const sources = (item.materialProcessSources || []).map(s => s.toLowerCase());
+    return p.includes('job work') || p.includes('jobwork') || sources.includes('job work') || sources.includes('jobwork');
   };
 
   const getJobworkItemShortage = (item: Item) => {
@@ -206,13 +274,25 @@ export const ExternalInventoryModule: React.FC = () => {
     const matchingBOM = boms.find(b => b.id === item.id || b.bomCode === item.itemCode || b.machineModel?.toLowerCase() === item.name.toLowerCase());
     const rawItemId = matchingBOM?.components?.[0]?.itemId || item.id;
 
+    const pCard = itemProcessCards.find(c => 
+      c.itemId === item.id || 
+      c.itemCode.toLowerCase() === item.itemCode.toLowerCase() ||
+      (c.rawItemId && c.rawItemId === item.id) ||
+      (c.rawItemCode && c.rawItemCode.toLowerCase() === item.itemCode.toLowerCase())
+    );
+
+    const autoStepNum = getAutoDetectedStepNumber(item, pCard);
+    setSelectedStepNumber(autoStepNum);
+    const activeStep = pCard?.steps?.find(s => s.stepNumber === autoStepNum) || pCard?.steps?.[0];
+
+    const p1VendorId = (activeStep?.vendorIds && activeStep.vendorIds.length > 0) ? activeStep.vendorIds[0] : '';
     setIssueData({
       challanNo: generateNextJobworkNumber(jobworks),
-      vendorId: '',
+      vendorId: p1VendorId,
       itemId: rawItemId,
       producedItemId: item.id,
       sentQuantity: Math.max(1, shortage),
-      processRequired: 'External Machining & Heat Treatment',
+      processRequired: activeStep ? (activeStep.processName || activeStep.processShortCode) : 'External Machining & Processing',
       issueDate: new Date().toISOString().split('T')[0],
       expectedReturnDate: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
       notes: `Jobwork issued directly from inventory shortage requirement for target item ${item.itemCode} (${shortage} ${item.unit}).`
@@ -221,6 +301,7 @@ export const ExternalInventoryModule: React.FC = () => {
   };
 
   const handleOpenIssueModal = () => {
+    setSelectedStepNumber(1);
     setIssueData({
       challanNo: generateNextJobworkNumber(jobworks),
       vendorId: '',
@@ -439,8 +520,8 @@ export const ExternalInventoryModule: React.FC = () => {
 
       {/* Tabular Shortage Jobwork Wizard View */}
       {isShortageWizardOpen ? (
-        <div className="card" style={{ padding: '1.25rem', backgroundColor: 'var(--bg-card)', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+        <div className="card" style={{ padding: '1rem 1.25rem', backgroundColor: 'var(--bg-card)', display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', flexWrap: 'wrap', gap: '0.75rem', flexShrink: 0 }}>
             <div>
               <h3 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <AlertTriangle size={18} color="var(--warning)" />
@@ -467,7 +548,7 @@ export const ExternalInventoryModule: React.FC = () => {
           </div>
 
           {/* Search Bar for Shortage Items */}
-          <div style={{ position: 'relative', width: '100%' }}>
+          <div style={{ position: 'relative', width: '100%', flexShrink: 0 }}>
             <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
             <input
               type="text"
@@ -489,7 +570,7 @@ export const ExternalInventoryModule: React.FC = () => {
               </div>
             </div>
           ) : (
-            <div className="table-container" style={{ maxHeight: '500px', overflowY: 'auto' }}>
+            <div className="table-container" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
               <table>
                 <thead>
                   <tr>
@@ -500,55 +581,136 @@ export const ExternalInventoryModule: React.FC = () => {
                     <th style={{ textAlign: 'right' }}>In-House Stock</th>
                     <th style={{ textAlign: 'right' }}>Jobwork (Vendor) Stock</th>
                     <th style={{ textAlign: 'right' }}>Shortage</th>
-                    <th style={{ width: '150px', textAlign: 'center' }}>Action</th>
+                    <th style={{ minWidth: '200px', textAlign: 'center' }}>Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {wizardTableRows.map((row, idx) => (
-                    <tr key={idx} style={{ backgroundColor: row.shortage > 0 ? 'rgba(239, 68, 68, 0.04)' : 'transparent' }}>
-                      <td style={{ textAlign: 'center', fontWeight: 600 }}>{idx + 1}</td>
-                      <td>
-                        <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{row.itemDescription}</div>
-                        {row.extraInfo && (
-                          <div style={{ fontSize: '0.72rem', color: 'var(--accent-primary)', fontWeight: 600, marginTop: '0.15rem' }}>
-                            {row.extraInfo}
-                          </div>
-                        )}
-                      </td>
-                      <td>
-                        <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>
-                          {row.partCode}
-                        </span>
-                      </td>
-                      <td style={{ textAlign: 'right', fontWeight: 600 }}>
-                        {row.requiredQty} {row.unit}
-                      </td>
-                      <td style={{ textAlign: 'right', color: row.currentStock <= 0 ? 'var(--danger)' : 'var(--text-primary)' }}>
-                        {row.currentStock} {row.unit}
-                      </td>
-                      <td style={{ textAlign: 'right', color: 'var(--accent-primary)', fontWeight: 600 }}>
-                        {row.externalStock} {row.unit}
-                      </td>
-                      <td style={{ textAlign: 'right' }}>
-                        <span className="badge badge-danger" style={{ fontWeight: 800, fontSize: '0.8rem', padding: '0.2rem 0.5rem' }}>
-                          {row.shortage} {row.unit}
-                        </span>
-                      </td>
-                      <td style={{ textAlign: 'center' }}>
-                        <button
-                          type="button"
-                          className="btn btn-primary"
-                          style={{ padding: '0.3rem 0.65rem', fontSize: '0.78rem', fontWeight: 700, gap: '0.3rem', display: 'inline-flex', alignItems: 'center' }}
-                          onClick={() => {
-                            setIsShortageWizardOpen(false);
-                            handleOpenShortageJWModal(row.item);
-                          }}
-                        >
-                          <Plus size={13} /> Create Challan
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {wizardTableRows.map((row, idx) => {
+                    const processCard = itemProcessCards.find(c => 
+                      c.itemId === row.item.id || 
+                      c.itemCode.toLowerCase() === row.item.itemCode.toLowerCase() ||
+                      (c.rawItemId && c.rawItemId === row.item.id) ||
+                      (c.rawItemCode && c.rawItemCode.toLowerCase() === row.item.itemCode.toLowerCase())
+                    );
+                    const hasProcessCard = Boolean(processCard && processCard.steps && processCard.steps.length > 0);
+                    const sources = (row.item.materialProcessSources || []).map(s => s.toLowerCase());
+                    const hasInHouse = sources.includes('in-house') || sources.includes('inhouse') || ['MF', 'AS', 'FAS', 'SA'].includes(row.item.category);
+                    const hasBoughtOut = sources.includes('bought out') || sources.includes('brought out') || row.item.category === 'BO';
+
+                    return (
+                      <tr key={idx} style={{ backgroundColor: row.shortage > 0 ? 'rgba(239, 68, 68, 0.04)' : 'transparent' }}>
+                        <td style={{ textAlign: 'center', fontWeight: 600 }}>{idx + 1}</td>
+                        <td>
+                          <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{row.itemDescription}</div>
+                          {row.extraInfo && (
+                            <div style={{ fontSize: '0.72rem', color: 'var(--accent-primary)', fontWeight: 600, marginTop: '0.15rem' }}>
+                              {row.extraInfo}
+                            </div>
+                          )}
+                        </td>
+                        <td>
+                          <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>
+                            {row.partCode}
+                          </span>
+                        </td>
+                        <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                          {row.requiredQty} {row.unit}
+                        </td>
+                        <td style={{ textAlign: 'right', color: row.currentStock <= 0 ? 'var(--danger)' : 'var(--text-primary)' }}>
+                          {row.currentStock} {row.unit}
+                        </td>
+                        <td style={{ textAlign: 'right', color: 'var(--accent-primary)', fontWeight: 600 }}>
+                          {row.externalStock} {row.unit}
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          <span className="badge badge-danger" style={{ fontWeight: 800, fontSize: '0.8rem', padding: '0.2rem 0.5rem' }}>
+                            {row.shortage} {row.unit}
+                          </span>
+                        </td>
+                        <td style={{ textAlign: 'center', minWidth: '200px' }}>
+                          {hasProcessCard ? (
+                            <button
+                              type="button"
+                              className="btn btn-primary"
+                              style={{ padding: '0.3rem 0.65rem', fontSize: '0.78rem', fontWeight: 700, gap: '0.3rem', display: 'inline-flex', alignItems: 'center' }}
+                              onClick={() => {
+                                setIsShortageWizardOpen(false);
+                                handleOpenShortageJWModal(row.item);
+                              }}
+                            >
+                              <Plus size={13} /> Create Challan
+                            </button>
+                          ) : hasInHouse && hasBoughtOut ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', alignItems: 'center' }}>
+                              <span style={{ fontSize: '0.7rem', color: '#d97706', fontWeight: 600, textAlign: 'center', lineHeight: '1.2' }}>
+                                ⚠️ No process card exists (create it), or this part can also be produced <strong>In-House</strong> or <strong>Bought Out</strong>.
+                              </span>
+                              <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                                <button
+                                  type="button"
+                                  className="btn btn-warning"
+                                  style={{ padding: '0.2rem 0.45rem', fontSize: '0.72rem', fontWeight: 700, color: '#fff', backgroundColor: '#d97706', borderColor: '#d97706' }}
+                                  onClick={() => { setIsShortageWizardOpen(false); setActiveModule('job_cards'); }}
+                                >
+                                  In-House
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-primary"
+                                  style={{ padding: '0.2rem 0.45rem', fontSize: '0.72rem', fontWeight: 700 }}
+                                  onClick={() => { setIsShortageWizardOpen(false); setActiveModule('purchase_orders'); }}
+                                >
+                                  Bought Out (PO)
+                                </button>
+                              </div>
+                            </div>
+                          ) : hasInHouse ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', alignItems: 'center' }}>
+                              <span style={{ fontSize: '0.7rem', color: '#d97706', fontWeight: 600, textAlign: 'center', lineHeight: '1.2' }}>
+                                ⚠️ No process card exists (create it), or this part can also be produced <strong>In-House</strong>.
+                              </span>
+                              <button
+                                type="button"
+                                className="btn btn-warning"
+                                style={{ padding: '0.25rem 0.55rem', fontSize: '0.74rem', fontWeight: 700, gap: '0.25rem', color: '#fff', backgroundColor: '#d97706', borderColor: '#d97706' }}
+                                onClick={() => { setIsShortageWizardOpen(false); setActiveModule('job_cards'); }}
+                              >
+                                <ClipboardList size={12} /> Produce In-House (Job Card)
+                              </button>
+                            </div>
+                          ) : hasBoughtOut ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', alignItems: 'center' }}>
+                              <span style={{ fontSize: '0.7rem', color: '#d97706', fontWeight: 600, textAlign: 'center', lineHeight: '1.2' }}>
+                                ⚠️ No process card exists (create it), or this part can also be <strong>Bought Out</strong>.
+                              </span>
+                              <button
+                                type="button"
+                                className="btn btn-primary"
+                                style={{ padding: '0.25rem 0.55rem', fontSize: '0.74rem', fontWeight: 700, gap: '0.25rem' }}
+                                onClick={() => { setIsShortageWizardOpen(false); setActiveModule('purchase_orders'); }}
+                              >
+                                <ShoppingCart size={12} /> Buy Out (Create PO)
+                              </button>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', alignItems: 'center' }}>
+                              <span className="badge badge-danger" style={{ fontSize: '0.7rem', whiteSpace: 'normal', textAlign: 'center', lineHeight: '1.2' }}>
+                                ⚠️ No process card exists for this item
+                              </span>
+                              <button
+                                type="button"
+                                className="btn btn-outline"
+                                style={{ padding: '0.2rem 0.45rem', fontSize: '0.68rem', color: 'var(--accent-primary)', borderColor: 'var(--accent-primary)' }}
+                                onClick={() => { setIsShortageWizardOpen(false); setActiveModule('process_master'); }}
+                              >
+                                Create Process Card
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -640,52 +802,47 @@ export const ExternalInventoryModule: React.FC = () => {
           <thead>
             <tr>
               <th onClick={() => handleSort('challanNo')} style={{ cursor: 'pointer' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                  Challan No. {sortField === 'challanNo' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  Challan No {sortField === 'challanNo' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
                 </div>
               </th>
               <th onClick={() => handleSort('vendorName')} style={{ cursor: 'pointer' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                   Vendor Name {sortField === 'vendorName' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
                 </div>
               </th>
               <th onClick={() => handleSort('itemName')} style={{ cursor: 'pointer' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                  Component Sent {sortField === 'itemName' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  Item Description {sortField === 'itemName' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
                 </div>
               </th>
               <th onClick={() => handleSort('processRequired')} style={{ cursor: 'pointer' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                   Process Required {sortField === 'processRequired' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
                 </div>
               </th>
-              <th onClick={() => handleSort('sentQuantity')} style={{ cursor: 'pointer' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+              <th onClick={() => handleSort('sentQuantity')} style={{ cursor: 'pointer', textAlign: 'right' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.35rem' }}>
                   Sent Qty {sortField === 'sentQuantity' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
                 </div>
               </th>
-              <th onClick={() => handleSort('receivedQuantity')} style={{ cursor: 'pointer' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                  Recd Qty {sortField === 'receivedQuantity' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
+              <th onClick={() => handleSort('receivedQuantity')} style={{ cursor: 'pointer', textAlign: 'right' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.35rem' }}>
+                  Received Qty {sortField === 'receivedQuantity' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
                 </div>
               </th>
-              <th onClick={() => handleSort('scrapQuantity')} style={{ cursor: 'pointer' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                  Scrap {sortField === 'scrapQuantity' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
-                </div>
-              </th>
-              <th onClick={() => handleSort('pendingBalance')} style={{ cursor: 'pointer' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                  Pending at Vendor {sortField === 'pendingBalance' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
+              <th onClick={() => handleSort('pendingBalance')} style={{ cursor: 'pointer', textAlign: 'right' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.35rem' }}>
+                  Pending Balance {sortField === 'pendingBalance' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
                 </div>
               </th>
               <th onClick={() => handleSort('expectedReturnDate')} style={{ cursor: 'pointer' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                  Expected Return {sortField === 'expectedReturnDate' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  Exp. Return {sortField === 'expectedReturnDate' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
                 </div>
               </th>
               <th onClick={() => handleSort('status')} style={{ cursor: 'pointer' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                   Status {sortField === 'status' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
                 </div>
               </th>
@@ -694,59 +851,43 @@ export const ExternalInventoryModule: React.FC = () => {
           </thead>
           <tbody>
             {filteredJobworks.map(j => {
-              const isHistory = j.status === 'COMPLETED' || j.pendingBalance === 0;
-
+              const isOverdue = j.status === 'PENDING' && new Date(j.expectedReturnDate) < new Date();
               return (
                 <tr key={j.id}>
+                  <td style={{ fontWeight: 700, color: 'var(--accent-primary)' }}>{j.challanNo}</td>
+                  <td>{j.vendorName}</td>
                   <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                      <span style={{ fontWeight: 700, color: 'var(--warning)', fontFamily: 'monospace' }}>
-                        {j.challanNo}
-                      </span>
-                      {isHistory && (
-                        <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#fff', fontSize: '0.65rem', padding: '0.1rem 0.35rem' }}>
-                          📜 HISTORY
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td style={{ fontWeight: 600 }}>{j.vendorName}</td>
-                  <td>
-                    <div style={{ fontWeight: 600 }}>{j.itemName}</div>
+                    <div>{j.itemName}</div>
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{j.itemCode}</div>
                   </td>
-                  <td style={{ fontSize: '0.85rem', color: 'var(--accent-primary)', fontWeight: 500 }}>
-                    {j.processRequired}
-                  </td>
-                  <td style={{ fontWeight: 700 }}>{j.sentQuantity} PCS</td>
-                  <td style={{ color: 'var(--success)', fontWeight: 600 }}>{j.receivedQuantity} PCS</td>
-                  <td style={{ color: j.scrapQuantity > 0 ? 'var(--danger)' : 'var(--text-muted)' }}>{j.scrapQuantity} PCS</td>
                   <td>
-                    <span style={{ fontSize: '0.95rem', fontWeight: 800, color: j.pendingBalance > 0 ? 'var(--warning)' : 'var(--success)' }}>
-                      {j.pendingBalance} PCS
-                    </span>
+                    <span className="badge badge-neutral">{j.processRequired}</span>
                   </td>
-                  <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{j.expectedReturnDate}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 600 }}>{j.sentQuantity}</td>
+                  <td style={{ textAlign: 'right', color: 'var(--success)' }}>{j.receivedQuantity}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 700, color: j.pendingBalance > 0 ? 'var(--warning)' : 'var(--text-muted)' }}>
+                    {j.pendingBalance}
+                  </td>
+                  <td style={{ color: isOverdue ? 'var(--danger)' : 'inherit', fontWeight: isOverdue ? 700 : 'normal' }}>
+                    {j.expectedReturnDate}
+                    {isOverdue && <span style={{ display: 'block', fontSize: '0.7rem' }}>⚠️ OVERDUE</span>}
+                  </td>
                   <td>
                     <span className={`badge ${j.status === 'COMPLETED' ? 'badge-success' : 'badge-warning'}`}>
-                      {j.status.replace('_', ' ')}
+                      {j.status}
                     </span>
                   </td>
                   <td>
-                    <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
-                      <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem' }} title="Print Challan Gatepass" onClick={() => handlePrintSingleChallan(j)}>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem' }} title="Print Outward Challan Gatepass" onClick={() => handlePrintSingleChallan(j)}>
                         <Printer size={14} />
                       </button>
-                      {j.pendingBalance > 0 ? (
-                        <button 
-                          className="btn btn-outline" 
-                          style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem', color: 'var(--success)', borderColor: 'var(--success)' }}
-                          onClick={() => handleOpenReturnModal(j)}
-                        >
-                          <ArrowRightLeft size={14} /> Record Receipt
+                      {j.status === 'PENDING' ? (
+                        <button className="btn btn-primary" style={{ padding: '0.3rem 0.5rem', fontSize: '0.75rem' }} onClick={() => handleOpenReturnModal(j)}>
+                          <ArrowRightLeft size={14} /> Receive Return
                         </button>
                       ) : (
-                        <span style={{ fontSize: '0.75rem', color: 'var(--success)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
                           <CheckCircle size={14} /> Complete
                         </span>
                       )}
@@ -768,6 +909,31 @@ export const ExternalInventoryModule: React.FC = () => {
         title="Issue Outward Jobwork Challan"
       >
         <form onSubmit={handleIssueSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          
+          {/* Missing Process Card Guidance Banner in Modal */}
+          {selectedTargetItem && !selectedItemProcessCard && (() => {
+            const sources = (selectedTargetItem.materialProcessSources || []).map(s => s.toLowerCase());
+            const hasInHouse = sources.includes('in-house') || sources.includes('inhouse') || ['MF', 'AS', 'FAS', 'SA'].includes(selectedTargetItem.category);
+            const hasBoughtOut = sources.includes('bought out') || sources.includes('brought out') || selectedTargetItem.category === 'BO';
+
+            return (
+              <div style={{ padding: '0.75rem 1rem', backgroundColor: 'rgba(239, 68, 68, 0.08)', borderRadius: '0.5rem', border: '1px solid rgba(239, 68, 68, 0.3)', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, color: 'var(--danger)', fontSize: '0.85rem' }}>
+                  <AlertTriangle size={16} />
+                  No process card exists for {selectedTargetItem.itemCode} in Process Master
+                </div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                  Job work items require an active Process Card with authorized processing vendors. Please create this item routing in Process Master.
+                </div>
+                {(hasInHouse || hasBoughtOut) && (
+                  <div style={{ fontSize: '0.78rem', color: '#d97706', fontWeight: 600, marginTop: '0.2rem' }}>
+                    💡 Note: This item is also configured to be {hasInHouse && hasBoughtOut ? 'produced In-House or Bought Out' : hasInHouse ? 'produced In-House' : 'Bought Out'}.
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           {/* Raw Component to Send */}
           <div>
             <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.25rem', color: 'var(--accent-primary)' }}>
@@ -791,16 +957,75 @@ export const ExternalInventoryModule: React.FC = () => {
               options={itemOptions}
               value={issueData.producedItemId}
               onChange={(val) => {
+                const targetIt = items.find(i => i.id === val);
+                const pCard = itemProcessCards.find(c => 
+                  c.itemId === val || 
+                  (targetIt && c.itemCode.toLowerCase() === targetIt.itemCode.toLowerCase()) ||
+                  (c.rawItemId && c.rawItemId === val) ||
+                  (targetIt && c.rawItemCode && c.rawItemCode.toLowerCase() === targetIt.itemCode.toLowerCase())
+                );
+                const autoStepNum = getAutoDetectedStepNumber(targetIt, pCard);
+                setSelectedStepNumber(autoStepNum);
+                const autoStep = pCard?.steps?.find(s => s.stepNumber === autoStepNum) || pCard?.steps?.[0];
+
+                const autoP1Vendor = (autoStep?.vendorIds && autoStep.vendorIds.length > 0) ? autoStep.vendorIds[0] : '';
                 setIssueData(prev => ({
                   ...prev,
                   producedItemId: val,
-                  vendorId: ''
+                  vendorId: autoP1Vendor,
+                  processRequired: autoStep ? (autoStep.processName || autoStep.processShortCode) : prev.processRequired
                 }));
               }}
               placeholder="Search output / processed item to produce..."
               required
             />
           </div>
+
+          {/* Multi-Step Process Card Stage Tracker & Step Selector */}
+          {selectedItemProcessCard && selectedItemProcessCard.steps && selectedItemProcessCard.steps.length > 0 && (
+            <div style={{ padding: '0.75rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: '0.5rem', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <span>🔄 Process Card Routing ({selectedItemProcessCard.steps.length} Steps):</span>
+                </div>
+                {activeProcessStep && (
+                  <span className="badge badge-primary" style={{ fontSize: '0.75rem', fontWeight: 700 }}>
+                    Active Step {activeProcessStep.stepNumber}: {activeProcessStep.processName} ({activeProcessStep.processShortCode})
+                  </span>
+                )}
+              </div>
+
+              {/* Step Sequence Pills */}
+              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                {selectedItemProcessCard.steps.map((st, sIdx) => {
+                  const isSelected = (st.stepNumber === selectedStepNumber) || (!selectedStepNumber && sIdx === 0);
+                  const stVendorCount = (st.vendorIds || (st as any).vendors || []).length;
+                  return (
+                    <button
+                      key={st.stepNumber || sIdx}
+                      type="button"
+                      className={`btn ${isSelected ? 'btn-primary' : 'btn-outline'}`}
+                      style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem', borderRadius: '0.375rem', fontWeight: isSelected ? 800 : 500 }}
+                      onClick={() => {
+                        setSelectedStepNumber(st.stepNumber);
+                        const p1VId = (st.vendorIds && st.vendorIds.length > 0) ? st.vendorIds[0] : '';
+                        setIssueData(prev => ({
+                          ...prev,
+                          processRequired: st.processName || st.processShortCode,
+                          vendorId: p1VId
+                        }));
+                      }}
+                    >
+                      Step {st.stepNumber}: {st.processShortCode || st.processName}
+                      <span style={{ opacity: 0.8, fontSize: '0.68rem', marginLeft: '0.25rem' }}>
+                        ({stVendorCount} v)
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Search Processing Vendor & Challan No */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
@@ -809,17 +1034,27 @@ export const ExternalInventoryModule: React.FC = () => {
                 <label style={{ fontSize: '0.85rem', fontWeight: 700 }}>
                   3. Processing Vendor *
                 </label>
-                {selectedTargetItem && selectedTargetItem.mappedVendors && selectedTargetItem.mappedVendors.length > 0 && (
-                  <span style={{ fontSize: '0.72rem', color: 'var(--success)', fontWeight: 600 }}>
-                    ✓ Filtered to {availableVendors.length} mapped vendor(s)
+                {selectedItemProcessCard ? (
+                  availableVendors.length > 0 ? (
+                    <span style={{ fontSize: '0.72rem', color: 'var(--success)', fontWeight: 600 }}>
+                      ✓ {availableVendors.length} Step {activeProcessStep?.stepNumber || 1} vendor(s)
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: '0.72rem', color: 'var(--danger)', fontWeight: 600 }}>
+                      ⚠️ No vendors for Step {activeProcessStep?.stepNumber || 1} in Process Master
+                    </span>
+                  )
+                ) : selectedTargetItem ? (
+                  <span style={{ fontSize: '0.72rem', color: 'var(--danger)', fontWeight: 600 }}>
+                    ⚠️ No Process Card for item
                   </span>
-                )}
+                ) : null}
               </div>
               <AutocompleteSelect
                 options={vendorOptions}
                 value={issueData.vendorId}
                 onChange={(val) => setIssueData({ ...issueData, vendorId: val })}
-                placeholder="Type vendor name..."
+                placeholder={availableVendors.length === 0 ? `No authorized vendor for Step ${activeProcessStep?.stepNumber || 1}...` : `Select Step ${activeProcessStep?.stepNumber || 1} vendor...`}
                 required
               />
             </div>
@@ -920,22 +1155,23 @@ export const ExternalInventoryModule: React.FC = () => {
         title="Print External Jobwork Shortage Matrix"
         documentRefNumber="JW-SHORTAGE-MATRIX"
       >
-        <TabularShortagePrintView 
-          title="EXTERNAL JOBWORK SHORTAGE REPORT" 
+        <TabularShortagePrintView
+          title="External Jobwork Shortage Matrix"
+          filterLabel="Direct Jobwork Sourcing Requirement for Component Machining & Surface Treatment"
           rows={wizardTableRows.map(r => ({
             srNo: r.srNo,
             itemDescription: r.itemDescription,
             partCode: r.partCode,
             requiredQty: r.requiredQty,
-            currentStock: `${r.currentStock} in-house / ${r.externalStock} at vendor`,
+            currentStock: r.currentStock,
+            externalStock: r.externalStock,
             shortage: r.shortage,
             unit: r.unit,
             extraInfo: r.extraInfo
-          }))} 
-          filterLabel={isExplodeShortage ? "Exploded Active Work Orders Jobwork Shortages" : "External Jobwork Component Stock Shortages"}
-          showMOQAndInPO={false}
+          }))}
         />
       </PrintManagerModal>
+
     </div>
   );
 };
