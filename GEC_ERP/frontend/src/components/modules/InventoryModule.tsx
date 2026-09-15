@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useDeferredValue } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { Modal } from '../common/Modal';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
@@ -16,7 +16,7 @@ type ExternalSortKey = 'itemCode' | 'name' | 'category' | 'inHouseStock' | 'exte
 export const InventoryModule: React.FC = () => {
   const { 
     items, allInventoryItems, vendors, jobworks,
-    searchTerm, setSearchTerm, adjustItemStock
+    adjustItemStock
   } = useERP();
 
   const inventoryList = allInventoryItems && allInventoryItems.length > 0 ? allInventoryItems : items;
@@ -45,8 +45,10 @@ export const InventoryModule: React.FC = () => {
   // Print Modals
   const [printModalOpen, setPrintModalOpen] = useState(false);
 
-  // Search cleanup
-  const cleanSearchTerm = searchTerm.replace(/@history|@deleted/gi, '').replace(/^@/g, '').trim().toLowerCase();
+  // Dedicated Local Search State
+  const [localSearch, setLocalSearch] = useState('');
+  const deferredSearch = useDeferredValue(localSearch);
+  const cleanSearchTerm = deferredSearch.replace(/@history|@deleted/gi, '').replace(/^@/g, '').trim().toLowerCase();
 
   // -------------------------------------------------------------
   // IN-HOUSE INVENTORY DATA
@@ -200,6 +202,34 @@ export const InventoryModule: React.FC = () => {
           <button type="button" className="btn btn-outline" onClick={() => setPrintModalOpen(true)} title="Print inventory ledger">
             <Printer size={14} /> Print Stock Ledger
           </button>
+        </div>
+      </div>
+
+      {/* Inventory Search & Filter Toolbar */}
+      <div className="card" style={{ padding: '0.65rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', backgroundColor: 'var(--bg-card)' }}>
+        <div style={{ position: 'relative', width: '380px', maxWidth: '100%' }}>
+          <Search size={15} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+          <input
+            type="text"
+            placeholder={activeTab === 'IN_HOUSE' ? "Search Part code, Item code, Description, Location..." : "Search Part code, Item code, Description, Vendor..."}
+            className="input-field"
+            style={{ paddingLeft: '2.25rem', paddingRight: '2rem', fontSize: '0.82rem' }}
+            value={localSearch}
+            onChange={(e) => setLocalSearch(e.target.value)}
+          />
+          {localSearch && (
+            <button
+              type="button"
+              onClick={() => setLocalSearch('')}
+              style={{ position: 'absolute', right: '0.6rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.85rem' }}
+              title="Clear Search"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+          Showing <strong>{activeTab === 'IN_HOUSE' ? filteredInHouseItems.length : externalItemSummary.length}</strong> items
         </div>
       </div>
 

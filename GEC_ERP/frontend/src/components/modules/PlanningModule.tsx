@@ -352,21 +352,8 @@ export const PlanningModule: React.FC = () => {
     });
   }, [items, purchaseOrders, workOrders, jobCards, jobworks, boms, qcInspections, finishedGoods, itemProcessCards]);
 
-  // Responsive Local Search Term with 120ms debounce to ERPContext
-  const [localSearch, setLocalSearch] = useState(searchTerm);
-
-  useEffect(() => {
-    setLocalSearch(searchTerm);
-  }, [searchTerm]);
-
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      if (localSearch !== searchTerm) {
-        setSearchTerm(localSearch);
-      }
-    }, 40);
-    return () => clearTimeout(handler);
-  }, [localSearch, searchTerm, setSearchTerm]);
+  // Dedicated Local Search Term for Planning Module
+  const [localSearch, setLocalSearch] = useState('');
 
   // Clean Search Term handling with useDeferredValue
   const deferredSearch = React.useDeferredValue(localSearch);
@@ -496,10 +483,19 @@ export const PlanningModule: React.FC = () => {
               type="text"
               placeholder="Search Part code, Item code, Description..."
               className="input-field"
-              style={{ paddingLeft: '2.25rem', fontSize: '0.82rem' }}
+              style={{ paddingLeft: '2.25rem', paddingRight: '2rem', fontSize: '0.82rem' }}
               value={localSearch}
               onChange={(e) => setLocalSearch(e.target.value)}
             />
+            {localSearch && (
+              <button
+                type="button"
+                onClick={() => setLocalSearch('')}
+                style={{ position: 'absolute', right: '0.6rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.85rem' }}
+              >
+                ✕
+              </button>
+            )}
           </div>
 
           {/* Process Filter */}

@@ -4,7 +4,7 @@ import { Search, Wifi, WifiOff, Server, AlertCircle, Globe } from 'lucide-react'
 import { apiClient } from '../../services/apiClient';
 export const Header: React.FC = () => {
   const { 
-    activeModule, setActiveModule, searchTerm, setSearchTerm, currentUser,
+    activeModule, setActiveModule, currentUser,
     items, customers, vendors, salesOrders, workOrders, purchaseOrders, jobCards, boms, grns,
     openBOMInEditor, openWOInEditor
   } = useERP();
@@ -115,24 +115,16 @@ export const Header: React.FC = () => {
     }
   };
 
-  // Responsive Local Search Term with 120ms debounce to ERPContext
-  const [localSearchTerm, setLocalSearchTerm] = useState(searchTerm);
+  // Omnipresent Global Search State (Completely independent of local module search bars)
+  const [globalSearchTerm, setGlobalSearchTerm] = useState('');
 
+  // Automatically close search dropdown when user switches modules
   useEffect(() => {
-    setLocalSearchTerm(searchTerm);
-  }, [searchTerm]);
-
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      if (localSearchTerm !== searchTerm) {
-        setSearchTerm(localSearchTerm);
-      }
-    }, 40);
-    return () => clearTimeout(handler);
-  }, [localSearchTerm, searchTerm, setSearchTerm]);
+    setIsSearchOpen(false);
+  }, [activeModule]);
 
   // Deferred search term for background dropdown processing without blocking keyboard
-  const deferredSearchTerm = React.useDeferredValue(localSearchTerm);
+  const deferredSearchTerm = React.useDeferredValue(globalSearchTerm);
 
   // Pre-compiled search index for instantaneous sub-millisecond global search
   const searchIndex = React.useMemo(() => {
@@ -265,18 +257,18 @@ export const Header: React.FC = () => {
             fontSize: '0.85rem',
             borderColor: isHistorySearch ? '#7c3aed' : undefined 
           }}
-          value={localSearchTerm}
+          value={globalSearchTerm}
           onFocus={() => setIsSearchOpen(true)}
           onChange={(e) => {
-            setLocalSearchTerm(e.target.value);
+            setGlobalSearchTerm(e.target.value);
             setIsSearchOpen(true);
           }}
         />
 
-        {localSearchTerm && (
+        {globalSearchTerm && (
           <button 
             type="button" 
-            onClick={() => { setLocalSearchTerm(''); setSearchTerm(''); setIsSearchOpen(false); }}
+            onClick={() => { setGlobalSearchTerm(''); setIsSearchOpen(false); }}
             style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.8rem', padding: '0.2rem' }}
           >
             ✕
@@ -284,7 +276,7 @@ export const Header: React.FC = () => {
         )}
 
         {/* Global Search Dropdown Overlay */}
-        {isSearchOpen && (localSearchTerm.trim().length > 0 || isHistorySearch) && (
+        {isSearchOpen && (globalSearchTerm.trim().length > 0 || isHistorySearch) && (
           <div 
             style={{ 
               position: 'absolute', 
@@ -312,7 +304,7 @@ export const Header: React.FC = () => {
                 type="button" 
                 className="btn btn-outline" 
                 style={{ padding: '0.15rem 0.4rem', fontSize: '0.7rem' }}
-                onClick={() => setIsSearchOpen(false)}
+                onClick={() => { setGlobalSearchTerm(''); setIsSearchOpen(false); }}
               >
                 Close (ESC)
               </button>
@@ -320,7 +312,7 @@ export const Header: React.FC = () => {
 
             {!hasAnyResults ? (
               <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                No matching records found for "{searchTerm}".
+                No matching records found for "{globalSearchTerm}".
               </div>
             ) : (
               <>
@@ -332,7 +324,7 @@ export const Header: React.FC = () => {
                       <div 
                         key={it.id} 
                         style={{ padding: '0.35rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-tertiary)', marginBottom: '0.25rem' }}
-                        onClick={() => { setActiveModule('item-master'); setIsSearchOpen(false); }}
+                        onClick={() => { setActiveModule('item-master'); setGlobalSearchTerm(''); setIsSearchOpen(false); }}
                       >
                         <div>
                           <strong style={{ fontSize: '0.82rem' }}>{it.name}</strong>
@@ -352,7 +344,7 @@ export const Header: React.FC = () => {
                       <div 
                         key={wo.id} 
                         style={{ padding: '0.35rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-tertiary)', marginBottom: '0.25rem' }}
-                        onClick={() => { setActiveModule('work-orders'); openWOInEditor(wo.id); setIsSearchOpen(false); }}
+                        onClick={() => { setActiveModule('work-orders'); openWOInEditor(wo.id); setGlobalSearchTerm(''); setIsSearchOpen(false); }}
                       >
                         <div>
                           <strong style={{ fontSize: '0.82rem', fontFamily: 'monospace' }}>{wo.workOrderNo || wo.woNumber}</strong>
@@ -372,7 +364,7 @@ export const Header: React.FC = () => {
                       <div 
                         key={po.id} 
                         style={{ padding: '0.35rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-tertiary)', marginBottom: '0.25rem' }}
-                        onClick={() => { setActiveModule('purchase-orders'); setIsSearchOpen(false); }}
+                        onClick={() => { setActiveModule('purchase-orders'); setGlobalSearchTerm(''); setIsSearchOpen(false); }}
                       >
                         <div>
                           <strong style={{ fontSize: '0.82rem', fontFamily: 'monospace' }}>{po.poNumber}</strong>
@@ -392,7 +384,7 @@ export const Header: React.FC = () => {
                       <div 
                         key={so.id} 
                         style={{ padding: '0.35rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-tertiary)', marginBottom: '0.25rem' }}
-                        onClick={() => { setActiveModule('sales-orders'); setIsSearchOpen(false); }}
+                        onClick={() => { setActiveModule('sales-orders'); setGlobalSearchTerm(''); setIsSearchOpen(false); }}
                       >
                         <div>
                           <strong style={{ fontSize: '0.82rem', fontFamily: 'monospace' }}>{so.soNumber}</strong>
@@ -412,7 +404,7 @@ export const Header: React.FC = () => {
                       <div 
                         key={b.id} 
                         style={{ padding: '0.35rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-tertiary)', marginBottom: '0.25rem' }}
-                        onClick={() => { openBOMInEditor(b.id); setIsSearchOpen(false); }}
+                        onClick={() => { openBOMInEditor(b.id); setGlobalSearchTerm(''); setIsSearchOpen(false); }}
                       >
                         <div>
                           <strong style={{ fontSize: '0.82rem' }}>{b.machineModel}</strong>
@@ -432,7 +424,7 @@ export const Header: React.FC = () => {
                       <div 
                         key={jc.id} 
                         style={{ padding: '0.35rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-tertiary)', marginBottom: '0.25rem' }}
-                        onClick={() => { setActiveModule('job-cards'); setIsSearchOpen(false); }}
+                        onClick={() => { setActiveModule('job-cards'); setGlobalSearchTerm(''); setIsSearchOpen(false); }}
                       >
                         <div>
                           <strong style={{ fontSize: '0.82rem', fontFamily: 'monospace' }}>{jc.jobCardNo}</strong>
@@ -454,7 +446,7 @@ export const Header: React.FC = () => {
                       <div 
                         key={c.id} 
                         style={{ padding: '0.35rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-tertiary)', marginBottom: '0.25rem' }}
-                        onClick={() => { setActiveModule('customers'); setIsSearchOpen(false); }}
+                        onClick={() => { setActiveModule('customers'); setGlobalSearchTerm(''); setIsSearchOpen(false); }}
                       >
                         <div>
                           <strong style={{ fontSize: '0.82rem' }}>{c.name}</strong>
@@ -474,7 +466,7 @@ export const Header: React.FC = () => {
                       <div 
                         key={v.id} 
                         style={{ padding: '0.35rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-tertiary)', marginBottom: '0.25rem' }}
-                        onClick={() => { setActiveModule('vendors'); setIsSearchOpen(false); }}
+                        onClick={() => { setActiveModule('vendors'); setGlobalSearchTerm(''); setIsSearchOpen(false); }}
                       >
                         <div>
                           <strong style={{ fontSize: '0.82rem' }}>{v.name}</strong>

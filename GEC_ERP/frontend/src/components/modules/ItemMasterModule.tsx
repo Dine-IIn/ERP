@@ -79,21 +79,8 @@ export const ItemMasterModule: React.FC = () => {
     }
   };
 
-  // Responsive Local Search Term with 120ms debounce to ERPContext
-  const [localSearch, setLocalSearch] = useState(searchTerm);
-
-  useEffect(() => {
-    setLocalSearch(searchTerm);
-  }, [searchTerm]);
-
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      if (localSearch !== searchTerm) {
-        setSearchTerm(localSearch);
-      }
-    }, 40);
-    return () => clearTimeout(handler);
-  }, [localSearch, searchTerm, setSearchTerm]);
+  // Dedicated Local Search Term for Item Master
+  const [localSearch, setLocalSearch] = useState('');
 
   const deferredSearch = useDeferredValue(localSearch);
   const isHistorySearch = deferredSearch.trim().startsWith('@') || deferredSearch.toLowerCase().includes('@history') || deferredSearch.toLowerCase().includes('@deleted');
@@ -698,10 +685,19 @@ export const ItemMasterModule: React.FC = () => {
                   type="text"
                   placeholder="Search item code, description, part code... (type @history)"
                   className="input-field"
-                  style={{ paddingLeft: '2.25rem' }}
+                  style={{ paddingLeft: '2.25rem', paddingRight: '2rem' }}
                   value={localSearch}
                   onChange={(e) => setLocalSearch(e.target.value)}
                 />
+                {localSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setLocalSearch('')}
+                    style={{ position: 'absolute', right: '0.6rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.85rem' }}
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
 
               {isHistorySearch && (
