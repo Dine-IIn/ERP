@@ -4,7 +4,7 @@ import { ShoppingCart, Search, FileSpreadsheet } from 'lucide-react';
 import { MRPShortageItem } from '../../types/erp';
 
 export const MRPPlanningModule: React.FC = () => {
-  const { items, purchaseOrders, workOrders, jobCards, jobworks, setActiveModule, addPurchaseOrder, vendors, searchTerm, setSearchTerm } = useERP();
+  const { items, purchaseOrders, workOrders, jobCards, jobworks, setActiveModule, addPurchaseOrder, vendors, searchTerm, setSearchTerm, itemProcessCards } = useERP();
 
   // Explode required components from active Work Orders and Job Cards
   const activeWOs = workOrders.filter(w => w.status === 'IN_PROGRESS' || w.status === 'PLANNED');
@@ -47,7 +47,36 @@ export const MRPPlanningModule: React.FC = () => {
         }
       });
 
-      const totalRequired = requiredForActiveWOs + requiredForActiveJCs + requiredForActiveJWs;
+      // 4. Calculate induced demand from Process Cards (if this item is the raw material input for an item in shortage)
+      let requiredFromProcessCards = 0;
+      (itemProcessCards || []).forEach(pc => {
+        if (pc.rawItemId === item.id || (pc.rawItemCode && pc.rawItemCode.toLowerCase() === item.itemCode.toLowerCase())) {
+          const parentComp = items.find(i => i.id === pc.itemId || (pc.itemCode && i.itemCode.toLowerCase() === pc.itemCode.toLowerCase()));
+          if (parentComp) {
+            let parentReq = 0;
+            activeWOs.forEach(wo => {
+              const woComp = (wo.woComponents || []).find(c => c.itemId === parentComp.id || c.itemCode === parentComp.itemCode);
+              if (woComp) parentReq += woComp.qtyRequired;
+            });
+            activeJCs.forEach(jc => {
+              const remaining = Math.max(0, (jc.targetQuantity || 1) - (jc.completedQuantity || 0));
+              if (jc.itemId === parentComp.id || jc.itemCode === parentComp.itemCode) parentReq += remaining;
+              if (jc.components) {
+                jc.components.forEach(c => {
+                  if (c.itemId === parentComp.id || c.itemCode === parentComp.itemCode) parentReq += (c.qtyPerUnit || 1) * remaining;
+                });
+              }
+            });
+            const parentInHouse = parentComp.inHouseStock || 0;
+            const parentShortage = Math.max(0, parentReq - parentInHouse);
+            if (parentShortage > 0) {
+              requiredFromProcessCards += parentShortage;
+            }
+          }
+        }
+      });
+
+      const totalRequired = requiredForActiveWOs + requiredForActiveJCs + requiredForActiveJWs + requiredFromProcessCards;
       const required = Math.max(totalRequired, (item.minStockQty || item.reorderLevel || 0));
       const inHouse = item.inHouseStock || 0;
 

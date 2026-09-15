@@ -27,7 +27,7 @@ type SortField =
 export const PlanningModule: React.FC = () => {
   const { 
     items, purchaseOrders, workOrders, jobCards, jobworks, boms, qcInspections, finishedGoods,
-    searchTerm, setSearchTerm 
+    searchTerm, setSearchTerm, itemProcessCards 
   } = useERP();
 
   // Filters State
@@ -253,7 +253,13 @@ export const PlanningModule: React.FC = () => {
         || (targetItem.itemCode && bomByCode.get(targetItem.itemCode.toLowerCase()))
         || (targetItem.name && bomByModel.get(targetItem.name.toLowerCase()));
 
-      if (subBOM && subBOM.components && subBOM.components.length > 0 && !visited.has(subBOM.id)) {
+      const hasSubBOM = subBOM && subBOM.components && subBOM.components.length > 0 && !visited.has(subBOM.id);
+      const procCard = (itemProcessCards || []).find(pc => 
+        (targetItem.id && pc.itemId === targetItem.id) || 
+        (targetItem.itemCode && (pc.itemCode?.toLowerCase() === targetItem.itemCode.toLowerCase() || pc.itemId === targetItem.itemCode))
+      );
+
+      if (hasSubBOM || procCard) {
         // Available supply: In-House Stock + Active Job Cards in progress + Active Job Work in progress
         const inHouse = targetItem.inHouseStock || 0;
         const activeJCSupply = (targetItem.id && pendingJCMap.get(targetItem.id)) || (targetItem.itemCode && pendingJCMap.get(targetItem.itemCode.toLowerCase())) || 0;
@@ -262,19 +268,33 @@ export const PlanningModule: React.FC = () => {
         const availableSupply = inHouse + activeJCSupply + activeJWSupply;
         const netShortage = Math.max(0, requiredQty - availableSupply);
 
-        // TREE PRUNING: Only explode child sub-BOM components if net shortage > 0
+        // TREE PRUNING: Only explode child components if net shortage > 0
         if (netShortage > 0) {
-          const nextVisited = new Set(visited);
-          nextVisited.add(subBOM.id);
+          // 1. Explode child sub-BOM components if BOM exists
+          if (hasSubBOM) {
+            const nextVisited = new Set(visited);
+            nextVisited.add(subBOM.id);
 
-          subBOM.components.forEach(comp => {
-            const compKey = comp.itemId || comp.itemCode || '';
-            const compQtyPer = comp.qtyPerMachine !== undefined ? comp.qtyPerMachine : 1;
-            const childReqQty = compQtyPer * netShortage;
-            if (compKey && childReqQty > 0) {
-              explodeItemShortage(compKey, childReqQty, nextVisited);
+            subBOM.components.forEach(comp => {
+              const compKey = comp.itemId || comp.itemCode || '';
+              const compQtyPer = comp.qtyPerMachine !== undefined ? comp.qtyPerMachine : 1;
+              const childReqQty = compQtyPer * netShortage;
+              if (compKey && childReqQty > 0) {
+                explodeItemShortage(compKey, childReqQty, nextVisited);
+              }
+            });
+          }
+
+          // 2. Process Card Link (Indirect BOM: Material Before Process / Casting -> Finished Component)
+          if (procCard && (procCard.rawItemId || procCard.rawItemCode)) {
+            const rawKey = procCard.rawItemId || procCard.rawItemCode || '';
+            if (rawKey && !visited.has(`proc_${rawKey}`)) {
+              const nextVisited = new Set(visited);
+              nextVisited.add(`proc_${rawKey}`);
+              // Induced demand to make netShortage units of finished item
+              explodeItemShortage(rawKey, netShortage, nextVisited);
             }
-          });
+          }
         }
       }
     };
@@ -330,7 +350,7 @@ export const PlanningModule: React.FC = () => {
         _searchStr: `${partCode} ${itemCode} ${name} ${item.category || ''}`.toLowerCase()
       };
     });
-  }, [items, purchaseOrders, workOrders, jobCards, jobworks, boms, qcInspections, finishedGoods]);
+  }, [items, purchaseOrders, workOrders, jobCards, jobworks, boms, qcInspections, finishedGoods, itemProcessCards]);
 
   // Responsive Local Search Term with 120ms debounce to ERPContext
   const [localSearch, setLocalSearch] = useState(searchTerm);

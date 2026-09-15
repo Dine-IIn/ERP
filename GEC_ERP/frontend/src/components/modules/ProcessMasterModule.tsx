@@ -483,7 +483,7 @@ export const ProcessMasterModule: React.FC = () => {
                   <tr>
                     <th style={{ width: '45px', textAlign: 'center' }}>#</th>
                     <th style={{ minWidth: '190px' }}>Finished Item (A)</th>
-                    <th style={{ minWidth: '190px' }}>Raw Material / Casting (B)</th>
+                    <th style={{ minWidth: '190px' }}>Material Before Process (B)</th>
                     <th style={{ minWidth: '320px' }}>Process Route Sequence</th>
                     <th style={{ minWidth: '240px' }}>Assigned Step Vendors</th>
                     <th style={{ width: '110px', textAlign: 'center' }}>Steps / Lead Time</th>
@@ -800,14 +800,14 @@ export const ProcessMasterModule: React.FC = () => {
             </div>
 
             <div>
-              <label style={{ fontSize: '0.8rem', fontWeight: 700 }}>Raw Item (Source Raw Material) *</label>
+              <label style={{ fontSize: '0.8rem', fontWeight: 700 }}>Material Before Process (B) *</label>
               <select
                 className="input-field"
                 required
                 value={selectedRawItemId}
                 onChange={(e) => setSelectedRawItemId(e.target.value)}
               >
-                <option value="">-- Choose Raw Item / Material --</option>
+                <option value="">-- Choose Material Before Process --</option>
                 {items.filter(i => i.id !== selectedItemId).map(it => (
                   <option key={it.id} value={it.id}>
                     {it.itemCode} - {it.name} ({it.category})
@@ -1084,7 +1084,7 @@ export const ProcessMasterModule: React.FC = () => {
                   <tr>
                     <th>#</th>
                     <th>Finished Product (A)</th>
-                    <th>Raw Casting (B)</th>
+                    <th>Material Before Process (B)</th>
                     <th>Process Steps Sequence</th>
                     <th>Total Steps</th>
                   </tr>
