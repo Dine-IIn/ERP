@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo, useDeferredValue } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { Modal } from '../common/Modal';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
@@ -14,7 +14,8 @@ type JCSortKey = 'jobCardNo' | 'itemType' | 'itemName' | 'woNumber' | 'targetQua
 export const JobCardModule: React.FC = () => {
   const { 
     jobCards, items, workOrders, boms, addJobCard, updateJobCard, updateJobCardProgress, closeJobCard, reopenJobCard, deleteJobCard,
-    jobCardMaterialReissues, addJobCardMaterialReissue, currentUser 
+    jobCardMaterialReissues, addJobCardMaterialReissue, currentUser, finishedGoods,
+    searchTerm, setSearchTerm 
   } = useERP();
 
   const [activeMainTab, setActiveMainTab] = useState<'JOB_CARDS' | 'REISSUES'>('JOB_CARDS');
@@ -29,9 +30,22 @@ export const JobCardModule: React.FC = () => {
   const [selectedJC, setSelectedJC] = useState<JobCard | null>(null);
   const [progressQtyInput, setProgressQtyInput] = useState<number>(1);
   const [statusFilter, setStatusFilter] = useState<string>('ACTIVE_ONLY');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(searchTerm || '');
   const [startDateFilter, setStartDateFilter] = useState<string>('');
   const [endDateFilter, setEndDateFilter] = useState<string>('');
+
+  useEffect(() => {
+    setSearchQuery(searchTerm);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      if (searchQuery !== searchTerm) {
+        setSearchTerm(searchQuery);
+      }
+    }, 40);
+    return () => clearTimeout(handler);
+  }, [searchQuery, searchTerm, setSearchTerm]);
 
   const [printModalOpen, setPrintModalOpen] = useState(false);
   const [printDocType, setPrintDocType] = useState<'SINGLE_JC' | 'JC_LIST'>('JC_LIST');
@@ -129,22 +143,21 @@ export const JobCardModule: React.FC = () => {
     // Check WO demand for this machine / final product model
     let woDemand = getItemWorkOrderDemand(item.id, item.itemCode);
     workOrders.filter(w => w.status === 'PLANNED' || w.status === 'IN_PROGRESS').forEach(wo => {
-      if (wo.machineModel === item.name || wo.machineModel === item.itemCode || wo.bomId === item.id) {
-        woDemand += (wo.quantity || 1);
+      if (wo.machineModel === item.name || wo.machineModel === item.itemCode || wo.bomId === item.id || (wo as any).itemId === item.id) {
+        const totalWOQty = wo.targetQuantity || wo.quantity || 1;
+        const dispatchedQty = (finishedGoods || []).filter(fg => 
+          fg.status === 'DISPATCHED' && (
+            fg.woId === wo.id ||
+            (wo.workOrderNo && fg.woNumber === wo.workOrderNo) ||
+            (wo.woNumber && fg.woNumber === wo.woNumber)
+          )
+        ).length;
+        woDemand += Math.max(0, totalWOQty - dispatchedQty);
       }
     });
 
-    const pendingJCQty = jobCards
-      .filter(jc => jc.status !== 'COMPLETED' && jc.status !== 'CANCELLED')
-      .reduce((sum, jc) => {
-        if (jc.itemId === item.id || jc.itemCode === item.itemCode) {
-          return sum + Math.max(0, (jc.targetQuantity || 1) - (jc.completedQuantity || 0));
-        }
-        return sum;
-      }, 0);
-
-    const totalRequired = woDemand + minReq;
-    return Math.max(0, totalRequired - (currentStock + pendingJCQty));
+    // Min Level Shortage Formula: (woDemand + minReq) - currentStock
+    return Math.max(0, (woDemand + minReq) - currentStock);
   };
 
   // Helper to check if item has BOM or Process defined
@@ -160,7 +173,7 @@ export const JobCardModule: React.FC = () => {
     return hasBOM || hasProcess;
   };
 
-  const inHouseShortageItems = items.filter(i => isInHouseItem(i) && !i.isBlocked && hasBOMorProcess(i) && getInHouseItemShortage(i) > 0);
+  const inHouseShortageItems = items.filter(i => isInHouseItem(i) && !i.isBlocked && hasBOMorProcess(i) && getInHouseItemShortage(i) >= 1);
 
   const handleOpenShortageJCModal = (item: Item) => {
     const shortage = getInHouseItemShortage(item);
@@ -441,56 +454,60 @@ export const JobCardModule: React.FC = () => {
     }
   };
 
-  // Universal @history & @deleted search handling
-  const isHistorySearch = searchQuery.toLowerCase().includes('@history') || searchQuery.toLowerCase().includes('@deleted') || searchQuery.trim().startsWith('@');
-  const cleanSearchTerm = searchQuery.replace(/@history|@deleted/gi, '').replace(/^@/g, '').trim().toLowerCase();
+  // Universal @history & @deleted search handling with useDeferredValue
+  const deferredSearchQuery = useDeferredValue(searchQuery);
+  const isDeletedSearch = deferredSearchQuery.toLowerCase().includes('@deleted');
+  const isHistorySearch = isDeletedSearch || deferredSearchQuery.toLowerCase().includes('@history') || deferredSearchQuery.trim().startsWith('@');
+  const cleanSearchTerm = deferredSearchQuery.replace(/@history|@deleted|@archived/gi, '').replace(/^@+/g, '').trim().toLowerCase();
 
-  const filteredJobCards = jobCards
-    .filter(jc => {
-      const isHistorical = jc.status === 'COMPLETED' || jc.status === 'CANCELLED' || jc.isDeleted;
+  const indexedJobCards = useMemo(() => {
+    return jobCards.map(jc => ({
+      jc,
+      _searchStr: `${jc.jobCardNo} ${jc.itemName} ${jc.itemCode} ${jc.woNumber || ''} ${jc.assignedOperator || ''}`.toLowerCase()
+    }));
+  }, [jobCards]);
 
-      // By default show active unless @history is typed or a specific status filter is picked
-      if (!isHistorySearch && statusFilter === 'ACTIVE_ONLY' && (isHistorical || jc.isDeleted)) {
-        return false;
-      }
-      if (!isHistorySearch && statusFilter === 'ALL' && (jc.status === 'COMPLETED' || jc.isDeleted)) {
-        return false;
-      }
+  const filteredJobCards = useMemo(() => {
+    return indexedJobCards
+      .filter(({ jc, _searchStr }) => {
+        const isHistorical = jc.status === 'COMPLETED' || jc.status === 'CANCELLED' || jc.isDeleted;
 
-      let matchesStatus = true;
-      if (isHistorySearch || statusFilter === 'ALL' || statusFilter === 'ACTIVE_ONLY') {
-        matchesStatus = true;
-      } else if (statusFilter === 'DELETED') {
-        matchesStatus = !!jc.isDeleted;
-      } else {
-        matchesStatus = jc.status === statusFilter && !jc.isDeleted;
-      }
+        if (isDeletedSearch) {
+          if (!jc.isDeleted) return false;
+        } else if (isHistorySearch) {
+          // If @ or @history, show completed, cancelled, or deleted job cards
+          if (!isHistorical) return false;
+        } else if (statusFilter === 'ACTIVE_ONLY') {
+          if (isHistorical || jc.isDeleted) return false;
+        } else if (statusFilter === 'ALL') {
+          if (jc.status === 'COMPLETED' || jc.isDeleted) return false;
+        } else if (statusFilter === 'DELETED') {
+          if (!jc.isDeleted) return false;
+        } else {
+          if (jc.status !== statusFilter || jc.isDeleted) return false;
+        }
 
-      const matchesSearch = !cleanSearchTerm || 
-        jc.jobCardNo.toLowerCase().includes(cleanSearchTerm) ||
-        jc.itemName.toLowerCase().includes(cleanSearchTerm) ||
-        jc.itemCode.toLowerCase().includes(cleanSearchTerm) ||
-        (jc.woNumber && jc.woNumber.toLowerCase().includes(cleanSearchTerm)) ||
-        (jc.assignedOperator && jc.assignedOperator.toLowerCase().includes(cleanSearchTerm));
+        const matchesSearch = !cleanSearchTerm || _searchStr.includes(cleanSearchTerm);
+        if (!matchesSearch) return false;
 
-      if (!matchesStatus || !matchesSearch) return false;
+        if (startDateFilter && jc.startDate && jc.startDate < startDateFilter) return false;
+        if (endDateFilter && jc.startDate && jc.startDate > endDateFilter) return false;
 
-      if (startDateFilter && jc.startDate && jc.startDate < startDateFilter) return false;
-      if (endDateFilter && jc.startDate && jc.startDate > endDateFilter) return false;
+        return true;
+      })
+      .map(({ jc }) => jc)
+      .sort((a, b) => {
+        let valA: any = (a as any)[sortField] ?? '';
+        let valB: any = (b as any)[sortField] ?? '';
 
-      return true;
-    })
-    .sort((a, b) => {
-      let valA: any = (a as any)[sortField] ?? '';
-      let valB: any = (b as any)[sortField] ?? '';
+        if (typeof valA === 'string') valA = valA.toLowerCase();
+        if (typeof valB === 'string') valB = valB.toLowerCase();
 
-      if (typeof valA === 'string') valA = valA.toLowerCase();
-      if (typeof valB === 'string') valB = valB.toLowerCase();
-
-      if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
-      if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
-      return 0;
-    });
+        if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+        if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+        return 0;
+      });
+  }, [indexedJobCards, isDeletedSearch, isHistorySearch, statusFilter, cleanSearchTerm, startDateFilter, endDateFilter, sortField, sortOrder]);
 
   const handlePrintSingleJC = (jc: JobCard) => {
     setSelectedPrintJC(jc);
@@ -503,8 +520,10 @@ export const JobCardModule: React.FC = () => {
     setPrintModalOpen(true);
   };
 
+  const deferredWizardSearchTerm = useDeferredValue(wizardSearchTerm);
+
   const getWizardTableRows = () => {
-    const term = wizardSearchTerm.trim().toLowerCase();
+    const term = deferredWizardSearchTerm.trim().toLowerCase();
 
     if (!isExplodeShortage) {
       return inHouseShortageItems
@@ -522,7 +541,7 @@ export const JobCardModule: React.FC = () => {
             srNo: idx + 1,
             item,
             itemDescription: item.name,
-            partCode: item.itemCode,
+            partCode: item.partCode || item.itemCode,
             requiredQty: reqQty,
             currentStock,
             shortage,
@@ -568,6 +587,7 @@ export const JobCardModule: React.FC = () => {
         if (term) {
           const matches = it.itemCode.toLowerCase().includes(term) ||
             it.name.toLowerCase().includes(term) ||
+            (it.partCode && it.partCode.toLowerCase().includes(term)) ||
             (wo.workOrderNo && wo.workOrderNo.toLowerCase().includes(term)) ||
             (wo.machineModel && wo.machineModel.toLowerCase().includes(term));
           if (!matches) return;
@@ -577,7 +597,7 @@ export const JobCardModule: React.FC = () => {
           srNo: count++,
           item: it,
           itemDescription: it.name,
-          partCode: it.itemCode,
+          partCode: it.partCode || it.itemCode,
           requiredQty: reqQty,
           currentStock,
           shortage,
@@ -591,7 +611,9 @@ export const JobCardModule: React.FC = () => {
     return explodedRows;
   };
 
-  const wizardTableRows = getWizardTableRows();
+  const wizardTableRows = useMemo(() => getWizardTableRows(), [
+    isExplodeShortage, inHouseShortageItems, deferredWizardSearchTerm, workOrders, boms, items
+  ]);
 
   return (
     <div className="module-layout-container">
@@ -1045,11 +1067,7 @@ export const JobCardModule: React.FC = () => {
                           <Printer size={13} />
                         </button>
                         
-                        {jc.isDeleted ? (
-                          <span className="badge" style={{ backgroundColor: '#dc2626', color: '#fff', fontSize: '0.72rem', fontWeight: 700 }}>
-                            🗑️ Deleted (Archived)
-                          </span>
-                        ) : isComplete ? (
+                        {jc.isDeleted ? null : isComplete ? (
                           <>
                             <span style={{ fontSize: '0.75rem', color: 'var(--success)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
                               <CheckCircle size={14} /> Closed & In Stock

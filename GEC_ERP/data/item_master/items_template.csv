@@ -1,9 +1,0 @@
-ItemCode,PartCode,OldItemCode,ItemName,Category,MaterialProcessSources,Unit,PurchaseUOM,ConversionFactor,InHouseStock,ExternalStock,MinStockQty,MinOrderQty,UnitPrice,LeadTimeDays,Location,QCTrigger,TestReportRequired,WeightKg,Specification
-GEC-RM-ROD80-EN8,DWG-TB-80,OLD-TB-01,Tie Bar Raw Rod 80mm EN8D,RM,Bought out,PCS,PCS,1,50,0,10,20,2450.00,7,Raw Store A-01,ON_GRN,TRUE,45.2,EN8D Hard Round Bar
-GEC-MC-TB80-250T,DWG-TB-250,OLD-TB-02,Tie Bar 80mm Finished Machined,MC,In-house;Job work,PCS,PCS,1,12,8,4,10,4850.00,12,WIP Rack B-03,ON_GRN,TRUE,42.0,Finished Ground & Hard Chrome Plated
-GEC-BO-VALVE-01,BO-PARKER-01,,Directional Control Valve D03,BO,Bought out,PCS,PCS,1,25,0,5,10,6500.00,15,Boughtout Store C-02,NO_QC,FALSE,3.5,Parker 24V DC Solenoid
-GEC-EL-PLC-S7,EL-SIEMENS-1200,,Siemens S7-1200 CPU 1214C PLC,EL,Bought out,PCS,PCS,1,8,0,2,5,32000.00,20,Electronics Room E-01,ON_GRN,TRUE,1.2,24VDC 14DI/10DO/2AI
-GEC-HY-PUMP-50KW,HY-YUKEN-01,,Variable Displacement Hydraulic Piston Pump 50kW,HY,Bought out,PCS,PCS,1,4,0,1,2,78000.00,25,Hydraulics Store H-01,ON_GRN,TRUE,38.0,Yuken A37 Series 250 Bar
-GEC-SA-INJ-250T,SA-INJ-250,,Injection Unit Sub-Assembly 250T,SA,In-house,SET,SET,1,2,0,1,2,145000.00,14,Assembly Bay 01,DURING_ASSEMBLY,TRUE,280.0,Complete 250T Injection Carriage
-GEC-SA-CLP-250T,SA-CLP-250,,Clamping Unit Sub-Assembly 250T,SA,In-house,SET,SET,1,2,0,1,2,185000.00,16,Assembly Bay 02,DURING_ASSEMBLY,TRUE,450.0,5-Point Double Toggle Clamping Unit
-GEC-FG-IMM-250T,FG-250T-STD,,GEC-250T Servo Hydraulic Plastic Injection Moulding Machine,FG,In-house,SET,SET,1,1,0,0,1,1250000.00,30,Final Dispatch Bay,ON_GRN,TRUE,8500.0,250 Ton Clamping Force Servo Hydraulic

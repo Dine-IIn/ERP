@@ -115,9 +115,77 @@ export const Header: React.FC = () => {
     }
   };
 
-  // Cross-module search results (Memoized for high-performance zero-lag typing)
-  const isHistorySearch = searchTerm.includes('@');
-  const cleanTerm = searchTerm.replace(/@history|@/gi, '').trim().toLowerCase();
+  // Responsive Local Search Term with 120ms debounce to ERPContext
+  const [localSearchTerm, setLocalSearchTerm] = useState(searchTerm);
+
+  useEffect(() => {
+    setLocalSearchTerm(searchTerm);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      if (localSearchTerm !== searchTerm) {
+        setSearchTerm(localSearchTerm);
+      }
+    }, 40);
+    return () => clearTimeout(handler);
+  }, [localSearchTerm, searchTerm, setSearchTerm]);
+
+  // Deferred search term for background dropdown processing without blocking keyboard
+  const deferredSearchTerm = React.useDeferredValue(localSearchTerm);
+
+  // Pre-compiled search index for instantaneous sub-millisecond global search
+  const searchIndex = React.useMemo(() => {
+    return {
+      items: items.map(i => ({
+        data: i,
+        searchStr: `${i.itemCode} ${i.name} ${i.category} ${i.partCode || ''}`.toLowerCase(),
+        isHistorical: !!i.isBlocked
+      })),
+      customers: customers.map(c => ({
+        data: c,
+        searchStr: `${c.name} ${c.customerCode} ${c.city || ''} ${c.phone || ''}`.toLowerCase(),
+        isHistorical: false
+      })),
+      vendors: vendors.map(v => ({
+        data: v,
+        searchStr: `${v.name} ${v.vendorCode} ${v.city || ''} ${v.phone || ''}`.toLowerCase(),
+        isHistorical: false
+      })),
+      salesOrders: salesOrders.map(so => ({
+        data: so,
+        searchStr: `${so.soNumber} ${so.customerName} ${so.machineModel}`.toLowerCase(),
+        isHistorical: so.status === 'COMPLETED' || (so.status as string) === 'DELIVERED' || so.status === 'CANCELLED' || !!(so as any).isArchived || !!(so as any).isDeleted
+      })),
+      purchaseOrders: purchaseOrders.map(po => {
+        const itemsStr = po.items.map(it => `${it.itemName || ''} ${it.itemCode || ''}`).join(' ');
+        return {
+          data: po,
+          searchStr: `${po.poNumber} ${po.vendorName} ${itemsStr}`.toLowerCase(),
+          isHistorical: po.status === 'GOODS_RECEIVED' || (po.status as string) === 'RECEIVED' || po.status === 'CANCELLED' || !!po.isDeleted || !!(po as any).isArchived
+        };
+      }),
+      workOrders: workOrders.map(wo => ({
+        data: wo,
+        searchStr: `${wo.workOrderNo || wo.woNumber || ''} ${wo.machineModel} ${wo.customerName || ''} ${wo.assignedLead || ''}`.toLowerCase(),
+        isHistorical: wo.status === 'COMPLETED' || wo.status === 'CANCELLED' || wo.stage === 'DISPATCHED' || !!(wo as any).isDeleted
+      })),
+      jobCards: jobCards.map(jc => ({
+        data: jc,
+        searchStr: `${jc.jobCardNo} ${jc.itemName} ${jc.itemCode} ${jc.woNumber || ''} ${jc.assignedOperator || ''}`.toLowerCase(),
+        isHistorical: jc.status === 'COMPLETED' || jc.status === 'CANCELLED' || !!jc.isDeleted
+      })),
+      boms: boms.map(b => ({
+        data: b,
+        searchStr: `${b.bomCode} ${b.machineModel}`.toLowerCase(),
+        isHistorical: false
+      }))
+    };
+  }, [items, customers, vendors, salesOrders, purchaseOrders, workOrders, jobCards, boms]);
+
+  // Cross-module search results (Ultra-fast early exit loop)
+  const isHistorySearch = deferredSearchTerm.includes('@');
+  const cleanTerm = deferredSearchTerm.replace(/@history|@deleted|@archived/gi, '').replace(/^@+/g, '').trim().toLowerCase();
 
   const {
     matchingItems, matchingCustomers, matchingVendors, matchingSOs,
@@ -130,40 +198,34 @@ export const Header: React.FC = () => {
       };
     }
 
-    const mItems = cleanTerm || isHistorySearch ? items.filter(i => {
-      if (isHistorySearch && !i.isBlocked) return false;
-      if (!isHistorySearch && i.isBlocked) return false;
-      if (!cleanTerm) return true;
-      return i.itemCode.toLowerCase().includes(cleanTerm) || i.name.toLowerCase().includes(cleanTerm) || i.category.toLowerCase().includes(cleanTerm);
-    }).slice(0, 5) : [];
+    const findMatches = <T,>(
+      list: Array<{ data: T; searchStr: string; isHistorical: boolean }>,
+      limit: number
+    ): T[] => {
+      const matched: T[] = [];
+      for (let i = 0; i < list.length; i++) {
+        const item = list[i];
+        if (isHistorySearch) {
+          if (!item.isHistorical) continue;
+        } else {
+          if (item.isHistorical) continue;
+        }
+        if (!cleanTerm || item.searchStr.includes(cleanTerm)) {
+          matched.push(item.data);
+          if (matched.length >= limit) break;
+        }
+      }
+      return matched;
+    };
 
-    const mCustomers = cleanTerm ? customers.filter(c => 
-      c.name.toLowerCase().includes(cleanTerm) || c.customerCode.toLowerCase().includes(cleanTerm) || (c.city && c.city.toLowerCase().includes(cleanTerm))
-    ).slice(0, 4) : [];
-
-    const mVendors = cleanTerm ? vendors.filter(v => 
-      v.name.toLowerCase().includes(cleanTerm) || v.vendorCode.toLowerCase().includes(cleanTerm) || (v.city && v.city.toLowerCase().includes(cleanTerm))
-    ).slice(0, 4) : [];
-
-    const mSOs = cleanTerm ? salesOrders.filter(so => 
-      so.soNumber.toLowerCase().includes(cleanTerm) || so.customerName.toLowerCase().includes(cleanTerm) || so.machineModel.toLowerCase().includes(cleanTerm)
-    ).slice(0, 4) : [];
-
-    const mPOs = cleanTerm ? purchaseOrders.filter(po => 
-      po.poNumber.toLowerCase().includes(cleanTerm) || po.vendorName.toLowerCase().includes(cleanTerm)
-    ).slice(0, 4) : [];
-
-    const mWOs = cleanTerm ? workOrders.filter(wo => 
-      (wo.workOrderNo || wo.woNumber).toLowerCase().includes(cleanTerm) || wo.machineModel.toLowerCase().includes(cleanTerm)
-    ).slice(0, 4) : [];
-
-    const mJCs = cleanTerm ? jobCards.filter(jc => 
-      jc.jobCardNo.toLowerCase().includes(cleanTerm) || jc.itemName.toLowerCase().includes(cleanTerm)
-    ).slice(0, 4) : [];
-
-    const mBOMs = cleanTerm ? boms.filter(b => 
-      b.bomCode.toLowerCase().includes(cleanTerm) || b.machineModel.toLowerCase().includes(cleanTerm)
-    ).slice(0, 4) : [];
+    const mItems = findMatches(searchIndex.items, 5);
+    const mCustomers = !isHistorySearch ? findMatches(searchIndex.customers, 4) : [];
+    const mVendors = !isHistorySearch ? findMatches(searchIndex.vendors, 4) : [];
+    const mSOs = findMatches(searchIndex.salesOrders, 4);
+    const mPOs = findMatches(searchIndex.purchaseOrders, 4);
+    const mWOs = findMatches(searchIndex.workOrders, 4);
+    const mJCs = findMatches(searchIndex.jobCards, 4);
+    const mBOMs = !isHistorySearch ? findMatches(searchIndex.boms, 4) : [];
 
     const hasRes = mItems.length > 0 || mCustomers.length > 0 || mVendors.length > 0 || 
       mSOs.length > 0 || mPOs.length > 0 || mWOs.length > 0 || mJCs.length > 0 || mBOMs.length > 0;
@@ -179,7 +241,7 @@ export const Header: React.FC = () => {
       matchingBOMs: mBOMs,
       hasAnyResults: hasRes
     };
-  }, [cleanTerm, isHistorySearch, items, customers, vendors, salesOrders, purchaseOrders, workOrders, jobCards, boms]);
+  }, [cleanTerm, isHistorySearch, searchIndex]);
 
   return (
     <header className="top-header" style={{ position: 'relative' }}>
@@ -203,18 +265,18 @@ export const Header: React.FC = () => {
             fontSize: '0.85rem',
             borderColor: isHistorySearch ? '#7c3aed' : undefined 
           }}
-          value={searchTerm}
+          value={localSearchTerm}
           onFocus={() => setIsSearchOpen(true)}
           onChange={(e) => {
-            setSearchTerm(e.target.value);
+            setLocalSearchTerm(e.target.value);
             setIsSearchOpen(true);
           }}
         />
 
-        {searchTerm && (
+        {localSearchTerm && (
           <button 
             type="button" 
-            onClick={() => { setSearchTerm(''); setIsSearchOpen(false); }}
+            onClick={() => { setLocalSearchTerm(''); setSearchTerm(''); setIsSearchOpen(false); }}
             style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.8rem', padding: '0.2rem' }}
           >
             ✕
@@ -222,7 +284,7 @@ export const Header: React.FC = () => {
         )}
 
         {/* Global Search Dropdown Overlay */}
-        {isSearchOpen && (searchTerm.trim().length > 0 || isHistorySearch) && (
+        {isSearchOpen && (localSearchTerm.trim().length > 0 || isHistorySearch) && (
           <div 
             style={{ 
               position: 'absolute', 
@@ -357,6 +419,68 @@ export const Header: React.FC = () => {
                           <span style={{ fontSize: '0.72rem', color: 'var(--accent-primary)', fontFamily: 'monospace', marginLeft: '0.35rem' }}>({b.bomCode})</span>
                         </div>
                         <span className="badge badge-primary" style={{ fontSize: '0.65rem' }}>Inspect BOM</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Job Cards */}
+                {matchingJCs.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#06b6d4', marginBottom: '0.25rem' }}>📋 JOB CARDS ({matchingJCs.length})</div>
+                    {matchingJCs.map(jc => (
+                      <div 
+                        key={jc.id} 
+                        style={{ padding: '0.35rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-tertiary)', marginBottom: '0.25rem' }}
+                        onClick={() => { setActiveModule('job-cards'); setIsSearchOpen(false); }}
+                      >
+                        <div>
+                          <strong style={{ fontSize: '0.82rem', fontFamily: 'monospace' }}>{jc.jobCardNo}</strong>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginLeft: '0.35rem' }}>{jc.itemName}</span>
+                        </div>
+                        <span className={`badge ${jc.isDeleted ? 'badge-danger' : jc.status === 'COMPLETED' ? 'badge-success' : 'badge-neutral'}`} style={{ fontSize: '0.65rem' }}>
+                          {jc.isDeleted ? 'DELETED' : jc.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Customers */}
+                {matchingCustomers.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#ec4899', marginBottom: '0.25rem' }}>👥 CUSTOMERS ({matchingCustomers.length})</div>
+                    {matchingCustomers.map(c => (
+                      <div 
+                        key={c.id} 
+                        style={{ padding: '0.35rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-tertiary)', marginBottom: '0.25rem' }}
+                        onClick={() => { setActiveModule('customers'); setIsSearchOpen(false); }}
+                      >
+                        <div>
+                          <strong style={{ fontSize: '0.82rem' }}>{c.name}</strong>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: '0.35rem' }}>({c.customerCode} {c.city ? `• ${c.city}` : ''})</span>
+                        </div>
+                        <span className="badge badge-neutral" style={{ fontSize: '0.65rem' }}>Client</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Vendors */}
+                {matchingVendors.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#14b8a6', marginBottom: '0.25rem' }}>🏭 VENDORS ({matchingVendors.length})</div>
+                    {matchingVendors.map(v => (
+                      <div 
+                        key={v.id} 
+                        style={{ padding: '0.35rem 0.5rem', borderRadius: '0.25rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-tertiary)', marginBottom: '0.25rem' }}
+                        onClick={() => { setActiveModule('vendors'); setIsSearchOpen(false); }}
+                      >
+                        <div>
+                          <strong style={{ fontSize: '0.82rem' }}>{v.name}</strong>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: '0.35rem' }}>({v.vendorCode} {v.city ? `• ${v.city}` : ''})</span>
+                        </div>
+                        <span className="badge badge-neutral" style={{ fontSize: '0.65rem' }}>Vendor</span>
                       </div>
                     ))}
                   </div>

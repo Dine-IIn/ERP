@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo, useDeferredValue } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { AutocompleteSelect, AutocompleteOption } from '../common/AutocompleteSelect';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
@@ -114,42 +114,67 @@ export const SalesOrderModule: React.FC = () => {
     }
   };
 
-  // Universal @history search handling
-  const isHistorySearch = searchTerm.toLowerCase().includes('@history');
-  const cleanSearchTerm = searchTerm.replace(/@history/gi, '').trim().toLowerCase();
+  // Synchronized search with fast 40ms debounce and deferred evaluation
+  const [localSearch, setLocalSearch] = useState(searchTerm || '');
+  useEffect(() => {
+    setLocalSearch(searchTerm);
+  }, [searchTerm]);
 
-  const filteredSOs = salesOrders
-    .filter(so => {
-      const isCompleted = so.status === 'COMPLETED' || (so.status as string) === 'DELIVERED' || so.status === 'CANCELLED' || (so as any).isArchived;
-
-      // By default show only active unless @history is typed
-      if (!isHistorySearch && isCompleted) {
-        return false;
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      if (localSearch !== searchTerm) {
+        setSearchTerm(localSearch);
       }
+    }, 40);
+    return () => clearTimeout(handler);
+  }, [localSearch, searchTerm, setSearchTerm]);
 
-      const matchesSearch = !cleanSearchTerm || (
-        so.soNumber.toLowerCase().includes(cleanSearchTerm) ||
-        so.customerName.toLowerCase().includes(cleanSearchTerm) ||
-        so.machineModel.toLowerCase().includes(cleanSearchTerm)
-      );
-      if (!matchesSearch) return false;
+  const deferredSearch = useDeferredValue(localSearch);
+  const isDeletedSearch = deferredSearch.toLowerCase().includes('@deleted');
+  const isHistorySearch = isDeletedSearch || deferredSearch.toLowerCase().includes('@history') || deferredSearch.toLowerCase().includes('@completed') || deferredSearch.trim().startsWith('@');
+  const cleanSearchTerm = deferredSearch.replace(/@history|@deleted|@completed|@archived/gi, '').replace(/^@+/g, '').trim().toLowerCase();
 
-      if (startDateFilter && so.orderDate && so.orderDate < startDateFilter) return false;
-      if (endDateFilter && so.orderDate && so.orderDate > endDateFilter) return false;
+  const indexedSOs = useMemo(() => {
+    return salesOrders.map(so => ({
+      so,
+      _searchStr: `${so.soNumber} ${so.customerName} ${so.machineModel}`.toLowerCase(),
+      isCompleted: so.status === 'COMPLETED' || (so.status as string) === 'DELIVERED' || so.status === 'CANCELLED' || !!(so as any).isArchived || !!(so as any).isDeleted,
+      isDeleted: !!(so as any).isDeleted
+    }));
+  }, [salesOrders]);
 
-      return true;
-    })
-    .sort((a, b) => {
-      let valA: any = a[sortField] || '';
-      let valB: any = b[sortField] || '';
+  const filteredSOs = useMemo(() => {
+    return indexedSOs
+      .filter(({ so, _searchStr, isCompleted, isDeleted }) => {
+        if (isDeletedSearch) {
+          if (!isDeleted) return false;
+        } else if (isHistorySearch) {
+          if (!isCompleted) return false;
+        } else if (isCompleted) {
+          return false;
+        }
 
-      if (typeof valA === 'string') valA = valA.toLowerCase();
-      if (typeof valB === 'string') valB = valB.toLowerCase();
+        const matchesSearch = !cleanSearchTerm || _searchStr.includes(cleanSearchTerm);
+        if (!matchesSearch) return false;
 
-      if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
-      if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
-      return 0;
-    });
+        if (startDateFilter && so.orderDate && so.orderDate < startDateFilter) return false;
+        if (endDateFilter && so.orderDate && so.orderDate > endDateFilter) return false;
+
+        return true;
+      })
+      .map(({ so }) => so)
+      .sort((a, b) => {
+        let valA: any = a[sortField] || '';
+        let valB: any = b[sortField] || '';
+
+        if (typeof valA === 'string') valA = valA.toLowerCase();
+        if (typeof valB === 'string') valB = valB.toLowerCase();
+
+        if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+        if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+        return 0;
+      });
+  }, [indexedSOs, isDeletedSearch, isHistorySearch, cleanSearchTerm, startDateFilter, endDateFilter, sortField, sortOrder]);
 
   // Keyboard navigation hook for live table row focus
   const { selectedIndex, setSelectedIndex } = useTableKeyboardNav(
@@ -275,8 +300,8 @@ export const SalesOrderModule: React.FC = () => {
                   placeholder="Search SO, customer, model... (type @history to search completed)"
                   className="input-field"
                   style={{ paddingLeft: '2.25rem' }}
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  value={localSearch}
+                  onChange={(e) => setLocalSearch(e.target.value)}
                 />
               </div>
 

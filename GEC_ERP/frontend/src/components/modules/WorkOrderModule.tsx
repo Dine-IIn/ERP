@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useDeferredValue } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { AutocompleteSelect, AutocompleteOption } from '../common/AutocompleteSelect';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
@@ -15,21 +15,17 @@ export const WorkOrderModule: React.FC = () => {
     workOrders, boms, items, itemCategories, addWorkOrder, updateWorkOrderStage, updateWorkOrderComponents, 
     searchTerm, setSearchTerm, selectedWOIdForEdit, setSelectedWOIdForEdit 
   } = useERP();
+
+  const [selectedWO, setSelectedWO] = useState<WorkOrder | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   const [isStageModalOpen, setIsStageModalOpen] = useState(false);
-    const [selectedWO, setSelectedWO] = useState<WorkOrder | null>(null);
-  const [printModalOpen, setPrintModalOpen] = useState(false);
-  const [printData, setPrintData] = useState<any>(null);
-
-  // Single Column Sorting State
   const [sortField, setSortField] = useState<SortField>('workOrderNo');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
-
-  // Inline Filter States
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [selectedStageFilter, setSelectedStageFilter] = useState<string>('ALL');
   const [startDateFilter, setStartDateFilter] = useState<string>('');
   const [endDateFilter, setEndDateFilter] = useState<string>('');
+  const [printModalOpen, setPrintModalOpen] = useState(false);
 
   const handleSortToggle = (field: SortField) => {
     if (sortField === field) {
@@ -40,50 +36,78 @@ export const WorkOrderModule: React.FC = () => {
     }
   };
 
-  // Universal @history search handling
-  const isHistorySearch = searchTerm.toLowerCase().includes('@history');
-  const cleanSearchTerm = searchTerm.replace(/@history/gi, '').trim().toLowerCase();
+  // Synchronized search with fast 40ms debounce and deferred evaluation
+  const [localSearch, setLocalSearch] = useState(searchTerm || '');
+  useEffect(() => {
+    setLocalSearch(searchTerm);
+  }, [searchTerm]);
 
-  const filteredWOs = workOrders
-    .filter(wo => {
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      if (localSearch !== searchTerm) {
+        setSearchTerm(localSearch);
+      }
+    }, 40);
+    return () => clearTimeout(handler);
+  }, [localSearch, searchTerm, setSearchTerm]);
+
+  const deferredSearch = useDeferredValue(localSearch);
+  const isDeletedSearch = deferredSearch.toLowerCase().includes('@deleted');
+  const isHistorySearch = isDeletedSearch || deferredSearch.toLowerCase().includes('@history') || deferredSearch.toLowerCase().includes('@completed') || deferredSearch.trim().startsWith('@');
+  const cleanSearchTerm = deferredSearch.replace(/@history|@deleted|@completed|@archived/gi, '').replace(/^@+/g, '').trim().toLowerCase();
+
+  const indexedWOs = useMemo(() => {
+    return workOrders.map(wo => {
       const woNo = wo.workOrderNo || wo.woNumber || '';
       const lead = wo.assignedLead || '';
-      const woStage = wo.stage || 'PLANNED';
-      const woStatus = wo.status || 'IN_PROGRESS';
-      const start = wo.startDate || '';
-      const targetDate = wo.targetCompletionDate || '';
-
-      const isCompletedOrClosed = woStage === 'DISPATCHED' || (woStage === 'FINAL_TESTING' && woStatus === 'COMPLETED') || (woStatus as string) === 'CLOSED' || (wo as any).isArchived;
-
-      // By default show only active records unless @history is typed
-      if (!isHistorySearch && isCompletedOrClosed) {
-        return false;
-      }
-
-      const matchesSearch = !cleanSearchTerm || (
-        woNo.toLowerCase().includes(cleanSearchTerm) ||
-        wo.machineModel.toLowerCase().includes(cleanSearchTerm) ||
-        lead.toLowerCase().includes(cleanSearchTerm) ||
-        (wo.soNumber && wo.soNumber.toLowerCase().includes(cleanSearchTerm))
-      );
-
-      const matchesStage = selectedStageFilter === 'ALL' || woStage === selectedStageFilter;
-      const matchesStart = !startDateFilter || start >= startDateFilter;
-      const matchesEnd = !endDateFilter || targetDate <= endDateFilter;
-
-      return matchesSearch && matchesStage && matchesStart && matchesEnd;
-    })
-    .sort((a, b) => {
-      let valA: any = (a as any)[sortField] || (a as any).woNumber || '';
-      let valB: any = (b as any)[sortField] || (b as any).woNumber || '';
-
-      if (typeof valA === 'string') valA = valA.toLowerCase();
-      if (typeof valB === 'string') valB = valB.toLowerCase();
-
-      if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
-      if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
-      return 0;
+      const soNo = wo.soNumber || '';
+      return {
+        wo,
+        _searchStr: `${woNo} ${wo.machineModel} ${lead} ${soNo} ${wo.customerName || ''}`.toLowerCase(),
+        isCompletedOrClosed: wo.stage === 'DISPATCHED' || (wo.stage === 'FINAL_TESTING' && wo.status === 'COMPLETED') || (wo.status as string) === 'CLOSED' || !!(wo as any).isArchived || !!(wo as any).isDeleted,
+        isDeleted: !!(wo as any).isDeleted
+      };
     });
+  }, [workOrders]);
+
+  const filteredWOs = useMemo(() => {
+    return indexedWOs
+      .filter(({ wo, _searchStr, isCompletedOrClosed, isDeleted }) => {
+        if (isDeletedSearch) {
+          if (!isDeleted) return false;
+        } else if (isHistorySearch) {
+          if (!isCompletedOrClosed) return false;
+        } else if (isCompletedOrClosed) {
+          return false;
+        }
+
+        const matchesSearch = !cleanSearchTerm || _searchStr.includes(cleanSearchTerm);
+        if (!matchesSearch) return false;
+
+        const woStage = wo.stage || 'PLANNED';
+        const matchesStage = selectedStageFilter === 'ALL' || woStage === selectedStageFilter;
+        if (!matchesStage) return false;
+
+        const start = wo.startDate || '';
+        const targetDate = wo.targetCompletionDate || '';
+        if (startDateFilter && start && start < startDateFilter) return false;
+        if (endDateFilter && targetDate && targetDate > endDateFilter) return false;
+
+        return true;
+      })
+      .map(({ wo }) => wo)
+      .sort((a, b) => {
+        let valA: any = (a as any)[sortField] || (a as any).woNumber || '';
+        let valB: any = (b as any)[sortField] || (b as any).woNumber || '';
+
+        if (typeof valA === 'string') valA = valA.toLowerCase();
+        if (typeof valB === 'string') valB = valB.toLowerCase();
+
+        if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+        if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+        return 0;
+      });
+  }, [indexedWOs, isDeletedSearch, isHistorySearch, cleanSearchTerm, selectedStageFilter, startDateFilter, endDateFilter, sortField, sortOrder]);
 
   // Customize modal search filter
   const [compSearchTerm, setCompSearchTerm] = useState('');
@@ -1226,8 +1250,8 @@ export const WorkOrderModule: React.FC = () => {
                 placeholder="Search WO no, model, lead... (type @history to search completed)"
                 className="input-field"
                 style={{ paddingLeft: '2.25rem' }}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                value={localSearch}
+                onChange={(e) => setLocalSearch(e.target.value)}
               />
             </div>
 

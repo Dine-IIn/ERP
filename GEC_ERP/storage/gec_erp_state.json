@@ -9,7 +9,7 @@
       "isSuperAdmin": true,
       "is_admin": true,
       "password": "GEC_SuperAdmin#2026!Secured$",
-      "desktopSessionId": "sess-1789451026034-0.7210290148260612"
+      "desktopSessionId": "sess-1789461183746-0.431381907959582"
     },
     {
       "id": "usr-admin",
@@ -269,7 +269,7 @@
       "unit": "NOS",
       "purchaseUOM": "NOS",
       "conversionFactor": 1,
-      "inHouseStock": 5,
+      "inHouseStock": 1,
       "externalStock": 0,
       "minStockQty": 1,
       "minOrderQty": 2,
@@ -282,7 +282,8 @@
         "In-house"
       ],
       "processType": "In-house",
-      "isBlocked": false
+      "isBlocked": false,
+      "reorderLevel": 12500
     },
     {
       "id": "itm-1789299669861-5-95nd4",
@@ -394,7 +395,7 @@
       "unit": "NOS",
       "purchaseUOM": "NOS",
       "conversionFactor": 1,
-      "inHouseStock": 50,
+      "inHouseStock": 1,
       "externalStock": 0,
       "minStockQty": 10,
       "minOrderQty": 20,
@@ -415,7 +416,8 @@
           "priority": 1
         }
       ],
-      "isBlocked": false
+      "isBlocked": false,
+      "reorderLevel": 1200
     },
     {
       "id": "itm-1789299669861-10-u27jm",
@@ -427,7 +429,7 @@
       "unit": "NOS",
       "purchaseUOM": "NOS",
       "conversionFactor": 1,
-      "inHouseStock": 50,
+      "inHouseStock": 1,
       "externalStock": 0,
       "minStockQty": 10,
       "minOrderQty": 20,
@@ -454,7 +456,8 @@
           "priority": 2
         }
       ],
-      "isBlocked": false
+      "isBlocked": false,
+      "reorderLevel": 1200
     },
     {
       "id": "itm-1789299669861-11-lwbuq",
@@ -16483,7 +16486,7 @@
       "maxBuildableQuantity": 2,
       "assignedOperator": "aeffddbeh",
       "stationName": "Main Assembly Bay",
-      "status": "OPEN",
+      "status": "CANCELLED",
       "type": "PRODUCTION",
       "startDate": "2026-09-14",
       "remarks": "",
@@ -16859,7 +16862,10 @@
         }
       ],
       "id": "jc-1789361981631",
-      "jobCardNo": "JCAJCG0002"
+      "jobCardNo": "JCAJCG0002",
+      "isDeleted": true,
+      "deletedAt": "2026-09-15T06:37:49.029Z",
+      "deletedBy": "GEC System Super Admin"
     },
     {
       "woId": "wo-1789299728249",
@@ -18826,6 +18832,50 @@
   "jobCardMaterialReissues": [],
   "intermediateProcessItems": [],
   "auditLogs": [
+    {
+      "id": "log-1789465450487-8m9zrz",
+      "userId": "usr-superadmin",
+      "username": "GEC System Super Admin (superadmin)",
+      "role": "Admin",
+      "action": "ADJUST_STOCK",
+      "module": "In-House Inventory",
+      "details": "Adjusted stock for GEC0000011: 50 -> 1 NOS (Reason: Physical Count Audit)",
+      "ipAddress": "127.0.0.1",
+      "timestamp": "2026-09-15T09:44:10.487Z"
+    },
+    {
+      "id": "log-1789465443627-bwqmgy",
+      "userId": "usr-superadmin",
+      "username": "GEC System Super Admin (superadmin)",
+      "role": "Admin",
+      "action": "ADJUST_STOCK",
+      "module": "In-House Inventory",
+      "details": "Adjusted stock for GEC0000010: 50 -> 1 NOS (Reason: Physical Count Audit)",
+      "ipAddress": "127.0.0.1",
+      "timestamp": "2026-09-15T09:44:03.627Z"
+    },
+    {
+      "id": "log-1789462103158-yin5do",
+      "userId": "usr-superadmin",
+      "username": "GEC System Super Admin (superadmin)",
+      "role": "Admin",
+      "action": "ADJUST_STOCK",
+      "module": "In-House Inventory",
+      "details": "Adjusted stock for GEC0000005: 5 -> 1 NOS (Reason: Physical Count Audit)",
+      "ipAddress": "127.0.0.1",
+      "timestamp": "2026-09-15T08:48:23.158Z"
+    },
+    {
+      "id": "log-1789454269029-nvcizq",
+      "userId": "usr-superadmin",
+      "username": "GEC System Super Admin (superadmin)",
+      "role": "Admin",
+      "action": "DELETE_JOB_CARD",
+      "module": "Job Cards",
+      "details": "Soft-deleted Job Card JCAJCG0002 (Archived to history).",
+      "ipAddress": "127.0.0.1",
+      "timestamp": "2026-09-15T06:37:49.029Z"
+    },
     {
       "id": "log-1789451718827-bw33co",
       "userId": "usr-superadmin",

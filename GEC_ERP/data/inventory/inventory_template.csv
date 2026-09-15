@@ -1,6 +1,0 @@
-ItemCode,InHouseStock,ExternalStock,Location,UnitPrice,MinStockQty
-GEC-RM-ROD80-EN8,150,0,Raw Store A-01,2450.00,15
-GEC-MC-TB80-250T,20,15,WIP Rack B-03,4850.00,5
-GEC-BO-VALVE-01,45,0,Boughtout Store C-02,6500.00,10
-GEC-EL-PLC-S7,12,0,Electronics Room E-01,32000.00,3
-GEC-HY-PUMP-50KW,6,0,Hydraulics Store H-01,78000.00,2

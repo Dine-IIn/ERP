@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useDeferredValue } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { Modal } from '../common/Modal';
 import { BulkUploadModal } from '../common/BulkUploadModal';
@@ -79,55 +79,86 @@ export const ItemMasterModule: React.FC = () => {
     }
   };
 
-  const isHistorySearch = searchTerm.trim().startsWith('@') || searchTerm.toLowerCase().includes('@history');
-  const queryClean = searchTerm.replace(/@history/gi, '').replace(/^@/g, '').trim().toLowerCase();
+  // Responsive Local Search Term with 120ms debounce to ERPContext
+  const [localSearch, setLocalSearch] = useState(searchTerm);
 
-  const filteredItems = items.filter(item => {
-    // If not in @ history search, exclude blocked items
-    if (!isHistorySearch && item.isBlocked) {
-      return false;
-    }
+  useEffect(() => {
+    setLocalSearch(searchTerm);
+  }, [searchTerm]);
 
-    const matchesSearch = !queryClean ||
-      item.itemCode.toLowerCase().includes(queryClean) ||
-      (item.partCode && item.partCode.toLowerCase().includes(queryClean)) ||
-      (item.oldItemCode && item.oldItemCode.toLowerCase().includes(queryClean)) ||
-      item.name.toLowerCase().includes(queryClean) ||
-      (item.category && item.category.toLowerCase().includes(queryClean)) ||
-      (item.partNo && item.partNo.toLowerCase().includes(queryClean)) ||
-      (item.location && item.location.toLowerCase().includes(queryClean)) ||
-      (item.note && item.note.toLowerCase().includes(queryClean));
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      if (localSearch !== searchTerm) {
+        setSearchTerm(localSearch);
+      }
+    }, 40);
+    return () => clearTimeout(handler);
+  }, [localSearch, searchTerm, setSearchTerm]);
 
-    const matchesCategory = selectedCategoriesFilter.length === 0 || selectedCategoriesFilter.includes(item.category);
-    const matchesProcess = selectedProcessFilter === 'ALL' || (
-      item.materialProcessSources && item.materialProcessSources.length > 0
-        ? item.materialProcessSources.includes(selectedProcessFilter as MaterialProcessSource)
-        : item.processType === selectedProcessFilter || (item.processType === 'Job work + Bought out' && (selectedProcessFilter === 'Bought out' || selectedProcessFilter === 'Job work'))
-    );
-    
+  const deferredSearch = useDeferredValue(localSearch);
+  const isHistorySearch = deferredSearch.trim().startsWith('@') || deferredSearch.toLowerCase().includes('@history') || deferredSearch.toLowerCase().includes('@deleted');
+  const queryClean = deferredSearch.replace(/@history|@deleted/gi, '').replace(/^@+/g, '').trim().toLowerCase();
+
+  // Pre-indexed items with cached lowercase search string (O(N) executed only on dataset changes)
+  const indexedItems = useMemo(() => {
+    return items.map(item => ({
+      item,
+      _searchStr: `${item.itemCode} ${item.partCode || ''} ${item.oldItemCode || ''} ${item.name} ${item.category || ''} ${item.partNo || ''} ${item.location || ''} ${item.note || ''}`.toLowerCase()
+    }));
+  }, [items]);
+
+  const filteredItems = useMemo(() => {
     const minP = minPriceFilter ? Number(minPriceFilter) : 0;
     const maxP = maxPriceFilter ? Number(maxPriceFilter) : Infinity;
-    const matchesPrice = item.unitPrice >= minP && item.unitPrice <= maxP;
 
-    const isLow = item.inHouseStock <= (item.minStockQty || 5);
-    const matchesStockStatus = 
-      selectedStockFilter === 'ALL' ? true :
-      selectedStockFilter === 'LOW_STOCK' ? isLow :
-      selectedStockFilter === 'ZERO_STOCK' ? item.inHouseStock === 0 :
-      selectedStockFilter === 'NORMAL_STOCK' ? item.inHouseStock > (item.minStockQty || 5) : true;
+    return indexedItems
+      .filter(({ item, _searchStr }) => {
+        // If in @ history search, show blocked items. Otherwise exclude blocked items.
+        if (isHistorySearch) {
+          if (!item.isBlocked) return false;
+        } else if (item.isBlocked) {
+          return false;
+        }
 
-    return matchesSearch && matchesCategory && matchesProcess && matchesPrice && matchesStockStatus;
-  }).sort((a, b) => {
-    let valA: any = a[sortColumn] ?? '';
-    let valB: any = b[sortColumn] ?? '';
+        // Fast native C++ single substring search
+        const matchesSearch = !queryClean || _searchStr.includes(queryClean);
+        if (!matchesSearch) return false;
 
-    if (typeof valA === 'string') valA = valA.toLowerCase();
-    if (typeof valB === 'string') valB = valB.toLowerCase();
+        const matchesCategory = selectedCategoriesFilter.length === 0 || selectedCategoriesFilter.includes(item.category);
+        if (!matchesCategory) return false;
 
-    if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
-    if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
-    return 0;
-  });
+        const matchesProcess = selectedProcessFilter === 'ALL' || (
+          item.materialProcessSources && item.materialProcessSources.length > 0
+            ? item.materialProcessSources.includes(selectedProcessFilter as MaterialProcessSource)
+            : item.processType === selectedProcessFilter || (item.processType === 'Job work + Bought out' && (selectedProcessFilter === 'Bought out' || selectedProcessFilter === 'Job work'))
+        );
+        if (!matchesProcess) return false;
+
+        const matchesPrice = item.unitPrice >= minP && item.unitPrice <= maxP;
+        if (!matchesPrice) return false;
+
+        const isLow = item.inHouseStock <= (item.minStockQty || 5);
+        const matchesStockStatus = 
+          selectedStockFilter === 'ALL' ? true :
+          selectedStockFilter === 'LOW_STOCK' ? isLow :
+          selectedStockFilter === 'ZERO_STOCK' ? item.inHouseStock === 0 :
+          selectedStockFilter === 'NORMAL_STOCK' ? item.inHouseStock > (item.minStockQty || 5) : true;
+
+        return matchesStockStatus;
+      })
+      .map(({ item }) => item)
+      .sort((a, b) => {
+        let valA: any = a[sortColumn] ?? '';
+        let valB: any = b[sortColumn] ?? '';
+
+        if (typeof valA === 'string') valA = valA.toLowerCase();
+        if (typeof valB === 'string') valB = valB.toLowerCase();
+
+        if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+        if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+        return 0;
+      });
+  }, [indexedItems, isHistorySearch, queryClean, selectedCategoriesFilter, selectedProcessFilter, minPriceFilter, maxPriceFilter, selectedStockFilter, sortColumn, sortDirection]);
 
   const handleOpenEditModal = (item: Item) => {
     setEditingItem(item);
@@ -668,8 +699,8 @@ export const ItemMasterModule: React.FC = () => {
                   placeholder="Search item code, description, part code... (type @history)"
                   className="input-field"
                   style={{ paddingLeft: '2.25rem' }}
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  value={localSearch}
+                  onChange={(e) => setLocalSearch(e.target.value)}
                 />
               </div>
 

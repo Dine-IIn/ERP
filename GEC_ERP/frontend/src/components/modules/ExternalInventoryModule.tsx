@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useDeferredValue, useEffect } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { Modal } from '../common/Modal';
 import { AutocompleteSelect, AutocompleteOption } from '../common/AutocompleteSelect';
@@ -6,14 +6,14 @@ import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { SingleJobworkPrintView, JobworkListPrintView } from '../printTemplates/JobworkPrintTemplates';
 import { TabularShortagePrintView } from '../printTemplates/ShortagePrintTemplates';
 import { Truck, Plus, ArrowRightLeft, CheckCircle, Search, Printer, FileSpreadsheet, ArrowUp, ArrowDown, ArrowUpDown, RefreshCw, AlertTriangle, Layers, X, CheckCircle2, ClipboardList, ShoppingCart } from 'lucide-react';
-import { JobworkChallan, Item, ItemProcessCard, VendorDebitChallan, generateNextJobworkNumber } from '../../types/erp';
+import { JobworkChallan, Item, ItemProcessCard, VendorDebitChallan, generateNextJobworkNumber, BOM } from '../../types/erp';
 
 type JWSortKey = 'challanNo' | 'vendorName' | 'itemName' | 'processRequired' | 'sentQuantity' | 'receivedQuantity' | 'scrapQuantity' | 'pendingBalance' | 'expectedReturnDate' | 'status';
 
 export const ExternalInventoryModule: React.FC = () => {
   const { 
     jobworks, vendors, items, workOrders, boms, grns, addJobworkChallan, recordJobworkReturn, searchTerm, setSearchTerm,
-    itemProcessCards, setActiveModule 
+    itemProcessCards, setActiveModule, jobCards, finishedGoods 
   } = useERP();
 
   const [activeMainTab, setActiveMainTab] = useState<'CHALLANS' | 'DEBIT_NOTES' | 'SHORTAGE'>('CHALLANS');
@@ -153,97 +153,241 @@ export const ExternalInventoryModule: React.FC = () => {
     badge: i.category
   }));
 
-  // Universal @history search handling
-  const isHistorySearch = searchTerm.toLowerCase().includes('@history');
-  const cleanSearchTerm = searchTerm.replace(/@history/gi, '').trim().toLowerCase();
+  // Responsive Local Search Term with 120ms debounce to ERPContext
+  const [localSearch, setLocalSearch] = useState(searchTerm);
 
-  const filteredJobworks = jobworks
-    .filter(j => {
-      const isCompleted = j.status === 'COMPLETED' || j.pendingBalance === 0;
-      if (!isHistorySearch && isCompleted) {
-        return false;
+  useEffect(() => {
+    setLocalSearch(searchTerm);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      if (localSearch !== searchTerm) {
+        setSearchTerm(localSearch);
       }
-      const matchesSearch = !cleanSearchTerm || (
-        j.challanNo.toLowerCase().includes(cleanSearchTerm) ||
-        j.vendorName.toLowerCase().includes(cleanSearchTerm) ||
-        j.itemName.toLowerCase().includes(cleanSearchTerm) ||
-        j.itemCode.toLowerCase().includes(cleanSearchTerm) ||
-        j.processRequired.toLowerCase().includes(cleanSearchTerm)
-      );
-      if (!matchesSearch) return false;
+    }, 40);
+    return () => clearTimeout(handler);
+  }, [localSearch, searchTerm, setSearchTerm]);
 
-      if (startDateFilter && j.issueDate && j.issueDate < startDateFilter) return false;
-      if (endDateFilter && j.issueDate && j.issueDate > endDateFilter) return false;
+  // Universal @history search handling with useDeferredValue
+  const deferredSearch = useDeferredValue(localSearch);
+  const isDeletedSearch = deferredSearch.toLowerCase().includes('@deleted');
+  const isHistorySearch = isDeletedSearch || deferredSearch.toLowerCase().includes('@history') || deferredSearch.toLowerCase().includes('@completed') || deferredSearch.trim().startsWith('@');
+  const cleanSearchTerm = deferredSearch.replace(/@history|@deleted|@completed|@archived/gi, '').replace(/^@+/g, '').trim().toLowerCase();
 
-      return true;
-    })
-    .sort((a, b) => {
-      let valA: any = (a as any)[sortField] ?? '';
-      let valB: any = (b as any)[sortField] ?? '';
+  const indexedJobworks = useMemo(() => {
+    return jobworks.map(j => ({
+      j,
+      _searchStr: `${j.challanNo} ${j.vendorName} ${j.itemName} ${j.itemCode} ${j.processRequired || ''}`.toLowerCase(),
+      isCompleted: j.status === 'COMPLETED' || j.pendingBalance === 0 || !!(j as any).isDeleted,
+      isDeleted: !!(j as any).isDeleted
+    }));
+  }, [jobworks]);
 
-      if (typeof valA === 'string') valA = valA.toLowerCase();
-      if (typeof valB === 'string') valB = valB.toLowerCase();
+  const filteredJobworks = useMemo(() => {
+    return indexedJobworks
+      .filter(({ j, _searchStr, isCompleted, isDeleted }) => {
+        if (isDeletedSearch) {
+          if (!isDeleted) return false;
+        } else if (isHistorySearch) {
+          if (!isCompleted) return false;
+        } else if (isCompleted) {
+          return false;
+        }
 
-      if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
-      if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
-      return 0;
+        const matchesSearch = !cleanSearchTerm || _searchStr.includes(cleanSearchTerm);
+        if (!matchesSearch) return false;
+
+        if (startDateFilter && j.issueDate && j.issueDate < startDateFilter) return false;
+        if (endDateFilter && j.issueDate && j.issueDate > endDateFilter) return false;
+
+        return true;
+      })
+      .map(({ j }) => j)
+      .sort((a, b) => {
+        let valA: any = (a as any)[sortField] ?? '';
+        let valB: any = (b as any)[sortField] ?? '';
+
+        if (typeof valA === 'string') valA = valA.toLowerCase();
+        if (typeof valB === 'string') valB = valB.toLowerCase();
+
+        if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+        if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+        return 0;
+      });
+  }, [indexedJobworks, isDeletedSearch, isHistorySearch, cleanSearchTerm, startDateFilter, endDateFilter, sortField, sortOrder]);
+
+  // Synchronized with Planning Module Tree-Pruning Demand Engine
+  const jwPlanningMap = useMemo(() => {
+    const activeWOs = (workOrders || []).filter(w => w.status === 'PLANNED' || w.status === 'IN_PROGRESS');
+    const activeJCs = (jobCards || []).filter(jc => jc.status !== 'COMPLETED' && jc.status !== 'CANCELLED' && !(jc as any).isDeleted);
+    const activeJWs = (jobworks || []).filter(jw => jw.status !== 'COMPLETED' && jw.status !== 'CANCELLED');
+
+    const itemById = new Map<string, Item>();
+    const itemByCode = new Map<string, Item>();
+    const itemByName = new Map<string, Item>();
+    (items || []).forEach(item => {
+      if (item.id) itemById.set(item.id, item);
+      if (item.itemCode) itemByCode.set(item.itemCode.toLowerCase(), item);
+      if (item.name) itemByName.set(item.name.toLowerCase(), item);
     });
 
-  // Helper: Item Work Order Demand (Multi-Level Exploded & woComponents supported)
-  const getItemWorkOrderDemand = (itemId: string, itemCode: string) => {
-    let demand = 0;
-    const activeWOs = workOrders.filter(w => w.status !== 'COMPLETED' && w.status !== 'CANCELLED');
+    const bomById = new Map<string, BOM>();
+    const bomByCode = new Map<string, BOM>();
+    const bomByModel = new Map<string, BOM>();
+    (boms || []).forEach(bom => {
+      if (bom.id) bomById.set(bom.id, bom);
+      if (bom.bomCode) bomByCode.set(bom.bomCode.toLowerCase(), bom);
+      if (bom.machineModel) bomByModel.set(bom.machineModel.toLowerCase(), bom);
+    });
 
-    const explodeDemand = (
-      components: Array<{ itemId?: string; itemCode?: string; qtyPerMachine?: number; qtyRequired?: number }>,
-      multiplier: number,
-      visited = new Set<string>()
-    ) => {
-      components.forEach(comp => {
-        const cItemId = comp.itemId || '';
-        const cItemCode = comp.itemCode || '';
-        const qtyPer = comp.qtyPerMachine !== undefined ? comp.qtyPerMachine : (comp.qtyRequired || 1);
-        const totalCompQty = qtyPer * multiplier;
+    // Active JC pending supply
+    const pendingJCMap = new Map<string, number>();
+    activeJCs.forEach(jc => {
+      const remaining = Math.max(0, (jc.targetQuantity || 1) - (jc.completedQuantity || 0));
+      if (remaining > 0) {
+        if (jc.itemId) pendingJCMap.set(jc.itemId, (pendingJCMap.get(jc.itemId) || 0) + remaining);
+        if (jc.itemCode) pendingJCMap.set(jc.itemCode.toLowerCase(), (pendingJCMap.get(jc.itemCode.toLowerCase()) || 0) + remaining);
+      }
+    });
 
-        if (
-          (itemId && cItemId && cItemId === itemId) ||
-          (itemCode && cItemCode && cItemCode.toLowerCase() === itemCode.toLowerCase())
-        ) {
-          demand += totalCompQty;
-        }
+    // Active JW pending supply
+    const pendingJWMap = new Map<string, number>();
+    activeJWs.forEach(jw => {
+      const remaining = jw.pendingBalance !== undefined ? jw.pendingBalance : (jw.sentQuantity || 0);
+      if (remaining > 0) {
+        if (jw.itemId) pendingJWMap.set(jw.itemId, (pendingJWMap.get(jw.itemId) || 0) + remaining);
+        if (jw.itemCode) pendingJWMap.set(jw.itemCode.toLowerCase(), (pendingJWMap.get(jw.itemCode.toLowerCase()) || 0) + remaining);
+      }
+    });
 
-        const childItem = items.find(i => (cItemId && i.id === cItemId) || (cItemCode && i.itemCode.toLowerCase() === cItemCode.toLowerCase()));
-        if (childItem) {
-          const subBOM = boms.find(b => b.id === childItem.id || b.bomCode?.toLowerCase() === childItem.itemCode.toLowerCase() || b.machineModel?.toLowerCase() === childItem.name?.toLowerCase());
-          if (subBOM && subBOM.components && subBOM.components.length > 0 && !visited.has(subBOM.id)) {
-            const nextVisited = new Set(visited);
-            nextVisited.add(subBOM.id);
-            explodeDemand(subBOM.components, totalCompQty, nextVisited);
-          }
-        }
-      });
+    // Multi-level BOM explosion with shortage pruning
+    const demandMap = new Map<string, number>();
+    const addDemand = (itemIdOrCode: string, qty: number) => {
+      if (!itemIdOrCode || qty <= 0) return;
+      const lower = itemIdOrCode.toLowerCase();
+      demandMap.set(itemIdOrCode, (demandMap.get(itemIdOrCode) || 0) + qty);
+      if (lower !== itemIdOrCode) {
+        demandMap.set(lower, (demandMap.get(lower) || 0) + qty);
+      }
     };
 
+    // 1. Aggregate root demand across active WOs
+    const rootDemandByItemKey = new Map<string, number>();
     activeWOs.forEach(wo => {
-      const remainingQty = Math.max(0, (wo.targetQuantity || wo.quantity || 1) - (wo.completedQuantity || 0));
-      if (remainingQty <= 0) return;
+      const totalWOQty = wo.targetQuantity || wo.quantity || 1;
 
-      if (wo.woComponents && wo.woComponents.length > 0) {
-        explodeDemand(wo.woComponents.map(c => ({
-          itemId: c.itemId,
-          itemCode: c.itemCode,
-          qtyPerMachine: c.qtyRequired ? c.qtyRequired / (wo.quantity || wo.targetQuantity || 1) : 1
-        })), remainingQty);
-      } else {
-        const bom = boms.find(b => b.id === wo.bomId || b.bomCode === (wo as any).bomCode || b.machineModel?.toLowerCase() === wo.machineModel?.toLowerCase());
-        if (bom && bom.components) {
-          explodeDemand(bom.components, remainingQty, new Set([bom.id]));
-        }
+      // Calculate dispatched units for this WO
+      const dispatchedQty = (finishedGoods || []).filter(fg => 
+        fg.status === 'DISPATCHED' && (
+          fg.woId === wo.id ||
+          (wo.workOrderNo && fg.woNumber === wo.workOrderNo) ||
+          (wo.woNumber && fg.woNumber === wo.woNumber)
+        )
+      ).length;
+
+      const undispatchedWOQty = Math.max(0, totalWOQty - dispatchedQty);
+
+      const matchedBOM = (wo.bomId && bomById.get(wo.bomId))
+        || ((wo as any).bomCode && bomByCode.get(((wo as any).bomCode as string).toLowerCase()))
+        || (wo.machineModel && bomByModel.get(wo.machineModel.toLowerCase()));
+
+      // Finished Product X demand: If WO has undispatched machines, register demand for product X itself
+      const topItem = (wo.itemId && itemById.get(wo.itemId))
+        || (wo.machineModel && (itemByName.get(wo.machineModel.toLowerCase()) || itemByCode.get(wo.machineModel.toLowerCase())))
+        || (matchedBOM && (itemById.get(matchedBOM.id) || itemByCode.get((matchedBOM.bomCode || '').toLowerCase()) || itemByName.get((matchedBOM.machineModel || '').toLowerCase())));
+
+      if (topItem && undispatchedWOQty > 0) {
+        addDemand(topItem.id, undispatchedWOQty);
+        if (topItem.itemCode) addDemand(topItem.itemCode, undispatchedWOQty);
       }
+
+      // Child components required for unfinished units to build
+      const remWOQty = Math.max(0, totalWOQty - (wo.completedQuantity || 0));
+      if (remWOQty <= 0) return;
+
+      const components = (wo.woComponents && wo.woComponents.length > 0)
+        ? wo.woComponents.map(c => ({
+            itemId: c.itemId,
+            itemCode: c.itemCode,
+            qtyPerMachine: c.qtyRequired ? c.qtyRequired / (wo.quantity || wo.targetQuantity || 1) : 1
+          }))
+        : (matchedBOM?.components || []).map(c => ({
+            itemId: c.itemId,
+            itemCode: c.itemCode,
+            qtyPerMachine: c.qtyPerMachine || 1
+          }));
+
+      components.forEach(c => {
+        const key = c.itemId || c.itemCode || '';
+        if (key) {
+          const qty = (c.qtyPerMachine || 1) * remWOQty;
+          rootDemandByItemKey.set(key, (rootDemandByItemKey.get(key) || 0) + qty);
+        }
+      });
     });
 
-    return demand;
-  };
+    // 2. Explode with pruning
+    const explodeItemShortage = (itemKey: string, requiredQty: number, visited: Set<string>) => {
+      const targetItem = itemById.get(itemKey) || itemByCode.get(itemKey.toLowerCase());
+      const idKey = targetItem ? targetItem.id : itemKey;
+      const codeKey = targetItem ? targetItem.itemCode : itemKey;
+
+      addDemand(idKey, requiredQty);
+      if (codeKey && codeKey !== idKey) {
+        addDemand(codeKey, requiredQty);
+      }
+
+      if (!targetItem) return;
+
+      const subBOM = (targetItem.id && bomById.get(targetItem.id))
+        || (targetItem.itemCode && bomByCode.get(targetItem.itemCode.toLowerCase()))
+        || (targetItem.name && bomByModel.get(targetItem.name.toLowerCase()));
+
+      if (subBOM && subBOM.components && subBOM.components.length > 0 && !visited.has(subBOM.id)) {
+        const inHouse = targetItem.inHouseStock || 0;
+        const activeJCSupply = (targetItem.id && pendingJCMap.get(targetItem.id)) || (targetItem.itemCode && pendingJCMap.get(targetItem.itemCode.toLowerCase())) || 0;
+        const activeJWSupply = (targetItem.id && pendingJWMap.get(targetItem.id)) || (targetItem.itemCode && pendingJWMap.get(targetItem.itemCode.toLowerCase())) || 0;
+
+        const availableSupply = inHouse + activeJCSupply + activeJWSupply;
+        const netShortage = Math.max(0, requiredQty - availableSupply);
+
+        if (netShortage > 0) {
+          const nextVisited = new Set(visited);
+          nextVisited.add(subBOM.id);
+
+          subBOM.components.forEach(comp => {
+            const compKey = comp.itemId || comp.itemCode || '';
+            const compQtyPer = comp.qtyPerMachine !== undefined ? comp.qtyPerMachine : 1;
+            const childReqQty = compQtyPer * netShortage;
+            if (compKey && childReqQty > 0) {
+              explodeItemShortage(compKey, childReqQty, nextVisited);
+            }
+          });
+        }
+      }
+    };
+
+    rootDemandByItemKey.forEach((qty, key) => {
+      explodeItemShortage(key, qty, new Set());
+    });
+
+    // Compute planning metrics for all items (MIN LEVEL SHORTAGE)
+    const resultMap = new Map<string, { totalRequired: number; inHouseStock: number; shortage: number; minStockLevel: number }>();
+    (items || []).forEach(item => {
+      const totalRequired = (item.id && demandMap.get(item.id)) || (item.itemCode && demandMap.get(item.itemCode.toLowerCase())) || (item.itemCode && demandMap.get(item.itemCode)) || 0;
+      const inHouseStock = item.inHouseStock || 0;
+      const minStockLevel = item.minStockQty !== undefined ? item.minStockQty : (item.reorderLevel || 0);
+
+      // Min Level Shortage Formula: (totalRequired + minStockLevel) - inHouseStock
+      const shortage = Math.max(0, (totalRequired + minStockLevel) - inHouseStock);
+      const data = { totalRequired, inHouseStock, shortage, minStockLevel };
+      resultMap.set(item.id, data);
+      if (item.itemCode) resultMap.set(item.itemCode.toLowerCase(), data);
+    });
+
+    return resultMap;
+  }, [items, workOrders, boms, jobCards, jobworks, finishedGoods]);
 
   // Shortage Calculation for Jobwork Items
   const isJobworkItem = (item: Item) => {
@@ -253,21 +397,18 @@ export const ExternalInventoryModule: React.FC = () => {
   };
 
   const getJobworkItemShortage = (item: Item) => {
-    const currentStock = (item.inHouseStock || 0) + (item.externalStock || 0);
-    const demand = getItemWorkOrderDemand(item.id, item.itemCode);
-    const minReq = item.minStockQty !== undefined ? item.minStockQty : (item.reorderLevel || 0);
-    const pendingJWQty = jobworks
-      .filter(jw => jw.status !== 'COMPLETED' && jw.status !== 'CANCELLED')
-      .reduce((sum, jw) => {
-        if (jw.itemId === item.id || jw.itemCode === item.itemCode) {
-          return sum + (jw.pendingBalance || 0);
-        }
-        return sum;
-      }, 0);
-    return Math.max(0, (demand + minReq) - (currentStock + pendingJWQty));
+    const data = jwPlanningMap.get(item.id) || (item.itemCode && jwPlanningMap.get(item.itemCode.toLowerCase()));
+    return data ? data.shortage : 0;
   };
 
-  const jwShortageItems = items.filter(i => isJobworkItem(i) && !i.isBlocked && getJobworkItemShortage(i) > 0);
+  const getJobworkItemTotalRequired = (item: Item) => {
+    const data = jwPlanningMap.get(item.id) || (item.itemCode && jwPlanningMap.get(item.itemCode.toLowerCase()));
+    return data ? data.totalRequired : 0;
+  };
+
+  const jwShortageItems = useMemo(() => {
+    return items.filter(i => isJobworkItem(i) && !i.isBlocked && getJobworkItemShortage(i) >= 1);
+  }, [items, jwPlanningMap]);
 
   const handleOpenShortageJWModal = (item: Item) => {
     const shortage = getJobworkItemShortage(item);
@@ -387,17 +528,24 @@ export const ExternalInventoryModule: React.FC = () => {
     setIsReturnModalOpen(false);
   };
 
+  const deferredWizardSearchTerm = useDeferredValue(wizardSearchTerm);
+
   const getWizardTableRows = () => {
-    const term = wizardSearchTerm.trim().toLowerCase();
+    const term = deferredWizardSearchTerm.trim().toLowerCase();
 
     if (!isExplodeShortage) {
       return jwShortageItems
         .filter(item => {
           if (!term) return true;
-          return item.itemCode.toLowerCase().includes(term) || item.name.toLowerCase().includes(term) || item.category.toLowerCase().includes(term);
+          return (
+            item.itemCode.toLowerCase().includes(term) ||
+            item.name.toLowerCase().includes(term) ||
+            (item.partCode && item.partCode.toLowerCase().includes(term)) ||
+            (item.category && item.category.toLowerCase().includes(term))
+          );
         })
         .map((item, idx) => {
-          const reqQty = getItemWorkOrderDemand(item.id, item.itemCode) || (item.minStockQty || 5);
+          const reqQty = getJobworkItemTotalRequired(item);
           const inHouseStock = item.inHouseStock || 0;
           const externalStock = item.externalStock || 0;
           const shortage = getJobworkItemShortage(item);
@@ -406,12 +554,12 @@ export const ExternalInventoryModule: React.FC = () => {
             srNo: idx + 1,
             item,
             itemDescription: item.name,
-            partCode: item.itemCode,
+            partCode: item.partCode || item.itemCode,
             requiredQty: reqQty,
             currentStock: inHouseStock,
             externalStock,
             shortage,
-            unit: item.unit,
+            unit: item.unit || 'PCS',
             extraInfo: item.category ? `Class: ${item.category}` : undefined
           };
         });
@@ -432,7 +580,7 @@ export const ExternalInventoryModule: React.FC = () => {
     }> = [];
 
     let count = 1;
-    const activeWOs = workOrders.filter(w => w.status !== 'COMPLETED' && w.status !== 'CANCELLED');
+    const activeWOs = workOrders.filter(w => w.status === 'PLANNED' || w.status === 'IN_PROGRESS');
 
     activeWOs.forEach(wo => {
       const bom = boms.find(b => b.id === wo.bomId || b.bomCode === (wo as any).bomCode || b.machineModel?.toLowerCase() === wo.machineModel?.toLowerCase());
@@ -442,16 +590,17 @@ export const ExternalInventoryModule: React.FC = () => {
         const it = items.find(i => i.id === comp.itemId || i.itemCode === comp.itemCode);
         if (!it || !isJobworkItem(it) || it.isBlocked) return;
 
+        const shortage = getJobworkItemShortage(it);
+        if (shortage < 1) return;
+
         const reqQty = (comp.qtyPerMachine || 1) * (wo.quantity || 1);
         const inHouseStock = it.inHouseStock || 0;
         const externalStock = it.externalStock || 0;
-        const shortage = getJobworkItemShortage(it);
-
-        if (shortage <= 0 && (inHouseStock + externalStock) >= reqQty) return;
 
         if (term) {
           const matches = it.itemCode.toLowerCase().includes(term) ||
             it.name.toLowerCase().includes(term) ||
+            (it.partCode && it.partCode.toLowerCase().includes(term)) ||
             (wo.workOrderNo && wo.workOrderNo.toLowerCase().includes(term)) ||
             (wo.machineModel && wo.machineModel.toLowerCase().includes(term));
           if (!matches) return;
@@ -461,12 +610,12 @@ export const ExternalInventoryModule: React.FC = () => {
           srNo: count++,
           item: it,
           itemDescription: it.name,
-          partCode: it.itemCode,
+          partCode: it.partCode || it.itemCode,
           requiredQty: reqQty,
           currentStock: inHouseStock,
           externalStock,
           shortage,
-          unit: it.unit,
+          unit: it.unit || 'PCS',
           extraInfo: `WO: ${wo.workOrderNo || wo.woNumber} (${wo.machineModel}) - Target Qty: ${wo.quantity} units`
         });
       });
@@ -475,7 +624,9 @@ export const ExternalInventoryModule: React.FC = () => {
     return explodedRows;
   };
 
-  const wizardTableRows = getWizardTableRows();
+  const wizardTableRows = useMemo(() => getWizardTableRows(), [
+    isExplodeShortage, jwShortageItems, deferredWizardSearchTerm, workOrders, boms, items, jwPlanningMap
+  ]);
 
   return (
     <div className="module-layout-container">
@@ -749,8 +900,8 @@ export const ExternalInventoryModule: React.FC = () => {
               placeholder="Search challan no, vendor, part... (type @history to search completed)"
               className="input-field"
               style={{ paddingLeft: '2.25rem' }}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              value={localSearch}
+              onChange={(e) => setLocalSearch(e.target.value)}
             />
           </div>
 

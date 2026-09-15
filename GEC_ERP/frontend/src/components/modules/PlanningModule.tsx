@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { PlanningPrintReport } from '../printTemplates/PlanningPrintTemplates';
@@ -26,7 +26,7 @@ type SortField =
 
 export const PlanningModule: React.FC = () => {
   const { 
-    items, purchaseOrders, workOrders, jobCards, jobworks, boms, qcInspections,
+    items, purchaseOrders, workOrders, jobCards, jobworks, boms, qcInspections, finishedGoods,
     searchTerm, setSearchTerm 
   } = useERP();
 
@@ -87,9 +87,11 @@ export const PlanningModule: React.FC = () => {
     // Pre-index items for O(1) lookup
     const itemById = new Map<string, Item>();
     const itemByCode = new Map<string, Item>();
+    const itemByName = new Map<string, Item>();
     items.forEach(it => {
       if (it.id) itemById.set(it.id, it);
       if (it.itemCode) itemByCode.set(it.itemCode.toLowerCase(), it);
+      if (it.name) itemByName.set(it.name.toLowerCase(), it);
     });
 
     // Pre-index BOMs
@@ -180,7 +182,35 @@ export const PlanningModule: React.FC = () => {
     const rootDemandByItemKey = new Map<string, number>();
 
     activeWOs.forEach(wo => {
-      const remWOQty = Math.max(0, (wo.targetQuantity || wo.quantity || 1) - (wo.completedQuantity || 0));
+      const totalWOQty = wo.targetQuantity || wo.quantity || 1;
+
+      // Calculate dispatched units for this WO
+      const dispatchedQty = (finishedGoods || []).filter(fg => 
+        fg.status === 'DISPATCHED' && (
+          fg.woId === wo.id ||
+          (wo.workOrderNo && fg.woNumber === wo.workOrderNo) ||
+          (wo.woNumber && fg.woNumber === wo.woNumber)
+        )
+      ).length;
+
+      const undispatchedWOQty = Math.max(0, totalWOQty - dispatchedQty);
+
+      const matchedBOM = (wo.bomId && bomById.get(wo.bomId))
+        || ((wo as any).bomCode && bomByCode.get(((wo as any).bomCode as string).toLowerCase()))
+        || (wo.machineModel && bomByModel.get(wo.machineModel.toLowerCase()));
+
+      // Finished Product X demand: If WO has undispatched machines, register demand for product X itself
+      const topItem = (wo.itemId && itemById.get(wo.itemId))
+        || (wo.machineModel && (itemByName.get(wo.machineModel.toLowerCase()) || itemByCode.get(wo.machineModel.toLowerCase())))
+        || (matchedBOM && (itemById.get(matchedBOM.id) || itemByCode.get((matchedBOM.bomCode || '').toLowerCase()) || itemByName.get((matchedBOM.machineModel || '').toLowerCase())));
+
+      if (topItem && undispatchedWOQty > 0) {
+        addDemand(topItem.id, undispatchedWOQty);
+        if (topItem.itemCode) addDemand(topItem.itemCode, undispatchedWOQty);
+      }
+
+      // Child components required for unfinished units to build
+      const remWOQty = Math.max(0, totalWOQty - (wo.completedQuantity || 0));
       if (remWOQty <= 0) return;
 
       const components = (wo.woComponents && wo.woComponents.length > 0)
@@ -189,16 +219,11 @@ export const PlanningModule: React.FC = () => {
             itemCode: c.itemCode,
             qtyPerMachine: c.qtyRequired ? c.qtyRequired / (wo.quantity || wo.targetQuantity || 1) : 1
           }))
-        : (() => {
-            const matchedBOM = (wo.bomId && bomById.get(wo.bomId))
-              || ((wo as any).bomCode && bomByCode.get(((wo as any).bomCode as string).toLowerCase()))
-              || (wo.machineModel && bomByModel.get(wo.machineModel.toLowerCase()));
-            return (matchedBOM?.components || []).map(c => ({
-              itemId: c.itemId,
-              itemCode: c.itemCode,
-              qtyPerMachine: c.qtyPerMachine || 1
-            }));
-          })();
+        : (matchedBOM?.components || []).map(c => ({
+            itemId: c.itemId,
+            itemCode: c.itemCode,
+            qtyPerMachine: c.qtyPerMachine || 1
+          }));
 
       components.forEach(c => {
         const key = c.itemId || c.itemCode || '';
@@ -301,25 +326,38 @@ export const PlanningModule: React.FC = () => {
         pendingQC,
         shortage,
         minStockLevel,
-        minShortage
+        minShortage,
+        _searchStr: `${partCode} ${itemCode} ${name} ${item.category || ''}`.toLowerCase()
       };
     });
-  }, [items, purchaseOrders, workOrders, jobCards, jobworks, boms, qcInspections]);
+  }, [items, purchaseOrders, workOrders, jobCards, jobworks, boms, qcInspections, finishedGoods]);
 
-  // Clean Search Term handling
-  const cleanSearchTerm = searchTerm.replace(/@history|@deleted/gi, '').replace(/^@/g, '').trim().toLowerCase();
+  // Responsive Local Search Term with 120ms debounce to ERPContext
+  const [localSearch, setLocalSearch] = useState(searchTerm);
+
+  useEffect(() => {
+    setLocalSearch(searchTerm);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      if (localSearch !== searchTerm) {
+        setSearchTerm(localSearch);
+      }
+    }, 40);
+    return () => clearTimeout(handler);
+  }, [localSearch, searchTerm, setSearchTerm]);
+
+  // Clean Search Term handling with useDeferredValue
+  const deferredSearch = React.useDeferredValue(localSearch);
+  const cleanSearchTerm = deferredSearch.replace(/@history|@deleted|@archived/gi, '').replace(/^@+/g, '').trim().toLowerCase();
 
   // Filtered & Sorted Records
   const filteredData = useMemo(() => {
     return planningData
       .filter(row => {
-        // Search Filter
-        const matchesSearch = !cleanSearchTerm || (
-          row.partCode.toLowerCase().includes(cleanSearchTerm) ||
-          row.itemCode.toLowerCase().includes(cleanSearchTerm) ||
-          row.name.toLowerCase().includes(cleanSearchTerm) ||
-          row.category.toLowerCase().includes(cleanSearchTerm)
-        );
+        // Fast pre-computed search filter
+        const matchesSearch = !cleanSearchTerm || row._searchStr.includes(cleanSearchTerm);
 
         // Class Filter
         const matchesClass = selectedClasses.length === 0 || selectedClasses.includes(row.category);
@@ -439,8 +477,8 @@ export const PlanningModule: React.FC = () => {
               placeholder="Search Part code, Item code, Description..."
               className="input-field"
               style={{ paddingLeft: '2.25rem', fontSize: '0.82rem' }}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              value={localSearch}
+              onChange={(e) => setLocalSearch(e.target.value)}
             />
           </div>
 

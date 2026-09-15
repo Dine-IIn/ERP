@@ -465,6 +465,8 @@ export interface WorkOrder {
   workOrderNo?: string;
   soNumber?: string;
   soId?: string;
+  itemId?: string;
+  itemCode?: string;
   customerName?: string;
   quantity?: number;
   stage?: WOStage;

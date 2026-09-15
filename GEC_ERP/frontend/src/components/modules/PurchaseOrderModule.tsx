@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { Modal } from '../common/Modal';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
@@ -12,7 +12,7 @@ type POSortField = 'poNumber' | 'vendorName' | 'orderDate' | 'deliveryDate' | 'p
 
 export const PurchaseOrderModule: React.FC = () => {
   const { 
-    purchaseOrders, vendors, items, workOrders, boms, jobCards, jobworks, qcInspections,
+    purchaseOrders, vendors, items, workOrders, boms, jobCards, jobworks, qcInspections, finishedGoods,
     addPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder, 
     updatePOStatus, sendPODraftsForApproval, resubmitPOForApproval, currentUser, searchTerm, setSearchTerm 
   } = useERP();
@@ -109,7 +109,10 @@ export const PurchaseOrderModule: React.FC = () => {
     };
 
     activeWOs.forEach(wo => {
-      const remainingQty = Math.max(0, (wo.targetQuantity || wo.quantity || 1) - (wo.completedQuantity || 0));
+      const dispatchedQty = (finishedGoods || [])
+        .filter(fg => (fg.woId === wo.id || fg.woNumber === wo.workOrderNo) && fg.status === 'DISPATCHED')
+        .length;
+      const remainingQty = Math.max(0, (wo.targetQuantity || wo.quantity || 1) - Math.max(wo.completedQuantity || 0, dispatchedQty));
       if (remainingQty <= 0) return;
 
       if (wo.woComponents && wo.woComponents.length > 0) {
@@ -181,19 +184,17 @@ export const PurchaseOrderModule: React.FC = () => {
     };
   };
 
-  // Calculate Net Effective Item Shortage:
-  // Shortage = (WO Demand + Job Card Demand + Jobwork Demand + Min Stock Level) - (Current In-House Stock + Pending PO Qty)
+  // Calculate Min Level Shortage for Purchase Orders:
+  // Shortage = max(0, (WO Demand + Job Card Demand + Jobwork Demand + Min Stock Level) - Current In-House Stock)
   const getItemEffectiveShortage = (item: Item) => {
     const inHouseStock = item.inHouseStock || 0;
-    const pendingPOQty = getOpenPOQuantity(item);
     const woDemand = getItemWorkOrderDemand(item.id, item.itemCode);
     const jcDemand = getItemJobCardDemand(item.id, item.itemCode);
     const jwDemand = getItemJobworkDemand(item.id, item.itemCode);
     const minStock = item.minStockQty !== undefined ? item.minStockQty : (item.reorderLevel || 0);
 
     const totalDemand = minStock + jwDemand + jcDemand + woDemand;
-    const totalSupply = inHouseStock + pendingPOQty;
-    const netShortage = Math.max(0, totalDemand - totalSupply);
+    const netShortage = Math.max(0, totalDemand - inHouseStock);
     return netShortage;
   };
 
@@ -205,8 +206,10 @@ export const PurchaseOrderModule: React.FC = () => {
     return p.includes('bought out') || p.includes('brought out') || cat === 'BO' || sources.includes('bought out') || sources.includes('brought out');
   };
 
-  // ONLY Bought-Out items with net shortage > 0 can have PO created
-  const shortageItems = items.filter(i => isBoughtOutItem(i) && !i.isBlocked && getItemEffectiveShortage(i) > 0);
+  // ONLY Bought-Out items with min level shortage >= 1 can have PO created
+  const shortageItems = useMemo(() => {
+    return items.filter(i => isBoughtOutItem(i) && !i.isBlocked && getItemEffectiveShortage(i) >= 1);
+  }, [items, workOrders, finishedGoods, boms, jobCards, jobworks]);
 
   // Filter Draft POs
   const draftPOs = purchaseOrders.filter(po => po.status === 'DRAFT');
@@ -225,54 +228,85 @@ export const PurchaseOrderModule: React.FC = () => {
     }
   };
 
-  // Universal @history & @deleted search handling
-  const isHistorySearch = searchTerm.toLowerCase().includes('@history') || searchTerm.toLowerCase().includes('@deleted') || searchTerm.trim().startsWith('@');
-  const cleanSearchTerm = searchTerm.replace(/@history|@deleted/gi, '').replace(/^@/g, '').trim().toLowerCase();
+  // Synchronized search with fast 40ms debounce and deferred evaluation
+  const [localSearch, setLocalSearch] = useState(searchTerm || '');
+  React.useEffect(() => {
+    setLocalSearch(searchTerm);
+  }, [searchTerm]);
 
-  const filteredPOs = purchaseOrders
-    .filter(po => {
+  React.useEffect(() => {
+    const handler = setTimeout(() => {
+      if (localSearch !== searchTerm) {
+        setSearchTerm(localSearch);
+      }
+    }, 40);
+    return () => clearTimeout(handler);
+  }, [localSearch, searchTerm, setSearchTerm]);
+
+  // Universal @history & @deleted search handling with deferred value & memoization
+  const deferredSearchTerm = React.useDeferredValue(localSearch);
+  const isDeletedSearch = deferredSearchTerm.toLowerCase().includes('@deleted');
+  const isHistorySearch = isDeletedSearch || deferredSearchTerm.toLowerCase().includes('@history') || deferredSearchTerm.toLowerCase().includes('@completed') || deferredSearchTerm.trim().startsWith('@');
+  const cleanSearchTerm = deferredSearchTerm.replace(/@history|@deleted|@completed|@archived/gi, '').replace(/^@+/g, '').trim().toLowerCase();
+
+  const poSearchIndex = useMemo(() => {
+    return purchaseOrders.map(po => {
+      const itemsStr = po.items.map(i => `${i.itemName || ''} ${i.itemCode || ''}`).join(' ');
       const isCompleted = po.status === 'GOODS_RECEIVED' || (po.status as string) === 'RECEIVED' || po.status === 'CANCELLED' || (po as any).isArchived || po.isDeleted;
-
-      // By default show active unless @history or @deleted is typed
-      if (!isHistorySearch && (po.isDeleted || isCompleted)) {
-        return false;
-      }
-
-      const matchesSearch = !cleanSearchTerm || (
-        po.poNumber.toLowerCase().includes(cleanSearchTerm) ||
-        po.vendorName.toLowerCase().includes(cleanSearchTerm) ||
-        po.items.some(i => (i.itemName || '').toLowerCase().includes(cleanSearchTerm) || (i.itemCode || '').toLowerCase().includes(cleanSearchTerm))
-      );
-
-      let matchesStatus = true;
-      if (isHistorySearch || selectedPOStatusFilter === 'ALL' || selectedPOStatusFilter === 'ACTIVE_ONLY') {
-        matchesStatus = true;
-      } else {
-        matchesStatus = po.status === selectedPOStatusFilter;
-      }
-
-      const poDate = po.orderDate;
-      const matchesStart = !startDateFilter || poDate >= startDateFilter;
-      const matchesEnd = !endDateFilter || poDate <= endDateFilter;
-
-      return matchesSearch && matchesStatus && matchesStart && matchesEnd;
-    })
-    .sort((a, b) => {
-      let valA: any = a[sortField] || '';
-      let valB: any = b[sortField] || '';
-
-      if (sortField === 'totalAmount') {
-        valA = Number(valA || 0);
-        valB = Number(valB || 0);
-      } else if (typeof valA === 'string') {
-        valA = valA.toLowerCase();
-        valB = valB.toLowerCase();
-      }
-
-      if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
-      if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
-      return 0;
+      return {
+        po,
+        searchStr: `${po.poNumber} ${po.vendorName} ${itemsStr}`.toLowerCase(),
+        isCompleted: !!isCompleted,
+        isDeleted: !!po.isDeleted
+      };
     });
+  }, [purchaseOrders]);
+
+  const filteredPOs = useMemo(() => {
+    return poSearchIndex
+      .filter(({ po, searchStr, isCompleted, isDeleted }) => {
+        if (isDeletedSearch) {
+          if (!isDeleted) return false;
+        } else if (isHistorySearch) {
+          if (!isCompleted) return false;
+        } else if (isCompleted) {
+          return false;
+        }
+
+        const matchesSearch = !cleanSearchTerm || searchStr.includes(cleanSearchTerm);
+        if (!matchesSearch) return false;
+
+        let matchesStatus = true;
+        if (isHistorySearch || selectedPOStatusFilter === 'ALL' || selectedPOStatusFilter === 'ACTIVE_ONLY') {
+          matchesStatus = true;
+        } else {
+          matchesStatus = po.status === selectedPOStatusFilter;
+        }
+
+        const poDate = po.orderDate;
+        const matchesStart = !startDateFilter || poDate >= startDateFilter;
+        const matchesEnd = !endDateFilter || poDate <= endDateFilter;
+
+        return matchesStatus && matchesStart && matchesEnd;
+      })
+      .map(({ po }) => po)
+      .sort((a, b) => {
+        let valA: any = a[sortField] || '';
+        let valB: any = b[sortField] || '';
+
+        if (sortField === 'totalAmount') {
+          valA = Number(valA || 0);
+          valB = Number(valB || 0);
+        } else if (typeof valA === 'string') {
+          valA = valA.toLowerCase();
+          valB = valB.toLowerCase();
+        }
+
+        if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+        if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+        return 0;
+      });
+  }, [poSearchIndex, isDeletedSearch, isHistorySearch, cleanSearchTerm, selectedPOStatusFilter, startDateFilter, endDateFilter, sortField, sortOrder]);
 
   const handlePrintSinglePO = (po: PurchaseOrder) => {
     setSelectedPrintPO(po);
@@ -596,26 +630,28 @@ export const PurchaseOrderModule: React.FC = () => {
   const { selectedIndex, setSelectedIndex } = useTableKeyboardNav(filteredPOs, handlePrintPO);
 
   
-  const wizardShortageItemsFiltered = shortageItems.filter(item => {
-    const term = wizardSearchTerm.trim().toLowerCase();
-    if (!term) return true;
-    return (
+  const deferredWizardSearchTerm = React.useDeferredValue(wizardSearchTerm);
+
+  const wizardShortageItemsFiltered = useMemo(() => {
+    const term = deferredWizardSearchTerm.trim().toLowerCase();
+    if (!term) return shortageItems;
+    return shortageItems.filter(item => (
       item.itemCode.toLowerCase().includes(term) ||
       item.name.toLowerCase().includes(term) ||
       item.category.toLowerCase().includes(term) ||
       (item.partCode && item.partCode.toLowerCase().includes(term))
-    );
-  });
+    ));
+  }, [shortageItems, deferredWizardSearchTerm]);
 
   // Build rows for Tabular Shortage Matrix
-  const getWizardTableRows = () => {
+  const wizardTableRows = useMemo(() => {
     return wizardShortageItemsFiltered.map((item, idx) => {
       const woReq = getItemWorkOrderDemand(item.id, item.itemCode);
       const jcReq = getItemJobCardDemand(item.id, item.itemCode);
       const jwReq = getItemJobworkDemand(item.id, item.itemCode);
       const reqQty = woReq + jcReq + jwReq;
       const minStock = item.minStockQty !== undefined ? item.minStockQty : (item.reorderLevel || 0);
-      const currentStock = (item.inHouseStock || 0) + (item.externalStock || 0);
+      const currentStock = item.inHouseStock || 0;
       const inPO = getOpenPOQuantity(item);
       const shortage = getItemEffectiveShortage(item);
 
@@ -634,9 +670,7 @@ export const PurchaseOrderModule: React.FC = () => {
         unit: item.unit
       };
     });
-  };
-
-  const wizardTableRows = getWizardTableRows();
+  }, [wizardShortageItemsFiltered, workOrders, finishedGoods, boms, jobCards, jobworks]);
 
   return (
     <div className="module-layout-container">
@@ -827,8 +861,8 @@ export const PurchaseOrderModule: React.FC = () => {
                   placeholder="Search PO Number, Vendor, Item, Ref... (type @history)"
                   className="input-field"
                   style={{ paddingLeft: '2.25rem', fontSize: '0.82rem' }}
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  value={localSearch}
+                  onChange={(e) => setLocalSearch(e.target.value)}
                 />
               </div>
 
