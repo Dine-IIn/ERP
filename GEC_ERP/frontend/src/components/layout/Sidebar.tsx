@@ -41,6 +41,7 @@ export const Sidebar: React.FC = () => {
     { key: 'sales-orders', label: 'Sales Orders (SO)', icon: <ShoppingBag size={16} />, badge: activeSOCount > 0 ? activeSOCount : undefined },
     { key: 'work-orders', label: 'Work Orders (WO)', icon: <Wrench size={16} />, badge: activeWOCount > 0 ? activeWOCount : undefined },
     { key: 'job-cards', label: 'Job Cards (Assembly)', icon: <ClipboardList size={16} /> },
+    { key: 'floor-planning', label: 'Shopfloor Planning', icon: <Factory size={16} /> },
     { key: 'inventory', label: 'Inventory (In-House & External)', icon: <Warehouse size={16} />, badge: lowStockCount > 0 ? lowStockCount : undefined },
     { key: 'external-jobwork', label: 'Job Work (Challans & Vendor)', icon: <Truck size={16} />, badge: activeJobworkCount > 0 ? activeJobworkCount : undefined },
     { key: 'purchase-orders', label: 'Purchase Orders (PO)', icon: <ShoppingCart size={16} />, badge: pendingPOCount > 0 ? pendingPOCount : undefined },
@@ -91,7 +92,7 @@ export const Sidebar: React.FC = () => {
       </div>
 
       {/* Navigation List - Ultra Compact Vertical Padding (Fits 100vh No Scroll) */}
-      <nav style={{ flex: 1, padding: '0.4rem 0.5rem', display: 'flex', flexDirection: 'column', gap: '0.1rem', overflow: 'hidden' }}>
+      <nav style={{ flex: 1, padding: '0.4rem 0.5rem', display: 'flex', flexDirection: 'column', gap: '0.1rem', overflowY: 'auto' }}>
         <div style={{ 
           fontSize: '0.65rem', 
           fontWeight: 700, 
