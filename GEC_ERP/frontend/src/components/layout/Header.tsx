@@ -190,6 +190,8 @@ export const Header: React.FC = () => {
       };
     }
 
+    const cleanTokens = cleanTerm ? cleanTerm.split(/\s+/).filter(Boolean) : [];
+
     const findMatches = <T,>(
       list: Array<{ data: T; searchStr: string; isHistorical: boolean }>,
       limit: number
@@ -202,7 +204,8 @@ export const Header: React.FC = () => {
         } else {
           if (item.isHistorical) continue;
         }
-        if (!cleanTerm || item.searchStr.includes(cleanTerm)) {
+        const matches = cleanTokens.length === 0 || cleanTokens.every(token => item.searchStr.includes(token));
+        if (matches) {
           matched.push(item.data);
           if (matched.length >= limit) break;
         }

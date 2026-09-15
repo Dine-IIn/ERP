@@ -358,13 +358,14 @@ export const PlanningModule: React.FC = () => {
   // Clean Search Term handling with useDeferredValue
   const deferredSearch = React.useDeferredValue(localSearch);
   const cleanSearchTerm = deferredSearch.replace(/@history|@deleted|@archived/gi, '').replace(/^@+/g, '').trim().toLowerCase();
+  const searchTokens = useMemo(() => cleanSearchTerm ? cleanSearchTerm.split(/\s+/).filter(Boolean) : [], [cleanSearchTerm]);
 
   // Filtered & Sorted Records
   const filteredData = useMemo(() => {
     return planningData
       .filter(row => {
-        // Fast pre-computed search filter
-        const matchesSearch = !cleanSearchTerm || row._searchStr.includes(cleanSearchTerm);
+        // Fast pre-computed tokenized search filter
+        const matchesSearch = searchTokens.length === 0 || searchTokens.every(t => row._searchStr.includes(t));
 
         // Class Filter
         const matchesClass = selectedClasses.length === 0 || selectedClasses.includes(row.category);
@@ -396,7 +397,7 @@ export const PlanningModule: React.FC = () => {
         if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
         return 0;
       });
-  }, [planningData, cleanSearchTerm, selectedClasses, selectedProcessType, showShortageOnly, sortField, sortOrder]);
+  }, [planningData, searchTokens, selectedClasses, selectedProcessType, showShortageOnly, sortField, sortOrder]);
 
   const totalShortageItemsCount = planningData.filter(d => d.shortage > 0).length;
   const totalMinShortageItemsCount = planningData.filter(d => d.minShortage > 0).length;

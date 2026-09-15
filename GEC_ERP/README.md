@@ -260,7 +260,7 @@ AUTO_BACKUP_CYCLE_HOURS=48
 BACKUP_RETENTION_DAYS=0
 
 # Security & Secrets
-CORS_ORIGIN=*
+CORS_ORIGIN=*?
 SUPERADMIN_MASTER_KEY=GEC_SuperAdmin#2026!Secured$
 JWT_SECRET=gec_moulding_machine_enterprise_secret_key_2026
 ```

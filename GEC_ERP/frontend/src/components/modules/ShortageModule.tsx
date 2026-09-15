@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useDeferredValue } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { 
@@ -31,6 +31,8 @@ export const ShortageModule: React.FC = () => {
   const [shortageFilterMode, setShortageFilterMode] = useState<'SHORTAGE_ONLY' | 'ALL_ITEMS'>('SHORTAGE_ONLY');
   const [woSearchTerm, setWoSearchTerm] = useState('');
   const [tableSearchTerm, setTableSearchTerm] = useState('');
+  const deferredWoSearchTerm = useDeferredValue(woSearchTerm);
+  const deferredTableSearchTerm = useDeferredValue(tableSearchTerm);
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
 
   // Simulation Quantities (key: woId -> simulated qty)
@@ -67,6 +69,7 @@ export const ShortageModule: React.FC = () => {
     | 'minStockLevel';
 
   const [itemWiseSearch, setItemWiseSearch] = useState('');
+  const deferredItemWiseSearch = useDeferredValue(itemWiseSearch);
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('gec_shortage_selected_item_ids');
@@ -76,6 +79,7 @@ export const ShortageModule: React.FC = () => {
     }
   });
   const [componentSearchTerm, setComponentSearchTerm] = useState('');
+  const deferredComponentSearchTerm = useDeferredValue(componentSearchTerm);
   const [selectedClassFilters, setSelectedClassFilters] = useState<string[]>([]);
   const [selectedProcessFilter, setSelectedProcessFilter] = useState<string>('ALL');
   const [itemTargetQuantities, setItemTargetQuantities] = useState<Record<string, number>>(() => {
@@ -98,6 +102,38 @@ export const ShortageModule: React.FC = () => {
       localStorage.setItem('gec_shortage_item_target_quantities', JSON.stringify(itemTargetQuantities));
     } catch {}
   }, [itemTargetQuantities]);
+
+  // Optimized Fast Item Suggestions for Item-Wise Search (Deferred + Tokenized)
+  const itemSuggestions = useMemo(() => {
+    const term = deferredItemWiseSearch.trim().toLowerCase();
+    if (!term) return [];
+    const tokens = term.split(/\s+/).filter(Boolean);
+    const selectedSet = new Set(selectedItemIds);
+    const matches: Item[] = [];
+
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (it.isBlocked || selectedSet.has(it.id)) continue;
+      const str = `${it.itemCode} ${it.name} ${it.partCode || ''} ${it.category || ''}`.toLowerCase();
+      if (tokens.every(t => str.includes(t))) {
+        matches.push(it);
+        if (matches.length >= 15) break; // Fast early exit
+      }
+    }
+    return matches;
+  }, [items, deferredItemWiseSearch, selectedItemIds]);
+
+  // Fast Filtered Work Orders for Selection (Deferred + Tokenized)
+  const filteredWorkOrdersForSelection = useMemo(() => {
+    const term = deferredWoSearchTerm.trim().toLowerCase();
+    const tokens = term ? term.split(/\s+/).filter(Boolean) : [];
+    return workOrders.filter(w => {
+      if (w.status !== 'IN_PROGRESS' && w.status !== 'PLANNED') return false;
+      if (tokens.length === 0) return true;
+      const str = `${w.workOrderNo || ''} ${(w as any).woNumber || ''} ${w.machineModel || ''} ${w.customerName || ''}`.toLowerCase();
+      return tokens.every(t => str.includes(t));
+    });
+  }, [workOrders, deferredWoSearchTerm]);
 
   const [itemWiseSortField, setItemWiseSortField] = useState<ItemWiseSortField>('shortage');
   const [itemWiseSortOrder, setItemWiseSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -200,128 +236,149 @@ export const ShortageModule: React.FC = () => {
     let minBuildable = Infinity;
     let bottleneckComp = '';
 
-    const collectedComps: Array<{
-      itemId: string;
-      itemCode: string;
-      itemName: string;
-      qtyPerMachine: number;
-      unit: string;
-    }> = [];
+    // Virtual stock map for this item's calculation simulation (Real inventory is never mutated!)
+    const localVirtualStock = new Map<string, number>();
+    items.forEach(it => {
+      localVirtualStock.set(it.id, it.inHouseStock || 0);
+      if (it.itemCode) localVirtualStock.set(it.itemCode.toLowerCase(), it.inHouseStock || 0);
+    });
 
-    const collectComponents = (bom: BOM, multiplier: number, visited = new Set<string>()) => {
+    const getLocalStock = (id: string, code?: string) => {
+      if (id && localVirtualStock.has(id)) return localVirtualStock.get(id)!;
+      if (code && localVirtualStock.has(code.toLowerCase())) return localVirtualStock.get(code.toLowerCase())!;
+      return 0;
+    };
+
+    const allocateLocalStock = (id: string, code: string | undefined, req: number) => {
+      const avail = getLocalStock(id, code);
+      const alloc = Math.min(avail, req);
+      const rem = avail - alloc;
+      if (id) localVirtualStock.set(id, rem);
+      if (code) localVirtualStock.set(code.toLowerCase(), rem);
+      return alloc;
+    };
+
+    const compLinesMap = new Map<string, any>();
+
+    const explodeCompTree = (
+      bom: BOM,
+      multiplier: number,
+      visited = new Set<string>()
+    ) => {
       if (visited.has(bom.id)) return;
       visited.add(bom.id);
 
       bom.components.forEach(comp => {
-        const childIt = items.find(i => i.id === comp.itemId || i.itemCode === comp.itemCode);
-        const qtyPer = (comp.qtyPerMachine || 1) * multiplier;
-        
-        const childBOM = isExplodeAllBOMs ? boms.find(b => b.id === childIt?.id || b.bomCode === childIt?.itemCode || b.machineModel?.toLowerCase() === childIt?.name?.toLowerCase()) : null;
-        if (childBOM && isExplodeAllBOMs) {
-          collectComponents(childBOM, qtyPer, new Set(visited));
+        const childIt = items.find(i => i.id === comp.itemId || (comp.itemCode && i.itemCode.toLowerCase() === comp.itemCode.toLowerCase()));
+        const qtyPer = comp.qtyPerMachine || 1;
+        const totalReq = qtyPer * multiplier;
+        const key = comp.itemCode || comp.itemId || 'unknown';
+
+        const inHouse = childIt ? (childIt.inHouseStock || 0) : 0;
+        const external = childIt ? (childIt.externalStock || 0) : 0;
+        const minStock = childIt ? (childIt.minStockQty !== undefined ? childIt.minStockQty : (childIt.reorderLevel || 0)) : 0;
+        const openPO = getOpenPOQuantity(childIt, comp.itemCode);
+        const pendingJW = jobworks
+          .filter(jw => jw.status !== 'COMPLETED' && jw.status !== 'CANCELLED' && !(jw as any).isDeleted)
+          .reduce((sum, jw) => (jw.itemId === comp.itemId || jw.itemCode === comp.itemCode) ? sum + (jw.pendingBalance ?? jw.sentQuantity ?? 0) : sum, 0);
+        const pendingQC = childIt?.pendingQCStock || 0;
+
+        // Virtual stock allocation for this requirement
+        const allocated = targetQty > 0 ? allocateLocalStock(childIt?.id || comp.itemId, childIt?.itemCode || comp.itemCode, totalReq) : 0;
+        const compNetShortage = targetQty > 0 ? Math.max(0, totalReq - allocated) : 0;
+
+        if (!compLinesMap.has(key)) {
+          compLinesMap.set(key, {
+            itemId: comp.itemId || childIt?.id || '',
+            itemCode: comp.itemCode || childIt?.itemCode || '',
+            itemName: comp.itemName || childIt?.name || '',
+            childItem: childIt,
+            category: childIt?.category || 'Component',
+            processType: childIt?.processType || 'In-house',
+            qtyPerItem: qtyPer,
+            totalRequired: totalReq,
+            inHouseStock: inHouse,
+            externalStock: external,
+            minStockQty: minStock,
+            netShortage: compNetShortage,
+            isShortage: compNetShortage > 0,
+            unit: comp.unit || childIt?.unit || 'PCS'
+          });
+        } else {
+          const existing = compLinesMap.get(key)!;
+          existing.totalRequired += totalReq;
+          existing.netShortage += compNetShortage;
+          existing.isShortage = existing.netShortage > 0;
         }
 
-        collectedComps.push({
-          itemId: comp.itemId || childIt?.id || '',
-          itemCode: comp.itemCode || childIt?.itemCode || '',
-          itemName: comp.itemName || childIt?.name || '',
-          qtyPerMachine: qtyPer,
-          unit: comp.unit || childIt?.unit || 'PCS'
-        });
+        // Buildable calculation
+        const buildableUnits = Math.floor(inHouse / Math.max(1, qtyPer));
+        if (buildableUnits < minBuildable) {
+          minBuildable = buildableUnits;
+          bottleneckComp = `${comp.itemCode} (${comp.itemName}) - Stock: ${inHouse} ${comp.unit || 'PCS'}, Needs ${qtyPer} per unit`;
+        }
+
+        // Tree Pruning: Only explode child sub-BOM or process card if compNetShortage > 0
+        if (compNetShortage > 0) {
+          const childBOM = boms.find(b => 
+            b.id === childIt?.id || 
+            (childIt?.itemCode && b.bomCode?.toLowerCase() === childIt.itemCode.toLowerCase()) || 
+            (childIt?.name && b.machineModel?.toLowerCase() === childIt.name.toLowerCase())
+          );
+          if (childBOM) {
+            explodeCompTree(childBOM, compNetShortage, new Set(visited));
+          }
+
+          // Process Card raw material link
+          const procCard = (itemProcessCards || []).find(pc => 
+            (childIt?.id && pc.itemId === childIt.id) || 
+            (childIt?.itemCode && (pc.itemCode?.toLowerCase() === childIt.itemCode.toLowerCase() || pc.itemId === childIt.itemCode))
+          );
+          if (procCard && (procCard.rawItemId || procCard.rawItemCode)) {
+            const rawItem = items.find(i => 
+              (procCard.rawItemId && i.id === procCard.rawItemId) || 
+              (procCard.rawItemCode && i.itemCode.toLowerCase() === procCard.rawItemCode.toLowerCase())
+            );
+            if (rawItem) {
+              const rawKey = rawItem.itemCode || rawItem.id;
+              const rawReq = compNetShortage;
+              const rawInHouse = rawItem.inHouseStock || 0;
+              const rawExternal = rawItem.externalStock || 0;
+              const rawMinStock = rawItem.minStockQty !== undefined ? rawItem.minStockQty : (rawItem.reorderLevel || 0);
+              const rawAlloc = allocateLocalStock(rawItem.id, rawItem.itemCode, rawReq);
+              const rawShortage = Math.max(0, rawReq - rawAlloc);
+
+              if (!compLinesMap.has(rawKey)) {
+                compLinesMap.set(rawKey, {
+                  itemId: rawItem.id,
+                  itemCode: rawItem.itemCode,
+                  itemName: `${rawItem.name} [Material Before Process for ${comp.itemCode}]`,
+                  childItem: rawItem,
+                  category: rawItem.category || 'RM',
+                  processType: (rawItem.processType || 'Bought out') as any,
+                  qtyPerItem: qtyPer,
+                  totalRequired: rawReq,
+                  inHouseStock: rawInHouse,
+                  externalStock: rawExternal,
+                  minStockQty: rawMinStock,
+                  netShortage: rawShortage,
+                  isShortage: rawShortage > 0,
+                  unit: rawItem.unit || 'PCS'
+                });
+              } else {
+                const existingRaw = compLinesMap.get(rawKey)!;
+                existingRaw.totalRequired += rawReq;
+                existingRaw.netShortage += rawShortage;
+                existingRaw.isShortage = existingRaw.netShortage > 0;
+              }
+            }
+          }
+        }
       });
     };
 
-    collectComponents(matchingBOM, 1);
-
-    const compLines = collectedComps.map(comp => {
-      const childItem = items.find(i => i.id === comp.itemId || i.itemCode === comp.itemCode);
-      const qtyPer = comp.qtyPerMachine;
-      const totalReq = qtyPer * targetQty;
-      const inHouse = childItem ? (childItem.inHouseStock || 0) : 0;
-      const external = childItem ? (childItem.externalStock || 0) : 0;
-      const minStock = childItem ? (childItem.minStockQty !== undefined ? childItem.minStockQty : (childItem.reorderLevel || 0)) : 0;
-      const openPO = getOpenPOQuantity(childItem, comp.itemCode);
-      const pendingJW = jobworks
-        .filter(jw => jw.status !== 'COMPLETED' && jw.status !== 'CANCELLED' && !(jw as any).isDeleted)
-        .reduce((sum, jw) => (jw.itemId === comp.itemId || jw.itemCode === comp.itemCode) ? sum + (jw.pendingBalance ?? jw.sentQuantity ?? 0) : sum, 0);
-      const pendingQC = childItem?.pendingQCStock || 0;
-      const totalPipelineSupply = inHouse + openPO + pendingJW + pendingQC;
-      const netShortage = Math.max(0, (totalReq + minStock) - totalPipelineSupply);
-      const pSource = childItem?.processType || 'In-house';
-
-      const buildableUnits = Math.floor(inHouse / Math.max(1, qtyPer));
-      if (buildableUnits < minBuildable) {
-        minBuildable = buildableUnits;
-        bottleneckComp = `${comp.itemCode} (${comp.itemName}) - Stock: ${inHouse} ${comp.unit || 'PCS'}, Needs ${qtyPer} per unit`;
-      }
-
-      return {
-        ...comp,
-        childItem,
-        itemCode: comp.itemCode || childItem?.itemCode || '',
-        itemName: comp.itemName || childItem?.name || '',
-        category: childItem?.category || 'Component',
-        processType: pSource,
-        qtyPerItem: qtyPer,
-        totalRequired: totalReq,
-        inHouseStock: inHouse,
-        externalStock: external,
-        minStockQty: minStock,
-        netShortage,
-        isShortage: netShortage > 0,
-        unit: comp.unit || childItem?.unit || 'PCS'
-      };
-    });
-
-    // Check Process Cards for indirect BOM raw material demands
-    const rawMaterialCompLines: typeof compLines = [];
-    compLines.forEach(cl => {
-      if (cl.netShortage > 0 && cl.childItem) {
-        const procCard = (itemProcessCards || []).find(pc => 
-          (cl.childItem?.id && pc.itemId === cl.childItem.id) || 
-          (cl.childItem?.itemCode && (pc.itemCode?.toLowerCase() === cl.childItem.itemCode.toLowerCase() || pc.itemId === cl.childItem.itemCode))
-        );
-        if (procCard && (procCard.rawItemId || procCard.rawItemCode)) {
-          const rawItem = items.find(i => 
-            (procCard.rawItemId && i.id === procCard.rawItemId) || 
-            (procCard.rawItemCode && i.itemCode.toLowerCase() === procCard.rawItemCode.toLowerCase())
-          );
-          if (rawItem && !compLines.some(c => c.itemId === rawItem.id || c.itemCode === rawItem.itemCode)) {
-            const rawReq = cl.netShortage;
-            const inHouse = rawItem.inHouseStock || 0;
-            const external = rawItem.externalStock || 0;
-            const minStock = rawItem.minStockQty !== undefined ? rawItem.minStockQty : (rawItem.reorderLevel || 0);
-            const openPO = getOpenPOQuantity(rawItem, rawItem.itemCode);
-            const pendingJW = jobworks
-              .filter(jw => jw.status !== 'COMPLETED' && jw.status !== 'CANCELLED' && !(jw as any).isDeleted)
-              .reduce((sum, jw) => (jw.itemId === rawItem.id || jw.itemCode === rawItem.itemCode) ? sum + (jw.pendingBalance ?? jw.sentQuantity ?? 0) : sum, 0);
-            const pendingQC = rawItem.pendingQCStock || 0;
-            const totalPipelineSupply = inHouse + openPO + pendingJW + pendingQC;
-            const rawShortage = Math.max(0, (rawReq + minStock) - totalPipelineSupply);
-
-            rawMaterialCompLines.push({
-              itemId: rawItem.id,
-              itemCode: rawItem.itemCode,
-              itemName: `${rawItem.name} [Material Before Process for ${cl.itemCode}]`,
-              qtyPerMachine: cl.qtyPerMachine,
-              childItem: rawItem,
-              category: rawItem.category || 'RM',
-              processType: (rawItem.processType || 'Bought out') as any,
-              qtyPerItem: cl.qtyPerItem,
-              totalRequired: rawReq,
-              inHouseStock: inHouse,
-              externalStock: external,
-              minStockQty: minStock,
-              netShortage: rawShortage,
-              isShortage: rawShortage > 0,
-              unit: rawItem.unit || 'PCS'
-            });
-          }
-        }
-      }
-    });
-
-    const allCompLines = [...compLines, ...rawMaterialCompLines];
+    explodeCompTree(matchingBOM, targetQty);
+    const allCompLines = Array.from(compLinesMap.values());
     const maxBuildable = minBuildable === Infinity ? 0 : minBuildable;
     const hasShortage = allCompLines.some(c => c.isShortage);
 
@@ -341,241 +398,246 @@ export const ShortageModule: React.FC = () => {
     .map(calculateItemShortageDetail);
 
   // -------------------------------------------------------------
-  // CONSOLIDATED MULTI-ITEM SHORTAGE ($X + Y$) AGGREGATION
+  // CONSOLIDATED MULTI-ITEM SHORTAGE ($X + Y$) TREE PRUNING AGGREGATION
   // -------------------------------------------------------------
   const consolidatedItemWiseData = useMemo(() => {
-    const itemMap = new Map<string, any>();
+    // 1. Fast Maps for O(1) lookups
+    const itemById = new Map<string, Item>();
+    const itemByCode = new Map<string, Item>();
+    items.forEach(it => {
+      if (it.id) itemById.set(it.id, it);
+      if (it.itemCode) itemByCode.set(it.itemCode.toLowerCase(), it);
+    });
 
-    const explodeItemBOMRecursively = (
-      bomIdOrModel: string,
-      multiplier: number,
-      parentContext: { itemId: string; itemCode: string; itemName: string; targetQty: number },
-      targetMap: Map<string, any>,
-      visitedBOMs = new Set<string>()
-    ) => {
-      const bom = boms.find(b => b.id === bomIdOrModel || b.bomCode === bomIdOrModel || b.machineModel?.toLowerCase() === bomIdOrModel?.toLowerCase());
-      if (!bom || !bom.components || visitedBOMs.has(bom.id)) return;
-      visitedBOMs.add(bom.id);
+    const bomById = new Map<string, BOM>();
+    const bomByCode = new Map<string, BOM>();
+    const bomByModel = new Map<string, BOM>();
+    boms.forEach(b => {
+      if (b.id) bomById.set(b.id, b);
+      if (b.bomCode) bomByCode.set(b.bomCode.toLowerCase(), b);
+      if (b.machineModel) bomByModel.set(b.machineModel.toLowerCase(), b);
+    });
 
-      bom.components.forEach(comp => {
-        const childIt = items.find(i => i.id === comp.itemId || i.itemCode === comp.itemCode);
-        const qtyPer = comp.qtyPerMachine || 1;
-        const totalReq = qtyPer * multiplier;
-        const key = comp.itemCode || comp.itemId || 'unknown';
+    const procCardByItem = new Map<string, any>();
+    (itemProcessCards || []).forEach(pc => {
+      if (pc.itemId) procCardByItem.set(pc.itemId, pc);
+      if (pc.itemCode) procCardByItem.set(pc.itemCode.toLowerCase(), pc);
+    });
 
-        const subBOM = boms.find(b => b.id === childIt?.id || b.bomCode === childIt?.itemCode || b.machineModel?.toLowerCase() === childIt?.name?.toLowerCase());
-        if (subBOM && isExplodeAllBOMs) {
-          explodeItemBOMRecursively(subBOM.id, totalReq, parentContext, targetMap, new Set(visitedBOMs));
-        }
+    // 2. Cloned Virtual Inventory Map - REAL INVENTORY IS NEVER MUTATED!
+    const virtualStockMap = new Map<string, number>();
+    items.forEach(it => {
+      const stock = it.inHouseStock || 0;
+      if (it.id) virtualStockMap.set(it.id, stock);
+      if (it.itemCode) virtualStockMap.set(it.itemCode.toLowerCase(), stock);
+    });
 
-        if (!targetMap.has(key)) {
-          targetMap.set(key, {
-            itemId: childIt?.id || comp.itemId || '',
-            itemCode: comp.itemCode || childIt?.itemCode || '',
-            partCode: childIt?.partCode || '',
-            itemName: comp.itemName || childIt?.name || '',
-            category: childIt?.category || 'Component',
-            processType: childIt?.processType || 'In-house',
-            unit: comp.unit || childIt?.unit || 'PCS',
-            totalRequired: totalReq,
-            itemObj: childIt,
-            requiredByItems: [{
-              itemId: parentContext.itemId,
-              itemCode: parentContext.itemCode,
-              itemName: parentContext.itemName,
-              targetQty: parentContext.targetQty,
-              requiredQty: totalReq
-            }]
-          });
-        } else {
-          const existing = targetMap.get(key)!;
-          existing.totalRequired += totalReq;
-          const found = existing.requiredByItems.find((r: any) => r.itemId === parentContext.itemId);
-          if (found) {
-            found.requiredQty += totalReq;
-          } else {
-            existing.requiredByItems.push({
-              itemId: parentContext.itemId,
-              itemCode: parentContext.itemCode,
-              itemName: parentContext.itemName,
-              targetQty: parentContext.targetQty,
-              requiredQty: totalReq
-            });
-          }
-        }
-      });
+    const getVirtualStock = (itemId: string, itemCode?: string): number => {
+      if (itemId && virtualStockMap.has(itemId)) return virtualStockMap.get(itemId)!;
+      if (itemCode && virtualStockMap.has(itemCode.toLowerCase())) return virtualStockMap.get(itemCode.toLowerCase())!;
+      return 0;
     };
 
+    const allocateVirtualStock = (itemId: string, itemCode: string | undefined, qty: number): number => {
+      const current = getVirtualStock(itemId, itemCode);
+      const allocated = Math.min(current, qty);
+      const remaining = current - allocated;
+      if (itemId) virtualStockMap.set(itemId, remaining);
+      if (itemCode) virtualStockMap.set(itemCode.toLowerCase(), remaining);
+      return allocated;
+    };
+
+    // 3. Consolidated Output Item Map
+    const itemMap = new Map<string, {
+      itemId: string;
+      itemCode: string;
+      partCode: string;
+      itemName: string;
+      category: string;
+      processType: string;
+      unit: string;
+      totalRequired: number;
+      itemObj?: Item;
+      requiredByItems: Array<{
+        itemId: string;
+        itemCode: string;
+        itemName: string;
+        targetQty: number;
+        requiredQty: number;
+        isShortageInduced?: boolean;
+      }>;
+    }>();
+
+    const registerItemDemand = (
+      childItem: Item | undefined,
+      fallbackKey: string,
+      reqQty: number,
+      parentContext: { itemId: string; itemCode: string; itemName: string; targetQty: number; isShortageInduced?: boolean }
+    ) => {
+      if (reqQty <= 0) return;
+      const key = (childItem?.itemCode || fallbackKey || childItem?.id || 'unknown').toLowerCase();
+      const displayKey = childItem?.itemCode || fallbackKey || childItem?.id || 'unknown';
+
+      let entry = itemMap.get(key);
+      if (!entry) {
+        const pSource = (childItem?.materialProcessSources && childItem.materialProcessSources.length > 0)
+          ? childItem.materialProcessSources.join(', ')
+          : childItem?.processType || 'In-house';
+
+        entry = {
+          itemId: childItem?.id || fallbackKey || '',
+          itemCode: childItem?.itemCode || displayKey,
+          partCode: childItem?.partCode || '',
+          itemName: childItem?.name || displayKey,
+          category: childItem?.category || 'Component',
+          processType: pSource,
+          unit: childItem?.unit || 'PCS',
+          totalRequired: 0,
+          itemObj: childItem,
+          requiredByItems: []
+        };
+        itemMap.set(key, entry);
+      }
+
+      entry.totalRequired += reqQty;
+      const existingReq = entry.requiredByItems.find(r => r.itemId === parentContext.itemId);
+      if (existingReq) {
+        existingReq.requiredQty += reqQty;
+      } else {
+        entry.requiredByItems.push({
+          itemId: parentContext.itemId,
+          itemCode: parentContext.itemCode,
+          itemName: parentContext.itemName,
+          targetQty: parentContext.targetQty,
+          requiredQty: reqQty,
+          isShortageInduced: parentContext.isShortageInduced
+        });
+      }
+    };
+
+    // 4. Recursive Shortage Branch Explosion with Cycle Detection
+    const explodeShortageBranch = (
+      targetItem: Item | undefined,
+      itemKey: string,
+      shortageQty: number,
+      visited: Set<string>
+    ) => {
+      if (!targetItem || shortageQty <= 0) return;
+      const targetId = targetItem.id;
+      if (visited.has(targetId)) return;
+      const nextVisited = new Set(visited);
+      nextVisited.add(targetId);
+
+      // (A) Check if targetItem has a sub-assembly BOM
+      const subBOM = bomById.get(targetItem.id) ||
+        bomByCode.get((targetItem.itemCode || '').toLowerCase()) ||
+        bomByModel.get((targetItem.name || '').toLowerCase());
+
+      if (subBOM && subBOM.components && subBOM.components.length > 0) {
+        subBOM.components.forEach(subComp => {
+          const subChild = itemById.get(subComp.itemId) || itemByCode.get((subComp.itemCode || '').toLowerCase());
+          const subReq = (subComp.qtyPerMachine || 1) * shortageQty;
+          const subContext = {
+            itemId: targetItem.id,
+            itemCode: targetItem.itemCode,
+            itemName: `${targetItem.name} [Sub-assembly Shortage]`,
+            targetQty: shortageQty,
+            isShortageInduced: true
+          };
+
+          registerItemDemand(subChild, subComp.itemCode || subComp.itemId, subReq, subContext);
+          const subAlloc = allocateVirtualStock(subChild?.id || subComp.itemId, subChild?.itemCode || subComp.itemCode, subReq);
+          const subShortage = Math.max(0, subReq - subAlloc);
+
+          // Tree Pruning: Only explode deeper into child sub-assemblies if subShortage > 0
+          if (subShortage > 0) {
+            explodeShortageBranch(subChild, subComp.itemCode || subComp.itemId, subShortage, nextVisited);
+          }
+        });
+      }
+
+      // (B) Check if targetItem has a Process Card (casting / material before process)
+      const procCard = procCardByItem.get(targetItem.id) || procCardByItem.get((targetItem.itemCode || '').toLowerCase());
+      if (procCard && (procCard.rawItemId || procCard.rawItemCode)) {
+        const rawKey = procCard.rawItemId || procCard.rawItemCode || '';
+        if (rawKey && !visited.has(`proc_${rawKey}`)) {
+          const rawItem = itemById.get(procCard.rawItemId) || itemByCode.get((procCard.rawItemCode || '').toLowerCase());
+          const rawReq = shortageQty; // 1:1 input material
+          const rawContext = {
+            itemId: targetItem.id,
+            itemCode: targetItem.itemCode,
+            itemName: `${targetItem.name} [Material Before Process]`,
+            targetQty: shortageQty,
+            isShortageInduced: true
+          };
+
+          registerItemDemand(rawItem, rawKey, rawReq, rawContext);
+          const rawAlloc = allocateVirtualStock(rawItem?.id || rawKey, rawItem?.itemCode || procCard.rawItemCode, rawReq);
+          const rawShortage = Math.max(0, rawReq - rawAlloc);
+
+          if (rawShortage > 0) {
+            const procVisited = new Set(nextVisited);
+            procVisited.add(`proc_${rawKey}`);
+            explodeShortageBranch(rawItem, rawKey, rawShortage, procVisited);
+          }
+        }
+      }
+    };
+
+    // 5. Traverse user-selected parent items & explode demand with Tree Pruning
     selectedItemIds.forEach(itemId => {
-      const parentItem = items.find(i => i.id === itemId);
+      const parentItem = itemById.get(itemId);
       if (!parentItem) return;
       const targetQty = itemTargetQuantities[itemId] !== undefined ? itemTargetQuantities[itemId] : 0;
-      const parentContext = {
-        itemId: parentItem.id,
-        itemCode: parentItem.itemCode,
-        itemName: parentItem.name,
-        targetQty
-      };
+      if (targetQty <= 0) return;
 
-      const matchingBOM = boms.find(b => 
-        b.id === parentItem.id ||
-        b.bomCode?.toLowerCase() === parentItem.itemCode.toLowerCase() || 
-        b.machineModel?.toLowerCase() === parentItem.name.toLowerCase()
-      );
+      const matchingBOM = bomById.get(parentItem.id) ||
+        bomByCode.get((parentItem.itemCode || '').toLowerCase()) ||
+        bomByModel.get((parentItem.name || '').toLowerCase());
 
       if (matchingBOM && matchingBOM.components && matchingBOM.components.length > 0) {
-        if (isExplodeAllBOMs) {
-          explodeItemBOMRecursively(matchingBOM.id, targetQty, parentContext, itemMap);
-        } else {
-          matchingBOM.components.forEach(comp => {
-            const childIt = items.find(i => i.id === comp.itemId || i.itemCode === comp.itemCode);
-            const qtyPer = comp.qtyPerMachine || 1;
-            const totalReq = qtyPer * targetQty;
-            const key = comp.itemCode || comp.itemId || 'unknown';
-
-            if (!itemMap.has(key)) {
-              itemMap.set(key, {
-                itemId: childIt?.id || comp.itemId || '',
-                itemCode: comp.itemCode || childIt?.itemCode || '',
-                partCode: childIt?.partCode || '',
-                itemName: comp.itemName || childIt?.name || '',
-                category: childIt?.category || 'Component',
-                processType: childIt?.processType || 'In-house',
-                unit: comp.unit || childIt?.unit || 'PCS',
-                totalRequired: totalReq,
-                itemObj: childIt,
-                requiredByItems: [{
-                  itemId: parentItem.id,
-                  itemCode: parentItem.itemCode,
-                  itemName: parentItem.name,
-                  targetQty,
-                  requiredQty: totalReq
-                }]
-              });
-            } else {
-              const existing = itemMap.get(key)!;
-              existing.totalRequired += totalReq;
-              const found = existing.requiredByItems.find((r: any) => r.itemId === parentItem.id);
-              if (found) {
-                found.requiredQty += totalReq;
-              } else {
-                existing.requiredByItems.push({
-                  itemId: parentItem.id,
-                  itemCode: parentItem.itemCode,
-                  itemName: parentItem.name,
-                  targetQty,
-                  requiredQty: totalReq
-                });
-              }
-            }
-          });
-        }
-      } else {
-        const key = parentItem.itemCode || parentItem.id;
-        if (!itemMap.has(key)) {
-          itemMap.set(key, {
+        // Direct components of the planned finished item
+        matchingBOM.components.forEach(comp => {
+          const childIt = itemById.get(comp.itemId) || itemByCode.get((comp.itemCode || '').toLowerCase());
+          const qtyPer = comp.qtyPerMachine || 1;
+          const totalReq = qtyPer * targetQty;
+          const parentContext = {
             itemId: parentItem.id,
             itemCode: parentItem.itemCode,
-            partCode: parentItem.partCode || '',
             itemName: parentItem.name,
-            category: parentItem.category || 'Component',
-            processType: parentItem.processType || 'In-house',
-            unit: parentItem.unit || 'PCS',
-            totalRequired: targetQty,
-            itemObj: parentItem,
-            requiredByItems: [{
-              itemId: parentItem.id,
-              itemCode: parentItem.itemCode,
-              itemName: parentItem.name,
-              targetQty,
-              requiredQty: targetQty
-            }]
-          });
-        } else {
-          const existing = itemMap.get(key)!;
-          existing.totalRequired += targetQty;
-          const found = existing.requiredByItems.find((r: any) => r.itemId === parentItem.id);
-          if (found) {
-            found.requiredQty += targetQty;
-          } else {
-            existing.requiredByItems.push({
-              itemId: parentItem.id,
-              itemCode: parentItem.itemCode,
-              itemName: parentItem.name,
-              targetQty,
-              requiredQty: targetQty
-            });
+            targetQty
+          };
+
+          registerItemDemand(childIt, comp.itemCode || comp.itemId, totalReq, parentContext);
+          const allocated = allocateVirtualStock(childIt?.id || comp.itemId, childIt?.itemCode || comp.itemCode, totalReq);
+          const childShortage = Math.max(0, totalReq - allocated);
+
+          // Tree Pruning: Only explode child sub-assembly if there is a net shortage
+          if (childShortage > 0) {
+            explodeShortageBranch(childIt, comp.itemCode || comp.itemId, childShortage, new Set([parentItem.id]));
           }
+        });
+      } else {
+        // Parent item itself has no BOM (e.g. standalone raw material or single component)
+        const parentContext = {
+          itemId: parentItem.id,
+          itemCode: parentItem.itemCode,
+          itemName: parentItem.name,
+          targetQty
+        };
+        registerItemDemand(parentItem, parentItem.id, targetQty, parentContext);
+        const allocated = allocateVirtualStock(parentItem.id, parentItem.itemCode, targetQty);
+        const parentShortage = Math.max(0, targetQty - allocated);
+
+        if (parentShortage > 0) {
+          explodeShortageBranch(parentItem, parentItem.itemCode || parentItem.id, parentShortage, new Set());
         }
       }
     });
 
-    // Process Card Indirect BOM Explosion:
-    // If any item in itemMap has a shortage (totalRequired > inHouseStock),
-    // and that item is produced from a raw material / casting via Process Card,
-    // explode the required raw material quantity into itemMap!
-    const processExplodeQueue = Array.from(itemMap.values());
-    processExplodeQueue.forEach(entry => {
-      const childIt = entry.itemObj || items.find(i => i.id === entry.itemId || i.itemCode === entry.itemCode);
-      const inStock = childIt ? (childIt.inHouseStock || 0) : 0;
-      const shortageQty = Math.max(0, entry.totalRequired - inStock);
-
-      if (shortageQty > 0 && childIt) {
-        const procCard = (itemProcessCards || []).find(pc => 
-          (childIt.id && pc.itemId === childIt.id) || 
-          (childIt.itemCode && (pc.itemCode?.toLowerCase() === childIt.itemCode.toLowerCase() || pc.itemId === childIt.itemCode))
-        );
-        if (procCard && (procCard.rawItemId || procCard.rawItemCode)) {
-          const rawItem = items.find(i => 
-            (procCard.rawItemId && i.id === procCard.rawItemId) || 
-            (procCard.rawItemCode && i.itemCode.toLowerCase() === procCard.rawItemCode.toLowerCase())
-          );
-          if (rawItem) {
-            const rawKey = rawItem.itemCode || rawItem.id;
-            const inducedReq = shortageQty;
-
-            if (!itemMap.has(rawKey)) {
-              itemMap.set(rawKey, {
-                itemId: rawItem.id,
-                itemCode: rawItem.itemCode,
-                partCode: rawItem.partCode || '',
-                itemName: rawItem.name,
-                category: rawItem.category || 'RM',
-                processType: (rawItem.processType || 'Bought out') as any,
-                unit: rawItem.unit || 'PCS',
-                totalRequired: inducedReq,
-                itemObj: rawItem,
-                requiredByItems: [{
-                  itemId: entry.itemId,
-                  itemCode: entry.itemCode,
-                  itemName: entry.itemName,
-                  targetQty: inducedReq,
-                  requiredQty: inducedReq
-                }]
-              });
-            } else {
-              const existing = itemMap.get(rawKey)!;
-              existing.totalRequired += inducedReq;
-              const found = existing.requiredByItems.find((r: any) => r.itemId === entry.itemId);
-              if (found) {
-                found.requiredQty += inducedReq;
-              } else {
-                existing.requiredByItems.push({
-                  itemId: entry.itemId,
-                  itemCode: entry.itemCode,
-                  itemName: entry.itemName,
-                  targetQty: inducedReq,
-                  requiredQty: inducedReq
-                });
-              }
-            }
-          }
-        }
-      }
-    });
-
+    // 6. Build final table rows with real stock comparison and pre-indexed search strings
     return Array.from(itemMap.values()).map((c, idx) => {
-      const childItem = c.itemObj || items.find(i => i.id === c.itemId || i.itemCode === c.itemCode);
+      const childItem = c.itemObj || itemById.get(c.itemId) || itemByCode.get(c.itemCode.toLowerCase());
       const inHouse = childItem ? (childItem.inHouseStock || 0) : 0;
       const minStock = childItem ? (childItem.minStockQty !== undefined ? childItem.minStockQty : (childItem.reorderLevel || 0)) : 0;
       const openPO = getOpenPOQuantity(childItem, c.itemCode);
@@ -587,6 +649,9 @@ export const ShortageModule: React.FC = () => {
       const shortage = Math.max(0, c.totalRequired - inHouse);
       const minShortage = Math.max(0, (c.totalRequired + minStock) - totalPipelineSupply);
       const isShortage = shortage > 0 || minShortage > 0;
+
+      const demandText = (c.requiredByItems || []).map(r => `${r.itemCode} ${r.itemName}`).join(' ').toLowerCase();
+      const _searchStr = `${c.partCode || ''} ${c.itemCode} ${c.itemName} ${c.category} ${c.processType} ${demandText}`.toLowerCase();
 
       return {
         ...c,
@@ -600,13 +665,17 @@ export const ShortageModule: React.FC = () => {
         minStockLevel: minStock,
         shortage,
         minShortage,
-        isShortage
+        isShortage,
+        _searchStr
       };
     });
-  }, [selectedItemIds, itemTargetQuantities, items, boms, jobworks, purchaseOrders, isExplodeAllBOMs, itemProcessCards]);
+  }, [selectedItemIds, itemTargetQuantities, items, boms, jobworks, purchaseOrders, itemProcessCards]);
 
-  // Filtered Consolidated Components ($X + Y$)
+  // Filtered Consolidated Components ($X + Y$) with Tokenized Search
   const filteredConsolidatedItems = useMemo(() => {
+    const cleanSearch = deferredComponentSearchTerm.trim().toLowerCase();
+    const searchTokens = cleanSearch ? cleanSearch.split(/\s+/).filter(Boolean) : [];
+
     const list = consolidatedItemWiseData.filter(c => {
       if (selectedClassFilters.length > 0 && !selectedClassFilters.includes(c.category)) {
         return false;
@@ -619,16 +688,8 @@ export const ShortageModule: React.FC = () => {
       if (shortageFilterMode === 'SHORTAGE_ONLY' && !c.isShortage) {
         return false;
       }
-      if (componentSearchTerm.trim()) {
-        const term = componentSearchTerm.trim().toLowerCase();
-        const matchPart = (c.partCode || '').toLowerCase().includes(term);
-        const matchCode = (c.itemCode || '').toLowerCase().includes(term);
-        const matchName = (c.itemName || '').toLowerCase().includes(term);
-        const matchCat = (c.category || '').toLowerCase().includes(term);
-        const matchProcess = (c.processType || '').toLowerCase().includes(term);
-        const demandText = (c.requiredByItems || []).map((r: any) => `${r.itemCode} ${r.itemName}`).join(' ').toLowerCase();
-        const matchDemand = demandText.includes(term);
-        if (!matchPart && !matchCode && !matchName && !matchCat && !matchProcess && !matchDemand) {
+      if (searchTokens.length > 0) {
+        if (!searchTokens.every(t => (c as any)._searchStr.includes(t))) {
           return false;
         }
       }
@@ -653,7 +714,7 @@ export const ShortageModule: React.FC = () => {
       if (valA > valB) return itemWiseSortOrder === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [consolidatedItemWiseData, selectedClassFilters, selectedProcessFilter, shortageFilterMode, componentSearchTerm, itemWiseSortField, itemWiseSortOrder]);
+  }, [consolidatedItemWiseData, selectedClassFilters, selectedProcessFilter, shortageFilterMode, deferredComponentSearchTerm, itemWiseSortField, itemWiseSortOrder]);
 
   // -------------------------------------------------------------
   // WORK ORDER SHORTAGE & COMBINED AGGREGATION CALCULATIONS
@@ -1394,15 +1455,8 @@ export const ShortageModule: React.FC = () => {
                     overflowY: 'auto',
                     zIndex: 20
                   }}>
-                    {items
-                      .filter(i => !i.isBlocked && !selectedItemIds.includes(i.id) && (
-                        i.itemCode.toLowerCase().includes(itemWiseSearch.toLowerCase()) ||
-                        i.name.toLowerCase().includes(itemWiseSearch.toLowerCase()) ||
-                        (i.partCode && i.partCode.toLowerCase().includes(itemWiseSearch.toLowerCase())) ||
-                        (i.category && i.category.toLowerCase().includes(itemWiseSearch.toLowerCase()))
-                      ))
-                      .slice(0, 10)
-                      .map(it => (
+                    {itemSuggestions.length > 0 ? (
+                      itemSuggestions.map(it => (
                         <div
                           key={it.id}
                           style={{
@@ -1429,7 +1483,12 @@ export const ShortageModule: React.FC = () => {
                           </div>
                           <span className="badge badge-neutral" style={{ fontSize: '0.7rem' }}>{it.category}</span>
                         </div>
-                      ))}
+                      ))
+                    ) : (
+                      <div style={{ padding: '0.65rem 0.75rem', fontSize: '0.78rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+                        No items matching "{itemWiseSearch}"
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1887,13 +1946,7 @@ export const ShortageModule: React.FC = () => {
 
             {/* Multi-Select Work Order Badges */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', maxHeight: '95px', overflowY: 'auto', padding: '0.4rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: '0.375rem', border: '1px solid var(--border-color)' }}>
-              {workOrders
-                .filter(w => (w.status === 'IN_PROGRESS' || w.status === 'PLANNED') && (
-                  !woSearchTerm || 
-                  (w.workOrderNo || '').toLowerCase().includes(woSearchTerm.toLowerCase()) || 
-                  (w.machineModel || '').toLowerCase().includes(woSearchTerm.toLowerCase()) || 
-                  ((w as any).woNumber || '').toLowerCase().includes(woSearchTerm.toLowerCase())
-                ))
+              {filteredWorkOrdersForSelection
                 .map(wo => {
                   const isSelected = selectedWOIds.length === 0 || selectedWOIds.includes(wo.id);
                   const isIndividuallySelected = selectedWOIds.includes(wo.id);
@@ -2074,7 +2127,12 @@ export const ShortageModule: React.FC = () => {
                 </thead>
                 <tbody>
                   {activeTabConsolidatedShortages
-                    .filter(c => !tableSearchTerm || c.itemCode.toLowerCase().includes(tableSearchTerm.toLowerCase()) || c.itemName.toLowerCase().includes(tableSearchTerm.toLowerCase()))
+                    .filter(c => {
+                      if (!deferredTableSearchTerm.trim()) return true;
+                      const tokens = deferredTableSearchTerm.trim().toLowerCase().split(/\s+/).filter(Boolean);
+                      const s = `${c.itemCode} ${c.itemName} ${c.category || ''} ${c.processType || ''}`.toLowerCase();
+                      return tokens.every(t => s.includes(t));
+                    })
                     .map((c, idx) => {
                       const childItem = c.itemObj || items.find(i => i.id === c.itemId || i.itemCode === c.itemCode);
                       return (
