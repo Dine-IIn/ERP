@@ -9,7 +9,7 @@
       "isSuperAdmin": true,
       "is_admin": true,
       "password": "GEC_SuperAdmin#2026!Secured$",
-      "desktopSessionId": "sess-1789449697686-0.6451371322111423"
+      "desktopSessionId": "sess-1789451026034-0.7210290148260612"
     },
     {
       "id": "usr-admin",
@@ -12360,6 +12360,18 @@
   ],
   "salesOrders": [
     {
+      "soNumber": "SOAJCG0005",
+      "customerId": "",
+      "customerName": "",
+      "machineModel": "GEC0000001 - NEO PRIME 90 - 280 TON",
+      "quantity": 1,
+      "orderDate": "2026-09-15",
+      "deliveryDate": "2026-10-15",
+      "customNotes": "",
+      "id": "so-1789451716818",
+      "status": "WO_GENERATED"
+    },
+    {
       "soNumber": "SOAJCG0004",
       "customerId": "",
       "customerName": "",
@@ -12409,6 +12421,816 @@
     }
   ],
   "workOrders": [
+    {
+      "id": "wo-1789451718826",
+      "workOrderNo": "WOAJCG0005",
+      "soId": "so-1789451716818",
+      "soNumber": "SOAJCG0005",
+      "customerName": "",
+      "machineModel": "GEC0000001 - NEO PRIME 90 - 280 TON",
+      "quantity": 1,
+      "targetCompletionDate": "2026-10-15",
+      "startDate": "2026-09-15",
+      "assignedLead": "Suresh Patel (Production Lead)",
+      "stage": "PLANNED",
+      "status": "IN_PROGRESS",
+      "bomId": "bom-1789299688240-0-ru0ay",
+      "remarks": "Generated against Sales Order",
+      "woComponents": [
+        {
+          "itemId": "itm-1789299669861-2-c7vvj",
+          "itemCode": "GEC0000003",
+          "itemName": "TOGGLE TYPE LOCKING UNIT-90 TON",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "AS",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-3-tyxb1",
+          "itemCode": "GEC0000004",
+          "itemName": "GUIDE ROD TYPE INJECTION UNIT-280",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "AS",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-25-25rpa",
+          "itemCode": "GEC0000026",
+          "itemName": "BASE FRAME ASSY - 90TON  (280/420)",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "FAS",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-26-hr29a",
+          "itemCode": "GEC0000027",
+          "itemName": "INJECTION FRAME ASSY - 90-280 \n(GUIDE ROD TYPE)",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "FAS",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-8-svj8b",
+          "itemCode": "GEC0000009",
+          "itemName": "SCREW BARREL SUB ASSY-280-40",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "AS",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-27-b17a2",
+          "itemCode": "GEC0000028",
+          "itemName": "OIL TANK ASSY - 90 TON - 250LTR",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "AS",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-28-kmg3z",
+          "itemCode": "GEC0000029",
+          "itemName": "HEAT EXCHANGER ASSY - 90 TON",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "AS",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-29-288fe",
+          "itemCode": "GEC0000030",
+          "itemName": "SAFETY DOOR ASSY - 90",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "AS",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-30-wnu3l",
+          "itemCode": "GEC0000031",
+          "itemName": "HOPPER ASSY - 25KG",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "AS",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-31-jz0io",
+          "itemCode": "GEC0000032",
+          "itemName": "BASE FRAME GUARD SET - 90-280",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "AS",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-32-dajlc",
+          "itemCode": "GEC0000033",
+          "itemName": "SEAMLESS PIPE SET - 90-280",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "AS",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-33-6dq3j",
+          "itemCode": "GEC0000034",
+          "itemName": "FASTENER KIT MAIN MACHINE - 90-280",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "AS",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-34-4v5b8",
+          "itemCode": "GEC0000035",
+          "itemName": "NIPPLE KIT - 90-280",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "AS",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-35-moac9",
+          "itemCode": "GEC0000036",
+          "itemName": "HOSE PIPE KIT - 90-280",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "AS",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-36-mtswn",
+          "itemCode": "GEC0000037",
+          "itemName": "LUBR PUMP SYSTEM",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "AS",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-37-k9h8c",
+          "itemCode": "GEC0000038",
+          "itemName": "SERVO PUMP HOSE NIPPLE ASSY - 64 LTR",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "FAS",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-38-x4lbn",
+          "itemCode": "GEC0000039",
+          "itemName": "PLC BOX - B&R",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "FAS",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-39-ns5td",
+          "itemCode": "GEC0000040",
+          "itemName": "LOCKING UNIT JUNCTION BOX OP",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "FAS",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-40-w1bxl",
+          "itemCode": "GEC0000041",
+          "itemName": "LOCKING UNIT JUNCTION BOX NOP",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "FAS",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-41-snzum",
+          "itemCode": "GEC0000042",
+          "itemName": "HEATER WIRE JUNCTION BOX",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "FAS",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-42-nz8j0",
+          "itemCode": "GEC0000043",
+          "itemName": "HYDRO MOTOR PIPE CLAMP MTG -280",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "FAS",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-43-gvipu",
+          "itemCode": "GEC0000044",
+          "itemName": "LOCKING UNIT LINEAR MTG BRACKET - 90 TON",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "FAS",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-44-v3h4k",
+          "itemCode": "GEC0000045",
+          "itemName": "INJECTION MANIFOLD - NG10",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "MF",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-45-dxip3",
+          "itemCode": "GEC0000046",
+          "itemName": "LOCKING MANIFOLD NG10-NG6-NG6",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "MF",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-46-cd54t",
+          "itemCode": "GEC0000047",
+          "itemName": "EJECTOR MANIFOLD NG6",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "MF",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-47-ybflb",
+          "itemCode": "GEC0000048",
+          "itemName": "PRESSURE MANIFOLD BG06",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "MF",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-48-tvkwx",
+          "itemCode": "GEC0000049",
+          "itemName": "EJECTOR ROD - 90 TON",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "MF",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-49-nmoy5",
+          "itemCode": "GEC0000050",
+          "itemName": "NOZZLE CYLINDER EXTENSION ROD 90-280",
+          "qtyRequired": 2,
+          "unit": "NOS",
+          "subAssemblyTag": "MF",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-50-e6kbl",
+          "itemCode": "GEC0000051",
+          "itemName": "NOZZLE CYLINDER EXTENSION ROD MTG",
+          "qtyRequired": 2,
+          "unit": "NOS",
+          "subAssemblyTag": "MF",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-51-g13o9",
+          "itemCode": "GEC0000052",
+          "itemName": "NOZZLE CYLINDER EXTENSION ROD MTG BUSH",
+          "qtyRequired": 2,
+          "unit": "NOS",
+          "subAssemblyTag": "MF",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-52-r642a",
+          "itemCode": "GEC0000053",
+          "itemName": "NOZZLE CYLINDER STOP LIMIT SWITCH OPERATING PIN",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "MF",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-53-rijmz",
+          "itemCode": "GEC0000054",
+          "itemName": "NOZZLE CYLINDER STOP SLIDER",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "MF",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-54-r5dys",
+          "itemCode": "GEC0000055",
+          "itemName": "INJECTION UNIT SETTING BLOCK",
+          "qtyRequired": 2,
+          "unit": "NOS",
+          "subAssemblyTag": "MF",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-55-4pyca",
+          "itemCode": "GEC0000056",
+          "itemName": "INJECTION FRAME MTG BOLT M27 X 35LG",
+          "qtyRequired": 4,
+          "unit": "NOS",
+          "subAssemblyTag": "MF",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-56-0gmt3",
+          "itemCode": "GEC0000057",
+          "itemName": "INJECTION GUARD MTG STUD",
+          "qtyRequired": 4,
+          "unit": "NOS",
+          "subAssemblyTag": "MF",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-57-hxs0a",
+          "itemCode": "GEC0000058",
+          "itemName": "CROSS HEAD LIMIT SWITCH OPERATING PIN",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "MF",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669861-58-ld4al",
+          "itemCode": "GEC0000059",
+          "itemName": "MOLD HEIGHT STOP LIMIT SWITCH OPERATING PIN",
+          "qtyRequired": 2,
+          "unit": "NOS",
+          "subAssemblyTag": "MF",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-59-wt7ic",
+          "itemCode": "GEC0000060",
+          "itemName": "INJECTION MANIFOLD MTG PLATE - 280",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "MF",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-60-j6jvx",
+          "itemCode": "GEC0000061",
+          "itemName": "INJECTION MANIFOLD MTG STRIP - 280",
+          "qtyRequired": 2,
+          "unit": "NOS",
+          "subAssemblyTag": "MF",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-61-u6qob",
+          "itemCode": "GEC0000062",
+          "itemName": "GREASE PUMP MOUNTING PLATE",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "MF",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-62-4vpd5",
+          "itemCode": "GEC0000063",
+          "itemName": "JUNCTION BOX COVER",
+          "qtyRequired": 2,
+          "unit": "NOS",
+          "subAssemblyTag": "LC",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-63-ckxx1",
+          "itemCode": "GEC0000064",
+          "itemName": "PLC BOX COVER",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "LC",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-64-vl26q",
+          "itemCode": "GEC0000065",
+          "itemName": "HEATER WIRE JUNCTION BOX COVER",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "LC",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-65-s20sc",
+          "itemCode": "GEC0000066",
+          "itemName": "PLC BOX  MTG TOP BRACKET",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "LC",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-66-phirb",
+          "itemCode": "GEC0000067",
+          "itemName": "PLC BOX MTG BOTTOM BRACKET",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "LC",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-67-jmt2u",
+          "itemCode": "GEC0000068",
+          "itemName": "MOLD HEIGHT STOP LIMIT SWITCH \nOPERATING PIN MTG BRACKET",
+          "qtyRequired": 2,
+          "unit": "NOS",
+          "subAssemblyTag": "LC",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-68-1w72p",
+          "itemCode": "GEC0000069",
+          "itemName": "MOLD HEIGHT STOP LIMIT SWITCH MTG BRACKET",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "LC",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-69-35bwy",
+          "itemCode": "GEC0000070",
+          "itemName": "CROSS HEAD LOCKING LIMIT STOP PIN MTG BRACKET",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "LC",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-70-of7mh",
+          "itemCode": "GEC0000071",
+          "itemName": "TOGGLE LIMIT SWITCH MTG BRACKET",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "LC",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-71-51nvc",
+          "itemCode": "GEC0000072",
+          "itemName": "EJECTOR LINEAR MTG BRACKET",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "LC",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-72-zj5gx",
+          "itemCode": "GEC0000073",
+          "itemName": "HEATER WIRE JUNCTION BOX MTG BRACKET",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "LC",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-73-r6tf3",
+          "itemCode": "GEC0000074",
+          "itemName": "HYD MOTOR RPM PROXY SENSOR MTG BRACKET",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "LC",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-74-gzmre",
+          "itemCode": "GEC0000075",
+          "itemName": "INJECTION LINEAR MOUNTING BRACKET - 280",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "LC",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-75-c368w",
+          "itemCode": "GEC0000076",
+          "itemName": "INJECTION LINEAR SHAFT MTG BRACKET - 280",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "LC",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-76-ms46p",
+          "itemCode": "GEC0000077",
+          "itemName": "NOZZLE CYLINDER LIMIT SWITCH PIN MTG BRACKET",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "LC",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-77-d1vh5",
+          "itemCode": "GEC0000078",
+          "itemName": "NOZZLE CYLINDER STOP LIMIT SWITCH MTG BRACKET",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "LC",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-78-9ox4c",
+          "itemCode": "GEC0000079",
+          "itemName": "INJECTION GUARD SUPPORT BRACKET - 280",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "LC",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-79-cl6vw",
+          "itemCode": "GEC0000080",
+          "itemName": "DSG-01-3C2-D24 (YUKEN)",
+          "qtyRequired": 2,
+          "unit": "NOS",
+          "subAssemblyTag": "BO",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-80-qd52q",
+          "itemCode": "GEC0000081",
+          "itemName": "DSG-01-3C4-D24 (YUKEN)",
+          "qtyRequired": 2,
+          "unit": "NOS",
+          "subAssemblyTag": "BO",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-81-npcze",
+          "itemCode": "GEC0000082",
+          "itemName": "DSG-03-3C2-D24 (YUKEN)",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "BO",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-82-3wp9n",
+          "itemCode": "GEC0000083",
+          "itemName": "DSG-03-2B2B-D24 (YUKEN)",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "BO",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-83-7kxe4",
+          "itemCode": "GEC0000084",
+          "itemName": "DSG-03-3C12-D24 (YUKEN)",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "BO",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-84-48k9u",
+          "itemCode": "GEC0000085",
+          "itemName": "PRESSURE RELIEF VALVE - BG-03-HP32 (YUKEN)",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "BO",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-85-p6rqa",
+          "itemCode": "GEC0000086",
+          "itemName": "PRESSURE RELIEF VALVE - BG-06-P32 (YUKEN)",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "BO",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-86-f4za7",
+          "itemCode": "GEC0000087",
+          "itemName": "PILOT OPERATED CHECK VALVE - MPA-01-4-40H01 (YUKEN)",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "BO",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-87-fv4wx",
+          "itemCode": "GEC0000088",
+          "itemName": "PILOT OPERATED CHECK VALVE - MCIV-06-01 (PRISM HYD)",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "BO",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-88-14if1",
+          "itemCode": "GEC0000089",
+          "itemName": "LINE CHECK VALVE C20T1-03  (POLYHYDRON)",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "BO",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-89-4sy79",
+          "itemCode": "GEC0000090",
+          "itemName": "LINE CHECK VALVE C10T1-03 (POLYHYDRON)",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "BO",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-90-1laxu",
+          "itemCode": "GEC0000091",
+          "itemName": "PRESSURE GAUG 0-420 BAR BACK CONNECTION (2-1/2\")",
+          "qtyRequired": 2,
+          "unit": "NOS",
+          "subAssemblyTag": "BO",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-91-4p6wx",
+          "itemCode": "GEC0000092",
+          "itemName": "SERVO SYSTEM - 64 LPM (JAKSH)",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "BO",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-92-974aa",
+          "itemCode": "GEC0000093",
+          "itemName": "PLC CONTROLLER-90-280 B&R",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "BO",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-93-21vws",
+          "itemCode": "GEC0000094",
+          "itemName": "PANEL SERVO-90-280 B&R",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "BO",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-94-adqyv",
+          "itemCode": "GEC0000095",
+          "itemName": "LINEAR LT-M-100",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "BO",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-95-6y52a",
+          "itemCode": "GEC0000096",
+          "itemName": "LINEAR LT-M-175",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "BO",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-96-o5ezc",
+          "itemCode": "GEC0000097",
+          "itemName": "LINEAR LT-M-350",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "BO",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-97-p2bjw",
+          "itemCode": "GEC0000098",
+          "itemName": "LIMIT SWITCH SNAP ACTION - PC 603",
+          "qtyRequired": 4,
+          "unit": "NOS",
+          "subAssemblyTag": "BO",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-98-hcsmk",
+          "itemCode": "GEC0000099",
+          "itemName": "LIMIT SWITCH ROLLER LEVER - FTN-139Z11",
+          "qtyRequired": 3,
+          "unit": "NOS",
+          "subAssemblyTag": "BO",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-99-4ap0h",
+          "itemCode": "GEC0000100",
+          "itemName": "HYDRAULIC PIPE CLAMP - 20 MM",
+          "qtyRequired": 2,
+          "unit": "NOS",
+          "subAssemblyTag": "BO",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-100-64eme",
+          "itemCode": "GEC0000101",
+          "itemName": "HYDRAULIC PIPE CLAMP - 25 MM",
+          "qtyRequired": 4,
+          "unit": "NOS",
+          "subAssemblyTag": "BO",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-101-dh2xq",
+          "itemCode": "GEC0000102",
+          "itemName": "Ø85x115 CERAMIC HEATER WITH COVER",
+          "qtyRequired": 6,
+          "unit": "NOS",
+          "subAssemblyTag": "BO",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-102-b6try",
+          "itemCode": "GEC0000103",
+          "itemName": "Ø85x30 MICA HEATER",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "BO",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-103-cz7wb",
+          "itemCode": "GEC0000104",
+          "itemName": "Ø50x40 MICA HEATER SIDE CUT",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "BO",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-104-o1i1e",
+          "itemCode": "GEC0000105",
+          "itemName": "Ø30x30 COIL HEATER",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "BO",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-105-ml789",
+          "itemCode": "GEC0000106",
+          "itemName": "THERMO COUPLE SENSOR \n(K TYPE L SHAPE ISOLATED 1 MTR)",
+          "qtyRequired": 3,
+          "unit": "NOS",
+          "subAssemblyTag": "BO",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-106-kax11",
+          "itemCode": "GEC0000107",
+          "itemName": "THERMO COUPLE SENSOR\nBUTTERFLY TYPE 1/4 BSP K TYPE ISOLATED 1.5 MTR",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "BO",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-107-w1gwl",
+          "itemCode": "GEC0000108",
+          "itemName": "MOTOR MOUNTING PAD Ø60 X M10 X 40LG",
+          "qtyRequired": 4,
+          "unit": "NOS",
+          "subAssemblyTag": "BO",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-108-411ql",
+          "itemCode": "GEC0000109",
+          "itemName": "PLASTIC CAN HDPE-3 LITER (WHITE)",
+          "qtyRequired": 1,
+          "unit": "NOS",
+          "subAssemblyTag": "BO",
+          "isCustomExtra": false
+        },
+        {
+          "itemId": "itm-1789299669862-109-2geu3",
+          "itemCode": "GEC0000110",
+          "itemName": "ANTI VIBRATION RUBBER PAD - Ø125",
+          "qtyRequired": 4,
+          "unit": "NOS",
+          "subAssemblyTag": "BO",
+          "isCustomExtra": false
+        }
+      ]
+    },
     {
       "id": "wo-1789449944616",
       "workOrderNo": "WOAJCG0004",
@@ -18004,6 +18826,39 @@
   "jobCardMaterialReissues": [],
   "intermediateProcessItems": [],
   "auditLogs": [
+    {
+      "id": "log-1789451718827-bw33co",
+      "userId": "usr-superadmin",
+      "username": "GEC System Super Admin (superadmin)",
+      "role": "Admin",
+      "action": "GENERATE_WO",
+      "module": "Work Orders",
+      "details": "Generated Work Order WOAJCG0005 from Sales Order SOAJCG0005",
+      "ipAddress": "127.0.0.1",
+      "timestamp": "2026-09-15T05:55:18.827Z"
+    },
+    {
+      "id": "log-1789451718827-jbjh4p",
+      "userId": "usr-superadmin",
+      "username": "GEC System Super Admin (superadmin)",
+      "role": "Admin",
+      "action": "UPDATE_SO_STATUS",
+      "module": "Sales Orders",
+      "details": "Updated status for SO SOAJCG0005 to WO_GENERATED",
+      "ipAddress": "127.0.0.1",
+      "timestamp": "2026-09-15T05:55:18.827Z"
+    },
+    {
+      "id": "log-1789451716818-e6s96v",
+      "userId": "usr-superadmin",
+      "username": "GEC System Super Admin (superadmin)",
+      "role": "Admin",
+      "action": "CREATE_SO",
+      "module": "Sales Orders",
+      "details": "Created Sales Order SOAJCG0005 for  (1x GEC0000001 - NEO PRIME 90 - 280 TON)",
+      "ipAddress": "127.0.0.1",
+      "timestamp": "2026-09-15T05:55:16.818Z"
+    },
     {
       "id": "log-1789449944616-o01i82",
       "userId": "usr-superadmin",

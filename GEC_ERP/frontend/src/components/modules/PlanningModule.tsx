@@ -61,135 +61,203 @@ export const PlanningModule: React.FC = () => {
   };
 
   // -------------------------------------------------------------
-  // LIVE CALCULATION OF DEMANDS AND PIPELINE SUPPLIES
+  // HIGH-PERFORMANCE LIVE CALCULATION OF DEMANDS & SUPPLIES
   // -------------------------------------------------------------
   const planningData = useMemo(() => {
-    // 1. Active Work Orders (any WO not fully completed or cancelled)
+    // 1. Active Work Orders
     const activeWOs = workOrders.filter(w => 
       w.status !== 'COMPLETED' && w.status !== 'CANCELLED' && !(w as any).isDeleted
     );
 
-    // 2. Active Job Cards (any JC not completed or cancelled)
+    // 2. Active Job Cards
     const activeJCs = jobCards.filter(j => 
       j.status !== 'COMPLETED' && j.status !== 'CANCELLED' && !(j as any).isDeleted
     );
 
-    // 3. Active Purchase Orders (undelivered open orders)
+    // 3. Active Purchase Orders
     const activePOs = purchaseOrders.filter(p => 
       p.status !== 'CANCELLED' && p.status !== 'GOODS_RECEIVED' && p.status !== 'REJECTED' && !(p as any).isDeleted
     );
 
-    // 4. Active Jobworks (outward material with vendors)
+    // 4. Active Jobworks
     const activeJWs = jobworks.filter(j => 
       j.status !== 'COMPLETED' && j.status !== 'CANCELLED' && !(j as any).isDeleted
     );
 
-    // Helper: Multi-level Tree/Graph BOM demand explosion with shortage pruning
-    const calculateWOItemDemand = (targetItemId: string, targetItemCode: string) => {
-      let totalDemand = 0;
+    // Pre-index items for O(1) lookup
+    const itemById = new Map<string, Item>();
+    const itemByCode = new Map<string, Item>();
+    items.forEach(it => {
+      if (it.id) itemById.set(it.id, it);
+      if (it.itemCode) itemByCode.set(it.itemCode.toLowerCase(), it);
+    });
 
-      const explodeDemand = (
-        components: Array<{ itemId?: string; itemCode?: string; qtyPerMachine?: number; qtyRequired?: number }>,
-        parentMultiplier: number,
-        visited: Set<string>
-      ) => {
-        components.forEach(comp => {
-          const cItemId = comp.itemId || '';
-          const cItemCode = comp.itemCode || '';
-          const qtyPer = comp.qtyPerMachine !== undefined ? comp.qtyPerMachine : (comp.qtyRequired || 1);
-          const requiredQtyForThisParent = qtyPer * parentMultiplier;
+    // Pre-index BOMs
+    const bomById = new Map<string, BOM>();
+    const bomByCode = new Map<string, BOM>();
+    const bomByModel = new Map<string, BOM>();
+    boms.forEach(b => {
+      if (b.id) bomById.set(b.id, b);
+      if (b.bomCode) bomByCode.set(b.bomCode.toLowerCase(), b);
+      if (b.machineModel) bomByModel.set(b.machineModel.toLowerCase(), b);
+    });
 
-          // 1. Direct requirement for this component at the current BOM level
-          if (
-            (targetItemId && cItemId && cItemId === targetItemId) ||
-            (targetItemCode && cItemCode && cItemCode.toLowerCase() === targetItemCode.toLowerCase())
-          ) {
-            totalDemand += requiredQtyForThisParent;
-          }
+    // Pre-index active Job Cards producing items (O(N))
+    const pendingJCMap = new Map<string, number>();
+    activeJCs.forEach(jc => {
+      const remaining = Math.max(0, (jc.targetQuantity || 1) - (jc.completedQuantity || 0));
+      if (remaining > 0) {
+        if (jc.itemId) pendingJCMap.set(jc.itemId, (pendingJCMap.get(jc.itemId) || 0) + remaining);
+        if (jc.itemCode) {
+          const c = jc.itemCode.toLowerCase();
+          pendingJCMap.set(c, (pendingJCMap.get(c) || 0) + remaining);
+        }
+      }
+    });
 
-          // 2. Check for nested sub-assembly BOM (e.g. Sub-assemblies / in-house manufactured parts)
-          const childItem = items.find(i => 
-            (cItemId && i.id === cItemId) || 
-            (cItemCode && i.itemCode.toLowerCase() === cItemCode.toLowerCase())
-          );
+    // Pre-index active Job Works producing items (O(N))
+    const pendingJWMap = new Map<string, number>();
+    activeJWs.forEach(jw => {
+      const bal = jw.pendingBalance !== undefined ? jw.pendingBalance : (jw.sentQuantity || 0);
+      if (bal > 0) {
+        if (jw.itemId) pendingJWMap.set(jw.itemId, (pendingJWMap.get(jw.itemId) || 0) + bal);
+        if (jw.itemCode) {
+          const c = jw.itemCode.toLowerCase();
+          pendingJWMap.set(c, (pendingJWMap.get(c) || 0) + bal);
+        }
+      }
+    });
 
-          if (childItem) {
-            const subBOM = boms.find(b => 
-              b.id === childItem.id || 
-              b.bomCode?.toLowerCase() === childItem.itemCode.toLowerCase() || 
-              b.machineModel?.toLowerCase() === childItem.name?.toLowerCase()
-            );
-
-            if (subBOM && subBOM.components && subBOM.components.length > 0 && !visited.has(subBOM.id)) {
-              // Calculate available supply for this intermediate component:
-              // Physical store stock + Active Job Cards in production + Active Jobwork in progress
-              const childStock = childItem.inHouseStock || 0;
-              
-              const childActiveJC = activeJCs.reduce((sum, jc) => {
-                if (
-                  (jc.itemId && jc.itemId === childItem.id) ||
-                  (jc.itemCode && jc.itemCode.toLowerCase() === childItem.itemCode.toLowerCase())
-                ) {
-                  return sum + Math.max(0, (jc.targetQuantity || 1) - (jc.completedQuantity || 0));
-                }
-                return sum;
-              }, 0);
-
-              const childActiveJW = activeJWs.reduce((sum, jw) => {
-                if (
-                  (jw.itemId && jw.itemId === childItem.id) ||
-                  (jw.itemCode && jw.itemCode.toLowerCase() === childItem.itemCode.toLowerCase())
-                ) {
-                  return sum + (jw.pendingBalance !== undefined ? jw.pendingBalance : (jw.sentQuantity || 0));
-                }
-                return sum;
-              }, 0);
-
-              const availableChildSupply = childStock + childActiveJC + childActiveJW;
-
-              // Net unfulfilled shortage of this intermediate sub-assembly
-              const childShortage = Math.max(0, requiredQtyForThisParent - availableChildSupply);
-
-              // TREE PRUNING: If shortage == 0 (supply covers requirement), do NOT explode below childItem!
-              // If shortage > 0, explode sub-BOM only for the unfulfilled shortage quantity.
-              if (childShortage > 0) {
-                const nextVisited = new Set(visited);
-                nextVisited.add(subBOM.id);
-                explodeDemand(subBOM.components, childShortage, nextVisited);
-              }
-            }
-          }
-        });
-      };
-
-      activeWOs.forEach(wo => {
-        const remainingWOQty = Math.max(0, (wo.targetQuantity || wo.quantity || 1) - (wo.completedQuantity || 0));
-        if (remainingWOQty <= 0) return;
-
-        if (wo.woComponents && wo.woComponents.length > 0) {
-          explodeDemand(
-            wo.woComponents.map(c => ({
-              itemId: c.itemId,
-              itemCode: c.itemCode,
-              qtyPerMachine: c.qtyRequired ? c.qtyRequired / (wo.quantity || wo.targetQuantity || 1) : 1
-            })),
-            remainingWOQty,
-            new Set()
-          );
-        } else {
-          const matchedBOM = boms.find(b => 
-            b.id === wo.bomId || 
-            b.bomCode === (wo as any).bomCode || 
-            b.machineModel?.toLowerCase() === wo.machineModel?.toLowerCase()
-          );
-          if (matchedBOM && matchedBOM.components) {
-            explodeDemand(matchedBOM.components, remainingWOQty, new Set([matchedBOM.id]));
+    // Pre-index active PO undelivered quantities (O(N))
+    const pendingPOMap = new Map<string, number>();
+    activePOs.forEach(po => {
+      (po.items || []).forEach(pi => {
+        const ord = pi.quantity || pi.orderedQty || 0;
+        const rec = pi.receivedQty || 0;
+        const undelivered = Math.max(0, ord - rec);
+        if (undelivered > 0) {
+          if (pi.itemId) pendingPOMap.set(pi.itemId, (pendingPOMap.get(pi.itemId) || 0) + undelivered);
+          if (pi.itemCode) {
+            const c = pi.itemCode.toLowerCase();
+            pendingPOMap.set(c, (pendingPOMap.get(c) || 0) + undelivered);
           }
         }
       });
+    });
 
-      return totalDemand;
+    // Pre-index QC pending inspection quantities (O(N))
+    const pendingQCMap = new Map<string, number>();
+    qcInspections.forEach(q => {
+      const isOpen = q.status === 'IN_INSPECTION' || (q.status as string) === 'PENDING' || q.disposition === 'PENDING' || !q.status;
+      if (isOpen) {
+        const inspected = q.inspectedQuantity || q.inspectedQty || 0;
+        const passed = q.passedQuantity || q.approvedQty || 0;
+        const rejected = q.rejectedQty || (q as any).rejectedQuantity || 0;
+        const remainingQC = Math.max(0, inspected - passed - rejected);
+        if (remainingQC > 0) {
+          if (q.itemId) pendingQCMap.set(q.itemId, (pendingQCMap.get(q.itemId) || 0) + remainingQC);
+          if (q.itemCode) {
+            const c = q.itemCode.toLowerCase();
+            pendingQCMap.set(c, (pendingQCMap.get(c) || 0) + remainingQC);
+          }
+        }
+      }
+    });
+
+    // Compute global multi-level demand map with tree shortage pruning
+    const demandMap = new Map<string, number>();
+
+    const addDemand = (itemIdOrCode: string, qty: number) => {
+      if (!itemIdOrCode || qty <= 0) return;
+      const lower = itemIdOrCode.toLowerCase();
+      demandMap.set(itemIdOrCode, (demandMap.get(itemIdOrCode) || 0) + qty);
+      if (lower !== itemIdOrCode) {
+        demandMap.set(lower, (demandMap.get(lower) || 0) + qty);
+      }
     };
+
+    // 1. Aggregate root-level demand across all active Work Orders
+    const rootDemandByItemKey = new Map<string, number>();
+
+    activeWOs.forEach(wo => {
+      const remWOQty = Math.max(0, (wo.targetQuantity || wo.quantity || 1) - (wo.completedQuantity || 0));
+      if (remWOQty <= 0) return;
+
+      const components = (wo.woComponents && wo.woComponents.length > 0)
+        ? wo.woComponents.map(c => ({
+            itemId: c.itemId,
+            itemCode: c.itemCode,
+            qtyPerMachine: c.qtyRequired ? c.qtyRequired / (wo.quantity || wo.targetQuantity || 1) : 1
+          }))
+        : (() => {
+            const matchedBOM = (wo.bomId && bomById.get(wo.bomId))
+              || ((wo as any).bomCode && bomByCode.get(((wo as any).bomCode as string).toLowerCase()))
+              || (wo.machineModel && bomByModel.get(wo.machineModel.toLowerCase()));
+            return (matchedBOM?.components || []).map(c => ({
+              itemId: c.itemId,
+              itemCode: c.itemCode,
+              qtyPerMachine: c.qtyPerMachine || 1
+            }));
+          })();
+
+      components.forEach(c => {
+        const key = c.itemId || c.itemCode || '';
+        if (key) {
+          const qty = (c.qtyPerMachine || 1) * remWOQty;
+          rootDemandByItemKey.set(key, (rootDemandByItemKey.get(key) || 0) + qty);
+        }
+      });
+    });
+
+    // 2. Recursive explosion with shortage pruning
+    const explodeItemShortage = (itemKey: string, requiredQty: number, visited: Set<string>) => {
+      const targetItem = itemById.get(itemKey) || itemByCode.get(itemKey.toLowerCase());
+      const idKey = targetItem ? targetItem.id : itemKey;
+      const codeKey = targetItem ? targetItem.itemCode : itemKey;
+
+      // Register requirement
+      addDemand(idKey, requiredQty);
+      if (codeKey && codeKey !== idKey) {
+        addDemand(codeKey, requiredQty);
+      }
+
+      if (!targetItem) return;
+
+      // Check for sub-assembly BOM
+      const subBOM = (targetItem.id && bomById.get(targetItem.id))
+        || (targetItem.itemCode && bomByCode.get(targetItem.itemCode.toLowerCase()))
+        || (targetItem.name && bomByModel.get(targetItem.name.toLowerCase()));
+
+      if (subBOM && subBOM.components && subBOM.components.length > 0 && !visited.has(subBOM.id)) {
+        // Available supply: In-House Stock + Active Job Cards in progress + Active Job Work in progress
+        const inHouse = targetItem.inHouseStock || 0;
+        const activeJCSupply = (targetItem.id && pendingJCMap.get(targetItem.id)) || (targetItem.itemCode && pendingJCMap.get(targetItem.itemCode.toLowerCase())) || 0;
+        const activeJWSupply = (targetItem.id && pendingJWMap.get(targetItem.id)) || (targetItem.itemCode && pendingJWMap.get(targetItem.itemCode.toLowerCase())) || 0;
+
+        const availableSupply = inHouse + activeJCSupply + activeJWSupply;
+        const netShortage = Math.max(0, requiredQty - availableSupply);
+
+        // TREE PRUNING: Only explode child sub-BOM components if net shortage > 0
+        if (netShortage > 0) {
+          const nextVisited = new Set(visited);
+          nextVisited.add(subBOM.id);
+
+          subBOM.components.forEach(comp => {
+            const compKey = comp.itemId || comp.itemCode || '';
+            const compQtyPer = comp.qtyPerMachine !== undefined ? comp.qtyPerMachine : 1;
+            const childReqQty = compQtyPer * netShortage;
+            if (compKey && childReqQty > 0) {
+              explodeItemShortage(compKey, childReqQty, nextVisited);
+            }
+          });
+        }
+      }
+    };
+
+    // Traverse all root requirements
+    rootDemandByItemKey.forEach((qty, key) => {
+      explodeItemShortage(key, qty, new Set());
+    });
 
     return items.map(item => {
       const partCode = item.partCode || '-';
@@ -198,68 +266,18 @@ export const PlanningModule: React.FC = () => {
       const currentStock = item.inHouseStock || 0;
       const minStockLevel = item.minStockQty !== undefined ? item.minStockQty : (item.reorderLevel || 0);
 
-      // 1. Pending PO Quantity (Undelivered line items)
-      let pendingPO = 0;
-      activePOs.forEach(po => {
-        po.items.forEach(pi => {
-          if (
-            (pi.itemId && pi.itemId === item.id) ||
-            (pi.itemCode && pi.itemCode.toLowerCase() === item.itemCode.toLowerCase())
-          ) {
-            const ord = pi.quantity || pi.orderedQty || 0;
-            const rec = pi.receivedQty || 0;
-            pendingPO += Math.max(0, ord - rec);
-          }
-        });
-      });
+      // Fast Map lookups (O(1))
+      const pendingPO = (item.id && pendingPOMap.get(item.id)) || (item.itemCode && pendingPOMap.get(item.itemCode.toLowerCase())) || 0;
+      const pendingWO = (item.id && demandMap.get(item.id)) || (item.itemCode && demandMap.get(item.itemCode.toLowerCase())) || (item.itemCode && demandMap.get(item.itemCode)) || 0;
+      const pendingJobCard = (item.id && pendingJCMap.get(item.id)) || (item.itemCode && pendingJCMap.get(item.itemCode.toLowerCase())) || 0;
+      const pendingQC = (item.id && pendingQCMap.get(item.id)) || (item.itemCode && pendingQCMap.get(item.itemCode.toLowerCase())) || 0;
+      const pendingJW = (item.id && pendingJWMap.get(item.id)) || (item.itemCode && pendingJWMap.get(item.itemCode.toLowerCase())) || 0;
 
-      // 2. Pending WO Demand (Live multi-level BOM explosion from active Work Orders)
-      const pendingWO = calculateWOItemDemand(item.id, item.itemCode);
-
-      // 3. Pending Job Card (Quantity of this item currently in production / being assembled on active Job Cards)
-      const pendingJobCard = activeJCs.reduce((sum, jc) => {
-        if (
-          (jc.itemId && jc.itemId === item.id) ||
-          (jc.itemCode && jc.itemCode.toLowerCase() === item.itemCode.toLowerCase())
-        ) {
-          return sum + Math.max(0, (jc.targetQuantity || 1) - (jc.completedQuantity || 0));
-        }
-        return sum;
-      }, 0);
-
-      // 4. Pending QC (Live from active QC inspection queue)
-      const openQCs = qcInspections.filter(q => 
-        ((q.itemId && q.itemId === item.id) || (q.itemCode && q.itemCode.toLowerCase() === item.itemCode.toLowerCase())) && 
-        (q.status === 'IN_INSPECTION' || (q.status as string) === 'PENDING' || q.disposition === 'PENDING' || !q.status)
-      );
-      const pendingQC = openQCs.reduce((sum, q) => {
-        const inspected = q.inspectedQuantity || q.inspectedQty || 0;
-        const passed = q.passedQuantity || q.approvedQty || 0;
-        const rejected = q.rejectedQty || (q as any).rejectedQuantity || 0;
-        return sum + Math.max(0, inspected - passed - rejected);
-      }, 0);
-
-      // 5. Pending Job Work Qty (Outward with processing vendors)
-      let pendingJW = 0;
-      activeJWs.forEach(jw => {
-        if (
-          (jw.itemId && jw.itemId === item.id) ||
-          (jw.itemCode && jw.itemCode.toLowerCase() === item.itemCode.toLowerCase())
-        ) {
-          pendingJW += (jw.pendingBalance !== undefined ? jw.pendingBalance : (jw.sentQuantity || 0));
-        }
-      });
-
-      // 6. Total Required = Pending WO (Job Card is creating this item, not demanding it)
+      // Calculations
       const totalRequired = pendingWO;
-
-      // 7. Shortage = max(0, Total Required - Current Stock)
       const shortage = Math.max(0, totalRequired - currentStock);
-
-      // 8. Min Level Shortage = max(0, (Total Required + Min Level) - Current Stock)
       const minShortage = Math.max(0, (totalRequired + minStockLevel) - currentStock);
 
-      // Process source representation
       const pSources: string[] = item.materialProcessSources && item.materialProcessSources.length > 0
         ? item.materialProcessSources
         : item.processType

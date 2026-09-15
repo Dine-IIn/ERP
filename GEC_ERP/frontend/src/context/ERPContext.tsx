@@ -377,10 +377,14 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [isServerHydrated, setIsServerHydrated] = useState(false);
 
+  const syncTimersRef = React.useRef<Record<string, any>>({});
   const syncEntityHelper = (key: string, data: any) => {
     setStored(key, data);
     if (isServerHydrated) {
-      apiClient.syncEntity(key, data);
+      if (syncTimersRef.current[key]) clearTimeout(syncTimersRef.current[key]);
+      syncTimersRef.current[key] = setTimeout(() => {
+        apiClient.syncEntity(key, data);
+      }, 250);
     }
   };
 

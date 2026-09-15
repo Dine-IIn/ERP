@@ -115,47 +115,71 @@ export const Header: React.FC = () => {
     }
   };
 
-  // Cross-module search results
+  // Cross-module search results (Memoized for high-performance zero-lag typing)
   const isHistorySearch = searchTerm.includes('@');
   const cleanTerm = searchTerm.replace(/@history|@/gi, '').trim().toLowerCase();
 
-  const matchingItems = cleanTerm || isHistorySearch ? items.filter(i => {
-    if (isHistorySearch && !i.isBlocked) return false;
-    if (!isHistorySearch && i.isBlocked) return false;
-    if (!cleanTerm) return true;
-    return i.itemCode.toLowerCase().includes(cleanTerm) || i.name.toLowerCase().includes(cleanTerm) || i.category.toLowerCase().includes(cleanTerm);
-  }).slice(0, 5) : [];
+  const {
+    matchingItems, matchingCustomers, matchingVendors, matchingSOs,
+    matchingPOs, matchingWOs, matchingJCs, matchingBOMs, hasAnyResults
+  } = React.useMemo(() => {
+    if (!cleanTerm && !isHistorySearch) {
+      return {
+        matchingItems: [], matchingCustomers: [], matchingVendors: [], matchingSOs: [],
+        matchingPOs: [], matchingWOs: [], matchingJCs: [], matchingBOMs: [], hasAnyResults: false
+      };
+    }
 
-  const matchingCustomers = cleanTerm ? customers.filter(c => 
-    c.name.toLowerCase().includes(cleanTerm) || c.customerCode.toLowerCase().includes(cleanTerm) || (c.city && c.city.toLowerCase().includes(cleanTerm))
-  ).slice(0, 4) : [];
+    const mItems = cleanTerm || isHistorySearch ? items.filter(i => {
+      if (isHistorySearch && !i.isBlocked) return false;
+      if (!isHistorySearch && i.isBlocked) return false;
+      if (!cleanTerm) return true;
+      return i.itemCode.toLowerCase().includes(cleanTerm) || i.name.toLowerCase().includes(cleanTerm) || i.category.toLowerCase().includes(cleanTerm);
+    }).slice(0, 5) : [];
 
-  const matchingVendors = cleanTerm ? vendors.filter(v => 
-    v.name.toLowerCase().includes(cleanTerm) || v.vendorCode.toLowerCase().includes(cleanTerm) || (v.city && v.city.toLowerCase().includes(cleanTerm))
-  ).slice(0, 4) : [];
+    const mCustomers = cleanTerm ? customers.filter(c => 
+      c.name.toLowerCase().includes(cleanTerm) || c.customerCode.toLowerCase().includes(cleanTerm) || (c.city && c.city.toLowerCase().includes(cleanTerm))
+    ).slice(0, 4) : [];
 
-  const matchingSOs = cleanTerm ? salesOrders.filter(so => 
-    so.soNumber.toLowerCase().includes(cleanTerm) || so.customerName.toLowerCase().includes(cleanTerm) || so.machineModel.toLowerCase().includes(cleanTerm)
-  ).slice(0, 4) : [];
+    const mVendors = cleanTerm ? vendors.filter(v => 
+      v.name.toLowerCase().includes(cleanTerm) || v.vendorCode.toLowerCase().includes(cleanTerm) || (v.city && v.city.toLowerCase().includes(cleanTerm))
+    ).slice(0, 4) : [];
 
-  const matchingPOs = cleanTerm ? purchaseOrders.filter(po => 
-    po.poNumber.toLowerCase().includes(cleanTerm) || po.vendorName.toLowerCase().includes(cleanTerm)
-  ).slice(0, 4) : [];
+    const mSOs = cleanTerm ? salesOrders.filter(so => 
+      so.soNumber.toLowerCase().includes(cleanTerm) || so.customerName.toLowerCase().includes(cleanTerm) || so.machineModel.toLowerCase().includes(cleanTerm)
+    ).slice(0, 4) : [];
 
-  const matchingWOs = cleanTerm ? workOrders.filter(wo => 
-    (wo.workOrderNo || wo.woNumber).toLowerCase().includes(cleanTerm) || wo.machineModel.toLowerCase().includes(cleanTerm)
-  ).slice(0, 4) : [];
+    const mPOs = cleanTerm ? purchaseOrders.filter(po => 
+      po.poNumber.toLowerCase().includes(cleanTerm) || po.vendorName.toLowerCase().includes(cleanTerm)
+    ).slice(0, 4) : [];
 
-  const matchingJCs = cleanTerm ? jobCards.filter(jc => 
-    jc.jobCardNo.toLowerCase().includes(cleanTerm) || jc.itemName.toLowerCase().includes(cleanTerm)
-  ).slice(0, 4) : [];
+    const mWOs = cleanTerm ? workOrders.filter(wo => 
+      (wo.workOrderNo || wo.woNumber).toLowerCase().includes(cleanTerm) || wo.machineModel.toLowerCase().includes(cleanTerm)
+    ).slice(0, 4) : [];
 
-  const matchingBOMs = cleanTerm ? boms.filter(b => 
-    b.bomCode.toLowerCase().includes(cleanTerm) || b.machineModel.toLowerCase().includes(cleanTerm)
-  ).slice(0, 4) : [];
+    const mJCs = cleanTerm ? jobCards.filter(jc => 
+      jc.jobCardNo.toLowerCase().includes(cleanTerm) || jc.itemName.toLowerCase().includes(cleanTerm)
+    ).slice(0, 4) : [];
 
-  const hasAnyResults = matchingItems.length > 0 || matchingCustomers.length > 0 || matchingVendors.length > 0 || 
-    matchingSOs.length > 0 || matchingPOs.length > 0 || matchingWOs.length > 0 || matchingJCs.length > 0 || matchingBOMs.length > 0;
+    const mBOMs = cleanTerm ? boms.filter(b => 
+      b.bomCode.toLowerCase().includes(cleanTerm) || b.machineModel.toLowerCase().includes(cleanTerm)
+    ).slice(0, 4) : [];
+
+    const hasRes = mItems.length > 0 || mCustomers.length > 0 || mVendors.length > 0 || 
+      mSOs.length > 0 || mPOs.length > 0 || mWOs.length > 0 || mJCs.length > 0 || mBOMs.length > 0;
+
+    return {
+      matchingItems: mItems,
+      matchingCustomers: mCustomers,
+      matchingVendors: mVendors,
+      matchingSOs: mSOs,
+      matchingPOs: mPOs,
+      matchingWOs: mWOs,
+      matchingJCs: mJCs,
+      matchingBOMs: mBOMs,
+      hasAnyResults: hasRes
+    };
+  }, [cleanTerm, isHistorySearch, items, customers, vendors, salesOrders, purchaseOrders, workOrders, jobCards, boms]);
 
   return (
     <header className="top-header" style={{ position: 'relative' }}>
