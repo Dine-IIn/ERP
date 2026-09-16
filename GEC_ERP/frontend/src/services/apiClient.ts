@@ -21,38 +21,73 @@ export function getApiBaseUrl(): string {
     return 'http://localhost:5000';
   }
 
-  // 1. Check environment variable override
+  // 1. User/Device Configured Server URL in localStorage (Takes Highest Priority)
+  const savedUrl = localStorage.getItem('gec_erp_server_url');
+  if (savedUrl && savedUrl.trim()) {
+    return savedUrl.trim().replace(/\/$/, '');
+  }
+
+  // 2. Tauri Desktop App Environment Detection
+  const isTauri = 
+    window.location.hostname.includes('tauri') || 
+    window.location.protocol.includes('tauri') || 
+    Boolean((window as any).__TAURI_INTERNALS__) ||
+    Boolean((window as any).__TAURI__);
+  
+  if (isTauri) {
+    // Check environment variable override for Tauri if provided
+    if ((import.meta as any).env?.VITE_API_URL) {
+      return ((import.meta as any).env.VITE_API_URL as string).replace(/\/$/, '');
+    }
+    return 'http://localhost:5000';
+  }
+
+  // 3. Capacitor Native Android / iOS App Detection
+  const isCapacitor = 
+    window.location.protocol === 'capacitor:' || 
+    Boolean((window as any).Capacitor);
+
+  if (isCapacitor) {
+    if ((import.meta as any).env?.VITE_API_URL) {
+      return ((import.meta as any).env.VITE_API_URL as string).replace(/\/$/, '');
+    }
+    return 'http://localhost:5000';
+  }
+
+  // 4. Vite Environment Variable Override
   if ((import.meta as any).env?.VITE_API_URL) {
     return ((import.meta as any).env.VITE_API_URL as string).replace(/\/$/, '');
   }
 
   const { protocol, hostname, port } = window.location;
 
-  // 2. If running on standard Vite dev ports (5173, 3000, 3001), target port 5000 on the same host
+  // 5. Standard Vite Dev Server Ports (5173, 3000, 3001) -> target backend on port 5000
   if (port === '5173' || port === '3000' || port === '3001') {
     return `${protocol}//${hostname}:5000`;
   }
 
-  // 3. In production or when served directly by backend or reverse proxy (Caddy, Nginx, Cloudflare, Domain)
-  if (port === '5000' || port === '80' || port === '443' || !port) {
+  // 6. Direct Backend Serve or Reverse Proxy (Port 5000, 80, 443)
+  if (port === '5000' || port === '80' || port === '443') {
     return `${protocol}//${hostname}${port && port !== '80' && port !== '443' ? `:${port}` : ''}`;
   }
 
-  // 4. Default fallback: target backend on port 5000 of the same hostname
-  return `${protocol}//${hostname}:5000`;
+  // 7. Default fallback: target backend on port 5000 of the same hostname
+  return `${protocol}//${hostname || 'localhost'}:5000`;
 }
 
 class HybridApiClient {
+  private activeBaseUrl: string = '';
   private isOnline: boolean = true;
   private lastHealth: ServerHealthResponse | null = null;
   private syncQueue: Array<() => Promise<any>> = [];
   private isSyncingQueue: boolean = false;
 
   constructor() {
+    this.activeBaseUrl = getApiBaseUrl();
     if (typeof window !== 'undefined') {
       window.addEventListener('online', () => {
         this.isOnline = true;
-        this.processSyncQueue();
+        this.checkHealth().then(() => this.processSyncQueue());
       });
       window.addEventListener('offline', () => {
         this.isOnline = false;
@@ -61,44 +96,171 @@ class HybridApiClient {
   }
 
   public getBaseUrl(): string {
-    return getApiBaseUrl();
+    return this.activeBaseUrl || getApiBaseUrl();
+  }
+
+  public setCustomServerUrl(url: string): void {
+    if (typeof window !== 'undefined') {
+      if (url && url.trim()) {
+        localStorage.setItem('gec_erp_server_url', url.trim().replace(/\/$/, ''));
+      } else {
+        localStorage.removeItem('gec_erp_server_url');
+      }
+      this.activeBaseUrl = getApiBaseUrl();
+    }
+  }
+
+  public setLanUrl(url: string): void {
+    if (typeof window !== 'undefined') {
+      if (url && url.trim()) {
+        localStorage.setItem('gec_erp_lan_url', url.trim().replace(/\/$/, ''));
+      } else {
+        localStorage.removeItem('gec_erp_lan_url');
+      }
+    }
+  }
+
+  public setCloudUrl(url: string): void {
+    if (typeof window !== 'undefined') {
+      if (url && url.trim()) {
+        localStorage.setItem('gec_erp_cloud_url', url.trim().replace(/\/$/, ''));
+      } else {
+        localStorage.removeItem('gec_erp_cloud_url');
+      }
+    }
+  }
+
+  public getCustomServerUrl(): string | null {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('gec_erp_server_url');
+    }
+    return null;
+  }
+
+  public getLanUrl(): string | null {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('gec_erp_lan_url');
+      if (stored) return stored;
+      if ((import.meta as any).env?.VITE_API_LAN_URL) {
+        return ((import.meta as any).env.VITE_API_LAN_URL as string).trim().replace(/\/$/, '');
+      }
+    }
+    return null;
+  }
+
+  public getCloudUrl(): string | null {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('gec_erp_cloud_url');
+      if (stored) return stored;
+      if ((import.meta as any).env?.VITE_API_CLOUD_URL) {
+        return ((import.meta as any).env.VITE_API_CLOUD_URL as string).trim().replace(/\/$/, '');
+      }
+    }
+    return null;
   }
 
   public getLastHealth(): ServerHealthResponse | null {
     return this.lastHealth;
   }
 
-  // Check health and detect network environment
-  public async checkHealth(): Promise<{ online: boolean; mode: 'LAN' | 'CLOUD' | 'LOCALHOST' | 'OFFLINE'; data?: ServerHealthResponse }> {
+  // Probe a single endpoint health
+  private async probeEndpoint(baseUrl: string, timeoutMs: number = 2000): Promise<{ online: boolean; data?: ServerHealthResponse }> {
     try {
-      const url = `${this.getBaseUrl()}/api/health`;
-      const res = await fetch(url, {
+      const cleanUrl = baseUrl.replace(/\/$/, '');
+      const res = await fetch(`${cleanUrl}/api/health`, {
         method: 'GET',
         headers: { 'Accept': 'application/json' },
-        signal: AbortSignal.timeout(3000)
+        signal: AbortSignal.timeout(timeoutMs)
       });
-
       if (res.ok) {
         const data: ServerHealthResponse = await res.json();
-        this.lastHealth = data;
-        this.isOnline = true;
-
-        const hostname = window.location.hostname;
-        let mode: 'LAN' | 'CLOUD' | 'LOCALHOST' | 'OFFLINE' = 'LAN';
-        if (hostname === 'localhost' || hostname === '127.0.0.1') {
-          mode = 'LOCALHOST';
-        } else if (/^(\d{1,3}\.){3}\d{1,3}$/.test(hostname)) {
-          mode = 'LAN';
-        } else {
-          mode = 'CLOUD';
-        }
-
-        return { online: true, mode, data };
+        return { online: true, data };
       }
     } catch {
-      // Server unreachable
+      // Unreachable
+    }
+    return { online: false };
+  }
+
+  // Check health with smart LAN-First priority
+  public async checkHealth(): Promise<{ online: boolean; mode: 'LAN' | 'CLOUD' | 'LOCALHOST' | 'OFFLINE'; data?: ServerHealthResponse }> {
+    const customUrl = this.getCustomServerUrl();
+    const lanUrl = this.getLanUrl();
+    const cloudUrl = this.getCloudUrl();
+
+    // 1. If explicit custom URL is provided, test it first
+    if (customUrl) {
+      const result = await this.probeEndpoint(customUrl, 3000);
+      if (result.online) {
+        this.activeBaseUrl = customUrl;
+        this.lastHealth = result.data || null;
+        this.isOnline = true;
+        let mode: 'LAN' | 'CLOUD' | 'LOCALHOST' | 'OFFLINE' = 'LAN';
+        try {
+          const host = new URL(customUrl).hostname;
+          if (host === 'localhost' || host === '127.0.0.1') mode = 'LOCALHOST';
+          else if (/^(\d{1,3}\.){3}\d{1,3}$/.test(host)) mode = 'LAN';
+          else mode = 'CLOUD';
+        } catch {
+          mode = 'LAN';
+        }
+        return { online: true, mode, data: result.data };
+      }
     }
 
+    // 2. Candidate candidate endpoints: LAN First, then Cloud
+    const lanCandidates: string[] = [];
+    if (lanUrl) lanCandidates.push(lanUrl);
+
+    // Auto-detect localhost / current host
+    const defaultUrl = getApiBaseUrl();
+    if (!lanCandidates.includes(defaultUrl)) {
+      lanCandidates.push(defaultUrl);
+    }
+
+    // Also include localhost:5000 if not already present
+    if (!lanCandidates.includes('http://localhost:5000')) {
+      lanCandidates.push('http://localhost:5000');
+    }
+
+    // If server previously announced its IPs, include them as LAN candidates
+    if (this.lastHealth?.serverIps) {
+      for (const ip of this.lastHealth.serverIps) {
+        const candidate = `http://${ip}:${this.lastHealth.serverPort || 5000}`;
+        if (!lanCandidates.includes(candidate)) lanCandidates.push(candidate);
+      }
+    }
+
+    // Probe LAN Candidates first (High priority, fast timeout)
+    for (const lanCandidate of lanCandidates) {
+      const lanResult = await this.probeEndpoint(lanCandidate, 1800);
+      if (lanResult.online) {
+        this.activeBaseUrl = lanCandidate;
+        this.lastHealth = lanResult.data || null;
+        this.isOnline = true;
+        let mode: 'LAN' | 'CLOUD' | 'LOCALHOST' | 'OFFLINE' = 'LAN';
+        try {
+          const host = new URL(lanCandidate).hostname;
+          mode = (host === 'localhost' || host === '127.0.0.1') ? 'LOCALHOST' : 'LAN';
+        } catch {
+          mode = 'LAN';
+        }
+        return { online: true, mode, data: lanResult.data };
+      }
+    }
+
+    // 3. If LAN not reachable, probe Cloud / Domain URL fallback
+    if (cloudUrl) {
+      const cloudResult = await this.probeEndpoint(cloudUrl, 3500);
+      if (cloudResult.online) {
+        this.activeBaseUrl = cloudUrl;
+        this.lastHealth = cloudResult.data || null;
+        this.isOnline = true;
+        return { online: true, mode: 'CLOUD', data: cloudResult.data };
+      }
+    }
+
+    // 4. Everything unreachable -> Switch to Offline Read-Only mode
     this.isOnline = false;
     return { online: false, mode: 'OFFLINE' };
   }

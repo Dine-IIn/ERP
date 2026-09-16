@@ -3,7 +3,7 @@ import { useERP } from '../../context/ERPContext';
 import { 
   LayoutDashboard, Package, Users, Contact, Warehouse, Truck, 
   ShoppingCart, FileCheck, Wrench, ShieldCheck, Layers, Shield, Cpu, LogOut, Sun, Moon, FileText, ShoppingBag,
-  AlertTriangle, ClipboardList, Factory, Send, FileSpreadsheet, ShieldAlert
+  AlertTriangle, ClipboardList, Factory, Send, FileSpreadsheet, ShieldAlert, X
 } from 'lucide-react';
 
 interface NavItem {
@@ -17,7 +17,8 @@ interface NavItem {
 export const Sidebar: React.FC = () => {
   const { 
     activeModule, setActiveModule, currentUser, logout, theme, toggleTheme,
-    items, jobworks, purchaseOrders, workOrders, salesOrders
+    items, jobworks, purchaseOrders, workOrders, salesOrders,
+    isMobileNavOpen, setIsMobileNavOpen
   } = useERP();
 
   const lowStockCount = items.filter(i => i.inHouseStock <= (i.reorderLevel || i.minStockQty || 5)).length;
@@ -41,6 +42,7 @@ export const Sidebar: React.FC = () => {
     { key: 'sales-orders', label: 'Sales Orders (SO)', icon: <ShoppingBag size={16} />, badge: activeSOCount > 0 ? activeSOCount : undefined },
     { key: 'work-orders', label: 'Work Orders (WO)', icon: <Wrench size={16} />, badge: activeWOCount > 0 ? activeWOCount : undefined },
     { key: 'job-cards', label: 'Job Cards (Assembly)', icon: <ClipboardList size={16} /> },
+    { key: 'material-issue', label: 'Material Issue & Store', icon: <Package size={16} color="var(--accent-primary)" /> },
     { key: 'floor-planning', label: 'Shopfloor Planning', icon: <Factory size={16} /> },
     { key: 'inventory', label: 'Inventory (In-House & External)', icon: <Warehouse size={16} />, badge: lowStockCount > 0 ? lowStockCount : undefined },
     { key: 'external-jobwork', label: 'Job Work (Challans & Vendor)', icon: <Truck size={16} />, badge: activeJobworkCount > 0 ? activeJobworkCount : undefined },
@@ -52,44 +54,66 @@ export const Sidebar: React.FC = () => {
   ];
 
   return (
-    <aside className="sidebar-fixed">
-      {/* Sidebar Header Logo - Perfectly Aligned 64px Header */}
-      <div style={{
-        height: '64px',
-        maxHeight: '64px',
-        minHeight: '64px',
-        padding: '0 1.25rem',
-        borderBottom: '1px solid var(--border-color)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '0.65rem',
-        boxSizing: 'border-box'
-      }}>
+    <>
+      {/* Mobile Drawer Backdrop Overlay */}
+      {isMobileNavOpen && (
+        <div 
+          className="sidebar-backdrop"
+          onClick={() => setIsMobileNavOpen(false)}
+        />
+      )}
+
+      <aside className={`sidebar-fixed ${isMobileNavOpen ? 'mobile-open' : ''}`}>
+        {/* Sidebar Header Logo - Perfectly Aligned 64px Header */}
         <div style={{
-          width: '36px',
-          height: '36px',
-          borderRadius: '0.5rem',
-          backgroundColor: 'var(--accent-primary)',
-          color: '#ffffff',
+          height: '64px',
+          maxHeight: '64px',
+          minHeight: '64px',
+          padding: '0 1.25rem',
+          borderBottom: '1px solid var(--border-color)',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center',
-          fontWeight: 800,
-          fontSize: '1rem',
-          letterSpacing: '-0.02em',
-          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2)'
+          justifyContent: 'space-between',
+          gap: '0.65rem',
+          boxSizing: 'border-box'
         }}>
-          GEC
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+            <div style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '0.5rem',
+              backgroundColor: 'var(--accent-primary)',
+              color: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: 800,
+              fontSize: '1rem',
+              letterSpacing: '-0.02em',
+              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2)'
+            }}>
+              GEC
+            </div>
+            <div>
+              <h2 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0, lineHeight: 1.1 }}>
+                GEC ERP
+              </h2>
+              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 500, letterSpacing: '0.02em' }}>
+                Moulding Machines
+              </span>
+            </div>
+          </div>
+
+          {/* Close button inside mobile drawer */}
+          <button
+            type="button"
+            className="mobile-sidebar-close"
+            onClick={() => setIsMobileNavOpen(false)}
+            aria-label="Close navigation"
+          >
+            <X size={20} />
+          </button>
         </div>
-        <div>
-          <h2 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0, lineHeight: 1.1 }}>
-            GEC ERP
-          </h2>
-          <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 500, letterSpacing: '0.02em' }}>
-            Moulding Machines
-          </span>
-        </div>
-      </div>
 
       {/* Navigation List - Ultra Compact Vertical Padding (Fits 100vh No Scroll) */}
       <nav style={{ flex: 1, padding: '0.4rem 0.5rem', display: 'flex', flexDirection: 'column', gap: '0.1rem', overflowY: 'auto' }}>
@@ -217,5 +241,6 @@ export const Sidebar: React.FC = () => {
         </div>
       </div>
     </aside>
+    </>
   );
 };

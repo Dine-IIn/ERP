@@ -209,29 +209,49 @@ export const PlanningModule: React.FC = () => {
         if (topItem.itemCode) addDemand(topItem.itemCode, undispatchedWOQty);
       }
 
-      // Child components required for unfinished units to build
+      // Child components required: Calculate unissued requirement based on issuedQty
       const remWOQty = Math.max(0, totalWOQty - (wo.completedQuantity || 0));
       if (remWOQty <= 0) return;
 
-      const components = (wo.woComponents && wo.woComponents.length > 0)
-        ? wo.woComponents.map(c => ({
-            itemId: c.itemId,
-            itemCode: c.itemCode,
-            qtyPerMachine: c.qtyRequired ? c.qtyRequired / (wo.quantity || wo.targetQuantity || 1) : 1
-          }))
-        : (matchedBOM?.components || []).map(c => ({
-            itemId: c.itemId,
-            itemCode: c.itemCode,
-            qtyPerMachine: c.qtyPerMachine || 1
-          }));
+      if (wo.woComponents && wo.woComponents.length > 0) {
+        wo.woComponents.forEach(c => {
+          const key = c.itemId || c.itemCode || '';
+          if (!key) return;
+          const totalCompReq = c.qtyRequired !== undefined 
+            ? c.qtyRequired 
+            : ((c.qtyPerMachine || 1) * remWOQty);
+          const issued = c.issuedQty || 0;
+          const unissuedDemand = Math.max(0, totalCompReq - issued);
+          if (unissuedDemand > 0) {
+            rootDemandByItemKey.set(key, (rootDemandByItemKey.get(key) || 0) + unissuedDemand);
+          }
+        });
+      } else if (matchedBOM?.components) {
+        matchedBOM.components.forEach(c => {
+          const key = c.itemId || c.itemCode || '';
+          if (key) {
+            const qty = (c.qtyPerMachine || 1) * remWOQty;
+            rootDemandByItemKey.set(key, (rootDemandByItemKey.get(key) || 0) + qty);
+          }
+        });
+      }
+    });
 
-      components.forEach(c => {
-        const key = c.itemId || c.itemCode || '';
-        if (key) {
-          const qty = (c.qtyPerMachine || 1) * remWOQty;
-          rootDemandByItemKey.set(key, (rootDemandByItemKey.get(key) || 0) + qty);
-        }
-      });
+    // Also include unissued materials from active Job Cards
+    activeJCs.forEach(jc => {
+      // If Job Card has an associated Work Order that already calculated components, skip double-counting
+      const isStandaloneJC = !jc.woId;
+      if (isStandaloneJC && jc.components && jc.components.length > 0) {
+        jc.components.forEach(comp => {
+          const key = comp.itemId || comp.itemCode || '';
+          if (!key) return;
+          const issued = comp.issuedQty || 0;
+          const unissuedJCReq = Math.max(0, comp.totalRequiredQty - issued);
+          if (unissuedJCReq > 0) {
+            rootDemandByItemKey.set(key, (rootDemandByItemKey.get(key) || 0) + unissuedJCReq);
+          }
+        });
+      }
     });
 
     // 2. Recursive explosion with shortage pruning

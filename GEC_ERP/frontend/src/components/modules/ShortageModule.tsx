@@ -138,6 +138,19 @@ export const ShortageModule: React.FC = () => {
   const [itemWiseSortField, setItemWiseSortField] = useState<ItemWiseSortField>('shortage');
   const [itemWiseSortOrder, setItemWiseSortOrder] = useState<'asc' | 'desc'>('desc');
 
+  // --- IN-HOUSE JOB CARD SHORTAGE UPGRADE STATE ---
+  const [jcFilterByWO, setJcFilterByWO] = useState<boolean>(false);
+  const [selectedJCWOIds, setSelectedJCWOIds] = useState<string[]>([]);
+  const [jcWOSearchTerm, setJcWOSearchTerm] = useState<string>('');
+  const deferredJcWOSearchTerm = useDeferredValue(jcWOSearchTerm);
+  const [selectedJCIds, setSelectedJCIds] = useState<string[]>([]);
+  const [jcSearchTerm, setJcSearchTerm] = useState<string>('');
+  const deferredJcSearchTerm = useDeferredValue(jcSearchTerm);
+  const [jcTableSearchTerm, setJcTableSearchTerm] = useState<string>('');
+  const deferredJcTableSearchTerm = useDeferredValue(jcTableSearchTerm);
+  const [jcSortField, setJcSortField] = useState<'itemCode' | 'itemName' | 'category' | 'processType' | 'totalRequired' | 'issuedQty' | 'netRemainingReq' | 'inHouseStock' | 'shortage'>('shortage');
+  const [jcSortOrder, setJcSortOrder] = useState<'asc' | 'desc'>('desc');
+
   const handleItemWiseSortToggle = (field: ItemWiseSortField) => {
     if (itemWiseSortField === field) {
       setItemWiseSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
@@ -318,18 +331,20 @@ export const ShortageModule: React.FC = () => {
           bottleneckComp = `${comp.itemCode} (${comp.itemName}) - Stock: ${inHouse} ${comp.unit || 'PCS'}, Needs ${qtyPer} per unit`;
         }
 
-        // Tree Pruning: Only explode child sub-BOM or process card if compNetShortage > 0
+        // Tree Pruning: Only explode child sub-BOM if isExplodeAllBOMs is true AND compNetShortage > 0
         if (compNetShortage > 0) {
-          const childBOM = boms.find(b => 
-            b.id === childIt?.id || 
-            (childIt?.itemCode && b.bomCode?.toLowerCase() === childIt.itemCode.toLowerCase()) || 
-            (childIt?.name && b.machineModel?.toLowerCase() === childIt.name.toLowerCase())
-          );
-          if (childBOM) {
-            explodeCompTree(childBOM, compNetShortage, new Set(visited));
+          if (isExplodeAllBOMs) {
+            const childBOM = boms.find(b => 
+              b.id === childIt?.id || 
+              (childIt?.itemCode && b.bomCode?.toLowerCase() === childIt.itemCode.toLowerCase()) || 
+              (childIt?.name && b.machineModel?.toLowerCase() === childIt.name.toLowerCase())
+            );
+            if (childBOM) {
+              explodeCompTree(childBOM, compNetShortage, new Set(visited));
+            }
           }
 
-          // Process Card raw material link
+          // Process Card raw material link (direct material before process)
           const procCard = (itemProcessCards || []).find(pc => 
             (childIt?.id && pc.itemId === childIt.id) || 
             (childIt?.itemCode && (pc.itemCode?.toLowerCase() === childIt.itemCode.toLowerCase() || pc.itemId === childIt.itemCode))
@@ -474,7 +489,7 @@ export const ShortageModule: React.FC = () => {
       reqQty: number,
       parentContext: { itemId: string; itemCode: string; itemName: string; targetQty: number; isShortageInduced?: boolean }
     ) => {
-      if (reqQty <= 0) return;
+      if (reqQty < 0) return;
       const key = (childItem?.itemCode || fallbackKey || childItem?.id || 'unknown').toLowerCase();
       const displayKey = childItem?.itemCode || fallbackKey || childItem?.id || 'unknown';
 
@@ -515,7 +530,7 @@ export const ShortageModule: React.FC = () => {
       }
     };
 
-    // 4. Recursive Shortage Branch Explosion with Cycle Detection
+    // 4. Recursive Shortage Branch Explosion with Cycle Detection (Only active when isExplodeAllBOMs is true)
     const explodeShortageBranch = (
       targetItem: Item | undefined,
       itemKey: string,
@@ -528,32 +543,34 @@ export const ShortageModule: React.FC = () => {
       const nextVisited = new Set(visited);
       nextVisited.add(targetId);
 
-      // (A) Check if targetItem has a sub-assembly BOM
-      const subBOM = bomById.get(targetItem.id) ||
-        bomByCode.get((targetItem.itemCode || '').toLowerCase()) ||
-        bomByModel.get((targetItem.name || '').toLowerCase());
+      // (A) Check if targetItem has a sub-assembly BOM (Only explode if isExplodeAllBOMs is ON)
+      if (isExplodeAllBOMs) {
+        const subBOM = bomById.get(targetItem.id) ||
+          bomByCode.get((targetItem.itemCode || '').toLowerCase()) ||
+          bomByModel.get((targetItem.name || '').toLowerCase());
 
-      if (subBOM && subBOM.components && subBOM.components.length > 0) {
-        subBOM.components.forEach(subComp => {
-          const subChild = itemById.get(subComp.itemId) || itemByCode.get((subComp.itemCode || '').toLowerCase());
-          const subReq = (subComp.qtyPerMachine || 1) * shortageQty;
-          const subContext = {
-            itemId: targetItem.id,
-            itemCode: targetItem.itemCode,
-            itemName: `${targetItem.name} [Sub-assembly Shortage]`,
-            targetQty: shortageQty,
-            isShortageInduced: true
-          };
+        if (subBOM && subBOM.components && subBOM.components.length > 0) {
+          subBOM.components.forEach(subComp => {
+            const subChild = itemById.get(subComp.itemId) || itemByCode.get((subComp.itemCode || '').toLowerCase());
+            const subReq = (subComp.qtyPerMachine || 1) * shortageQty;
+            const subContext = {
+              itemId: targetItem.id,
+              itemCode: targetItem.itemCode,
+              itemName: `${targetItem.name} [Sub-assembly Shortage]`,
+              targetQty: shortageQty,
+              isShortageInduced: true
+            };
 
-          registerItemDemand(subChild, subComp.itemCode || subComp.itemId, subReq, subContext);
-          const subAlloc = allocateVirtualStock(subChild?.id || subComp.itemId, subChild?.itemCode || subComp.itemCode, subReq);
-          const subShortage = Math.max(0, subReq - subAlloc);
+            registerItemDemand(subChild, subComp.itemCode || subComp.itemId, subReq, subContext);
+            const subAlloc = allocateVirtualStock(subChild?.id || subComp.itemId, subChild?.itemCode || subComp.itemCode, subReq);
+            const subShortage = Math.max(0, subReq - subAlloc);
 
-          // Tree Pruning: Only explode deeper into child sub-assemblies if subShortage > 0
-          if (subShortage > 0) {
-            explodeShortageBranch(subChild, subComp.itemCode || subComp.itemId, subShortage, nextVisited);
-          }
-        });
+            // Tree Pruning: Only explode deeper into child sub-assemblies if subShortage > 0
+            if (subShortage > 0) {
+              explodeShortageBranch(subChild, subComp.itemCode || subComp.itemId, subShortage, nextVisited);
+            }
+          });
+        }
       }
 
       // (B) Check if targetItem has a Process Card (casting / material before process)
@@ -575,7 +592,7 @@ export const ShortageModule: React.FC = () => {
           const rawAlloc = allocateVirtualStock(rawItem?.id || rawKey, rawItem?.itemCode || procCard.rawItemCode, rawReq);
           const rawShortage = Math.max(0, rawReq - rawAlloc);
 
-          if (rawShortage > 0) {
+          if (rawShortage > 0 && isExplodeAllBOMs) {
             const procVisited = new Set(nextVisited);
             procVisited.add(`proc_${rawKey}`);
             explodeShortageBranch(rawItem, rawKey, rawShortage, procVisited);
@@ -612,9 +629,28 @@ export const ShortageModule: React.FC = () => {
           const allocated = allocateVirtualStock(childIt?.id || comp.itemId, childIt?.itemCode || comp.itemCode, totalReq);
           const childShortage = Math.max(0, totalReq - allocated);
 
-          // Tree Pruning: Only explode child sub-assembly if there is a net shortage
+          // Tree Pruning: Only explode child sub-assembly if isExplodeAllBOMs is true AND childShortage > 0
           if (childShortage > 0) {
-            explodeShortageBranch(childIt, comp.itemCode || comp.itemId, childShortage, new Set([parentItem.id]));
+            if (isExplodeAllBOMs) {
+              explodeShortageBranch(childIt, comp.itemCode || comp.itemId, childShortage, new Set([parentItem.id]));
+            } else {
+              // If Explode is OFF, check only if this direct child component has a direct Process Card (raw casting)
+              const childProcCard = procCardByItem.get(childIt?.id || '') || procCardByItem.get((childIt?.itemCode || '').toLowerCase());
+              if (childProcCard && (childProcCard.rawItemId || childProcCard.rawItemCode)) {
+                const rawKey = childProcCard.rawItemId || childProcCard.rawItemCode || '';
+                const rawItem = itemById.get(childProcCard.rawItemId) || itemByCode.get((childProcCard.rawItemCode || '').toLowerCase());
+                const rawReq = childShortage;
+                const rawContext = {
+                  itemId: childIt?.id || comp.itemId,
+                  itemCode: childIt?.itemCode || comp.itemCode,
+                  itemName: `${childIt?.name || comp.itemName} [Material Before Process]`,
+                  targetQty: childShortage,
+                  isShortageInduced: true
+                };
+                registerItemDemand(rawItem, rawKey, rawReq, rawContext);
+                allocateVirtualStock(rawItem?.id || rawKey, rawItem?.itemCode || childProcCard.rawItemCode, rawReq);
+              }
+            }
           }
         });
       } else {
@@ -632,6 +668,84 @@ export const ShortageModule: React.FC = () => {
         if (parentShortage > 0) {
           explodeShortageBranch(parentItem, parentItem.itemCode || parentItem.id, parentShortage, new Set());
         }
+      }
+    });
+
+    // 5b. Ensure structural BOM and Process Card components (especially Raw Castings) are registered so they appear in ALL_ITEMS mode
+    const registerStructuralTree = (targetItem: Item | undefined, visited: Set<string>, isDirectLevel: boolean) => {
+      if (!targetItem) return;
+      const targetId = targetItem.id;
+      if (visited.has(targetId)) return;
+      const nextVisited = new Set(visited);
+      nextVisited.add(targetId);
+
+      // (A) Check if targetItem has a Process Card (Casting / Material Before Process)
+      const procCard = procCardByItem.get(targetItem.id) || procCardByItem.get((targetItem.itemCode || '').toLowerCase());
+      if (procCard && (procCard.rawItemId || procCard.rawItemCode)) {
+        const rawKey = procCard.rawItemId || procCard.rawItemCode || '';
+        const rawItem = itemById.get(procCard.rawItemId) || itemByCode.get((procCard.rawItemCode || '').toLowerCase());
+        const rawContext = {
+          itemId: targetItem.id,
+          itemCode: targetItem.itemCode,
+          itemName: `${targetItem.name} [Material Before Process]`,
+          targetQty: 0,
+          isShortageInduced: false
+        };
+        registerItemDemand(rawItem, rawKey, 0, rawContext);
+        if (rawItem && !visited.has(`proc_${rawKey}`) && isExplodeAllBOMs) {
+          const procVisited = new Set(nextVisited);
+          procVisited.add(`proc_${rawKey}`);
+          registerStructuralTree(rawItem, procVisited, false);
+        }
+      }
+
+      // (B) Check if targetItem has a BOM
+      if (isDirectLevel || isExplodeAllBOMs) {
+        const subBOM = bomById.get(targetItem.id) ||
+          bomByCode.get((targetItem.itemCode || '').toLowerCase()) ||
+          bomByModel.get((targetItem.name || '').toLowerCase());
+
+        if (subBOM && subBOM.components && subBOM.components.length > 0) {
+          subBOM.components.forEach(subComp => {
+            const subChild = itemById.get(subComp.itemId) || itemByCode.get((subComp.itemCode || '').toLowerCase());
+            const subContext = {
+              itemId: targetItem.id,
+              itemCode: targetItem.itemCode,
+              itemName: `${targetItem.name} [Sub-assembly]`,
+              targetQty: 0,
+              isShortageInduced: false
+            };
+            registerItemDemand(subChild, subComp.itemCode || subComp.itemId, 0, subContext);
+            if (subChild) {
+              // Also register direct process card raw castings for direct level components
+              const childProcCard = procCardByItem.get(subChild.id) || procCardByItem.get((subChild.itemCode || '').toLowerCase());
+              if (childProcCard && (childProcCard.rawItemId || childProcCard.rawItemCode)) {
+                const cRawKey = childProcCard.rawItemId || childProcCard.rawItemCode || '';
+                const cRawItem = itemById.get(childProcCard.rawItemId) || itemByCode.get((childProcCard.rawItemCode || '').toLowerCase());
+                const cRawContext = {
+                  itemId: subChild.id,
+                  itemCode: subChild.itemCode,
+                  itemName: `${subChild.name} [Material Before Process]`,
+                  targetQty: 0,
+                  isShortageInduced: false
+                };
+                registerItemDemand(cRawItem, cRawKey, 0, cRawContext);
+              }
+
+              // Recurse to lower levels only if isExplodeAllBOMs is true
+              if (isExplodeAllBOMs) {
+                registerStructuralTree(subChild, nextVisited, false);
+              }
+            }
+          });
+        }
+      }
+    };
+
+    selectedItemIds.forEach(itemId => {
+      const parentItem = itemById.get(itemId);
+      if (parentItem) {
+        registerStructuralTree(parentItem, new Set(), true);
       }
     });
 
@@ -669,7 +783,7 @@ export const ShortageModule: React.FC = () => {
         _searchStr
       };
     });
-  }, [selectedItemIds, itemTargetQuantities, items, boms, jobworks, purchaseOrders, itemProcessCards]);
+  }, [selectedItemIds, itemTargetQuantities, items, boms, jobworks, purchaseOrders, itemProcessCards, isExplodeAllBOMs]);
 
   // Filtered Consolidated Components ($X + Y$) with Tokenized Search
   const filteredConsolidatedItems = useMemo(() => {
@@ -1015,6 +1129,191 @@ export const ShortageModule: React.FC = () => {
     }
     return true;
   });
+
+  // -------------------------------------------------------------
+  // IN-HOUSE JOB CARD SHORTAGE DEDICATED ENGINE
+  // -------------------------------------------------------------
+  const allActiveJobCards = useMemo(() => {
+    return jobCards.filter(jc => jc.status !== 'CANCELLED' && jc.status !== 'COMPLETED' && !(jc as any).isDeleted);
+  }, [jobCards]);
+
+  const filteredActiveWOsForJC = useMemo(() => {
+    const term = deferredJcWOSearchTerm.trim().toLowerCase();
+    const tokens = term ? term.split(/\s+/).filter(Boolean) : [];
+    return workOrders.filter(w => {
+      if (w.status === 'COMPLETED' || w.status === 'CANCELLED' || (w as any).isDeleted) return false;
+      if (tokens.length === 0) return true;
+      const str = `${w.workOrderNo || ''} ${(w as any).woNumber || ''} ${w.machineModel || ''} ${w.customerName || ''}`.toLowerCase();
+      return tokens.every(t => str.includes(t));
+    });
+  }, [workOrders, deferredJcWOSearchTerm]);
+
+  const availableJCsForSelection = useMemo(() => {
+    if (jcFilterByWO) {
+      if (selectedJCWOIds.length === 0) return [];
+      const woSet = new Set(selectedJCWOIds);
+      const selectedWOObjs = workOrders.filter(w => woSet.has(w.id));
+      const woNoSet = new Set<string>();
+      selectedWOObjs.forEach(w => {
+        if (w.workOrderNo) woNoSet.add(w.workOrderNo.toLowerCase());
+        if ((w as any).woNumber) woNoSet.add((w as any).woNumber.toLowerCase());
+      });
+      return allActiveJobCards.filter(jc => 
+        (jc.woId && woSet.has(jc.woId)) || 
+        (jc.woNumber && woNoSet.has(jc.woNumber.toLowerCase()))
+      );
+    }
+    return allActiveJobCards;
+  }, [jcFilterByWO, selectedJCWOIds, allActiveJobCards, workOrders]);
+
+  const filteredAvailableJCs = useMemo(() => {
+    const term = deferredJcSearchTerm.trim().toLowerCase();
+    if (!term) return availableJCsForSelection;
+    const tokens = term.split(/\s+/).filter(Boolean);
+    return availableJCsForSelection.filter(jc => {
+      const str = `${jc.jobCardNo} ${jc.woNumber || ''} ${jc.itemCode} ${jc.itemName} ${jc.assignedOperator || ''}`.toLowerCase();
+      return tokens.every(t => str.includes(t));
+    });
+  }, [availableJCsForSelection, deferredJcSearchTerm]);
+
+  const consolidatedJCShortages = useMemo(() => {
+    const set = new Set(selectedJCIds);
+    const selectedJCs = allActiveJobCards.filter(jc => set.has(jc.id));
+    if (selectedJCs.length === 0) return [];
+
+    const compMap = new Map<string, {
+      itemId: string;
+      itemCode: string;
+      itemName: string;
+      partCode: string;
+      category: string;
+      processType: string;
+      unit: string;
+      totalRequired: number;
+      issuedQty: number;
+      netRemainingReq: number;
+      inHouseStock: number;
+      openPO: number;
+      pendingJW: number;
+      pendingQC: number;
+      shortage: number;
+      isShortage: boolean;
+      itemObj?: Item;
+      requiredByJCs: { jcId: string; jcNo: string; woNumber?: string; itemName: string; requiredQty: number; issuedQty: number }[];
+      _searchStr: string;
+    }>();
+
+    selectedJCs.forEach(jc => {
+      let comps = jc.components;
+      if (!comps || comps.length === 0) {
+        const linkedBOM = boms.find(b => b.id === jc.itemId || b.bomCode === jc.itemCode || b.machineModel?.toLowerCase() === jc.itemName?.toLowerCase());
+        if (linkedBOM && linkedBOM.components) {
+          comps = linkedBOM.components.map(c => ({
+            itemId: c.itemId,
+            itemCode: c.itemCode,
+            itemName: c.itemName,
+            qtyPerUnit: c.qtyPerMachine || 1,
+            totalRequiredQty: (c.qtyPerMachine || 1) * (jc.targetQuantity || 1),
+            issuedQty: 0,
+            unit: c.unit || 'PCS'
+          }));
+        }
+      }
+
+      (comps || []).forEach(comp => {
+        const itemObj = items.find(i => i.id === comp.itemId || i.itemCode === comp.itemCode);
+        const key = (comp.itemCode || comp.itemId || 'unknown').toLowerCase();
+        const req = comp.totalRequiredQty || 0;
+        const issued = comp.issuedQty || 0;
+        const remaining = Math.max(0, req - issued);
+
+        let entry = compMap.get(key);
+        if (!entry) {
+          const inHouse = itemObj ? (itemObj.inHouseStock || 0) : 0;
+          const openPO = getOpenPOQuantity(itemObj, comp.itemCode);
+          const pendingJW = jobworks
+            .filter(jw => jw.status !== 'COMPLETED' && jw.status !== 'CANCELLED' && !(jw as any).isDeleted)
+            .reduce((sum, jw) => (jw.itemId === comp.itemId || jw.itemCode === comp.itemCode) ? sum + (jw.pendingBalance ?? jw.sentQuantity ?? 0) : sum, 0);
+          const pendingQC = itemObj?.pendingQCStock || 0;
+          const pSource = (itemObj?.materialProcessSources && itemObj.materialProcessSources.length > 0)
+            ? itemObj.materialProcessSources.join(', ')
+            : itemObj?.processType || 'In-house';
+          const cat = itemObj?.category || 'Component';
+
+          entry = {
+            itemId: itemObj?.id || comp.itemId || '',
+            itemCode: comp.itemCode || itemObj?.itemCode || '',
+            itemName: comp.itemName || itemObj?.name || '',
+            partCode: itemObj?.partCode || '',
+            category: cat,
+            processType: pSource,
+            unit: comp.unit || itemObj?.unit || 'PCS',
+            totalRequired: 0,
+            issuedQty: 0,
+            netRemainingReq: 0,
+            inHouseStock: inHouse,
+            openPO,
+            pendingJW,
+            pendingQC,
+            shortage: 0,
+            isShortage: false,
+            itemObj,
+            requiredByJCs: [],
+            _searchStr: ''
+          };
+          compMap.set(key, entry);
+        }
+
+        entry.totalRequired += req;
+        entry.issuedQty += issued;
+        entry.netRemainingReq += remaining;
+        entry.requiredByJCs.push({
+          jcId: jc.id,
+          jcNo: jc.jobCardNo,
+          woNumber: jc.woNumber,
+          itemName: jc.itemName,
+          requiredQty: req,
+          issuedQty: issued
+        });
+      });
+    });
+
+    return Array.from(compMap.values()).map(c => {
+      const shortage = Math.max(0, c.netRemainingReq - c.inHouseStock);
+      const isShortage = shortage > 0;
+      const jcNames = c.requiredByJCs.map(r => `${r.jcNo} ${r.woNumber || ''} ${r.itemName}`).join(' ').toLowerCase();
+      const _searchStr = `${c.partCode} ${c.itemCode} ${c.itemName} ${c.category} ${c.processType} ${jcNames}`.toLowerCase();
+      return {
+        ...c,
+        shortage,
+        isShortage,
+        _searchStr
+      };
+    });
+  }, [selectedJCIds, allActiveJobCards, items, boms, jobworks, purchaseOrders]);
+
+  const filteredJCShortages = useMemo(() => {
+    const term = deferredJcTableSearchTerm.trim().toLowerCase();
+    const tokens = term ? term.split(/\s+/).filter(Boolean) : [];
+
+    const list = consolidatedJCShortages.filter(c => {
+      if (shortageFilterMode === 'SHORTAGE_ONLY' && !c.isShortage) return false;
+      if (tokens.length > 0 && !tokens.every(t => c._searchStr.includes(t))) return false;
+      return true;
+    });
+
+    return list.sort((a, b) => {
+      let valA: any = a[jcSortField];
+      let valB: any = b[jcSortField];
+      if (typeof valA === 'string') {
+        valA = valA.toLowerCase();
+        valB = (valB || '').toString().toLowerCase();
+      }
+      if (valA < valB) return jcSortOrder === 'asc' ? -1 : 1;
+      if (valA > valB) return jcSortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [consolidatedJCShortages, shortageFilterMode, deferredJcTableSearchTerm, jcSortField, jcSortOrder]);
 
   const getWOShortageData = (wo: WorkOrder) => {
     const linkedBOM = boms.find(b => b.machineModel === wo.machineModel || b.id === wo.bomId);
@@ -1910,9 +2209,9 @@ export const ShortageModule: React.FC = () => {
       )}
 
       {/* ========================================================= */}
-      {/* TAB 2-5: WORK ORDER SHORTAGE & COMBINED AGGREGATION       */}
+      {/* TAB 2-4: WORK ORDER SHORTAGE & COMBINED AGGREGATION       */}
       {/* ========================================================= */}
-      {activeTab !== 'ITEM_WISE_SHORTAGE' && (
+      {activeTab !== 'ITEM_WISE_SHORTAGE' && activeTab !== 'JOBCARD_SHORTAGE' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: 1, minHeight: 0 }}>
           
           {/* WO Filter Bar with Search Bar */}
@@ -2092,8 +2391,8 @@ export const ShortageModule: React.FC = () => {
             </div>
           )}
 
-          {/* Tab 3-5: Process-Specific Consolidated Tables (PO, JW, JC) */}
-          {(activeTab === 'PO_SHORTAGE' || activeTab === 'JOBWORK_SHORTAGE' || activeTab === 'JOBCARD_SHORTAGE') && (
+          {/* Tab 3-4: Process-Specific Consolidated Tables (PO, JW) */}
+          {(activeTab === 'PO_SHORTAGE' || activeTab === 'JOBWORK_SHORTAGE') && (
             <div className="table-container" style={{ flex: 1, overflowY: 'auto' }}>
               <div style={{ padding: '0.5rem 0.75rem', backgroundColor: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '0.82rem', fontWeight: 700 }}>
@@ -2245,11 +2544,6 @@ export const ShortageModule: React.FC = () => {
                                     </div>
                                   );
                                 })()}
-                                {activeTab === 'JOBCARD_SHORTAGE' && (
-                                  <button type="button" className="btn btn-outline" style={{ padding: '0.2rem 0.4rem', fontSize: '0.7rem', color: 'var(--success)' }} onClick={() => handleIssueJobCard(childItem, c.netShortage)}>
-                                    Issue JC
-                                  </button>
-                                )}
                               </div>
                             )}
                           </td>
@@ -2260,6 +2554,421 @@ export const ShortageModule: React.FC = () => {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* TAB 5: UPGRADED IN-HOUSE JOB CARD SHORTAGE                */}
+      {/* ========================================================= */}
+      {activeTab === 'JOBCARD_SHORTAGE' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: 1, minHeight: 0 }}>
+          {/* Card 1: Selection & Filtering Control Panel */}
+          <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', flexShrink: 0 }}>
+            {/* Header / Checkbox row */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.84rem', margin: 0, userSelect: 'none' }}>
+                  <input
+                    type="checkbox"
+                    checked={jcFilterByWO}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setJcFilterByWO(checked);
+                      setSelectedJCIds([]);
+                      setSelectedJCWOIds([]);
+                      setJcWOSearchTerm('');
+                    }}
+                    style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                  />
+                  <span>🔗 Filter against Work Order(s)</span>
+                </label>
+              </div>
+            </div>
+
+            {/* If Filter against WO is active: Multi-WO Selection Panel */}
+            {jcFilterByWO && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '0.6rem 0.75rem', backgroundColor: 'var(--bg-secondary)', borderRadius: '0.375rem', border: '1px solid var(--border-color)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-primary)' }}>
+                      1. Select Work Order(s) ({selectedJCWOIds.length} selected):
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                    <div style={{ position: 'relative', width: '220px', maxWidth: '100%' }}>
+                      <Search size={13} style={{ position: 'absolute', left: '0.5rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                      <input
+                        type="text"
+                        placeholder="Search Work Orders..."
+                        className="input-field"
+                        style={{ paddingLeft: '1.75rem', paddingRight: '0.5rem', paddingTop: '0.2rem', paddingBottom: '0.2rem', fontSize: '0.76rem', width: '100%' }}
+                        value={jcWOSearchTerm}
+                        onChange={(e) => setJcWOSearchTerm(e.target.value)}
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      className="btn btn-outline"
+                      style={{ padding: '0.2rem 0.5rem', fontSize: '0.74rem' }}
+                      onClick={() => {
+                        const allWOIds = filteredActiveWOsForJC.map(w => w.id);
+                        setSelectedJCWOIds(allWOIds);
+                        // Auto-select all JCs belonging to these WOs
+                        const woSet = new Set(allWOIds);
+                        const selectedWOObjs = workOrders.filter(w => woSet.has(w.id));
+                        const woNoSet = new Set<string>();
+                        selectedWOObjs.forEach(w => {
+                          if (w.workOrderNo) woNoSet.add(w.workOrderNo.toLowerCase());
+                          if ((w as any).woNumber) woNoSet.add((w as any).woNumber.toLowerCase());
+                        });
+                        const matchingJCs = allActiveJobCards.filter(jc => 
+                          (jc.woId && woSet.has(jc.woId)) || 
+                          (jc.woNumber && woNoSet.has(jc.woNumber.toLowerCase()))
+                        );
+                        setSelectedJCIds(matchingJCs.map(j => j.id));
+                      }}
+                      disabled={filteredActiveWOsForJC.length === 0}
+                    >
+                      <CheckSquare size={12} style={{ marginRight: '0.25rem' }} /> Select All WOs ({filteredActiveWOsForJC.length})
+                    </button>
+
+                    <button
+                      type="button"
+                      className="btn btn-outline"
+                      style={{ padding: '0.2rem 0.5rem', fontSize: '0.74rem' }}
+                      onClick={() => {
+                        setSelectedJCWOIds([]);
+                        setSelectedJCIds([]);
+                      }}
+                      disabled={selectedJCWOIds.length === 0}
+                    >
+                      <Square size={12} style={{ marginRight: '0.25rem' }} /> Clear WOs
+                    </button>
+                  </div>
+                </div>
+
+                {/* Multi-Select Work Order Badges */}
+                <div style={{ 
+                  display: 'flex', 
+                  flexWrap: 'wrap', 
+                  gap: '0.35rem', 
+                  maxHeight: '90px', 
+                  overflowY: 'auto', 
+                  padding: '0.35rem', 
+                  backgroundColor: 'var(--bg-tertiary)', 
+                  borderRadius: '0.25rem', 
+                  border: '1px solid var(--border-color)' 
+                }}>
+                  {filteredActiveWOsForJC.length === 0 ? (
+                    <div style={{ padding: '0.3rem', fontSize: '0.76rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                      No active Work Orders match the search query.
+                    </div>
+                  ) : (
+                    filteredActiveWOsForJC.map(wo => {
+                      const isSelected = selectedJCWOIds.includes(wo.id);
+                      return (
+                        <button
+                          key={wo.id}
+                          type="button"
+                          onClick={() => {
+                            const newSelectedWOIds = isSelected 
+                              ? selectedJCWOIds.filter(id => id !== wo.id)
+                              : [...selectedJCWOIds, wo.id];
+                            setSelectedJCWOIds(newSelectedWOIds);
+
+                            // Auto-sync JCs
+                            if (newSelectedWOIds.length === 0) {
+                              setSelectedJCIds([]);
+                            } else {
+                              const woSet = new Set(newSelectedWOIds);
+                              const selectedWOObjs = workOrders.filter(w => woSet.has(w.id));
+                              const woNoSet = new Set<string>();
+                              selectedWOObjs.forEach(w => {
+                                if (w.workOrderNo) woNoSet.add(w.workOrderNo.toLowerCase());
+                                if ((w as any).woNumber) woNoSet.add((w as any).woNumber.toLowerCase());
+                              });
+                              const matchingJCs = allActiveJobCards.filter(jc => 
+                                (jc.woId && woSet.has(jc.woId)) || 
+                                (jc.woNumber && woNoSet.has(jc.woNumber.toLowerCase()))
+                              );
+                              setSelectedJCIds(matchingJCs.map(j => j.id));
+                            }
+                          }}
+                          className={`btn ${isSelected ? 'btn-primary' : 'btn-outline'}`}
+                          style={{
+                            padding: '0.18rem 0.45rem',
+                            fontSize: '0.73rem',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.3rem',
+                            borderRadius: '0.25rem',
+                            border: isSelected ? 'none' : '1px solid var(--border-color)'
+                          }}
+                        >
+                          {isSelected ? <CheckSquare size={11} /> : <Square size={11} />}
+                          <strong>{wo.workOrderNo || (wo as any).woNumber}</strong>
+                          <span style={{ opacity: 0.85 }}>• {wo.machineModel}</span>
+                          <span style={{ fontSize: '0.66rem', opacity: 0.8 }}>
+                            (Qty: {wo.quantity || (wo as any).targetQuantity || 1})
+                          </span>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Job Card Selection Toolbar */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-primary)' }}>
+                {jcFilterByWO ? `2. Select Job Cards under Selected WO(s)` : `Select Active Job Cards`} ({selectedJCIds.length} selected):
+              </div>
+
+              {/* Selection Actions & Search */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                <div style={{ position: 'relative', width: '220px', maxWidth: '100%' }}>
+                  <Search size={13} style={{ position: 'absolute', left: '0.5rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                  <input
+                    type="text"
+                    placeholder="Search Job Cards..."
+                    className="input-field"
+                    style={{ paddingLeft: '1.75rem', paddingRight: '0.5rem', paddingTop: '0.2rem', paddingBottom: '0.2rem', fontSize: '0.76rem', width: '100%' }}
+                    value={jcSearchTerm}
+                    onChange={(e) => setJcSearchTerm(e.target.value)}
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  style={{ padding: '0.2rem 0.5rem', fontSize: '0.74rem' }}
+                  onClick={() => setSelectedJCIds(availableJCsForSelection.map(j => j.id))}
+                  disabled={availableJCsForSelection.length === 0}
+                >
+                  <CheckSquare size={12} style={{ marginRight: '0.25rem' }} /> Select All JCs ({availableJCsForSelection.length})
+                </button>
+
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  style={{ padding: '0.2rem 0.5rem', fontSize: '0.74rem' }}
+                  onClick={() => setSelectedJCIds([])}
+                  disabled={selectedJCIds.length === 0}
+                >
+                  <Square size={12} style={{ marginRight: '0.25rem' }} /> Clear JCs
+                </button>
+              </div>
+            </div>
+
+            {/* Multi-Select Job Card Badges */}
+            <div style={{ 
+              display: 'flex', 
+              flexWrap: 'wrap', 
+              gap: '0.35rem', 
+              maxHeight: '110px', 
+              overflowY: 'auto', 
+              padding: '0.35rem', 
+              backgroundColor: 'var(--bg-tertiary)', 
+              borderRadius: '0.25rem', 
+              border: '1px solid var(--border-color)' 
+            }}>
+              {filteredAvailableJCs.length === 0 ? (
+                <div style={{ padding: '0.4rem', fontSize: '0.76rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                  {jcFilterByWO && selectedJCWOIds.length === 0 
+                    ? '👈 Please select one or more Work Orders above to view their associated Job Cards.' 
+                    : 'No active Job Cards match the current filter.'}
+                </div>
+              ) : (
+                filteredAvailableJCs.map(jc => {
+                  const isSelected = selectedJCIds.includes(jc.id);
+                  return (
+                    <button
+                      key={jc.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedJCIds(prev => 
+                          prev.includes(jc.id) ? prev.filter(id => id !== jc.id) : [...prev, jc.id]
+                        );
+                      }}
+                      className={`btn ${isSelected ? 'btn-primary' : 'btn-outline'}`}
+                      style={{
+                        padding: '0.18rem 0.45rem',
+                        fontSize: '0.73rem',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.3rem',
+                        borderRadius: '0.25rem',
+                        border: isSelected ? 'none' : '1px solid var(--border-color)'
+                      }}
+                    >
+                      {isSelected ? <CheckSquare size={11} /> : <Square size={11} />}
+                      <strong>{jc.jobCardNo}</strong>
+                      <span style={{ opacity: 0.85 }}>• {jc.itemName || jc.itemCode}</span>
+                      <span style={{ fontSize: '0.66rem', backgroundColor: isSelected ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.06)', padding: '0.05rem 0.3rem', borderRadius: '4px' }}>
+                        Qty: {jc.targetQuantity}
+                      </span>
+                      {jc.woNumber && (
+                        <span style={{ fontSize: '0.66rem', opacity: 0.75 }}>
+                          (WO: {jc.woNumber})
+                        </span>
+                      )}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          {/* Card 2: Consolidated Job Card Shortage Table */}
+          <div className="table-container" style={{ flex: 1, overflowY: 'auto' }}>
+            <div style={{ padding: '0.5rem 0.75rem', backgroundColor: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <span style={{ fontSize: '0.82rem', fontWeight: 700 }}>
+                  Job Card Material Shortage ({consolidatedJCShortages.length} parts required for {selectedJCIds.length} Job Cards):
+                </span>
+                {selectedJCIds.length > 0 && (
+                  <span className={`badge ${consolidatedJCShortages.some(c => c.isShortage) ? 'badge-danger' : 'badge-success'}`} style={{ fontSize: '0.72rem' }}>
+                    {consolidatedJCShortages.filter(c => c.isShortage).length} Items with Shortage
+                  </span>
+                )}
+              </div>
+
+              <input
+                type="text"
+                placeholder="Filter table components..."
+                className="input-field"
+                style={{ width: '240px', padding: '0.2rem 0.5rem', fontSize: '0.78rem' }}
+                value={jcTableSearchTerm}
+                onChange={(e) => setJcTableSearchTerm(e.target.value)}
+              />
+            </div>
+
+            {selectedJCIds.length === 0 ? (
+              <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                <ClipboardList size={38} style={{ opacity: 0.3, marginBottom: '0.75rem' }} />
+                <h4 style={{ fontWeight: 700, margin: '0 0 0.4rem 0' }}>No Job Cards Selected</h4>
+                <p style={{ fontSize: '0.82rem', maxWidth: '440px', margin: '0 auto', color: 'var(--text-muted)' }}>
+                  {jcFilterByWO
+                    ? 'Select a Work Order above and choose one or more Job Cards to calculate component shortages.'
+                    : 'Select one or more active Job Cards above to calculate required materials and store stock shortages.'}
+                </p>
+              </div>
+            ) : filteredJCShortages.length === 0 ? (
+              <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                <CheckCircle size={38} color="var(--success)" style={{ opacity: 0.8, marginBottom: '0.75rem' }} />
+                <h4 style={{ fontWeight: 700, margin: '0 0 0.4rem 0' }}>All Materials Available!</h4>
+                <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                  {shortageFilterMode === 'SHORTAGE_ONLY'
+                    ? 'None of the components required by the selected Job Cards have a shortage in store.'
+                    : 'No matching components found for the current search filter.'}
+                </p>
+              </div>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th style={{ width: '30px' }}>#</th>
+                    <th onClick={() => { setJcSortField('itemCode'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ cursor: 'pointer' }}>Item Code</th>
+                    <th onClick={() => { setJcSortField('itemName'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ cursor: 'pointer' }}>Item Description</th>
+                    <th onClick={() => { setJcSortField('category'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ textAlign: 'center', cursor: 'pointer' }}>Class</th>
+                    <th onClick={() => { setJcSortField('processType'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ textAlign: 'center', cursor: 'pointer' }}>Source</th>
+                    <th style={{ minWidth: '150px' }}>Required By Job Cards</th>
+                    <th onClick={() => { setJcSortField('totalRequired'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ textAlign: 'right', cursor: 'pointer' }}>Total Req</th>
+                    <th onClick={() => { setJcSortField('issuedQty'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ textAlign: 'right', cursor: 'pointer' }}>Issued</th>
+                    <th onClick={() => { setJcSortField('netRemainingReq'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ textAlign: 'right', cursor: 'pointer' }}>Net Req</th>
+                    <th onClick={() => { setJcSortField('inHouseStock'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ textAlign: 'right', cursor: 'pointer' }}>In Stock</th>
+                    <th style={{ textAlign: 'right' }}>Open PO</th>
+                    <th style={{ textAlign: 'right' }}>Pend JW</th>
+                    <th onClick={() => { setJcSortField('shortage'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ textAlign: 'right', cursor: 'pointer' }}>Shortage</th>
+                    <th style={{ textAlign: 'center', minWidth: '160px' }}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredJCShortages.map((c, idx) => {
+                    const childItem = c.itemObj || items.find(i => i.id === c.itemId || i.itemCode === c.itemCode);
+                    return (
+                      <tr key={idx} style={{ backgroundColor: c.isShortage ? 'rgba(239, 68, 68, 0.06)' : 'transparent' }}>
+                        <td>{idx + 1}</td>
+                        <td style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>
+                          {c.itemCode}
+                          {c.partCode && <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{c.partCode}</div>}
+                        </td>
+                        <td style={{ fontWeight: 600 }}>{c.itemName}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          <span className="badge badge-neutral" style={{ fontSize: '0.7rem' }}>{c.category}</span>
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <span className={`badge ${c.processType === 'Bought out' || c.processType === 'Job work + Bought out' ? 'badge-primary' : c.processType === 'In-house' ? 'badge-success' : 'badge-outline'}`} style={{ fontSize: '0.7rem' }}>
+                            {c.processType}
+                          </span>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '0.72rem' }}>
+                            {(c.requiredByJCs || []).map((req, rIdx) => (
+                              <span key={rIdx} style={{ color: 'var(--text-secondary)' }}>
+                                <strong>{req.jcNo}</strong>: {req.requiredQty} {c.unit}
+                                {req.issuedQty > 0 && <span style={{ color: 'var(--success)', marginLeft: '4px' }}>(Issued: {req.issuedQty})</span>}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                        <td style={{ textAlign: 'right', fontWeight: 700 }}>{c.totalRequired} {c.unit}</td>
+                        <td style={{ textAlign: 'right', color: c.issuedQty > 0 ? 'var(--success)' : 'var(--text-muted)', fontWeight: 600 }}>
+                          {c.issuedQty} {c.unit}
+                        </td>
+                        <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--text-primary)' }}>
+                          {c.netRemainingReq} {c.unit}
+                        </td>
+                        <td style={{ textAlign: 'right', fontWeight: 700 }}>{c.inHouseStock} {c.unit}</td>
+                        <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{c.openPO || 0}</td>
+                        <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{c.pendingJW || 0}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 800, color: c.isShortage ? 'var(--danger)' : 'var(--success)' }}>
+                          {c.isShortage ? `${c.shortage} ${c.unit}` : 'OK (0)'}
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                            {c.isShortage && childItem && (
+                              <>
+                                {(c.processType === 'Bought out' || c.processType === 'Job work + Bought out') && (
+                                  <button type="button" className="btn btn-primary" style={{ padding: '0.15rem 0.35rem', fontSize: '0.68rem' }} onClick={() => handleRaisePO(childItem, c.shortage)}>
+                                    +PO
+                                  </button>
+                                )}
+                                {(c.processType === 'Job work' || c.processType === 'Job work + Bought out') && (
+                                  <button type="button" className="btn btn-outline" style={{ padding: '0.15rem 0.35rem', fontSize: '0.68rem', color: 'var(--accent-primary)' }} onClick={() => handleIssueJobwork(childItem, c.shortage)}>
+                                    +JW
+                                  </button>
+                                )}
+                                {c.processType === 'In-house' && (
+                                  <button type="button" className="btn btn-outline" style={{ padding: '0.15rem 0.35rem', fontSize: '0.68rem', color: 'var(--success)' }} onClick={() => handleIssueJobCard(childItem, c.shortage)}>
+                                    +JC
+                                  </button>
+                                )}
+                              </>
+                            )}
+                            {c.inHouseStock > 0 && c.netRemainingReq > 0 && (
+                              <button
+                                type="button"
+                                className="btn btn-success"
+                                style={{ padding: '0.15rem 0.4rem', fontSize: '0.68rem', fontWeight: 700 }}
+                                onClick={() => setActiveModule('material-issue')}
+                                title="Go to Material Issue & Store to issue available items"
+                              >
+                                Store Issue
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
       )}
 

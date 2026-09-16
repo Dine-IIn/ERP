@@ -6,6 +6,8 @@ import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
 import { pool, isPostgresConnected, initDatabase } from './db.js';
+import { sessionManager } from './sessionManager.js';
+import { autoUpdater } from './updater.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -160,6 +162,7 @@ async function logActivity(userId, username, role, action, module, details, req)
 // ==========================================
 app.get('/api/health', (req, res) => {
   const localIps = getLocalNetworkIps();
+  const updaterStatus = autoUpdater.getStatus();
   res.json({
     status: 'ONLINE',
     system: 'GEC ERP Enterprise Hybrid Server',
@@ -172,8 +175,62 @@ app.get('/api/health', (req, res) => {
     storageDirectory: STORAGE_DIR,
     backupDirectory: BACKUP_DIR,
     stateFile: STATE_FILE,
+    version: updaterStatus.currentVersion,
+    latestVersion: updaterStatus.latestVersion,
+    updateAvailable: updaterStatus.updateAvailable,
+    activeSessionsCount: updaterStatus.activeSessionsCount,
     timestamp: new Date().toISOString()
   });
+});
+
+// ==========================================
+// 1.1 ACTIVE SESSION HEARTBEAT & TRACKING API
+// ==========================================
+app.post('/api/session/heartbeat', (req, res) => {
+  const { sessionId, user, platform } = req.body;
+  const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1';
+  sessionManager.recordHeartbeat(sessionId, user, platform, ip);
+  res.json({ 
+    success: true, 
+    activeSessionsCount: sessionManager.getActiveSessionsCount(),
+    updateAvailable: autoUpdater.getStatus().updateAvailable,
+    latestVersion: autoUpdater.getStatus().latestVersion
+  });
+});
+
+app.post('/api/session/logout', (req, res) => {
+  const { sessionId } = req.body;
+  sessionManager.removeSession(sessionId);
+  res.json({ success: true, activeSessionsCount: sessionManager.getActiveSessionsCount() });
+});
+
+app.get('/api/session/status', (req, res) => {
+  res.json({
+    success: true,
+    activeSessionsCount: sessionManager.getActiveSessionsCount(),
+    sessions: sessionManager.getActiveSessions()
+  });
+});
+
+// ==========================================
+// 1.2 AUTOMATED UPDATES API
+// ==========================================
+app.get('/api/updates/status', (req, res) => {
+  res.json({
+    success: true,
+    ...autoUpdater.getStatus()
+  });
+});
+
+app.post('/api/updates/check-now', async (req, res) => {
+  const result = await autoUpdater.checkForUpdates();
+  res.json({ success: true, ...result, ...autoUpdater.getStatus() });
+});
+
+app.post('/api/updates/apply-now', async (req, res) => {
+  const { force } = req.body;
+  const result = await autoUpdater.applyUpdate(Boolean(force));
+  res.json(result);
 });
 
 // ==========================================

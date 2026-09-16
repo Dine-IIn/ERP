@@ -18,11 +18,9 @@ export const JobCardModule: React.FC = () => {
     searchTerm, setSearchTerm 
   } = useERP();
 
-  const [activeMainTab, setActiveMainTab] = useState<'JOB_CARDS' | 'REISSUES'>('JOB_CARDS');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingJC, setEditingJC] = useState<JobCard | null>(null);
-  const [isReissueModalOpen, setIsReissueModalOpen] = useState(false);
   const [isShortageWizardOpen, setIsShortageWizardOpen] = useState(false);
   const [isExplodeShortage, setIsExplodeShortage] = useState(false);
   const [isShortagePrintOpen, setIsShortagePrintOpen] = useState(false);
@@ -60,18 +58,6 @@ export const JobCardModule: React.FC = () => {
   const [targetQuantity, setTargetQuantity] = useState(1);
   const [assignedOperator, setAssignedOperator] = useState('');
   const [remarks, setRemarks] = useState('');
-
-  // Material Re-Issue Form State
-  const [reissueForm, setReissueForm] = useState({
-    workerName: '',
-    supervisorName: '',
-    reason: 'Damaged during machining / assembly',
-    itemId: '',
-    quantity: 1,
-    jobCardId: '',
-    notes: ''
-  });
-  const [reissueItemSearch, setReissueItemSearch] = useState('');
 
   // Helper: Item Work Order Demand (Multi-Level Exploded & woComponents supported)
   const getItemWorkOrderDemand = (itemId: string, itemCode: string) => {
@@ -371,56 +357,6 @@ export const JobCardModule: React.FC = () => {
     closeJobCard(jc.id);
   };
 
-  const handleSaveMaterialReissue = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!reissueForm.workerName.trim()) {
-      alert('Please enter worker / operator name.');
-      return;
-    }
-    if (!reissueForm.itemId) {
-      alert('Please select an item to re-issue.');
-      return;
-    }
-    const itemObj = items.find(i => i.id === reissueForm.itemId);
-    if (!itemObj) return;
-
-    if (itemObj.inHouseStock < reissueForm.quantity) {
-      alert(`⚠️ Insufficient store stock! Available: ${itemObj.inHouseStock} ${itemObj.unit}, Requested: ${reissueForm.quantity} ${itemObj.unit}.`);
-      return;
-    }
-
-    const matchingJC = jobCards.find(j => j.id === reissueForm.jobCardId);
-
-    addJobCardMaterialReissue({
-      jobCardId: matchingJC?.id || 'DIRECT',
-      jobCardNo: matchingJC?.jobCardNo || '-',
-      workerName: reissueForm.workerName,
-      supervisorName: reissueForm.supervisorName || currentUser?.fullName || 'Supervisor',
-      itemId: itemObj.id,
-      itemCode: itemObj.itemCode,
-      itemName: itemObj.name,
-      quantity: Number(reissueForm.quantity),
-      unit: itemObj.unit,
-      reason: reissueForm.reason,
-      issuedDate: new Date().toISOString().split('T')[0],
-      status: 'ISSUED',
-      notes: reissueForm.notes
-    });
-
-    setIsReissueModalOpen(false);
-    setReissueForm({
-      workerName: '',
-      supervisorName: '',
-      reason: 'Damaged during machining / assembly',
-      itemId: '',
-      quantity: 1,
-      jobCardId: '',
-      notes: ''
-    });
-    setReissueItemSearch('');
-    alert(`✅ Material Re-Issue logged successfully! ${reissueForm.quantity} ${itemObj.unit} of ${itemObj.itemCode} deducted from in-house stock.`);
-  };
-
   // Handlers for Edit, Reopen, and Soft-Delete
   const handleOpenEditModal = (jc: JobCard) => {
     setEditingJC(JSON.parse(JSON.stringify(jc)));
@@ -632,21 +568,14 @@ export const JobCardModule: React.FC = () => {
               </h2>
             </>
           ) : (
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              <button 
-                className={`btn ${activeMainTab === 'JOB_CARDS' ? 'btn-primary' : 'btn-outline'}`}
-                style={{ fontWeight: 700, padding: '0.45rem 1rem', fontSize: '0.88rem' }}
-                onClick={() => setActiveMainTab('JOB_CARDS')}
-              >
-                📋 Job Cards ({jobCards.length})
-              </button>
-              <button 
-                className={`btn ${activeMainTab === 'REISSUES' ? 'btn-primary' : 'btn-outline'}`}
-                style={{ fontWeight: 700, padding: '0.45rem 1rem', fontSize: '0.88rem' }}
-                onClick={() => setActiveMainTab('REISSUES')}
-              >
-                🛠️ Material Re-Issue ({(jobCardMaterialReissues || []).length})
-              </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-primary)' }}>
+                <ClipboardList size={22} color="var(--accent-primary)" />
+                Job Cards (Assembly)
+              </h2>
+              <span className="badge badge-primary" style={{ fontSize: '0.74rem' }}>
+                {jobCards.length} Cards
+              </span>
             </div>
           )}
         </div>
@@ -655,18 +584,7 @@ export const JobCardModule: React.FC = () => {
           <button type="button" className="btn btn-outline" onClick={handlePrintJCList} title="Print filtered job cards report">
             <Printer size={14} /> Print Report
           </button>
-          {activeMainTab === 'REISSUES' && !isShortageWizardOpen && (
-            <button 
-              type="button"
-              className="btn btn-warning" 
-              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.9rem', color: '#fff', backgroundColor: '#d97706', borderColor: '#d97706', fontWeight: 700 }} 
-              onClick={() => setIsReissueModalOpen(true)}
-            >
-              <Package size={15} />
-              <span>🛠️ Material Re-Issue</span>
-            </button>
-          )}
-          {activeMainTab === 'JOB_CARDS' && !isShortageWizardOpen && (
+          {!isShortageWizardOpen && (
             <>
               <button 
                 type="button"
@@ -882,84 +800,7 @@ export const JobCardModule: React.FC = () => {
       </div>
 
       {/* Main Table Views */}
-      {activeMainTab === 'REISSUES' ? (
-        <div className="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th>Re-Issue ID</th>
-                <th>Date & Time</th>
-                <th>Worker / Operator</th>
-                <th>Supervisor / Allocator</th>
-                <th>Item Re-Issued</th>
-                <th>Quantity</th>
-                <th>Reason / Root Cause</th>
-                <th>Linked Job Card</th>
-                <th>Audit Notes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(!jobCardMaterialReissues || jobCardMaterialReissues.length === 0) ? (
-                <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-muted)' }}>
-                    No Material Re-Issues recorded yet. Click "🛠️ Material Re-Issue (Lost/Damaged Goods)" to log replacement items for damaged or lost shopfloor components.
-                  </td>
-                </tr>
-              ) : (
-                jobCardMaterialReissues
-                  .filter(r => {
-                    if (!cleanSearchTerm) return true;
-                    return (
-                      r.reissueNo.toLowerCase().includes(cleanSearchTerm) ||
-                      r.workerName.toLowerCase().includes(cleanSearchTerm) ||
-                      r.itemCode.toLowerCase().includes(cleanSearchTerm) ||
-                      r.itemName.toLowerCase().includes(cleanSearchTerm) ||
-                      r.reason.toLowerCase().includes(cleanSearchTerm) ||
-                      (r.jobCardNo && r.jobCardNo.toLowerCase().includes(cleanSearchTerm))
-                    );
-                  })
-                  .map(reissue => (
-                    <tr key={reissue.id}>
-                      <td style={{ fontWeight: 700, fontFamily: 'monospace', color: 'var(--warning)' }}>
-                        {reissue.reissueNo}
-                      </td>
-                      <td style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                        {reissue.issuedDate}
-                      </td>
-                      <td style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
-                        👤 {reissue.workerName}
-                      </td>
-                      <td style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                        {reissue.supervisorName}
-                      </td>
-                      <td>
-                        <strong>{reissue.itemName}</strong>
-                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
-                          {reissue.itemCode}
-                        </div>
-                      </td>
-                      <td style={{ fontWeight: 800, color: 'var(--danger)', fontSize: '0.95rem' }}>
-                        {reissue.quantity} {reissue.unit}
-                      </td>
-                      <td>
-                        <span className="badge badge-warning" style={{ fontSize: '0.75rem' }}>
-                          {reissue.reason}
-                        </span>
-                      </td>
-                      <td style={{ fontFamily: 'monospace', color: 'var(--accent-primary)', fontWeight: 600 }}>
-                        {reissue.jobCardNo || '-'}
-                      </td>
-                      <td style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                        {reissue.notes || '-'}
-                      </td>
-                    </tr>
-                  ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="table-container">
+      <div className="table-container">
           <table>
             <thead>
               <tr>
@@ -1126,7 +967,6 @@ export const JobCardModule: React.FC = () => {
             </tbody>
           </table>
         </div>
-      )}
       </>
       )}
 
@@ -1268,153 +1108,7 @@ export const JobCardModule: React.FC = () => {
         </Modal>
       )}
 
-      {/* Modal: Material Re-Issue / Damaged Goods Replacement */}
-      {isReissueModalOpen && (
-        <Modal 
-          isOpen={isReissueModalOpen} 
-          onClose={() => setIsReissueModalOpen(false)} 
-          title="🛠️ Re-Issue Shopfloor Material (Lost / Damaged Goods Replacement)"
-        >
-          <form onSubmit={handleSaveMaterialReissue} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div style={{ padding: '0.65rem 0.85rem', backgroundColor: 'rgba(217, 119, 6, 0.1)', border: '1px solid #d97706', borderRadius: '0.375rem', fontSize: '0.8rem', color: '#d97706' }}>
-              <strong>📋 Material Re-Issue System:</strong> This will register an audit record and automatically deduct the replacement components from physical In-House Store inventory.
-            </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              <div>
-                <label style={{ fontSize: '0.82rem', fontWeight: 700 }}>Worker / Operator Name *</label>
-                <input 
-                  type="text" 
-                  required 
-                  className="input-field" 
-                  placeholder="e.g. Ramesh Patel / Assembly Lead"
-                  value={reissueForm.workerName} 
-                  onChange={(e) => setReissueForm({ ...reissueForm, workerName: e.target.value })} 
-                />
-              </div>
-              <div>
-                <label style={{ fontSize: '0.82rem', fontWeight: 700 }}>Supervisor / Allocator</label>
-                <input 
-                  type="text" 
-                  className="input-field" 
-                  placeholder="e.g. Production Manager"
-                  value={reissueForm.supervisorName} 
-                  onChange={(e) => setReissueForm({ ...reissueForm, supervisorName: e.target.value })} 
-                />
-              </div>
-            </div>
-
-            <div>
-              <label style={{ fontSize: '0.82rem', fontWeight: 700 }}>Reason / Cause for Re-Issue *</label>
-              <input 
-                type="text" 
-                required
-                className="input-field" 
-                placeholder="Enter reason / cause for re-issue (e.g. Broken in transport, damaged during machining)..."
-                value={reissueForm.reason} 
-                onChange={(e) => setReissueForm({ ...reissueForm, reason: e.target.value })}
-              />
-            </div>
-
-            {/* Item Selection with Search Bar */}
-            <div>
-              <label style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--accent-primary)' }}>Select Replacement Item *</label>
-              <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.35rem' }}>
-                <input 
-                  type="text" 
-                  placeholder="🔍 Search items by code, name, category..." 
-                  className="input-field"
-                  style={{ fontSize: '0.8rem', padding: '0.35rem 0.6rem' }}
-                  value={reissueItemSearch}
-                  onChange={(e) => setReissueItemSearch(e.target.value)}
-                />
-              </div>
-              <select 
-                className="input-field" 
-                required 
-                value={reissueForm.itemId} 
-                onChange={(e) => setReissueForm({ ...reissueForm, itemId: e.target.value })}
-              >
-                <option value="" disabled>-- Select Replacement Component from Store --</option>
-                {items
-                  .filter(it => !it.isBlocked)
-                  .filter(it => {
-                    if (!reissueItemSearch.trim()) return true;
-                    const term = reissueItemSearch.toLowerCase();
-                    return it.itemCode.toLowerCase().includes(term) || it.name.toLowerCase().includes(term) || it.category.toLowerCase().includes(term);
-                  })
-                  .map(it => (
-                    <option key={it.id} value={it.id}>
-                      {it.itemCode} - {it.name} [{it.category}] (Stock: {it.inHouseStock} {it.unit})
-                    </option>
-                  ))}
-              </select>
-            </div>
-
-            {/* Item Stock and Quantity */}
-            {(() => {
-              const selItem = items.find(i => i.id === reissueForm.itemId);
-              return (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <div>
-                    <label style={{ fontSize: '0.82rem', fontWeight: 700 }}>
-                      Quantity to Re-Issue {selItem ? `(${selItem.unit})` : ''} *
-                    </label>
-                    <input 
-                      type="number" 
-                      min="1" 
-                      max={selItem?.inHouseStock || 9999}
-                      required 
-                      className="input-field" 
-                      value={reissueForm.quantity === 0 ? '' : reissueForm.quantity} 
-                      onChange={(e) => setReissueForm({ ...reissueForm, quantity: e.target.value === '' ? 0 : Number(e.target.value) })}
-                      onBlur={(e) => { if (!e.target.value || Number(e.target.value) < 1) setReissueForm({ ...reissueForm, quantity: 1 }); }} 
-                    />
-                    {selItem && (
-                      <div style={{ fontSize: '0.72rem', color: selItem.inHouseStock < reissueForm.quantity ? 'var(--danger)' : 'var(--text-muted)', marginTop: '0.2rem' }}>
-                        In-House Stock Available: <strong>{selItem.inHouseStock} {selItem.unit}</strong>
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.82rem', fontWeight: 700 }}>Linked Job Card (Optional)</label>
-                    <select 
-                      className="input-field" 
-                      value={reissueForm.jobCardId} 
-                      onChange={(e) => setReissueForm({ ...reissueForm, jobCardId: e.target.value })}
-                    >
-                      <option value="">-- No Direct Job Card Linked --</option>
-                      {jobCards.filter(j => j.status !== 'COMPLETED').map(jc => (
-                        <option key={jc.id} value={jc.id}>
-                          {jc.jobCardNo} - {jc.itemName} ({jc.assignedOperator})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              );
-            })()}
-
-            <div>
-              <label style={{ fontSize: '0.82rem', fontWeight: 700 }}>Investigation Notes / Remarks</label>
-              <input 
-                type="text" 
-                className="input-field" 
-                placeholder="e.g. Dropped from crane assembly clamp during alignment"
-                value={reissueForm.notes} 
-                onChange={(e) => setReissueForm({ ...reissueForm, notes: e.target.value })} 
-              />
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setIsReissueModalOpen(false)}>Cancel</button>
-              <button type="submit" className="btn btn-warning" style={{ backgroundColor: '#d97706', borderColor: '#d97706', color: '#fff', fontWeight: 700 }}>
-                ✓ Approve & Deduct From In-House Store
-              </button>
-            </div>
-          </form>
-        </Modal>
-      )}
 
       {/* Feature-Wise Modular Print Manager Modal */}
       <PrintManagerModal

@@ -9,7 +9,7 @@
       "isSuperAdmin": true,
       "is_admin": true,
       "password": "GEC_SuperAdmin#2026!Secured$",
-      "desktopSessionId": "sess-1789461183746-0.431381907959582"
+      "desktopSessionId": "sess-1789503072405-0.8424831693173997"
     },
     {
       "id": "usr-admin",
@@ -18833,326 +18833,51 @@
   "intermediateProcessItems": [],
   "auditLogs": [
     {
-      "id": "log-1789465450487-8m9zrz",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "ADJUST_STOCK",
-      "module": "In-House Inventory",
-      "details": "Adjusted stock for GEC0000011: 50 -> 1 NOS (Reason: Physical Count Audit)",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-15T09:44:10.487Z"
-    },
-    {
-      "id": "log-1789465443627-bwqmgy",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "ADJUST_STOCK",
-      "module": "In-House Inventory",
-      "details": "Adjusted stock for GEC0000010: 50 -> 1 NOS (Reason: Physical Count Audit)",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-15T09:44:03.627Z"
-    },
-    {
-      "id": "log-1789462103158-yin5do",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "ADJUST_STOCK",
-      "module": "In-House Inventory",
-      "details": "Adjusted stock for GEC0000005: 5 -> 1 NOS (Reason: Physical Count Audit)",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-15T08:48:23.158Z"
-    },
-    {
-      "id": "log-1789454269029-nvcizq",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "DELETE_JOB_CARD",
-      "module": "Job Cards",
-      "details": "Soft-deleted Job Card JCAJCG0002 (Archived to history).",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-15T06:37:49.029Z"
-    },
-    {
-      "id": "log-1789451718827-bw33co",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "GENERATE_WO",
-      "module": "Work Orders",
-      "details": "Generated Work Order WOAJCG0005 from Sales Order SOAJCG0005",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-15T05:55:18.827Z"
-    },
-    {
-      "id": "log-1789451718827-jbjh4p",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "UPDATE_SO_STATUS",
-      "module": "Sales Orders",
-      "details": "Updated status for SO SOAJCG0005 to WO_GENERATED",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-15T05:55:18.827Z"
-    },
-    {
-      "id": "log-1789451716818-e6s96v",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "CREATE_SO",
-      "module": "Sales Orders",
-      "details": "Created Sales Order SOAJCG0005 for  (1x GEC0000001 - NEO PRIME 90 - 280 TON)",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-15T05:55:16.818Z"
-    },
-    {
-      "id": "log-1789449944616-o01i82",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "GENERATE_WO",
-      "module": "Work Orders",
-      "details": "Generated Work Order WOAJCG0004 from Sales Order SOAJCG0004",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-15T05:25:44.616Z"
-    },
-    {
-      "id": "log-1789449944616-tpzczs",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "UPDATE_SO_STATUS",
-      "module": "Sales Orders",
-      "details": "Updated status for SO SOAJCG0004 to WO_GENERATED",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-15T05:25:44.616Z"
-    },
-    {
-      "id": "log-1789449942777-ut6z0y",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "CREATE_SO",
-      "module": "Sales Orders",
-      "details": "Created Sales Order SOAJCG0004 for  (1x GEC0000001 - NEO PRIME 90 - 280 TON)",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-15T05:25:42.777Z"
-    },
-    {
-      "id": "log-1789449870742-o0t06o",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "GENERATE_WO",
-      "module": "Work Orders",
-      "details": "Generated Work Order WOAJCG0003 from Sales Order SOAJCG0003",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-15T05:24:30.742Z"
-    },
-    {
-      "id": "log-1789449870742-4rm4dx",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "UPDATE_SO_STATUS",
-      "module": "Sales Orders",
-      "details": "Updated status for SO SOAJCG0003 to WO_GENERATED",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-15T05:24:30.742Z"
-    },
-    {
-      "id": "log-1789449868625-6tf18k",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "CREATE_SO",
-      "module": "Sales Orders",
-      "details": "Created Sales Order SOAJCG0003 for  (1x GEC0000001 - NEO PRIME 90 - 280 TON)",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-15T05:24:28.625Z"
-    },
-    {
-      "id": "log-1789368734986-qfezep",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "ADJUST_STOCK",
-      "module": "In-House Inventory",
-      "details": "Adjusted stock for GEC0000116: 15 -> 1 NOS (Reason: Physical Count Audit)",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-14T06:52:14.986Z"
-    },
-    {
-      "id": "log-1789303675472-m89v25",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "CREATE_GRN",
-      "module": "Goods Received",
-      "details": "Created GRN GRNAJCG0001 (1 item lines) - Status: NO_QC",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T12:47:55.472Z"
-    },
-    {
-      "id": "log-1789303675472-nmbzp2",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "AUTO_JOBWORK_CHALLAN",
-      "module": "Goods Received",
-      "details": "Generated direct Job Work Challan JW-DIR-5472 for vendor Apex Precision VMC Machinists",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T12:47:55.472Z"
-    },
-    {
-      "id": "log-1789299823627-98y6mo",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "UPDATE_PO_STATUS",
-      "module": "Purchase Orders",
-      "details": "Updated PO status to APPROVED",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:43:43.627Z"
-    },
-    {
-      "id": "log-1789299820737-v1641k",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "UPDATE_PO_STATUS",
-      "module": "Purchase Orders",
-      "details": "Updated PO status to APPROVED",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:43:40.737Z"
-    },
-    {
-      "id": "log-1789299817137-9nse8e",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "SEND_PO_FOR_APPROVAL",
-      "module": "Purchase Orders",
-      "details": "Submitted 2 PO draft(s) for manager approval.",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:43:37.137Z"
-    },
-    {
-      "id": "log-1789299728250-x93wng",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "GENERATE_WO",
-      "module": "Work Orders",
-      "details": "Generated Work Order WOAJCG0002 from Sales Order SOAJCG0001",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:42:08.250Z"
-    },
-    {
-      "id": "log-1789299728250-q8a6h8",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "UPDATE_SO_STATUS",
-      "module": "Sales Orders",
-      "details": "Updated status for SO SOAJCG0001 to WO_GENERATED",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:42:08.250Z"
-    },
-    {
-      "id": "log-1789299723008-wyekfg",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "GENERATE_WO",
-      "module": "Work Orders",
-      "details": "Generated Work Order WOAJCG0001 from Sales Order SOAJCG0002",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:42:03.008Z"
-    },
-    {
-      "id": "log-1789299723008-yshc8s",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "UPDATE_SO_STATUS",
-      "module": "Sales Orders",
-      "details": "Updated status for SO SOAJCG0002 to WO_GENERATED",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:42:03.008Z"
-    },
-    {
-      "id": "log-1789299721500-kzclmf",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "CREATE_SO",
-      "module": "Sales Orders",
-      "details": "Created Sales Order SOAJCG0002 for  (5x GEC0000002 - NEO PRIME 110 - 420 TON)",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:42:01.500Z"
-    },
-    {
-      "id": "log-1789299711627-i7o877",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "CREATE_SO",
-      "module": "Sales Orders",
-      "details": "Created Sales Order SOAJCG0001 for  (5x GEC0000001 - NEO PRIME 90 - 280 TON)",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:41:51.627Z"
-    },
-    {
-      "id": "log-1789299690496-dzlyuy",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "MASS_UPSERT_BOMS",
-      "module": "Super Admin Data Hub",
-      "details": "Upserted/merged 10 BOMs.",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:41:30.496Z"
-    },
-    {
-      "id": "log-1789299681908-jm23y4",
+      "id": "log-1789474112991-3mk67k",
       "userId": "usr-superadmin",
       "username": "GEC System Super Admin (superadmin)",
       "role": "Admin",
       "action": "MASS_UPSERT_PROCESSES",
       "module": "Super Admin Data Hub",
-      "details": "Upserted/merged 13 process operations.",
+      "details": "Upserted/merged 24 process operations.",
       "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:41:21.908Z"
+      "timestamp": "2026-09-15T12:08:32.991Z"
     },
     {
-      "id": "log-1789299681908-0wmt5h",
+      "id": "log-1789474112991-v41rtc",
       "userId": "usr-superadmin",
       "username": "GEC System Super Admin (superadmin)",
       "role": "Admin",
       "action": "MASS_UPSERT_PROCESS_CARDS",
       "module": "Super Admin Data Hub",
-      "details": "Upserted 23 Process Routing Cards.",
+      "details": "Upserted 28 Process Routing Cards.",
       "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:41:21.908Z"
+      "timestamp": "2026-09-15T12:08:32.991Z"
     },
     {
-      "id": "log-1789299672527-tfqy4s",
+      "id": "log-1789473929887-84adv8",
+      "userId": "usr-superadmin",
+      "username": "GEC System Super Admin (superadmin)",
+      "role": "Admin",
+      "action": "MASS_UPSERT_BOMS",
+      "module": "Super Admin Data Hub",
+      "details": "Upserted/merged 16 BOMs.",
+      "ipAddress": "127.0.0.1",
+      "timestamp": "2026-09-15T12:05:29.887Z"
+    },
+    {
+      "id": "log-1789473918540-boeur3",
       "userId": "usr-superadmin",
       "username": "GEC System Super Admin (superadmin)",
       "role": "Admin",
       "action": "MASS_UPSERT_ITEMS",
       "module": "Super Admin Data Hub",
-      "details": "Upserted/merged 302 items without duplicates.",
+      "details": "Upserted/merged 341 items without duplicates.",
       "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:41:12.527Z"
+      "timestamp": "2026-09-15T12:05:18.540Z"
     },
     {
-      "id": "log-1789299662406-xfk7yq",
+      "id": "log-1789473899897-zrc5t9",
       "userId": "usr-superadmin",
       "username": "GEC System Super Admin (superadmin)",
       "role": "Admin",
@@ -19160,249 +18885,7 @@
       "module": "Super Admin Data Hub",
       "details": "Upserted/merged 12 vendors.",
       "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:41:02.406Z"
-    },
-    {
-      "id": "log-1789299632296-wojb6z",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "MASS_UPSERT_BOMS",
-      "module": "Super Admin Data Hub",
-      "details": "Upserted/merged 0 BOMs.",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:40:32.296Z"
-    },
-    {
-      "id": "log-1789299632296-k77kiz",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "MASS_UPSERT_BOMS",
-      "module": "Super Admin Data Hub",
-      "details": "Upserted/merged 0 BOMs.",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:40:32.296Z"
-    },
-    {
-      "id": "log-1789299632296-nz6buk",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "MASS_UPSERT_BOMS",
-      "module": "Super Admin Data Hub",
-      "details": "Upserted/merged 0 BOMs.",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:40:32.296Z"
-    },
-    {
-      "id": "log-1789299632296-9zgoon",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "MASS_UPSERT_BOMS",
-      "module": "Super Admin Data Hub",
-      "details": "Upserted/merged 0 BOMs.",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:40:32.296Z"
-    },
-    {
-      "id": "log-1789299632296-wi4ern",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "MASS_UPSERT_BOMS",
-      "module": "Super Admin Data Hub",
-      "details": "Upserted/merged 0 BOMs.",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:40:32.296Z"
-    },
-    {
-      "id": "log-1789299632296-mzza8n",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "MASS_UPSERT_BOMS",
-      "module": "Super Admin Data Hub",
-      "details": "Upserted/merged 0 BOMs.",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:40:32.296Z"
-    },
-    {
-      "id": "log-1789299632296-kxbf5t",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "MASS_UPSERT_BOMS",
-      "module": "Super Admin Data Hub",
-      "details": "Upserted/merged 0 BOMs.",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:40:32.296Z"
-    },
-    {
-      "id": "log-1789299632296-qs3jfn",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "MASS_UPSERT_BOMS",
-      "module": "Super Admin Data Hub",
-      "details": "Upserted/merged 0 BOMs.",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:40:32.296Z"
-    },
-    {
-      "id": "log-1789299632296-eh3urn",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "MASS_UPSERT_BOMS",
-      "module": "Super Admin Data Hub",
-      "details": "Upserted/merged 0 BOMs.",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:40:32.296Z"
-    },
-    {
-      "id": "log-1789299632296-uo9ucx",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "MASS_UPSERT_BOMS",
-      "module": "Super Admin Data Hub",
-      "details": "Upserted/merged 0 BOMs.",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:40:32.296Z"
-    },
-    {
-      "id": "log-1789299632296-9du8cc",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "MASS_UPSERT_BOMS",
-      "module": "Super Admin Data Hub",
-      "details": "Upserted/merged 0 BOMs.",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:40:32.296Z"
-    },
-    {
-      "id": "log-1789299605836-1zlq1h",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "MASS_UPSERT_BOMS",
-      "module": "Super Admin Data Hub",
-      "details": "Upserted/merged 0 BOMs.",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:40:05.836Z"
-    },
-    {
-      "id": "log-1789299605836-y5i50b",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "MASS_UPSERT_BOMS",
-      "module": "Super Admin Data Hub",
-      "details": "Upserted/merged 0 BOMs.",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:40:05.836Z"
-    },
-    {
-      "id": "log-1789299605836-6xe4ey",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "MASS_UPSERT_BOMS",
-      "module": "Super Admin Data Hub",
-      "details": "Upserted/merged 0 BOMs.",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:40:05.836Z"
-    },
-    {
-      "id": "log-1789299605836-rru409",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "MASS_UPSERT_BOMS",
-      "module": "Super Admin Data Hub",
-      "details": "Upserted/merged 0 BOMs.",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:40:05.836Z"
-    },
-    {
-      "id": "log-1789299605836-d6joly",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "MASS_UPSERT_BOMS",
-      "module": "Super Admin Data Hub",
-      "details": "Upserted/merged 0 BOMs.",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:40:05.836Z"
-    },
-    {
-      "id": "log-1789299605836-m8n94a",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "MASS_UPSERT_BOMS",
-      "module": "Super Admin Data Hub",
-      "details": "Upserted/merged 0 BOMs.",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:40:05.836Z"
-    },
-    {
-      "id": "log-1789299605836-r2zev0",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "MASS_UPSERT_BOMS",
-      "module": "Super Admin Data Hub",
-      "details": "Upserted/merged 0 BOMs.",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:40:05.836Z"
-    },
-    {
-      "id": "log-1789299605836-5rspc7",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "MASS_UPSERT_BOMS",
-      "module": "Super Admin Data Hub",
-      "details": "Upserted/merged 0 BOMs.",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:40:05.836Z"
-    },
-    {
-      "id": "log-1789299605836-cc39wl",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "MASS_UPSERT_BOMS",
-      "module": "Super Admin Data Hub",
-      "details": "Upserted/merged 0 BOMs.",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:40:05.836Z"
-    },
-    {
-      "id": "log-1789299605836-19ynpe",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "MASS_UPSERT_BOMS",
-      "module": "Super Admin Data Hub",
-      "details": "Upserted/merged 0 BOMs.",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:40:05.836Z"
-    },
-    {
-      "id": "log-1789299605836-44qujh",
-      "userId": "usr-superadmin",
-      "username": "GEC System Super Admin (superadmin)",
-      "role": "Admin",
-      "action": "MASS_UPSERT_BOMS",
-      "module": "Super Admin Data Hub",
-      "details": "Upserted/merged 0 BOMs.",
-      "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-13T11:40:05.836Z"
+      "timestamp": "2026-09-15T12:04:59.897Z"
     },
     {
       "id": "log-init",
@@ -19411,13 +18894,25 @@
       "action": "SYSTEM_BOOT",
       "module": "Security & Auth",
       "details": "GEC ERP Enterprise Engine initialized with secure PostgreSQL sync.",
-      "timestamp": "2026-09-13T11:37:03.501Z"
+      "timestamp": "2026-09-15T12:03:54.075Z"
     }
   ],
-  "backups": [],
+  "backups": [
+    {
+      "id": "bak-1789546617332",
+      "fileName": "GEC_ERP_BACKUP_2026-09-16T08-16-57-311Z.json",
+      "filePath": "D:\\ERP\\GEC_ERP\\backups\\GEC_ERP_BACKUP_2026-09-16T08-16-57-311Z.json",
+      "fileSizeKb": 540,
+      "backupType": "SCHEDULED",
+      "status": "SUCCESS",
+      "createdAt": "2026-09-16T08:16:57.332Z"
+    }
+  ],
   "backupSettings": {
     "cycleValue": 2,
     "cycleUnit": "Days",
-    "retentionLife": "Infinite"
-  }
+    "retentionLife": "Infinite",
+    "lastBackupDate": "2026-09-16T08:16:57.332Z"
+  },
+  "materialIssueRecords": []
 }

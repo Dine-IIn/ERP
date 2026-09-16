@@ -452,6 +452,8 @@ export interface WOCustomComponent {
   itemName?: string;
   qty?: number;
   qtyRequired?: number;
+  qtyPerMachine?: number;
+  issuedQty?: number;
   unit?: string;
   subAssemblyTag?: string;
   isCustomExtra?: boolean;
@@ -476,12 +478,14 @@ export interface WorkOrder {
   machineModel: string;
   targetQuantity?: number;
   completedQuantity?: number;
+  orderDate?: string;
   startDate?: string;
   targetCompletionDate?: string;
   status: WOStatus;
   assignedSupervisor?: string;
   bomId: string;
   notes?: string;
+  isDeleted?: boolean;
 }
 
 export type QCStatus = 'PENDING' | 'IN_INSPECTION' | 'APPROVED' | 'REJECTED' | 'CONDITIONAL_APPROVAL';
@@ -767,6 +771,7 @@ export interface JobCardMaterialReissue {
   reissueNo: string;
   jobCardId: string;
   jobCardNo?: string;
+  woId?: string;
   woNumber?: string;
   itemId: string;
   itemCode: string;
@@ -779,6 +784,24 @@ export interface JobCardMaterialReissue {
   customReason?: string;
   issuedDate: string;
   status: 'ISSUED' | 'APPROVED';
+  notes?: string;
+}
+
+export interface MaterialIssueRecord {
+  id: string;
+  issueNo: string;
+  type: 'JOB_CARD' | 'WORK_ORDER' | 'MANUAL';
+  referenceId: string;
+  referenceNo: string;
+  machineModel?: string;
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  issuedQty: number;
+  unit: string;
+  issuedDate: string;
+  issuedBy: string;
+  issuedTo?: string;
   notes?: string;
 }
 

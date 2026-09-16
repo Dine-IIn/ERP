@@ -5,7 +5,7 @@ import {
   PurchaseOrder, GoodsReceivedNotice, WorkOrder, 
   QCInspection, QCType, MachineAssembly, BOM, SalesOrder, Role, Department, CustomRole,
   JobCard, FloorStation, FinishedGoodUnit, DispatchRecord, UserActivityLog, BackupRecord, RBAC_FEATURES,
-  JobCardMaterialReissue, POItem, POStatus, SystemErrorLog,
+  JobCardMaterialReissue, MaterialIssueRecord, POItem, POStatus, SystemErrorLog,
   ProcessDefinition, ItemProcessCard, IntermediateProcessItem, VendorDebitChallan,
   MaterialProcessSource,
   generateNextPONumber, generateNextJobworkNumber, generateNextQCNumber,
@@ -159,6 +159,9 @@ interface ERPContextType {
   addJobCardMaterialReissue: (reissue: Omit<JobCardMaterialReissue, 'id' | 'reissueNo'>) => void;
   resubmitPOForApproval: (poId: string, updatedItems?: POItem[], notes?: string) => void;
   setSearchTerm: (term: string) => void;
+  isMobileNavOpen: boolean;
+  setIsMobileNavOpen: (open: boolean) => void;
+  toggleMobileNav: () => void;
   setActiveModule: (moduleKey: string) => void;
   toggleTheme: () => void;
   
@@ -240,6 +243,12 @@ interface ERPContextType {
   reopenJobCard: (id: string) => void;
   deleteJobCard: (id: string) => boolean;
   createExchangeJobCard: (woId: string, returnParts: any[], newParts: any[]) => void;
+
+  // Material Issue Methods
+  materialIssueRecords: MaterialIssueRecord[];
+  issueMaterialForJobCard: (jcId: string, itemId: string, qty: number, issuedTo?: string, notes?: string) => boolean;
+  issueMaterialForWorkOrder: (woId: string, itemId: string, qty: number, issuedTo?: string, notes?: string) => boolean;
+  issueAllAvailableForCard: (cardType: 'JOB_CARD' | 'WORK_ORDER', cardId: string, issuedTo?: string) => number;
 
   // Floor Planning Methods
   addFloorStation: (station: Omit<FloorStation, 'id'>) => void;
@@ -764,6 +773,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [selectedWOIdForEdit, setSelectedWOIdForEdit] = useState<string | null>(null);
   const [selectedBOMIdForView, setSelectedBOMIdForView] = useState<string | null>(null);
   const [jobCardMaterialReissues, setJobCardMaterialReissues] = useState<JobCardMaterialReissue[]>(() => getStored('jobCardMaterialReissues', []));
+  const [materialIssueRecords, setMaterialIssueRecords] = useState<MaterialIssueRecord[]>(() => getStored('materialIssueRecords', []));
 
   const openWOInEditor = (woId: string) => {
     setSelectedWOIdForEdit(woId);
@@ -839,6 +849,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => syncEntityHelper('assemblyStages', assemblyStages), [assemblyStages, isServerHydrated]);
   useEffect(() => syncEntityHelper('jobCards', jobCards), [jobCards, isServerHydrated]);
   useEffect(() => syncEntityHelper('jobCardMaterialReissues', jobCardMaterialReissues), [jobCardMaterialReissues, isServerHydrated]);
+  useEffect(() => syncEntityHelper('materialIssueRecords', materialIssueRecords), [materialIssueRecords, isServerHydrated]);
   useEffect(() => syncEntityHelper('floorStations', floorStations), [floorStations, isServerHydrated]);
   useEffect(() => syncEntityHelper('finishedGoods', finishedGoods), [finishedGoods, isServerHydrated]);
   useEffect(() => syncEntityHelper('dispatchRecords', dispatchRecords), [dispatchRecords, isServerHydrated]);
@@ -858,11 +869,14 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [theme]);
 
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState<boolean>(false);
+  const toggleMobileNav = () => setIsMobileNavOpen(prev => !prev);
   const toggleTheme = () => setTheme(prev => prev === 'dark' ? 'light' : 'dark');
 
   const setActiveModule = (moduleKey: string) => {
     setActiveModuleState(moduleKey);
     setSearchTerm('');
+    setIsMobileNavOpen(false);
   };
 
   // 15-min Persistent Inactivity Auto-Logout for Web & Desktop (Tauri)
@@ -1454,17 +1468,22 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const targetJC = jobCards.find(jc => jc.id === id);
     if (!targetJC) return;
 
-    // Deduct consumed components from inventory
+    // Deduct any remaining unissued components from inventory
     targetJC.components.forEach(comp => {
-      setItems(prevItems => prevItems.map(i => {
-        if (i.id === comp.itemId || i.itemCode === comp.itemCode) {
-          return {
-            ...i,
-            inHouseStock: Math.max(0, i.inHouseStock - (comp.qtyPerUnit * targetJC.targetQuantity))
-          };
-        }
-        return i;
-      }));
+      const required = comp.totalRequiredQty || (comp.qtyPerUnit * targetJC.targetQuantity);
+      const alreadyIssued = comp.issuedQty || 0;
+      const unissuedRemaining = Math.max(0, required - alreadyIssued);
+      if (unissuedRemaining > 0) {
+        setItems(prevItems => prevItems.map(i => {
+          if (i.id === comp.itemId || i.itemCode === comp.itemCode) {
+            return {
+              ...i,
+              inHouseStock: Math.max(0, i.inHouseStock - unissuedRemaining)
+            };
+          }
+          return i;
+        }));
+      }
     });
 
     // Credit finished assembly/sub-assembly item to in-house stock
@@ -1642,6 +1661,176 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setJobCards(prev => [exchangeJC, ...prev]);
+  };
+
+  // Material Issue Methods
+  const issueMaterialForJobCard = (jcId: string, itemId: string, qty: number, issuedTo?: string, notes?: string): boolean => {
+    if (qty <= 0) return false;
+    let success = false;
+    let targetItemCode = '';
+    let targetItemName = '';
+    let jcRefNo = '';
+    let jcModel = '';
+
+    setJobCards(prev => prev.map(jc => {
+      if (jc.id !== jcId) return jc;
+      jcRefNo = jc.jobCardNo;
+      jcModel = jc.itemName || jc.itemCode;
+      const updatedComps = jc.components.map(comp => {
+        if (comp.itemId === itemId || comp.itemCode === itemId) {
+          targetItemCode = comp.itemCode;
+          targetItemName = comp.itemName;
+          const currentIssued = comp.issuedQty || 0;
+          return {
+            ...comp,
+            issuedQty: currentIssued + qty
+          };
+        }
+        return comp;
+      });
+      success = true;
+      return { ...jc, components: updatedComps };
+    }));
+
+    if (success) {
+      // Deduct from physical store inventory
+      setItems(prevItems => prevItems.map(it => {
+        if (it.id === itemId || it.itemCode === itemId || it.itemCode === targetItemCode) {
+          return {
+            ...it,
+            inHouseStock: Math.max(0, it.inHouseStock - qty)
+          };
+        }
+        return it;
+      }));
+
+      // Create Material Issue Record
+      const newRecord: MaterialIssueRecord = {
+        id: `iss-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        issueNo: `ISS-JC-${Date.now().toString().slice(-4)}`,
+        type: 'JOB_CARD',
+        referenceId: jcId,
+        referenceNo: jcRefNo,
+        machineModel: jcModel,
+        itemId,
+        itemCode: targetItemCode,
+        itemName: targetItemName,
+        issuedQty: qty,
+        unit: 'PCS',
+        issuedDate: new Date().toISOString().split('T')[0],
+        issuedBy: currentUser?.fullName || currentUser?.username || 'Store Keeper',
+        issuedTo: issuedTo || 'Assembly Floor',
+        notes: notes || `Store material issue for Job Card ${jcRefNo}`
+      };
+      setMaterialIssueRecords(prev => [newRecord, ...prev]);
+      addAuditLog('MATERIAL_ISSUE', 'Material Issue & Store', `Issued ${qty}x ${targetItemCode} for Job Card ${jcRefNo}`);
+    }
+    return success;
+  };
+
+  const issueMaterialForWorkOrder = (woId: string, itemId: string, qty: number, issuedTo?: string, notes?: string): boolean => {
+    if (qty <= 0) return false;
+    let success = false;
+    let targetItemCode = '';
+    let targetItemName = '';
+    let woRefNo = '';
+    let woModel = '';
+
+    setWorkOrders(prev => prev.map(wo => {
+      if (wo.id !== woId) return wo;
+      woRefNo = wo.workOrderNo || wo.woNumber || wo.id;
+      woModel = wo.machineModel;
+      const comps = wo.woComponents || [];
+      const updatedComps = comps.map(comp => {
+        if (comp.itemId === itemId || comp.itemCode === itemId) {
+          targetItemCode = comp.itemCode || '';
+          targetItemName = comp.itemName || '';
+          const currentIssued = comp.issuedQty || 0;
+          return {
+            ...comp,
+            issuedQty: currentIssued + qty
+          };
+        }
+        return comp;
+      });
+      success = true;
+      return { ...wo, woComponents: updatedComps };
+    }));
+
+    if (success) {
+      // Deduct from physical store inventory
+      setItems(prevItems => prevItems.map(it => {
+        if (it.id === itemId || it.itemCode === itemId || it.itemCode === targetItemCode) {
+          return {
+            ...it,
+            inHouseStock: Math.max(0, it.inHouseStock - qty)
+          };
+        }
+        return it;
+      }));
+
+      // Create Material Issue Record
+      const newRecord: MaterialIssueRecord = {
+        id: `iss-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        issueNo: `ISS-WO-${Date.now().toString().slice(-4)}`,
+        type: 'WORK_ORDER',
+        referenceId: woId,
+        referenceNo: woRefNo,
+        machineModel: woModel,
+        itemId,
+        itemCode: targetItemCode,
+        itemName: targetItemName,
+        issuedQty: qty,
+        unit: 'PCS',
+        issuedDate: new Date().toISOString().split('T')[0],
+        issuedBy: currentUser?.fullName || currentUser?.username || 'Store Keeper',
+        issuedTo: issuedTo || 'Shopfloor Assembly',
+        notes: notes || `Store material issue for Work Order ${woRefNo}`
+      };
+      setMaterialIssueRecords(prev => [newRecord, ...prev]);
+      addAuditLog('MATERIAL_ISSUE', 'Material Issue & Store', `Issued ${qty}x ${targetItemCode} for Work Order ${woRefNo}`);
+    }
+    return success;
+  };
+
+  const issueAllAvailableForCard = (cardType: 'JOB_CARD' | 'WORK_ORDER', cardId: string, issuedTo?: string): number => {
+    let totalIssuedLines = 0;
+    if (cardType === 'JOB_CARD') {
+      const jc = jobCards.find(j => j.id === cardId);
+      if (!jc) return 0;
+      jc.components.forEach(comp => {
+        const req = comp.totalRequiredQty || (comp.qtyPerUnit * jc.targetQuantity);
+        const issued = comp.issuedQty || 0;
+        const unissued = Math.max(0, req - issued);
+        if (unissued > 0) {
+          const itemObj = items.find(i => i.id === comp.itemId || i.itemCode === comp.itemCode);
+          const inStock = itemObj?.inHouseStock || 0;
+          const canIssue = Math.min(unissued, inStock);
+          if (canIssue > 0) {
+            issueMaterialForJobCard(cardId, comp.itemId || comp.itemCode, canIssue, issuedTo);
+            totalIssuedLines++;
+          }
+        }
+      });
+    } else {
+      const wo = workOrders.find(w => w.id === cardId);
+      if (!wo) return 0;
+      (wo.woComponents || []).forEach(comp => {
+        const req = comp.qtyRequired || comp.qty || 1;
+        const issued = comp.issuedQty || 0;
+        const unissued = Math.max(0, req - issued);
+        if (unissued > 0) {
+          const itemObj = items.find(i => i.id === comp.itemId || i.itemCode === comp.itemCode);
+          const inStock = itemObj?.inHouseStock || 0;
+          const canIssue = Math.min(unissued, inStock);
+          if (canIssue > 0) {
+            issueMaterialForWorkOrder(cardId, comp.itemId || comp.itemCode || '', canIssue, issuedTo);
+            totalIssuedLines++;
+          }
+        }
+      });
+    }
+    return totalIssuedLines;
   };
 
   // Floor Planning Methods
@@ -2696,6 +2885,9 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addJobCardMaterialReissue,
       resubmitPOForApproval,
       setSearchTerm,
+      isMobileNavOpen,
+      setIsMobileNavOpen,
+      toggleMobileNav,
       setActiveModule,
       toggleTheme,
       login,
@@ -2757,6 +2949,10 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       reopenJobCard,
       deleteJobCard,
       createExchangeJobCard,
+      materialIssueRecords,
+      issueMaterialForJobCard,
+      issueMaterialForWorkOrder,
+      issueAllAvailableForCard,
       assignWOToStation,
       moveWOStation,
       addFloorStation,

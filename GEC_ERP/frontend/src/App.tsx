@@ -1,8 +1,10 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ERPProvider, useERP } from './context/ERPContext';
 import { LoginSignup } from './components/auth/LoginSignup';
 import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
+import { UpdateEnforcementModal } from './components/common/UpdateEnforcementModal';
+import { updaterService, UpdateInfo } from './services/updaterService';
 import { DashboardModule } from './components/modules/DashboardModule';
 import { ItemMasterModule } from './components/modules/ItemMasterModule';
 import { ProcessMasterModule } from './components/modules/ProcessMasterModule';
@@ -25,9 +27,30 @@ import { FloorPlanningModule } from './components/modules/FloorPlanningModule';
 import { DispatchModule } from './components/modules/DispatchModule';
 import { PlanningModule } from './components/modules/PlanningModule';
 import { SuperAdminAnalyticsModule } from './components/modules/SuperAdminAnalyticsModule';
+import { MaterialIssueModule } from './components/modules/MaterialIssueModule';
 
 const MainContent: React.FC = () => {
   const { currentUser, activeModule, setActiveModule } = useERP();
+  const [pendingUpdate, setPendingUpdate] = useState<UpdateInfo | null>(null);
+
+  // Initialize heartbeat and check for updates on startup/login
+  useEffect(() => {
+    updaterService.setOnUpdateAvailable((info) => {
+      setPendingUpdate(info);
+    });
+
+    if (currentUser) {
+      updaterService.startHeartbeat(currentUser);
+      updaterService.checkForUpdates();
+    } else {
+      updaterService.stopHeartbeat();
+      updaterService.checkForUpdates();
+    }
+
+    return () => {
+      updaterService.stopHeartbeat();
+    };
+  }, [currentUser]);
 
   // Global ESC Key Navigation System: Closes in-screen forms/modals first, then returns to Dashboard
   useEffect(() => {
@@ -77,7 +100,14 @@ const MainContent: React.FC = () => {
   }, []);
 
   if (!currentUser) {
-    return <LoginSignup />;
+    return (
+      <>
+        {pendingUpdate && pendingUpdate.updateAvailable && (
+          <UpdateEnforcementModal updateInfo={pendingUpdate} />
+        )}
+        <LoginSignup />
+      </>
+    );
   }
 
   const isSuperAdminUser = currentUser?.isSuperAdmin === true || currentUser?.username?.toLowerCase() === 'superadmin';
@@ -96,6 +126,7 @@ const MainContent: React.FC = () => {
       case 'sales-orders': return <SalesOrderModule />;
       case 'work-orders': return <WorkOrderModule />;
       case 'job-cards': return <JobCardModule />;
+      case 'material-issue': return <MaterialIssueModule />;
       case 'floor-planning': return <FloorPlanningModule />;
       case 'inventory': return <InventoryModule />;
       case 'inhouse-inventory': return <InventoryModule />;
@@ -114,6 +145,11 @@ const MainContent: React.FC = () => {
 
   return (
     <div className="app-container">
+      {/* Mandatory Update Enforcement Modal */}
+      {pendingUpdate && pendingUpdate.updateAvailable && (
+        <UpdateEnforcementModal updateInfo={pendingUpdate} />
+      )}
+
       {/* Fixed Left Side Navigation Panel - Permanent */}
       <Sidebar />
 

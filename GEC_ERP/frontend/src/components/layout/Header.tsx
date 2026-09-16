@@ -1,21 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { useERP } from '../../context/ERPContext';
-import { Search, Wifi, WifiOff, Server, AlertCircle, Globe } from 'lucide-react';
+import { Search, Wifi, WifiOff, Server, AlertCircle, Globe, Menu, Settings, RefreshCw, CheckCircle2, Lock, X } from 'lucide-react';
 import { apiClient } from '../../services/apiClient';
+
 export const Header: React.FC = () => {
   const { 
     activeModule, setActiveModule, currentUser,
     items, customers, vendors, salesOrders, workOrders, purchaseOrders, jobCards, boms, grns,
-    openBOMInEditor, openWOInEditor
+    openBOMInEditor, openWOInEditor, toggleMobileNav
   } = useERP();
   
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isServerModalOpen, setIsServerModalOpen] = useState(false);
+  const [customLanInput, setCustomLanInput] = useState(apiClient.getLanUrl() || '');
+  const [customCloudInput, setCustomCloudInput] = useState(apiClient.getCloudUrl() || '');
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [serverModalMsg, setServerModalMsg] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   // User Internet / Network Connection State
   const [isUserOnline, setIsUserOnline] = useState<boolean>(navigator.onLine);
 
   // Central Host PC Server Connection State
   const [isServerOnline, setIsServerOnline] = useState<boolean>(false);
+  const [serverNetworkMode, setServerNetworkMode] = useState<'LAN' | 'CLOUD' | 'LOCALHOST' | 'OFFLINE'>('LAN');
+  const [serverDbStatus, setServerDbStatus] = useState<string>('Checking...');
+  const [detectedServerIps, setDetectedServerIps] = useState<string[]>([]);
 
   // Probe real internet reachability (even when hotspot is on without data)
   useEffect(() => {
@@ -58,34 +67,73 @@ export const Header: React.FC = () => {
     };
   }, []);
 
-  const [serverNetworkMode, setServerNetworkMode] = useState<'LAN' | 'CLOUD' | 'LOCALHOST' | 'OFFLINE'>('LAN');
-  const [serverDbStatus, setServerDbStatus] = useState<string>('Checking...');
-
-  // Dynamic server health & hybrid network mode check
-  useEffect(() => {
-    const checkServerHealth = async () => {
-      try {
-        const result = await apiClient.checkHealth();
-        if (result.online) {
-          setIsServerOnline(true);
-          setServerNetworkMode(result.mode);
-          setServerDbStatus(result.data?.isPostgresConnected ? 'PostgreSQL Live' : 'Hybrid Cache');
-        } else {
-          setIsServerOnline(false);
-          setServerNetworkMode('OFFLINE');
-          setServerDbStatus('Offline');
+  const checkServerHealth = async () => {
+    try {
+      const result = await apiClient.checkHealth();
+      if (result.online) {
+        setIsServerOnline(true);
+        setServerNetworkMode(result.mode);
+        setServerDbStatus(result.data?.isPostgresConnected ? 'PostgreSQL Live' : 'Hybrid Cache');
+        if (result.data?.serverIps) {
+          setDetectedServerIps(result.data.serverIps);
         }
-      } catch {
+      } else {
         setIsServerOnline(false);
         setServerNetworkMode('OFFLINE');
         setServerDbStatus('Offline');
       }
-    };
+    } catch {
+      setIsServerOnline(false);
+      setServerNetworkMode('OFFLINE');
+      setServerDbStatus('Offline');
+    }
+  };
 
+  // Dynamic server health & hybrid network mode check
+  useEffect(() => {
     checkServerHealth();
     const interval = setInterval(checkServerHealth, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  const handleSaveAndTestServerConfig = async (lanOverride?: string, cloudOverride?: string) => {
+    const targetLan = lanOverride !== undefined ? lanOverride : customLanInput;
+    const targetCloud = cloudOverride !== undefined ? cloudOverride : customCloudInput;
+    
+    setIsTestingConnection(true);
+    setServerModalMsg({ text: 'Testing LAN & Cloud connections (Prioritizing LAN)...', type: 'info' });
+    
+    apiClient.setLanUrl(targetLan);
+    apiClient.setCloudUrl(targetCloud);
+    apiClient.setCustomServerUrl(''); // clear legacy single override to enable dual LAN/Cloud prioritization
+
+    setCustomLanInput(apiClient.getLanUrl() || '');
+    setCustomCloudInput(apiClient.getCloudUrl() || '');
+
+    try {
+      const result = await apiClient.checkHealth();
+      if (result.online) {
+        setIsServerOnline(true);
+        setServerNetworkMode(result.mode);
+        setServerDbStatus(result.data?.isPostgresConnected ? 'PostgreSQL Live' : 'Hybrid Cache');
+        if (result.data?.serverIps) setDetectedServerIps(result.data.serverIps);
+        setServerModalMsg({ 
+          text: `Active on ${result.mode === 'LAN' || result.mode === 'LOCALHOST' ? '🚀 High-Speed LAN' : '🌐 Cloud Domain'} (${apiClient.getBaseUrl()})`, 
+          type: 'success' 
+        });
+      } else {
+        setIsServerOnline(false);
+        setServerNetworkMode('OFFLINE');
+        setServerDbStatus('Offline');
+        setServerModalMsg({ text: `Could not reach server via LAN or Cloud. Make sure server is running.`, type: 'error' });
+      }
+    } catch (e: any) {
+      setIsServerOnline(false);
+      setServerModalMsg({ text: `Connection check failed: ${e?.message || 'Network error'}`, type: 'error' });
+    } finally {
+      setIsTestingConnection(false);
+    }
+  };
 
   const getModuleTitle = () => {
     switch (activeModule) {
@@ -240,9 +288,17 @@ export const Header: React.FC = () => {
 
   return (
     <header className="top-header" style={{ position: 'relative' }}>
-      {/* Active Page Title */}
-      <div>
-        <h1 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
+      {/* Active Page Title with Mobile Hamburger Toggle */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0 }}>
+        <button
+          type="button"
+          className="mobile-menu-toggle"
+          onClick={toggleMobileNav}
+          aria-label="Toggle navigation menu"
+        >
+          <Menu size={22} />
+        </button>
+        <h1 className="header-page-title" style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {getModuleTitle()}
         </h1>
       </div>
@@ -532,7 +588,7 @@ export const Header: React.FC = () => {
           );
         })()}
 
-        {/* Server Connection Status: Online | LAN | Offline */}
+        {/* Server Connection Status: Online | LAN | Offline (Clickable to change Server URL) */}
         {(() => {
           let serverStatusText = 'Online';
           let serverBg = 'rgba(16, 185, 129, 0.12)';
@@ -554,6 +610,42 @@ export const Header: React.FC = () => {
             serverIcon = <Server size={13} />;
           }
 
+          const isSuperAdminUser = currentUser?.isSuperAdmin === true || currentUser?.username?.toLowerCase() === 'superadmin';
+
+          if (isSuperAdminUser) {
+            return (
+              <button 
+                type="button"
+                onClick={() => {
+                  setCustomLanInput(apiClient.getLanUrl() || '');
+                  setCustomCloudInput(apiClient.getCloudUrl() || '');
+                  setServerModalMsg(null);
+                  setIsServerModalOpen(true);
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  padding: '0.3rem 0.65rem',
+                  borderRadius: '9999px',
+                  backgroundColor: serverBg,
+                  border: `1px solid ${serverBorder}`,
+                  color: serverColor,
+                  fontSize: '0.73rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }} 
+                title={isServerOnline ? `Central Server is LIVE in ${serverStatusText} Mode (${serverDbStatus}). Click to configure Server Network Address (SuperAdmin).` : 'Server: Offline (Click to configure Server Address - SuperAdmin)'}
+              >
+                {serverIcon}
+                <span>Server: {serverStatusText}</span>
+                <Settings size={11} style={{ opacity: 0.7, marginLeft: '0.15rem' }} />
+              </button>
+            );
+          }
+
+          // Regular User: Display Indicator Badge Only (Non-interactive)
           return (
             <div 
               style={{
@@ -568,7 +660,7 @@ export const Header: React.FC = () => {
                 fontSize: '0.73rem',
                 fontWeight: 700
               }} 
-              title={isServerOnline ? `Central Server is LIVE in ${serverStatusText} Mode (${serverDbStatus})` : 'Server: Offline (Read-Only cached data access. Create, edit, delete is disabled until server reconnects)'}
+              title={isServerOnline ? `Central Server is LIVE in ${serverStatusText} Mode (${serverDbStatus})` : 'Server: Offline (Read-Only cached data access)'}
             >
               {serverIcon}
               <span>Server: {serverStatusText}</span>
@@ -576,6 +668,239 @@ export const Header: React.FC = () => {
           );
         })()}
       </div>
+
+      {/* Server Connection & Hybrid Mode Modal (SuperAdmin Only) */}
+      {(currentUser?.isSuperAdmin === true || currentUser?.username?.toLowerCase() === 'superadmin') && isServerModalOpen && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 99999,
+          padding: '1rem'
+        }}>
+          <div style={{
+            backgroundColor: 'var(--bg-secondary)',
+            border: '1px solid var(--border-color)',
+            borderRadius: '0.75rem',
+            width: '100%',
+            maxWidth: '520px',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5)',
+            overflow: 'hidden'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              padding: '1rem 1.25rem',
+              borderBottom: '1px solid var(--border-color)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              backgroundColor: 'var(--bg-tertiary)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Server size={18} style={{ color: 'var(--accent-primary)' }} />
+                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>Central Server & Network Configuration</h3>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setIsServerModalOpen(false)}
+                style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '0.25rem' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {/* Notice regarding LAN priority */}
+              <div style={{
+                padding: '0.6rem 0.8rem',
+                borderRadius: '0.375rem',
+                backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                border: '1px solid rgba(59, 130, 246, 0.25)',
+                fontSize: '0.74rem',
+                color: 'var(--text-secondary)',
+                lineHeight: 1.4
+              }}>
+                <strong style={{ color: 'var(--accent-primary)' }}>⚡ LAN-First Hybrid Priority:</strong> When inside the factory, GEC ERP connects over ultra-fast local LAN (no internet data used). When away, it automatically switches to your Cloud Domain.
+              </div>
+
+              {/* 1. LAN URL */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                  1. Factory LAN Server Address (High Priority):
+                </label>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input
+                    type="text"
+                    value={customLanInput}
+                    onChange={(e) => setCustomLanInput(e.target.value)}
+                    placeholder="e.g. http://192.168.1.100:5000 or http://localhost:5000"
+                    style={{
+                      flex: 1,
+                      padding: '0.55rem 0.75rem',
+                      borderRadius: '0.375rem',
+                      border: '1px solid var(--border-color)',
+                      backgroundColor: 'var(--bg-primary)',
+                      color: 'var(--text-primary)',
+                      fontSize: '0.85rem',
+                      fontFamily: 'monospace'
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* 2. Cloud Domain URL */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                  2. Remote Cloud Domain (Fallback outside Factory):
+                </label>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input
+                    type="text"
+                    value={customCloudInput}
+                    onChange={(e) => setCustomCloudInput(e.target.value)}
+                    placeholder="e.g. https://erp.yourcompany.com"
+                    style={{
+                      flex: 1,
+                      padding: '0.55rem 0.75rem',
+                      borderRadius: '0.375rem',
+                      border: '1px solid var(--border-color)',
+                      backgroundColor: 'var(--bg-primary)',
+                      color: 'var(--text-primary)',
+                      fontSize: '0.85rem',
+                      fontFamily: 'monospace'
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleSaveAndTestServerConfig()}
+                    disabled={isTestingConnection}
+                    className="btn btn-primary"
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', whiteSpace: 'nowrap', padding: '0.55rem 1rem' }}
+                  >
+                    {isTestingConnection ? <RefreshCw size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                    <span>Save & Test</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Quick Presets */}
+              <div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
+                  Quick LAN Presets:
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => { setCustomLanInput('http://localhost:5000'); handleSaveAndTestServerConfig('http://localhost:5000'); }}
+                    style={{
+                      padding: '0.25rem 0.6rem',
+                      borderRadius: '0.25rem',
+                      border: '1px solid var(--border-color)',
+                      backgroundColor: 'var(--bg-tertiary)',
+                      color: 'var(--text-primary)',
+                      fontSize: '0.72rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    💻 Localhost (5000)
+                  </button>
+                  {detectedServerIps.map(ip => (
+                    <button
+                      key={ip}
+                      type="button"
+                      onClick={() => { const u = `http://${ip}:5000`; setCustomLanInput(u); handleSaveAndTestServerConfig(u); }}
+                      style={{
+                        padding: '0.25rem 0.6rem',
+                        borderRadius: '0.25rem',
+                        border: '1px solid var(--border-color)',
+                        backgroundColor: 'var(--bg-tertiary)',
+                        color: 'var(--text-primary)',
+                        fontSize: '0.72rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      📡 LAN ({ip}:5000)
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => { setCustomLanInput(''); setCustomCloudInput(''); handleSaveAndTestServerConfig('', ''); }}
+                    style={{
+                      padding: '0.25rem 0.6rem',
+                      borderRadius: '0.25rem',
+                      border: '1px dashed var(--border-color)',
+                      backgroundColor: 'transparent',
+                      color: 'var(--text-secondary)',
+                      fontSize: '0.72rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    🔄 Clear & Auto-Detect
+                  </button>
+                </div>
+              </div>
+
+              {/* Feedback Message */}
+              {serverModalMsg && (
+                <div style={{
+                  padding: '0.65rem 0.85rem',
+                  borderRadius: '0.375rem',
+                  fontSize: '0.78rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  backgroundColor: serverModalMsg.type === 'success' ? 'rgba(16, 185, 129, 0.15)' : serverModalMsg.type === 'error' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                  border: `1px solid ${serverModalMsg.type === 'success' ? 'var(--success)' : serverModalMsg.type === 'error' ? 'var(--danger)' : 'var(--accent-primary)'}`,
+                  color: serverModalMsg.type === 'success' ? 'var(--success)' : serverModalMsg.type === 'error' ? 'var(--danger)' : 'var(--accent-primary)'
+                }}>
+                  {serverModalMsg.type === 'success' ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
+                  <span>{serverModalMsg.text}</span>
+                </div>
+              )}
+
+              {/* Live Info Box */}
+              <div style={{
+                padding: '0.75rem',
+                borderRadius: '0.375rem',
+                backgroundColor: 'var(--bg-tertiary)',
+                fontSize: '0.75rem',
+                lineHeight: 1.5,
+                color: 'var(--text-secondary)'
+              }}>
+                <div><strong>Currently Active Route:</strong> <code style={{ color: 'var(--accent-primary)' }}>{apiClient.getBaseUrl()}</code></div>
+                <div><strong>Live Connection Mode:</strong> {isServerOnline ? `🟢 Connected (${serverNetworkMode} Mode - ${serverDbStatus})` : '🔴 Unreachable (Offline Cache Mode)'}</div>
+                {detectedServerIps.length > 0 && (
+                  <div><strong>Server Host IPs:</strong> {detectedServerIps.join(', ')}</div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{
+              padding: '0.75rem 1.25rem',
+              borderTop: '1px solid var(--border-color)',
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '0.5rem',
+              backgroundColor: 'var(--bg-tertiary)'
+            }}>
+              <button
+                type="button"
+                onClick={() => setIsServerModalOpen(false)}
+                className="btn btn-secondary"
+                style={{ fontSize: '0.8rem', padding: '0.4rem 0.85rem' }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 };
