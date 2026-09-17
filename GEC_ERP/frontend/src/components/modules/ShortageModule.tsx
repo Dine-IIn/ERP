@@ -87,7 +87,8 @@ export const ShortageModule: React.FC = () => {
     | 'pendingJW' 
     | 'pendingQC' 
     | 'shortage' 
-    | 'minStockLevel';
+    | 'minStockLevel'
+    | 'minShortage';
 
   const [itemWiseSearch, setItemWiseSearch] = useState('');
   const deferredItemWiseSearch = useDeferredValue(itemWiseSearch);
@@ -158,6 +159,7 @@ export const ShortageModule: React.FC = () => {
 
   const [itemWiseSortField, setItemWiseSortField] = useState<ItemWiseSortField>('priority');
   const [itemWiseSortOrder, setItemWiseSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [expandedWOId, setExpandedWOId] = useState<string | null>(null);
 
   // --- TAB 3-4 (PO / JOB WORK) SHORTAGE SORT STATE ---
   const [procSortField, setProcSortField] = useState<'priority' | 'leadTimeDays' | 'itemCode' | 'itemName' | 'category' | 'processType' | 'totalRequired' | 'inHouseStock' | 'openPO' | 'pendingJW' | 'netShortage'>('priority');
@@ -2225,8 +2227,8 @@ export const ShortageModule: React.FC = () => {
                 backgroundColor: 'var(--bg-card)', 
                 border: '1px solid var(--border-color)', 
                 borderRadius: selectedItemIds.length > 0 ? '0 0 0.5rem 0.5rem' : '0.5rem', 
-                overflow: 'auto',
-                maxHeight: 'calc(100vh - 290px)',
+                overflowX: 'auto',
+                overflowY: 'visible',
                 width: '100%', 
                 maxWidth: '100%',
                 margin: 0
@@ -2293,7 +2295,7 @@ export const ShortageModule: React.FC = () => {
                     </th>
 
                     {/* 5. Class */}
-                    <th onClick={() => handleItemWiseSortToggle('category')} style={{ width: '65px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
+                    <th onClick={() => handleItemWiseSortToggle('category')} style={{ width: '70px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
                         Class {itemWiseSortField === 'category' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                       </div>
@@ -2359,6 +2361,13 @@ export const ShortageModule: React.FC = () => {
                     <th onClick={() => handleItemWiseSortToggle('minStockLevel')} style={{ textAlign: 'right', width: '80px', cursor: 'pointer', userSelect: 'none' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
                         Min Stock {itemWiseSortField === 'minStockLevel' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+                      </div>
+                    </th>
+
+                    {/* 15. Min Level Shortage */}
+                    <th onClick={() => handleItemWiseSortToggle('minShortage')} style={{ textAlign: 'right', width: '110px', cursor: 'pointer', userSelect: 'none' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
+                        Min Level Shortage {itemWiseSortField === 'minShortage' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                       </div>
                     </th>
                   </tr>
@@ -2465,6 +2474,11 @@ export const ShortageModule: React.FC = () => {
                         <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
                           {comp.minStockLevel || 0} {comp.unit}
                         </td>
+
+                        {/* 15. Min Level Shortage */}
+                        <td style={{ textAlign: 'right', fontWeight: 800, color: (comp.minShortage || 0) > 0 ? '#ea580c' : 'var(--text-muted)' }}>
+                          {(comp.minShortage || 0) > 0 ? `${comp.minShortage} ${comp.unit}` : 'OK (0)'}
+                        </td>
                       </tr>
                     );
                   })}
@@ -2521,8 +2535,6 @@ export const ShortageModule: React.FC = () => {
                     <button
                       key={wo.id}
                       type="button"
-                      className={`btn ${isIndividuallySelected ? 'btn-primary' : isSelected ? 'btn-outline' : 'btn-ghost'}`}
-                      style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', borderRadius: '0.25rem' }}
                       onClick={() => {
                         if (isIndividuallySelected) {
                           setSelectedWOIds(selectedWOIds.filter(id => id !== wo.id));
@@ -2530,8 +2542,22 @@ export const ShortageModule: React.FC = () => {
                           setSelectedWOIds([...selectedWOIds, wo.id]);
                         }
                       }}
+                      className={`btn ${isIndividuallySelected ? 'btn-primary' : isSelected ? 'btn-outline' : 'btn-secondary'}`}
+                      style={{
+                        padding: '0.2rem 0.5rem',
+                        fontSize: '0.75rem',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.35rem',
+                        borderRadius: '0.25rem',
+                        opacity: isSelected ? 1 : 0.6,
+                        border: isIndividuallySelected ? 'none' : '1px solid var(--border-color)'
+                      }}
                     >
-                      {isIndividuallySelected ? '✓ ' : ''}{wo.workOrderNo || wo.woNumber} ({wo.machineModel})
+                      {isIndividuallySelected ? <CheckSquare size={12} /> : <Square size={12} />}
+                      <strong>{wo.workOrderNo || wo.woNumber}</strong>
+                      <span style={{ opacity: 0.85 }}>• {wo.machineModel}</span>
+                      <span style={{ fontSize: '0.68rem', opacity: 0.8 }}>(Qty: {wo.targetQuantity || wo.quantity || 1})</span>
                     </button>
                   );
                 })}
@@ -2540,105 +2566,166 @@ export const ShortageModule: React.FC = () => {
 
           {/* Tab 2: Work Order Shortage Tree View */}
           {activeTab === 'WO_SHORTAGE' && (
-            <div className="table-container-flow" style={{ border: 'none', background: 'none', boxShadow: 'none', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {filteredWOShortages.length === 0 ? (
-                <div className="card" style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                  <CheckCircle size={36} color="var(--success)" style={{ margin: '0 auto 0.5rem auto' }} />
-                  <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>No Work Order Shortages</h3>
-                  <p style={{ fontSize: '0.8rem', margin: '0.25rem 0 0 0' }}>All components are in-stock or covered for selected Work Orders!</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.35rem 0.5rem' }}>
+                <span style={{ fontSize: '0.82rem', fontWeight: 700 }}>
+                  Active Work Orders ({relevantWOs.length}):
+                </span>
+                <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                  Click a Work Order to expand its complete component BOM tree
+                </span>
+              </div>
+
+              {relevantWOs.length === 0 ? (
+                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  No active Work Orders selected.
                 </div>
               ) : (
-                filteredWOShortages.map(woData => {
-                  const wo = woData.wo;
-                  const isExpanded = expandedNodes[wo.id] !== false;
-                  const simQty = simulatedQuantities[wo.id] !== undefined ? simulatedQuantities[wo.id] : (wo.targetQuantity || wo.quantity || 1);
+                relevantWOs.map(wo => {
+                  const isExpanded = expandedWOId === wo.id;
+                  const linkedBOM = boms.find(b => b.machineModel === wo.machineModel || b.id === wo.bomId);
+                  const components = wo.woComponents && wo.woComponents.length > 0
+                    ? wo.woComponents.map(c => ({
+                        itemId: c.itemId || '',
+                        itemCode: c.itemCode || '',
+                        itemName: c.itemName || '',
+                        qtyPerMachine: c.qtyRequired ? c.qtyRequired / (wo.quantity || 1) : 1,
+                        unit: c.unit || 'PCS',
+                        subAssemblyTag: c.subAssemblyTag || 'General Assembly'
+                      }))
+                    : (linkedBOM?.components || []);
 
                   return (
-                    <div key={wo.id} className="card" style={{ padding: '0.85rem', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
-                      {/* Tree Parent Header */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                        <div 
-                          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
-                          onClick={() => toggleNode(wo.id)}
-                        >
-                          {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                          <span style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--accent-primary)', fontFamily: 'monospace' }}>
+                    <div 
+                      key={wo.id} 
+                      className="card" 
+                      style={{ 
+                        padding: 0, 
+                        overflow: 'hidden',
+                        border: isExpanded ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                        borderRadius: '0.5rem'
+                      }}
+                    >
+                      {/* Accordion Header */}
+                      <div 
+                        onClick={() => setExpandedWOId(isExpanded ? null : wo.id)}
+                        style={{
+                          padding: '0.65rem 1rem',
+                          backgroundColor: isExpanded ? 'var(--bg-tertiary)' : 'var(--bg-card)',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          cursor: 'pointer',
+                          userSelect: 'none',
+                          borderBottom: isExpanded ? '1px solid var(--border-color)' : 'none'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                          <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '0.9rem', color: 'var(--accent-primary)' }}>
                             {wo.workOrderNo || wo.woNumber}
                           </span>
-                          <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>{wo.machineModel}</span>
-                          <span className="badge badge-neutral" style={{ fontSize: '0.7rem' }}>Qty: {wo.targetQuantity || wo.quantity || 1}</span>
-                          <span className={`badge ${woData.components.filter(c => c.isShortage).length > 0 ? 'badge-danger' : 'badge-success'}`} style={{ fontSize: '0.7rem' }}>
-                            {woData.components.filter(c => c.isShortage).length} Shortages
+                          <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>
+                            {wo.machineModel}
+                          </span>
+                          <span className="badge badge-neutral" style={{ fontSize: '0.7rem' }}>
+                            Qty: {wo.targetQuantity || wo.quantity || 1}
+                          </span>
+                          <span className={`badge ${wo.status === 'IN_PROGRESS' ? 'badge-warning' : 'badge-primary'}`} style={{ fontSize: '0.7rem' }}>
+                            {wo.status}
                           </span>
                         </div>
 
-                        {/* Capacity / What-If Simulation input */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <label style={{ fontSize: '0.75rem', fontWeight: 700, margin: 0 }}>Simulate Build Qty:</label>
-                          <input
-                            type="number"
-                            min="0"
-                            style={{ width: '70px', padding: '0.2rem 0.4rem', fontSize: '0.8rem', textAlign: 'center' }}
-                            className="input-field"
-                            value={simQty}
-                            onChange={(e) => handleSimulatedQtyChange(wo.id, Number(e.target.value))}
-                          />
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                            {components.length} components
+                          </span>
+                          {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                         </div>
                       </div>
 
-                      {/* Tree Child Table */}
+                      {/* Accordion Body */}
                       {isExpanded && (
-                        <div style={{ marginTop: '0.65rem', border: '1px solid var(--border-color)', borderRadius: '0.375rem' }}>
-                          <table>
+                        <div style={{ padding: '0.5rem', overflowX: 'auto' }}>
+                          <table style={{ width: '100%', fontSize: '0.78rem' }}>
                             <thead>
-                              <tr>
-                                <th style={{ width: '30px' }}>#</th>
-                                <th>Component Code</th>
-                                <th>Component Name</th>
-                                <th>Source</th>
-                                <th style={{ textAlign: 'right' }}>Total Req</th>
-                                <th style={{ textAlign: 'right' }}>In Stock</th>
-                                <th style={{ textAlign: 'right' }}>Net Shortage</th>
-                                <th style={{ textAlign: 'center', minWidth: '180px' }}>Action</th>
+                              <tr style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                                <th style={{ padding: '0.35rem 0.5rem', textAlign: 'left', width: '30px' }}>#</th>
+                                <th style={{ padding: '0.35rem 0.5rem', textAlign: 'left' }}>Item Code</th>
+                                <th style={{ padding: '0.35rem 0.5rem', textAlign: 'left' }}>Description</th>
+                                <th style={{ padding: '0.35rem 0.5rem', textAlign: 'center' }}>Source</th>
+                                <th style={{ padding: '0.35rem 0.5rem', textAlign: 'right' }}>Qty/Unit</th>
+                                <th style={{ padding: '0.35rem 0.5rem', textAlign: 'right' }}>Total Req</th>
+                                <th style={{ padding: '0.35rem 0.5rem', textAlign: 'right' }}>In Stock</th>
+                                <th style={{ padding: '0.35rem 0.5rem', textAlign: 'right' }}>Shortage</th>
+                                <th style={{ padding: '0.35rem 0.5rem', textAlign: 'center' }}>Action</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {woData.components
-                                .filter(c => shortageFilterMode === 'ALL_ITEMS' || c.isShortage)
+                              {components
+                                .filter(comp => {
+                                  const itemObj = items.find(i => i.id === comp.itemId || i.itemCode === comp.itemCode);
+                                  const inStock = itemObj ? (itemObj.inHouseStock || 0) : 0;
+                                  const totalReq = (comp.qtyPerMachine || 1) * (wo.targetQuantity || wo.quantity || 1);
+                                  const shortage = Math.max(0, totalReq - inStock);
+                                  if (shortageFilterMode === 'SHORTAGE_ONLY') {
+                                    return shortage > 0;
+                                  }
+                                  return true;
+                                })
                                 .map((comp, cIdx) => {
-                                  const childItem = comp.itemObj || items.find(i => i.id === comp.itemId || i.itemCode === comp.itemCode);
-                                  const simulatedReq = (comp.qtyPerMachine || 1) * simQty;
-                                  const simulatedShortage = Math.max(0, (simulatedReq + comp.minStockQty) - (comp.inHouseStock + comp.openPO + comp.pendingJW + comp.pendingQC));
+                                  const itemObj = items.find(i => i.id === comp.itemId || i.itemCode === comp.itemCode);
+                                  const inStock = itemObj ? (itemObj.inHouseStock || 0) : 0;
+                                  const totalReq = (comp.qtyPerMachine || 1) * (wo.targetQuantity || wo.quantity || 1);
+                                  const shortage = Math.max(0, totalReq - inStock);
+                                  const isShort = shortage > 0;
+
                                   return (
-                                    <tr key={cIdx} style={{ backgroundColor: simulatedShortage > 0 ? 'rgba(239, 68, 68, 0.06)' : 'transparent' }}>
-                                      <td>{cIdx + 1}</td>
-                                      <td style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>{comp.itemCode}</td>
-                                      <td style={{ fontWeight: 600 }}>{comp.itemName}</td>
-                                      <td>
-                                        <span className={`badge ${comp.processType === 'Bought out' || comp.processType === 'Job work + Bought out' ? 'badge-primary' : comp.processType === 'In-house' ? 'badge-success' : 'badge-purple'}`} style={{ fontSize: '0.7rem' }}>
-                                          {comp.processType}
+                                    <tr 
+                                      key={cIdx} 
+                                      style={{ 
+                                        backgroundColor: isShort ? 'rgba(239, 68, 68, 0.06)' : 'transparent',
+                                        borderBottom: '1px solid var(--border-color)'
+                                      }}
+                                    >
+                                      <td style={{ padding: '0.35rem 0.5rem' }}>{cIdx + 1}</td>
+                                      <td style={{ padding: '0.35rem 0.5rem', fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>
+                                        {comp.itemCode}
+                                      </td>
+                                      <td style={{ padding: '0.35rem 0.5rem', fontWeight: 600 }}>
+                                        {comp.itemName}
+                                      </td>
+                                      <td style={{ padding: '0.35rem 0.5rem', textAlign: 'center' }}>
+                                        <span className={`badge ${itemObj?.processType === 'Bought out' ? 'badge-primary' : itemObj?.processType === 'In-house' ? 'badge-success' : 'badge-outline'}`} style={{ fontSize: '0.68rem' }}>
+                                          {itemObj?.processType || 'In-house'}
                                         </span>
                                       </td>
-                                      <td style={{ textAlign: 'right', fontWeight: 700 }}>{simulatedReq} {comp.unit}</td>
-                                      <td style={{ textAlign: 'right' }}>{comp.inHouseStock} {comp.unit}</td>
-                                      <td style={{ textAlign: 'right', fontWeight: 800, color: simulatedShortage > 0 ? 'var(--danger)' : 'var(--success)' }}>
-                                        {simulatedShortage > 0 ? `${simulatedShortage} ${comp.unit}` : 'OK (0)'}
+                                      <td style={{ padding: '0.35rem 0.5rem', textAlign: 'right' }}>
+                                        {comp.qtyPerMachine || 1} {comp.unit}
                                       </td>
-                                      <td style={{ textAlign: 'center' }}>
-                                        {simulatedShortage > 0 && childItem && (
-                                          <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'center' }}>
-                                            {(comp.processType === 'Bought out' || comp.processType === 'Job work + Bought out') && (
-                                              <button type="button" className="btn btn-primary" style={{ padding: '0.15rem 0.35rem', fontSize: '0.68rem' }} onClick={() => handleRaisePO(childItem, simulatedShortage, wo)}>
+                                      <td style={{ padding: '0.35rem 0.5rem', textAlign: 'right', fontWeight: 700 }}>
+                                        {totalReq} {comp.unit}
+                                      </td>
+                                      <td style={{ padding: '0.35rem 0.5rem', textAlign: 'right' }}>
+                                        {inStock} {comp.unit}
+                                      </td>
+                                      <td style={{ padding: '0.35rem 0.5rem', textAlign: 'right', fontWeight: 800, color: isShort ? 'var(--danger)' : 'var(--success)' }}>
+                                        {isShort ? `${shortage} ${comp.unit}` : 'OK'}
+                                      </td>
+                                      <td style={{ padding: '0.35rem 0.5rem', textAlign: 'center' }}>
+                                        {isShort && itemObj && (
+                                          <div style={{ display: 'flex', gap: '0.2rem', justifyContent: 'center' }}>
+                                            {isBoughtOutItem(itemObj) && (
+                                              <button type="button" className="btn btn-primary" style={{ padding: '0.15rem 0.35rem', fontSize: '0.68rem' }} onClick={() => handleRaisePO(itemObj, shortage)}>
                                                 +PO
                                               </button>
                                             )}
-                                            {(comp.processType === 'Job work' || comp.processType === 'Job work + Bought out') && (
-                                              <button type="button" className="btn btn-outline" style={{ padding: '0.15rem 0.35rem', fontSize: '0.68rem' }} onClick={() => handleIssueJobwork(childItem, simulatedShortage, wo)}>
+                                            {isJobWorkItem(itemObj) && (
+                                              <button type="button" className="btn btn-outline" style={{ padding: '0.15rem 0.35rem', fontSize: '0.68rem', color: 'var(--accent-primary)' }} onClick={() => handleIssueJobwork(itemObj, shortage)}>
                                                 +JW
                                               </button>
                                             )}
-                                            {comp.processType === 'In-house' && (
-                                              <button type="button" className="btn btn-outline" style={{ padding: '0.15rem 0.35rem', fontSize: '0.68rem', color: 'var(--success)' }} onClick={() => handleIssueJobCard(childItem, simulatedShortage, wo)}>
+                                            {isInHouseItem(itemObj) && (
+                                              <button type="button" className="btn btn-outline" style={{ padding: '0.15rem 0.35rem', fontSize: '0.68rem', color: 'var(--success)' }} onClick={() => handleIssueJobCard(itemObj, shortage)}>
                                                 +JC
                                               </button>
                                             )}
@@ -2661,7 +2748,7 @@ export const ShortageModule: React.FC = () => {
 
           {/* Tab 3-4: Process-Specific Consolidated Tables (PO, JW) */}
           {(activeTab === 'PO_SHORTAGE' || activeTab === 'JOBWORK_SHORTAGE') && (
-            <div className="table-container-flow" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '0.5rem', overflow: 'auto', maxHeight: 'calc(100vh - 230px)', width: '100%', maxWidth: '100%' }}>
+            <div className="table-container-flow" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '0.5rem', overflowX: 'auto', overflowY: 'visible', width: '100%', maxWidth: '100%' }}>
               <div style={{ padding: '0.5rem 0.75rem', backgroundColor: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 25, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
                 <span style={{ fontSize: '0.82rem', fontWeight: 700 }}>
                   Combined Shortage Breakdown ({filteredActiveTabShortages.length} items from {relevantWOs.length} Work Orders):
@@ -3138,7 +3225,7 @@ export const ShortageModule: React.FC = () => {
                 </p>
               </div>
             ) : (
-              <div className="table-container-flow" style={{ overflow: 'auto', maxHeight: 'calc(100vh - 230px)', width: '100%', border: '1px solid var(--border-color)', borderRadius: '0.375rem' }}>
+              <div className="table-container-flow" style={{ overflowX: 'auto', overflowY: 'visible', width: '100%', border: '1px solid var(--border-color)', borderRadius: '0.375rem' }}>
                 <table className="shortage-proc-table" style={{ width: '100%', minWidth: '1300px' }}>
                   <thead>
                     <tr>

@@ -29,42 +29,45 @@ def log(msg, symbol="[*]"):
 
 def kill_running_instances(root_dir):
     try:
-        cmd = 'powershell -NoProfile -Command "Get-Process | Where-Object { $_.Name -match \'gec|tauri|makensis|rustc|cargo|candle|light\' } | Stop-Process -Force -ErrorAction SilentlyContinue"'
-        subprocess.run(cmd, shell=True, capture_output=True)
+        # Terminate any running instances holding locks
+        for proc in ["gec-erp.exe", "makensis.exe", "GEC ERP_1.0.0_x64-setup.exe", "tauri.exe"]:
+            subprocess.run(["taskkill", "/F", "/IM", proc, "/T"], capture_output=True, shell=True)
         time.sleep(1)
-        
-        # Explicit absolute path cleanups to prevent OS error 1224 / os error 5
-        target_dir = root_dir / "frontend" / "src-tauri" / "target" / "release"
-        nsis_dir = target_dir / "bundle" / "nsis"
-        if nsis_dir.exists():
-            shutil.rmtree(nsis_dir, ignore_errors=True)
-            
-        deps_dir = target_dir / "deps"
-        if deps_dir.exists():
-            for f in deps_dir.glob("gec_erp*"):
+
+        # Clear stale release binaries and dependency files that can hold user-mapped sections
+        release_dir = root_dir / "frontend" / "src-tauri" / "target" / "release"
+        if release_dir.exists():
+            for f in (release_dir / "deps").glob("gec_erp*"):
                 try:
                     f.unlink()
                 except Exception:
                     pass
-                    
-        for exe_f in target_dir.glob("gec-erp.*"):
-            try:
-                exe_f.unlink()
-            except Exception:
-                pass
-        time.sleep(1)
+            for f in release_dir.glob("gec-erp.*"):
+                try:
+                    f.unlink()
+                except Exception:
+                    pass
+
+        # Remove previous nsis bundle if present so makensis can write cleanly
+        nsis_bundle = release_dir / "bundle" / "nsis"
+        if nsis_bundle.exists():
+            for f in nsis_bundle.glob("*.exe"):
+                try:
+                    f.unlink()
+                except Exception:
+                    pass
     except Exception:
         pass
 
 def run_build_with_retry(pnpm_cmd, frontend_dir, root_dir, max_retries=2):
     for attempt in range(1, max_retries + 1):
         print(f"  [EXEC] {pnpm_cmd} (Attempt {attempt}/{max_retries})")
-        res = subprocess.run(pnpm_cmd, shell=True, cwd=frontend_dir)
+        res = subprocess.run(pnpm_cmd, shell=True, cwd=str(frontend_dir))
         if res.returncode == 0:
             return True
-        print(f"\n[WARN] Build attempt {attempt} encountered lock or exit code {res.returncode}. Releasing locks and retrying in 2 seconds...")
+        print(f"\n[WARN] Build attempt {attempt} encountered lock or exit code {res.returncode}. Releasing locks and retrying in 3 seconds...")
         kill_running_instances(root_dir)
-        time.sleep(2)
+        time.sleep(3)
     
     print(f"\n[ERROR] Command failed after {max_retries} attempts: {pnpm_cmd}")
     sys.exit(1)

@@ -224,7 +224,7 @@
       "minStockQty": 1,
       "minOrderQty": 2,
       "unitPrice": 12500,
-      "leadTimeDays": 0,
+      "leadTimeDays": 10,
       "location": "Sub-Assembly Section",
       "qcTrigger": "NO_QC",
       "testReportRequired": false,
@@ -232,7 +232,12 @@
         "In-house"
       ],
       "processType": "In-house",
-      "isBlocked": false
+      "isBlocked": false,
+      "partNo": "",
+      "mappedVendors": [],
+      "note": "",
+      "weightKg": 0,
+      "isDirectJobworkShipment": false
     },
     {
       "id": "itm-1789299669861-3-tyxb1",
@@ -3516,9 +3521,9 @@
       "minStockQty": 5,
       "minOrderQty": 10,
       "unitPrice": 350,
-      "leadTimeDays": 0,
+      "leadTimeDays": 10,
       "location": "Warehouse Rack BO",
-      "qcTrigger": "",
+      "qcTrigger": "NO_QC",
       "testReportRequired": false,
       "materialProcessSources": [
         "Bought out"
@@ -3538,7 +3543,11 @@
           "priority": 2
         }
       ],
-      "isBlocked": false
+      "isBlocked": false,
+      "partNo": "",
+      "note": "",
+      "weightKg": 0,
+      "isDirectJobworkShipment": false
     },
     {
       "id": "itm-1789299669862-108-411ql",
@@ -3617,7 +3626,7 @@
       "minStockQty": 1,
       "minOrderQty": 2,
       "unitPrice": 12500,
-      "leadTimeDays": 0,
+      "leadTimeDays": 30,
       "location": "Sub-Assembly Section",
       "qcTrigger": "NO_QC",
       "testReportRequired": false,
@@ -3625,7 +3634,12 @@
         "In-house"
       ],
       "processType": "In-house",
-      "isBlocked": false
+      "isBlocked": false,
+      "partNo": "",
+      "mappedVendors": [],
+      "note": "",
+      "weightKg": 0,
+      "isDirectJobworkShipment": false
     },
     {
       "id": "itm-1789299669862-111-nozm3",
@@ -3642,7 +3656,7 @@
       "minStockQty": 1,
       "minOrderQty": 2,
       "unitPrice": 12500,
-      "leadTimeDays": 0,
+      "leadTimeDays": 30,
       "location": "Sub-Assembly Section",
       "qcTrigger": "NO_QC",
       "testReportRequired": false,
@@ -3650,7 +3664,12 @@
         "In-house"
       ],
       "processType": "In-house",
-      "isBlocked": false
+      "isBlocked": false,
+      "partNo": "",
+      "mappedVendors": [],
+      "note": "",
+      "weightKg": 0,
+      "isDirectJobworkShipment": false
     },
     {
       "id": "itm-1789299669862-112-aoafa",
@@ -18855,6 +18874,50 @@
   "jobCardMaterialReissues": [],
   "intermediateProcessItems": [],
   "auditLogs": [
+    {
+      "id": "log-1789643556992-c85vl1",
+      "userId": "usr-superadmin",
+      "username": "GEC System Super Admin (superadmin)",
+      "role": "Admin",
+      "action": "UPDATE_ITEM",
+      "module": "Item Master",
+      "details": "Updated item: GEC0000112 - EJECTOR CYLINDER ASSY - 90 TON (STOCK-85)",
+      "ipAddress": "127.0.0.1",
+      "timestamp": "2026-09-17T11:12:36.992Z"
+    },
+    {
+      "id": "log-1789643541103-s0p07m",
+      "userId": "usr-superadmin",
+      "username": "GEC System Super Admin (superadmin)",
+      "role": "Admin",
+      "action": "UPDATE_ITEM",
+      "module": "Item Master",
+      "details": "Updated item: GEC0000111 - LOCKING CYLINDER ASSY - 90 TON (STOCK-295)",
+      "ipAddress": "127.0.0.1",
+      "timestamp": "2026-09-17T11:12:21.103Z"
+    },
+    {
+      "id": "log-1789643487295-qzck5z",
+      "userId": "usr-superadmin",
+      "username": "GEC System Super Admin (superadmin)",
+      "role": "Admin",
+      "action": "UPDATE_ITEM",
+      "module": "Item Master",
+      "details": "Updated item: GEC0000108 - MOTOR MOUNTING PAD Ø60 X M10 X 40LG",
+      "ipAddress": "127.0.0.1",
+      "timestamp": "2026-09-17T11:11:27.295Z"
+    },
+    {
+      "id": "log-1789643448289-fneat2",
+      "userId": "usr-superadmin",
+      "username": "GEC System Super Admin (superadmin)",
+      "role": "Admin",
+      "action": "UPDATE_ITEM",
+      "module": "Item Master",
+      "details": "Updated item: GEC0000003 - TOGGLE TYPE LOCKING UNIT-90 TON",
+      "ipAddress": "127.0.0.1",
+      "timestamp": "2026-09-17T11:10:48.289Z"
+    },
     {
       "id": "log-1789642323271-dz4esd",
       "userId": "usr-superadmin",
