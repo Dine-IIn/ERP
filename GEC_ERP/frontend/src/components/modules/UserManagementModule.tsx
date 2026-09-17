@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { User, Role, Department, CustomRole, PermissionLevel, PermissionAction, UserActivityLog, BackupRecord, RBAC_FEATURES, RBACFeatureDefinition } from '../../types/erp';
-import { UserPlus, Shield, Trash2, Key, Lock, UserCheck, Building2, Plus, Edit2, Database, Activity, RefreshCw, Download, HardDrive, ShieldCheck, Search, CheckCircle2, XCircle, Eye, EyeOff } from 'lucide-react';
+import { UserPlus, Shield, Trash2, Key, Lock, UserCheck, Building2, Plus, Edit2, Database, Activity, RefreshCw, Download, HardDrive, ShieldCheck, Search, CheckCircle2, XCircle, Eye, EyeOff, Printer } from 'lucide-react';
+import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
+import { AuditLogListPrintView } from '../printTemplates/AuditPrintTemplates';
 
 export const UserManagementModule: React.FC = () => {
   const { 
@@ -79,6 +81,7 @@ export const UserManagementModule: React.FC = () => {
   const [selectedAuditActionType, setSelectedAuditActionType] = useState<string>('ALL');
   const [selectedAuditModule, setSelectedAuditModule] = useState<string>('ALL');
   const [selectedAuditTimeRange, setSelectedAuditTimeRange] = useState<string>('ALL');
+  const [isPrintAuditOpen, setIsPrintAuditOpen] = useState(false);
   const [backupCycleDays, setBackupCycleDays] = useState(2);
   const [isBackingUp, setIsBackingUp] = useState(false);
 
@@ -1205,6 +1208,15 @@ export const UserManagementModule: React.FC = () => {
                 <span className="badge badge-info" style={{ fontSize: '0.75rem' }}>
                   Showing {filteredLogs.length} of {auditLogs.length} Events
                 </span>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ padding: '0.3rem 0.75rem', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                  onClick={() => setIsPrintAuditOpen(true)}
+                  title="Print Filtered Audit Logs (A4 Landscape)"
+                >
+                  <Printer size={14} /> Print Audit Log
+                </button>
                 {(selectedAuditUser !== 'ALL' || selectedAuditActionType !== 'ALL' || selectedAuditModule !== 'ALL' || selectedAuditTimeRange !== 'ALL' || auditSearch) && (
                   <button 
                     className="btn btn-outline" 
@@ -1445,6 +1457,17 @@ export const UserManagementModule: React.FC = () => {
               </tbody>
             </table>
           </div>
+
+          {/* Audit Log Print Preview Modal */}
+          {isPrintAuditOpen && (
+            <PrintManagerModal
+              documentTitle="System_Security_Audit_Report"
+              onClose={() => setIsPrintAuditOpen(false)}
+              orientation="landscape"
+            >
+              <AuditLogListPrintView logs={filteredLogs} />
+            </PrintManagerModal>
+          )}
         </div>
       )}
 

@@ -397,6 +397,7 @@ export const AssemblyModule: React.FC = () => {
         onClose={() => setPrintModalOpen(false)}
         title="Print Assembly Floor Station Tracking Report"
         documentRefNumber="ASM-FLOOR-REPORT"
+        orientation="landscape"
       >
         <AssemblyListPrintView assemblies={filteredAssemblies} filterLabel={isHistorySearch ? 'All Active & Completed Assembly Stations' : 'Active Assembly Floor Stations'} />
       </PrintManagerModal>

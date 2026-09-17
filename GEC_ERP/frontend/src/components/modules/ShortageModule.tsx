@@ -27,6 +27,7 @@ export const ShortageModule: React.FC = () => {
   const [selectedWOIds, setSelectedWOIds] = useState<string[]>([]);
   
   // Universal Shortage Controls
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [isExplodeAllBOMs, setIsExplodeAllBOMs] = useState(false);
   const [shortageFilterMode, setShortageFilterMode] = useState<'SHORTAGE_ONLY' | 'ALL_ITEMS'>('SHORTAGE_ONLY');
   const [woSearchTerm, setWoSearchTerm] = useState('');
@@ -188,7 +189,7 @@ export const ShortageModule: React.FC = () => {
   };
 
   const handleQuickPrint = () => {
-    window.print();
+    setIsPrintModalOpen(true);
   };
 
   // Helper to test if item is Bought-Out
@@ -3082,43 +3083,48 @@ export const ShortageModule: React.FC = () => {
         </div>
       )}
 
-      {/* Hidden Direct Print Area (Used by Quick Direct Print) */}
-      <div id="direct-print-area">
-        {activeTab === 'ITEM_WISE_SHORTAGE' ? (
-          <ConsolidatedItemWiseShortagePrintReport
-            data={filteredConsolidatedItems}
-            selectedItems={selectedParentItemsMeta}
-            filterLabel="Consolidated Item-Wise Shortage Report"
-          />
-        ) : (activeTab === 'PO_SHORTAGE' || activeTab === 'JOBWORK_SHORTAGE' || activeTab === 'JOBCARD_SHORTAGE') ? (
-          <TabularShortagePrintView
-            title={activeTab === 'PO_SHORTAGE' ? "BOUGHT-OUT PURCHASE SHORTAGE REPORT" : activeTab === 'JOBWORK_SHORTAGE' ? "EXTERNAL JOBWORK SHORTAGE REPORT" : "IN-HOUSE JOB CARD SHORTAGE REPORT"}
-            rows={activeTabConsolidatedShortages.map((c, idx) => ({
-              srNo: idx + 1,
-              itemDescription: c.itemName,
-              partCode: c.itemCode,
-              requiredQty: c.totalRequired,
-              currentStock: c.inHouseStock,
-              moq: c.itemObj?.minOrderQty || 1,
-              inPO: purchaseOrders.filter(po => po.status !== 'GOODS_RECEIVED' && po.status !== 'CANCELLED' && !(po as any).isDeleted).reduce((sum, po) => {
-                const line = po.items.find(pi => pi.itemId === c.itemId || pi.itemCode === c.itemCode);
-                return sum + (line ? (line.quantity || line.orderedQty || 0) : 0);
-              }, 0),
-              shortage: c.netShortage,
-              unit: c.unit,
-              extraInfo: `Class: ${c.category} | Source: ${c.processType}`
-            }))}
-            filterLabel={`Combined Shortage from ${relevantWOs.length} Selected Work Orders`}
-            showMOQAndInPO={activeTab === 'PO_SHORTAGE'}
-          />
-        ) : (
-          <WOShortagePrintView
-            shortageData={filteredWOShortages}
-            filterLabel="Active Work Order Shortage Trees"
-          />
-        )}
-      </div>
-
+      {/* Print Preview Modal - Landscape */}
+      {isPrintModalOpen && (
+        <PrintManagerModal
+          documentTitle={`Shortage_Report_${activeTab}`}
+          onClose={() => setIsPrintModalOpen(false)}
+          orientation="landscape"
+        >
+          {activeTab === 'ITEM_WISE_SHORTAGE' ? (
+            <ConsolidatedItemWiseShortagePrintReport
+              data={filteredConsolidatedItems}
+              selectedItems={selectedParentItemsMeta}
+              filterLabel="Consolidated Item-Wise Shortage Report"
+            />
+          ) : (activeTab === 'PO_SHORTAGE' || activeTab === 'JOBWORK_SHORTAGE' || activeTab === 'JOBCARD_SHORTAGE') ? (
+            <TabularShortagePrintView
+              title={activeTab === 'PO_SHORTAGE' ? "BOUGHT-OUT PURCHASE SHORTAGE REPORT" : activeTab === 'JOBWORK_SHORTAGE' ? "EXTERNAL JOBWORK SHORTAGE REPORT" : "IN-HOUSE JOB CARD SHORTAGE REPORT"}
+              rows={activeTabConsolidatedShortages.map((c, idx) => ({
+                srNo: idx + 1,
+                itemDescription: c.itemName,
+                partCode: c.itemCode,
+                requiredQty: c.totalRequired,
+                currentStock: c.inHouseStock,
+                moq: c.itemObj?.minOrderQty || 1,
+                inPO: purchaseOrders.filter(po => po.status !== 'GOODS_RECEIVED' && po.status !== 'CANCELLED' && !(po as any).isDeleted).reduce((sum, po) => {
+                  const line = po.items.find(pi => pi.itemId === c.itemId || pi.itemCode === c.itemCode);
+                  return sum + (line ? (line.quantity || line.orderedQty || 0) : 0);
+                }, 0),
+                shortage: c.netShortage,
+                unit: c.unit,
+                extraInfo: `Class: ${c.category} | Source: ${c.processType}`
+              }))}
+              filterLabel={`Combined Shortage from ${relevantWOs.length} Selected Work Orders`}
+              showMOQAndInPO={activeTab === 'PO_SHORTAGE'}
+            />
+          ) : (
+            <WOShortagePrintView
+              shortageData={filteredWOShortages}
+              filterLabel="Active Work Order Shortage Trees"
+            />
+          )}
+        </PrintManagerModal>
+      )}
     </div>
   );
 };

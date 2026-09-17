@@ -3,7 +3,7 @@
   display: none;
 }
 
-/* Professional Print & PDF Styles */
+/* Professional A4 Standard Print & PDF Styles */
 @media print {
   body * {
     visibility: hidden;
@@ -16,18 +16,46 @@
     position: absolute;
     left: 0;
     top: 0;
-    width: 100%;
-    margin: 0;
-    padding: 0.15rem !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
     background: #ffffff !important;
     color: #000000 !important;
   }
+
   @page {
-    margin: 2mm 3mm;
+    size: A4 portrait;
+    margin: 8mm 6mm 8mm 6mm;
   }
+
+  .print-document.a4-portrait {
+    width: 100%;
+    max-width: 198mm;
+    margin: 0 auto;
+  }
+
+  .print-document.a4-landscape {
+    width: 100%;
+    max-width: 285mm;
+    margin: 0 auto;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .print-header, .print-signatory, .print-meta-grid {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
   .page-break {
     page-break-before: always;
+    break-before: page;
   }
+
   .no-print {
     display: none !important;
   }

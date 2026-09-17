@@ -9,7 +9,7 @@
       "isSuperAdmin": true,
       "is_admin": true,
       "password": "GEC_SuperAdmin#2026!Secured$",
-      "desktopSessionId": "sess-1789626358546-0.3059165826915685"
+      "desktopSessionId": "sess-1789582463975-0.5493621436740919"
     },
     {
       "id": "usr-admin",
@@ -18897,22 +18897,11 @@
       "timestamp": "2026-09-15T12:03:54.075Z"
     }
   ],
-  "backups": [
-    {
-      "id": "bak-1789625435506",
-      "fileName": "GEC_ERP_BACKUP_2026-09-17T06-10-35-389Z.json",
-      "filePath": "D:\\ERP\\GEC_ERP\\backups\\GEC_ERP_BACKUP_2026-09-17T06-10-35-389Z.json",
-      "fileSizeKb": 540,
-      "backupType": "SCHEDULED",
-      "status": "SUCCESS",
-      "createdAt": "2026-09-17T06:10:35.506Z"
-    }
-  ],
+  "backups": [],
   "backupSettings": {
     "cycleValue": 2,
     "cycleUnit": "Days",
-    "retentionLife": "Infinite",
-    "lastBackupDate": "2026-09-17T06:10:35.506Z"
+    "retentionLife": "Infinite"
   },
   "materialIssueRecords": []
 }

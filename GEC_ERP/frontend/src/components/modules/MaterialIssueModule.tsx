@@ -3,9 +3,11 @@ import { useERP } from '../../context/ERPContext';
 import { 
   ClipboardList, Package, CheckCircle2, History, AlertTriangle, 
   Search, RefreshCw, Send, CheckSquare, Layers, Truck, ShieldAlert,
-  ArrowRight, Check, X, FileText, ChevronDown, ChevronRight, Sparkles
+  ArrowRight, Check, X, FileText, ChevronDown, ChevronRight, Sparkles, Printer
 } from 'lucide-react';
 import { JobCard, WorkOrder, Item } from '../../types/erp';
+import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
+import { SingleMaterialIssuePrintView, MaterialIssueListPrintView } from '../printTemplates/MaterialIssuePrintTemplates';
 
 export const MaterialIssueModule: React.FC = () => {
   const { 
@@ -13,6 +15,10 @@ export const MaterialIssueModule: React.FC = () => {
     issueMaterialForJobCard, issueMaterialForWorkOrder, issueAllAvailableForCard,
     jobCardMaterialReissues, addJobCardMaterialReissue, currentUser, setActiveModule
   } = useERP();
+
+  // Print Document state
+  const [printRecord, setPrintRecord] = useState<any | null>(null);
+  const [isPrintListOpen, setIsPrintListOpen] = useState(false);
 
   // Top Tabs
   const [activeTab, setActiveTab] = useState<'ACTIVE_CARDS' | 'ISSUE_HISTORY' | 'REISSUES'>('ACTIVE_CARDS');
@@ -49,7 +55,7 @@ export const MaterialIssueModule: React.FC = () => {
   const toggleCardExpanded = (id: string) => {
     setExpandedCards(prev => ({
       ...prev,
-      [id]: prev[id] === undefined ? false : !prev[id]
+      [id]: !prev[id]
     }));
   };
 
@@ -88,7 +94,8 @@ export const MaterialIssueModule: React.FC = () => {
       totalItemsCount: number;
       fullyIssuedItemsCount: number;
       isFullyIssued: boolean;
-      _searchStr: string;
+      headerSearchStr: string;
+      componentSearchList: string[];
     }> = [];
 
     // Process Active Job Cards
@@ -117,8 +124,8 @@ export const MaterialIssueModule: React.FC = () => {
         const fullyIssuedItemsCount = comps.filter(c => c.unissuedQty === 0).length;
         const isFullyIssued = totalItemsCount > 0 && fullyIssuedItemsCount === totalItemsCount;
 
-        const compSearch = comps.map(c => `${c.itemCode} ${c.itemName}`).join(' ').toLowerCase();
-        const _searchStr = `${jc.jobCardNo} ${jc.woNumber || ''} ${jc.itemCode} ${jc.itemName} ${jc.assignedOperator || ''} ${compSearch}`.toLowerCase();
+        const headerSearchStr = `${jc.jobCardNo} ${jc.woNumber || ''} ${jc.itemCode} ${jc.itemName} ${jc.assignedOperator || ''}`.toLowerCase();
+        const componentSearchList = comps.map(c => `${c.itemCode} ${c.itemName}`.toLowerCase());
 
         list.push({
           id: jc.id,
@@ -134,7 +141,8 @@ export const MaterialIssueModule: React.FC = () => {
           totalItemsCount,
           fullyIssuedItemsCount,
           isFullyIssued,
-          _searchStr
+          headerSearchStr,
+          componentSearchList
         });
       });
 
@@ -166,9 +174,9 @@ export const MaterialIssueModule: React.FC = () => {
         const fullyIssuedItemsCount = comps.filter(c => c.unissuedQty === 0).length;
         const isFullyIssued = totalItemsCount > 0 && fullyIssuedItemsCount === totalItemsCount;
 
-        const compSearch = comps.map(c => `${c.itemCode} ${c.itemName}`).join(' ').toLowerCase();
         const refNo = wo.workOrderNo || (wo as any).woNumber || wo.id;
-        const _searchStr = `${refNo} ${wo.machineModel} ${wo.customerName || ''} ${wo.assignedLead || ''} ${compSearch}`.toLowerCase();
+        const headerSearchStr = `${refNo} ${wo.machineModel} ${wo.customerName || ''} ${wo.assignedLead || ''}`.toLowerCase();
+        const componentSearchList = comps.map(c => `${c.itemCode} ${c.itemName}`.toLowerCase());
 
         list.push({
           id: wo.id,
@@ -184,7 +192,8 @@ export const MaterialIssueModule: React.FC = () => {
           totalItemsCount,
           fullyIssuedItemsCount,
           isFullyIssued,
-          _searchStr
+          headerSearchStr,
+          componentSearchList
         });
       });
 
@@ -203,7 +212,17 @@ export const MaterialIssueModule: React.FC = () => {
       if (sourceTypeFilter === 'JOB_CARDS' && card.cardType !== 'JOB_CARD') return false;
       if (sourceTypeFilter === 'WORK_ORDERS' && card.cardType !== 'WORK_ORDER') return false;
 
-      if (tokens.length > 0 && !tokens.every(t => card._searchStr.includes(t))) {
+      if (tokens.length > 0) {
+        // 1. Matches card header (WO number, Machine Model, Item Code, Lead, Customer)
+        const matchesHeader = tokens.every(t => card.headerSearchStr.includes(t));
+        if (matchesHeader) return true;
+
+        // 2. Matches any individual child component completely
+        const matchesAnyComponent = card.componentSearchList.some(compStr => 
+          tokens.every(t => compStr.includes(t))
+        );
+        if (matchesAnyComponent) return true;
+
         return false;
       }
       return true;
@@ -363,6 +382,18 @@ export const MaterialIssueModule: React.FC = () => {
             Issue raw materials & components from Store for active Job Cards and Work Orders without premature stock deduction.
           </p>
         </div>
+
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <button 
+            type="button" 
+            className="btn btn-outline" 
+            onClick={() => setIsPrintListOpen(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.82rem' }}
+            title="Print store material issuance report"
+          >
+            <Printer size={14} /> Print Issue Register
+          </button>
+        </div>
       </div>
 
       {/* Navigation Tabs */}
@@ -452,7 +483,7 @@ export const MaterialIssueModule: React.FC = () => {
               </div>
             ) : (
               filteredActiveCards.map(card => {
-                const isExpanded = expandedCards[card.id] !== false; // default expanded
+                const isExpanded = !!expandedCards[card.id]; // default collapsed
                 const pct = card.totalItemsCount > 0 ? Math.round((card.fullyIssuedItemsCount / card.totalItemsCount) * 100) : 100;
 
                 return (
@@ -697,6 +728,7 @@ export const MaterialIssueModule: React.FC = () => {
                     <th>Issued To</th>
                     <th>Issued By</th>
                     <th>Notes</th>
+                    <th style={{ textAlign: 'center', width: '70px' }}>Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -727,6 +759,17 @@ export const MaterialIssueModule: React.FC = () => {
                       <td>{rec.issuedTo || '-'}</td>
                       <td style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>{rec.issuedBy}</td>
                       <td style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>{rec.notes || '-'}</td>
+                      <td style={{ textAlign: 'center' }}>
+                        <button
+                          type="button"
+                          className="btn btn-outline"
+                          style={{ padding: '0.2rem 0.45rem', fontSize: '0.72rem' }}
+                          title="Print Material Issue Slip (A4 Portrait)"
+                          onClick={() => setPrintRecord(rec)}
+                        >
+                          <Printer size={13} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -986,6 +1029,28 @@ export const MaterialIssueModule: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* PRINT PREVIEW MODAL - SINGLE ISSUE SLIP */}
+      {printRecord && (
+        <PrintManagerModal
+          documentTitle={`Material_Issue_${printRecord.issueNo || printRecord.id}`}
+          onClose={() => setPrintRecord(null)}
+          orientation="portrait"
+        >
+          <SingleMaterialIssuePrintView record={printRecord} />
+        </PrintManagerModal>
+      )}
+
+      {/* PRINT PREVIEW MODAL - ISSUE HISTORY REGISTER */}
+      {isPrintListOpen && (
+        <PrintManagerModal
+          documentTitle="Material_Issue_Register"
+          onClose={() => setIsPrintListOpen(false)}
+          orientation="portrait"
+        >
+          <MaterialIssueListPrintView records={filteredHistoryRecords} />
+        </PrintManagerModal>
       )}
     </div>
   );

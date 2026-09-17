@@ -423,7 +423,7 @@ export const PlanningModule: React.FC = () => {
   const totalMinShortageItemsCount = planningData.filter(d => d.minShortage > 0).length;
 
   const handleQuickPrint = () => {
-    window.print();
+    setPrintModalOpen(true);
   };
 
   return (
@@ -842,24 +842,12 @@ export const PlanningModule: React.FC = () => {
         </table>
       </div>
 
-      {/* Hidden Direct Print Area (Used by Quick Direct Print) */}
-      <div id="direct-print-area">
-        <PlanningPrintReport 
-          data={filteredData} 
-          filters={{
-            selectedClasses,
-            selectedProcessType,
-            searchTerm: cleanSearchTerm
-          }}
-        />
-      </div>
-
-      {/* Print Preview Modal */}
+      {/* Direct Print Mount (No Preview Modal) */}
       {printModalOpen && (
         <PrintManagerModal
           isOpen={printModalOpen}
           onClose={() => setPrintModalOpen(false)}
-          title="Planning & Material Demand Matrix"
+          orientation="landscape"
         >
           <PlanningPrintReport 
             data={filteredData} 
