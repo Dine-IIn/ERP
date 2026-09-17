@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useLayoutEffect, useRef, useDeferredValue } from 'react';
+import React, { useState, useMemo, useEffect, useLayoutEffect, useRef, useDeferredValue, useCallback } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { 
@@ -40,20 +40,27 @@ export const ShortageModule: React.FC = () => {
   const [simulatedQuantities, setSimulatedQuantities] = useState<Record<string, number>>({});
 
   // Dynamic Sticky Filter Bar Height for Tab 1
-  const card2Ref = useRef<HTMLDivElement>(null);
-  const [card2Height, setCard2Height] = useState<number>(82);
+  const [card2Height, setCard2Height] = useState<number>(0);
+  const card2ObserverRef = useRef<ResizeObserver | null>(null);
 
-  useLayoutEffect(() => {
-    if (card2Ref.current) {
-      const updateHeight = () => {
-        if (card2Ref.current) {
-          setCard2Height(card2Ref.current.offsetHeight);
+  const card2RefCallback = useCallback((node: HTMLDivElement | null) => {
+    if (card2ObserverRef.current) {
+      card2ObserverRef.current.disconnect();
+      card2ObserverRef.current = null;
+    }
+    if (node) {
+      setCard2Height(node.offsetHeight);
+      const ro = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          if (entry.target === node) {
+            setCard2Height(node.offsetHeight);
+          }
         }
-      };
-      updateHeight();
-      const ro = new ResizeObserver(updateHeight);
-      ro.observe(card2Ref.current);
-      return () => ro.disconnect();
+      });
+      ro.observe(node);
+      card2ObserverRef.current = ro;
+    } else {
+      setCard2Height(0);
     }
   }, []);
 
@@ -862,14 +869,36 @@ export const ShortageModule: React.FC = () => {
       return { ...c, childItem, leadTimeDays: leadTime };
     });
 
-    const sortedByLeadTime = [...withLeadTime].sort((a, b) => {
-      if (b.leadTimeDays !== a.leadTimeDays) return b.leadTimeDays - a.leadTimeDays;
-      if (b.shortage !== a.shortage) return b.shortage - a.shortage;
+    const sortedByPriority = [...withLeadTime].sort((a, b) => {
+      // 1. Lead Time Days (higher lead time = higher priority)
+      const ltA = a.leadTimeDays ?? 0;
+      const ltB = b.leadTimeDays ?? 0;
+      if (ltB !== ltA) return ltB - ltA;
+
+      // 2. Net Shortage (items with active shortage > 0 have higher priority, then shortage amount desc)
+      const hasShortageA = (a.shortage || 0) > 0 ? 1 : 0;
+      const hasShortageB = (b.shortage || 0) > 0 ? 1 : 0;
+      if (hasShortageB !== hasShortageA) return hasShortageB - hasShortageA;
+      if ((b.shortage || 0) !== (a.shortage || 0)) return (b.shortage || 0) - (a.shortage || 0);
+
+      // 3. Min Level Safety Shortage (minShortage > 0 has higher priority, then amount desc)
+      const hasMinShortA = (a.minShortage || 0) > 0 ? 1 : 0;
+      const hasMinShortB = (b.minShortage || 0) > 0 ? 1 : 0;
+      if (hasMinShortB !== hasMinShortA) return hasMinShortB - hasMinShortA;
+      if ((b.minShortage || 0) !== (a.minShortage || 0)) return (b.minShortage || 0) - (a.minShortage || 0);
+
+      // 4. WO Required / BOM Demand (totalRequired > 0 has higher priority, then amount desc)
+      const hasReqA = (a.totalRequired || 0) > 0 ? 1 : 0;
+      const hasReqB = (b.totalRequired || 0) > 0 ? 1 : 0;
+      if (hasReqB !== hasReqA) return hasReqB - hasReqA;
+      if ((b.totalRequired || 0) !== (a.totalRequired || 0)) return (b.totalRequired || 0) - (a.totalRequired || 0);
+
+      // 5. Alphabetical tie-breaker
       return (a.itemCode || '').localeCompare(b.itemCode || '');
     });
 
     const rankMap = new Map<string, number>();
-    sortedByLeadTime.forEach((it, idx) => {
+    sortedByPriority.forEach((it, idx) => {
       rankMap.set(it.itemId || it.itemCode, idx + 1);
     });
 
@@ -1223,14 +1252,38 @@ export const ShortageModule: React.FC = () => {
       return { ...c, childItem, leadTimeDays: leadTime };
     });
 
-    const sortedByLeadTime = [...withLeadTime].sort((a, b) => {
-      if (b.leadTimeDays !== a.leadTimeDays) return b.leadTimeDays - a.leadTimeDays;
-      if (b.netShortage !== a.netShortage) return b.netShortage - a.netShortage;
+    const sortedByPriority = [...withLeadTime].sort((a, b) => {
+      // 1. Lead Time Days (higher lead time = higher priority)
+      const ltA = a.leadTimeDays ?? 0;
+      const ltB = b.leadTimeDays ?? 0;
+      if (ltB !== ltA) return ltB - ltA;
+
+      // 2. Net Shortage (items with active shortage > 0 have higher priority, then shortage amount desc)
+      const hasShortageA = (a.netShortage || 0) > 0 ? 1 : 0;
+      const hasShortageB = (b.netShortage || 0) > 0 ? 1 : 0;
+      if (hasShortageB !== hasShortageA) return hasShortageB - hasShortageA;
+      if ((b.netShortage || 0) !== (a.netShortage || 0)) return (b.netShortage || 0) - (a.netShortage || 0);
+
+      // 3. Min Level Safety Shortage
+      const minShortA = Math.max(0, (a.minStockQty || 0) - (a.inHouseStock || 0));
+      const minShortB = Math.max(0, (b.minStockQty || 0) - (b.inHouseStock || 0));
+      const hasMinShortA = minShortA > 0 ? 1 : 0;
+      const hasMinShortB = minShortB > 0 ? 1 : 0;
+      if (hasMinShortB !== hasMinShortA) return hasMinShortB - hasMinShortA;
+      if (minShortB !== minShortA) return minShortB - minShortA;
+
+      // 4. WO Required / BOM Demand (totalRequired > 0 has higher priority, then amount desc)
+      const hasReqA = (a.totalRequired || 0) > 0 ? 1 : 0;
+      const hasReqB = (b.totalRequired || 0) > 0 ? 1 : 0;
+      if (hasReqB !== hasReqA) return hasReqB - hasReqA;
+      if ((b.totalRequired || 0) !== (a.totalRequired || 0)) return (b.totalRequired || 0) - (a.totalRequired || 0);
+
+      // 5. Alphabetical tie-breaker
       return (a.itemCode || '').localeCompare(b.itemCode || '');
     });
 
     const rankMap = new Map<string, number>();
-    sortedByLeadTime.forEach((it, idx) => {
+    sortedByPriority.forEach((it, idx) => {
       rankMap.set(it.itemId || it.itemCode, idx + 1);
     });
 
@@ -1443,14 +1496,40 @@ export const ShortageModule: React.FC = () => {
       return { ...c, childItem, leadTimeDays: leadTime };
     });
 
-    const sortedByLeadTime = [...withLeadTime].sort((a, b) => {
-      if (b.leadTimeDays !== a.leadTimeDays) return b.leadTimeDays - a.leadTimeDays;
-      if (b.shortage !== a.shortage) return b.shortage - a.shortage;
+    const sortedByPriority = [...withLeadTime].sort((a, b) => {
+      // 1. Lead Time Days (higher lead time = higher priority)
+      const ltA = a.leadTimeDays ?? 0;
+      const ltB = b.leadTimeDays ?? 0;
+      if (ltB !== ltA) return ltB - ltA;
+
+      // 2. Net Shortage (items with active shortage > 0 have higher priority, then shortage amount desc)
+      const hasShortageA = (a.shortage || 0) > 0 ? 1 : 0;
+      const hasShortageB = (b.shortage || 0) > 0 ? 1 : 0;
+      if (hasShortageB !== hasShortageA) return hasShortageB - hasShortageA;
+      if ((b.shortage || 0) !== (a.shortage || 0)) return (b.shortage || 0) - (a.shortage || 0);
+
+      // 3. Min Level Safety Shortage
+      const minStockA = a.childItem ? (a.childItem.minStockQty !== undefined ? a.childItem.minStockQty : (a.childItem.reorderLevel || 0)) : 0;
+      const minStockB = b.childItem ? (b.childItem.minStockQty !== undefined ? b.childItem.minStockQty : (b.childItem.reorderLevel || 0)) : 0;
+      const minShortA = Math.max(0, minStockA - (a.inHouseStock || 0));
+      const minShortB = Math.max(0, minStockB - (b.inHouseStock || 0));
+      const hasMinShortA = minShortA > 0 ? 1 : 0;
+      const hasMinShortB = minShortB > 0 ? 1 : 0;
+      if (hasMinShortB !== hasMinShortA) return hasMinShortB - hasMinShortA;
+      if (minShortB !== minShortA) return minShortB - minShortA;
+
+      // 4. Job Card Required Demand
+      const hasReqA = (a.totalRequired || 0) > 0 ? 1 : 0;
+      const hasReqB = (b.totalRequired || 0) > 0 ? 1 : 0;
+      if (hasReqB !== hasReqA) return hasReqB - hasReqA;
+      if ((b.totalRequired || 0) !== (a.totalRequired || 0)) return (b.totalRequired || 0) - (a.totalRequired || 0);
+
+      // 5. Alphabetical tie-breaker
       return (a.itemCode || '').localeCompare(b.itemCode || '');
     });
 
     const rankMap = new Map<string, number>();
-    sortedByLeadTime.forEach((it, idx) => {
+    sortedByPriority.forEach((it, idx) => {
       rankMap.set(it.itemId || it.itemCode, idx + 1);
     });
 
@@ -2085,24 +2164,30 @@ export const ShortageModule: React.FC = () => {
             )}
           </div>
 
-          {/* Consolidated Component Table Filter & Table Section (Zero Gap for Clean Sticky Scroll) */}
+          {/* Consolidated Component Table ($X + Y$) - Single Unified Container */}
           <div 
+            className="table-container-flow" 
             style={{ 
-              display: 'flex', 
-              flexDirection: 'column', 
-              gap: 0, 
-              width: '100%',
+              backgroundColor: 'var(--bg-card)', 
+              border: '1px solid var(--border-color)', 
+              borderRadius: '0.5rem', 
+              overflowX: 'auto',
+              overflowY: 'visible',
+              width: '100%', 
+              maxWidth: '100%',
+              margin: 0,
               ['--shortage-filter-height' as any]: `${card2Height}px`
             }}
           >
-            {/* Filter & Search Controls (Sticky at top: 0) */}
+            {/* Filter & Search Controls (Sticky at top: 0, left: 0 inside table container) */}
             {selectedItemIds.length > 0 && (
               <div 
-                ref={card2Ref}
-                className="card shortage-sticky-card2" 
+                ref={card2RefCallback}
+                className="shortage-sticky-card2" 
                 style={{ 
                   position: 'sticky',
                   top: 0,
+                  left: 0,
                   zIndex: 30,
                   backgroundColor: 'var(--bg-card)', 
                   padding: '0.55rem 0.85rem', 
@@ -2110,11 +2195,10 @@ export const ShortageModule: React.FC = () => {
                   flexDirection: 'column', 
                   gap: '0.45rem', 
                   flexShrink: 0, 
-                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)', 
-                  border: '1px solid var(--border-color)',
-                  borderBottom: 'none',
+                  borderBottom: '1px solid var(--border-color)',
                   borderRadius: '0.5rem 0.5rem 0 0',
-                  margin: 0
+                  minWidth: '100%',
+                  boxSizing: 'border-box'
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
@@ -2219,21 +2303,6 @@ export const ShortageModule: React.FC = () => {
                 </div>
               </div>
             )}
-
-            {/* Consolidated Component Table ($X + Y$) - Single-Scroll Table Flow */}
-            <div 
-              className="table-container-flow" 
-              style={{ 
-                backgroundColor: 'var(--bg-card)', 
-                border: '1px solid var(--border-color)', 
-                borderRadius: selectedItemIds.length > 0 ? '0 0 0.5rem 0.5rem' : '0.5rem', 
-                overflowX: 'auto',
-                overflowY: 'visible',
-                width: '100%', 
-                maxWidth: '100%',
-                margin: 0
-              }}
-            >
             {selectedItemIds.length === 0 ? (
               <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
                 <Package size={40} color="var(--accent-primary)" style={{ margin: '0 auto 0.75rem auto' }} />
@@ -2486,7 +2555,6 @@ export const ShortageModule: React.FC = () => {
               </table>
             )}
             </div>
-          </div>
         </div>
       )}
 

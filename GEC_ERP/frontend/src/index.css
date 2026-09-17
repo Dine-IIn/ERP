@@ -258,7 +258,7 @@ th {
 
 .shortage-itemwise-table th {
   position: sticky !important;
-  top: var(--shortage-filter-height, 44px) !important;
+  top: var(--shortage-filter-height, 0px) !important;
   z-index: 20 !important;
   background-color: var(--bg-tertiary) !important;
   box-shadow: 0 1px 0 var(--border-color);

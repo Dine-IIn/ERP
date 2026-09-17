@@ -254,7 +254,7 @@
       "minStockQty": 1,
       "minOrderQty": 2,
       "unitPrice": 12500,
-      "leadTimeDays": 0,
+      "leadTimeDays": 10,
       "location": "Sub-Assembly Section",
       "qcTrigger": "NO_QC",
       "testReportRequired": false,
@@ -262,7 +262,12 @@
         "In-house"
       ],
       "processType": "In-house",
-      "isBlocked": false
+      "isBlocked": false,
+      "partNo": "",
+      "mappedVendors": [],
+      "note": "",
+      "weightKg": 0,
+      "isDirectJobworkShipment": false
     },
     {
       "id": "itm-1789299669861-4-5l67m",
@@ -279,7 +284,7 @@
       "minStockQty": 1,
       "minOrderQty": 2,
       "unitPrice": 12500,
-      "leadTimeDays": 0,
+      "leadTimeDays": 30,
       "location": "Sub-Assembly Section",
       "qcTrigger": "NO_QC",
       "testReportRequired": false,
@@ -288,7 +293,12 @@
       ],
       "processType": "In-house",
       "isBlocked": false,
-      "reorderLevel": 12500
+      "reorderLevel": 12500,
+      "partNo": "",
+      "mappedVendors": [],
+      "note": "",
+      "weightKg": 0,
+      "isDirectJobworkShipment": false
     },
     {
       "id": "itm-1789299669861-5-95nd4",
@@ -305,7 +315,7 @@
       "minStockQty": 1,
       "minOrderQty": 2,
       "unitPrice": 12500,
-      "leadTimeDays": 0,
+      "leadTimeDays": 30,
       "location": "Sub-Assembly Section",
       "qcTrigger": "NO_QC",
       "testReportRequired": false,
@@ -313,7 +323,12 @@
         "In-house"
       ],
       "processType": "In-house",
-      "isBlocked": false
+      "isBlocked": false,
+      "partNo": "",
+      "mappedVendors": [],
+      "note": "",
+      "weightKg": 0,
+      "isDirectJobworkShipment": false
     },
     {
       "id": "itm-1789299669861-6-qbclw",
@@ -1586,16 +1601,21 @@
       "minStockQty": 3,
       "minOrderQty": 5,
       "unitPrice": 2400,
-      "leadTimeDays": 0,
+      "leadTimeDays": 30,
       "location": "Machine Shop Bay",
-      "qcTrigger": "",
+      "qcTrigger": "NO_QC",
       "testReportRequired": false,
       "materialProcessSources": [
         "In-house",
         "Job work"
       ],
       "processType": "Job work",
-      "isBlocked": false
+      "isBlocked": false,
+      "partNo": "",
+      "mappedVendors": [],
+      "note": "",
+      "weightKg": 0,
+      "isDirectJobworkShipment": false
     },
     {
       "id": "itm-1789299669861-50-e6kbl",
@@ -1957,9 +1977,9 @@
       "minStockQty": 2,
       "minOrderQty": 5,
       "unitPrice": 500,
-      "leadTimeDays": 0,
+      "leadTimeDays": 10,
       "location": "General Stores",
-      "qcTrigger": "",
+      "qcTrigger": "NO_QC",
       "testReportRequired": false,
       "materialProcessSources": [
         "Bought out"
@@ -1979,7 +1999,11 @@
           "priority": 2
         }
       ],
-      "isBlocked": false
+      "isBlocked": false,
+      "partNo": "",
+      "note": "",
+      "weightKg": 0,
+      "isDirectJobworkShipment": false
     },
     {
       "id": "itm-1789299669862-64-vl26q",
@@ -4907,16 +4931,22 @@
       "minStockQty": 3,
       "minOrderQty": 5,
       "unitPrice": 2400,
-      "leadTimeDays": 0,
+      "leadTimeDays": 50,
       "location": "Machine Shop Bay",
-      "qcTrigger": "",
+      "qcTrigger": "NO_QC",
       "testReportRequired": false,
       "materialProcessSources": [
         "In-house",
         "Job work"
       ],
       "processType": "Job work",
-      "isBlocked": false
+      "isBlocked": false,
+      "oldItemCode": "",
+      "partNo": "",
+      "mappedVendors": [],
+      "note": "",
+      "weightKg": 0,
+      "isDirectJobworkShipment": false
     },
     {
       "id": "itm-1789299669863-158-awj4j",
@@ -5011,16 +5041,21 @@
       "minStockQty": 3,
       "minOrderQty": 5,
       "unitPrice": 2400,
-      "leadTimeDays": 0,
+      "leadTimeDays": 50,
       "location": "Machine Shop Bay",
-      "qcTrigger": "",
+      "qcTrigger": "NO_QC",
       "testReportRequired": false,
       "materialProcessSources": [
         "In-house",
         "Job work"
       ],
       "processType": "Job work",
-      "isBlocked": false
+      "isBlocked": false,
+      "partNo": "",
+      "mappedVendors": [],
+      "note": "",
+      "weightKg": 0,
+      "isDirectJobworkShipment": false
     },
     {
       "id": "itm-1789299669863-162-cddgk",
@@ -18874,6 +18909,83 @@
   "jobCardMaterialReissues": [],
   "intermediateProcessItems": [],
   "auditLogs": [
+    {
+      "id": "log-1789646951045-671jqq",
+      "userId": "usr-superadmin",
+      "username": "GEC System Super Admin (superadmin)",
+      "role": "Admin",
+      "action": "UPDATE_ITEM",
+      "module": "Item Master",
+      "details": "Updated item: GEC0000162 - INJECTION CYLINDER ROD - 280",
+      "ipAddress": "127.0.0.1",
+      "timestamp": "2026-09-17T12:09:11.045Z"
+    },
+    {
+      "id": "log-1789646930082-e0xhen",
+      "userId": "usr-superadmin",
+      "username": "GEC System Super Admin (superadmin)",
+      "role": "Admin",
+      "action": "UPDATE_ITEM",
+      "module": "Item Master",
+      "details": "Updated item: GEC0000158 - FASTENER KIT BARREL PLATE ASSY - 280",
+      "ipAddress": "127.0.0.1",
+      "timestamp": "2026-09-17T12:08:50.082Z"
+    },
+    {
+      "id": "log-1789646897461-xa5no5",
+      "userId": "usr-superadmin",
+      "username": "GEC System Super Admin (superadmin)",
+      "role": "Admin",
+      "action": "UPDATE_ITEM",
+      "module": "Item Master",
+      "details": "Updated item: GEC0000050 - NOZZLE CYLINDER EXTENSION ROD 90-280",
+      "ipAddress": "127.0.0.1",
+      "timestamp": "2026-09-17T12:08:17.461Z"
+    },
+    {
+      "id": "log-1789646864528-ykos2n",
+      "userId": "usr-superadmin",
+      "username": "GEC System Super Admin (superadmin)",
+      "role": "Admin",
+      "action": "UPDATE_ITEM",
+      "module": "Item Master",
+      "details": "Updated item: GEC0000006 - BEARING HOUSING ASSY-280",
+      "ipAddress": "127.0.0.1",
+      "timestamp": "2026-09-17T12:07:44.528Z"
+    },
+    {
+      "id": "log-1789646851898-9hc167",
+      "userId": "usr-superadmin",
+      "username": "GEC System Super Admin (superadmin)",
+      "role": "Admin",
+      "action": "UPDATE_ITEM",
+      "module": "Item Master",
+      "details": "Updated item: GEC0000005 - BARREL PLATE ASSY-280",
+      "ipAddress": "127.0.0.1",
+      "timestamp": "2026-09-17T12:07:31.898Z"
+    },
+    {
+      "id": "log-1789646831264-v0pip1",
+      "userId": "usr-superadmin",
+      "username": "GEC System Super Admin (superadmin)",
+      "role": "Admin",
+      "action": "UPDATE_ITEM",
+      "module": "Item Master",
+      "details": "Updated item: GEC0000064 - PLC BOX COVER",
+      "ipAddress": "127.0.0.1",
+      "timestamp": "2026-09-17T12:07:11.264Z"
+    },
+    {
+      "id": "log-1789646801873-bd6b6w",
+      "userId": "usr-superadmin",
+      "username": "GEC System Super Admin (superadmin)",
+      "role": "Admin",
+      "action": "UPDATE_ITEM",
+      "module": "Item Master",
+      "details": "Updated item: GEC0000004 - GUIDE ROD TYPE INJECTION UNIT-280",
+      "ipAddress": "127.0.0.1",
+      "timestamp": "2026-09-17T12:06:41.873Z"
+    },
     {
       "id": "log-1789643556992-c85vl1",
       "userId": "usr-superadmin",
