@@ -29,9 +29,50 @@ import { PlanningModule } from './components/modules/PlanningModule';
 import { SuperAdminAnalyticsModule } from './components/modules/SuperAdminAnalyticsModule';
 import { MaterialIssueModule } from './components/modules/MaterialIssueModule';
 
+const MODULE_REGISTRY: Record<string, React.FC> = {
+  'superadmin-analytics': SuperAdminAnalyticsModule,
+  'dashboard': DashboardModule,
+  'planning': PlanningModule,
+  'shortage': ShortageModule,
+  'item-master': ItemMasterModule,
+  'process-master': ProcessMasterModule,
+  'customer-master': CustomerMasterModule,
+  'vendor-master': VendorMasterModule,
+  'bom-master': BOMMasterModule,
+  'sales-orders': SalesOrderModule,
+  'work-orders': WorkOrderModule,
+  'job-cards': JobCardModule,
+  'material-issue': MaterialIssueModule,
+  'floor-planning': FloorPlanningModule,
+  'inventory': InventoryModule,
+  'inhouse-inventory': InHouseInventoryModule,
+  'external-inventory': ExternalInventoryModule,
+  'external-jobwork': ExternalInventoryModule,
+  'jobwork': ExternalInventoryModule,
+  'purchase-orders': PurchaseOrderModule,
+  'grn': GRNModule,
+  'quality-control': QualityControlModule,
+  'dispatch': DispatchModule,
+  'assembly': AssemblyModule,
+  'user-management': UserManagementModule,
+};
+
 const MainContent: React.FC = () => {
   const { currentUser, activeModule, setActiveModule } = useERP();
   const [pendingUpdate, setPendingUpdate] = useState<UpdateInfo | null>(null);
+
+  const isSuperAdminUser = currentUser?.isSuperAdmin === true || currentUser?.username?.toLowerCase() === 'superadmin';
+  const effectiveModule = activeModule || (isSuperAdminUser ? 'superadmin-analytics' : 'dashboard');
+
+  // Keep-Alive Module Caching: visited modules stay mounted in DOM for 0ms instant tab switching
+  const [visitedModules, setVisitedModules] = useState<string[]>(() => [effectiveModule]);
+
+  // Track active modules unconditionally
+  useEffect(() => {
+    if (currentUser && effectiveModule) {
+      setVisitedModules(prev => prev.includes(effectiveModule) ? prev : [...prev, effectiveModule]);
+    }
+  }, [currentUser, effectiveModule]);
 
   // Initialize heartbeat and check for updates on startup/login
   useEffect(() => {
@@ -75,7 +116,6 @@ const MainContent: React.FC = () => {
         }
 
         // Priority 3: If no active form/modal is open, navigate back to Dashboard
-        const isSuperAdminUser = currentUser?.isSuperAdmin === true || currentUser?.username?.toLowerCase() === 'superadmin';
         const homeModule = isSuperAdminUser ? 'superadmin-analytics' : 'dashboard';
         if (activeModule !== homeModule) {
           setActiveModule(homeModule);
@@ -85,7 +125,7 @@ const MainContent: React.FC = () => {
 
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [activeModule, setActiveModule, currentUser]);
+  }, [activeModule, setActiveModule, isSuperAdminUser]);
 
   // Disable scroll wheel increment/decrement on all number inputs globally
   useEffect(() => {
@@ -110,39 +150,6 @@ const MainContent: React.FC = () => {
     );
   }
 
-  const isSuperAdminUser = currentUser?.isSuperAdmin === true || currentUser?.username?.toLowerCase() === 'superadmin';
-
-  const renderActiveModule = () => {
-    switch (activeModule) {
-      case 'superadmin-analytics': return <SuperAdminAnalyticsModule />;
-      case 'dashboard': return <DashboardModule />;
-      case 'planning': return <PlanningModule />;
-      case 'shortage': return <ShortageModule />;
-      case 'item-master': return <ItemMasterModule />;
-      case 'process-master': return <ProcessMasterModule />;
-      case 'customer-master': return <CustomerMasterModule />;
-      case 'vendor-master': return <VendorMasterModule />;
-      case 'bom-master': return <BOMMasterModule />;
-      case 'sales-orders': return <SalesOrderModule />;
-      case 'work-orders': return <WorkOrderModule />;
-      case 'job-cards': return <JobCardModule />;
-      case 'material-issue': return <MaterialIssueModule />;
-      case 'floor-planning': return <FloorPlanningModule />;
-      case 'inventory': return <InventoryModule />;
-      case 'inhouse-inventory': return <InventoryModule />;
-      case 'external-inventory': return <InventoryModule />;
-      case 'external-jobwork': return <ExternalInventoryModule />;
-      case 'jobwork': return <ExternalInventoryModule />;
-      case 'purchase-orders': return <PurchaseOrderModule />;
-      case 'grn': return <GRNModule />;
-      case 'quality-control': return <QualityControlModule />;
-      case 'dispatch': return <DispatchModule />;
-      case 'assembly': return <AssemblyModule />;
-      case 'user-management': return <UserManagementModule />;
-      default: return isSuperAdminUser ? <SuperAdminAnalyticsModule /> : <DashboardModule />;
-    }
-  };
-
   return (
     <div className="app-container">
       {/* Mandatory Update Enforcement Modal */}
@@ -157,7 +164,25 @@ const MainContent: React.FC = () => {
       <div className="main-content-wrapper">
         <Header />
         <main className="page-body animate-fade-in">
-          {renderActiveModule()}
+          {visitedModules.map(modKey => {
+            const Component = MODULE_REGISTRY[modKey] || (isSuperAdminUser ? SuperAdminAnalyticsModule : DashboardModule);
+            const isVisible = effectiveModule === modKey;
+            return (
+              <div
+                key={modKey}
+                style={{
+                  display: isVisible ? 'flex' : 'none',
+                  flexDirection: 'column',
+                  flex: 1,
+                  minHeight: 0,
+                  height: '100%',
+                  width: '100%'
+                }}
+              >
+                <Component />
+              </div>
+            );
+          })}
         </main>
       </div>
     </div>

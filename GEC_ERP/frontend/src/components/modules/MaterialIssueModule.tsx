@@ -613,9 +613,12 @@ export const MaterialIssueModule: React.FC = () => {
                                         className="input-field"
                                         style={{ width: '85px', textAlign: 'right', padding: '0.15rem 0.4rem', fontSize: '0.78rem' }}
                                         value={currentInputQty}
+                                        title={`Max allowed: ${Math.min(comp.unissuedQty, comp.inHouseStock)} ${comp.unit} (Cannot exceed required: ${comp.totalRequiredQty} ${comp.unit})`}
                                         onChange={(e) => {
                                           const val = Number(e.target.value);
-                                          setCustomIssueQtys(prev => ({ ...prev, [key]: val }));
+                                          const maxLimit = Math.min(comp.unissuedQty, comp.inHouseStock);
+                                          const clamped = isNaN(val) ? 0 : Math.max(0, Math.min(val, maxLimit));
+                                          setCustomIssueQtys(prev => ({ ...prev, [key]: clamped }));
                                         }}
                                         disabled={comp.inHouseStock === 0}
                                       />

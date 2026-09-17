@@ -6,7 +6,7 @@ import {
   VendorDebitChallan, IntermediateProcessItem
 } from '../types/erp';
 
-// Clean Initial Accounts: Standard Admin and Protected Super Admin
+// Initial Accounts metadata (Passwords are dynamically authenticated and salted by backend)
 export const INITIAL_USERS: User[] = [
   {
     id: 'usr-admin',
@@ -14,7 +14,6 @@ export const INITIAL_USERS: User[] = [
     fullName: 'System Administrator',
     role: 'Admin',
     email: 'admin@gecmachines.com',
-    password: 'admin',
     isSuperAdmin: false
   },
   {
@@ -23,7 +22,6 @@ export const INITIAL_USERS: User[] = [
     fullName: 'GEC System Super Admin',
     role: 'Admin',
     email: 'superadmin@gecmachines.com',
-    password: 'GEC_SuperAdmin#2026!Secured$',
     isSuperAdmin: true
   }
 ];

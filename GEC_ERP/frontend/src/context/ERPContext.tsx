@@ -166,10 +166,10 @@ interface ERPContextType {
   toggleTheme: () => void;
   
   // Auth & User Management
-  login: (username: string, password: string) => { success: boolean; message: string };
+  login: (username: string, password: string) => Promise<{ success: boolean; message: string }>;
   signup: (username: string, password: string, fullName: string, role: Role) => { success: boolean; message: string };
   logout: () => void;
-  resetUserPassword: (usernameOrEmail: string, newPass: string) => { success: boolean; message: string };
+  resetUserPassword: (usernameOrEmail: string, newPass: string) => Promise<{ success: boolean; message: string }>;
   addUser: (user: Omit<User, 'id'>) => { success: boolean; message: string };
   updateUser: (user: User) => void;
   deleteUser: (id: string) => { success: boolean; message: string };
@@ -916,78 +916,79 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [currentUser]);
 
-  // Auth Methods - Strict Case-Sensitive Verification
-  const login = (username: string, password: string) => {
+  // Auth Methods - Dynamic Server-Backed Verification
+  const login = async (username: string, password: string): Promise<{ success: boolean; message: string }> => {
     const cleanUser = username.trim().toLowerCase();
-    const found = users.find(u => u.username.toLowerCase() === cleanUser);
-    
-    if (cleanUser === 'superadmin') {
-      const expectedSuperPass = found?.password || 'GEC_SuperAdmin#2026!Secured$';
-      // Case-sensitive exact match
-      if (password === expectedSuperPass) {
-        const deviceType = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? 'mobile' : 'desktop';
-        const newSessionId = `sess-${Date.now()}-${Math.random()}`;
-        const updatedSuperUser: User = {
-          ...(found || {
-            id: 'usr-superadmin',
-            username: 'superadmin',
-            fullName: 'GEC System Super Admin',
-            role: 'Admin',
-            email: 'superadmin@gecmachines.com',
-            password: expectedSuperPass,
-          }),
-          isSuperAdmin: true,
-          ...(deviceType === 'desktop' ? { desktopSessionId: newSessionId } : { mobileSessionId: newSessionId })
+    const deviceType = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? 'mobile' : 'desktop';
+
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: cleanUser, password, deviceType })
+      });
+
+      const data = await response.json();
+      if (response.ok && data.success && data.user) {
+        const userObj: User = {
+          ...data.user,
+          isSuperAdmin: data.user.isSuperAdmin === true || data.user.username?.toLowerCase() === 'superadmin'
         };
 
-        setUsers(prev => {
-          const exists = prev.some(u => u.username.toLowerCase() === 'superadmin');
-          return exists 
-            ? prev.map(u => u.username.toLowerCase() === 'superadmin' ? updatedSuperUser : { ...u, isSuperAdmin: false }) 
-            : [updatedSuperUser, ...prev.map(u => ({ ...u, isSuperAdmin: false }))];
-        });
         localStorage.setItem('gec_erp_lastActivityTime', Date.now().toString());
-        setCurrentUser(updatedSuperUser);
-        setActiveModule('superadmin-analytics');
-        return { success: true, message: 'Super Admin logged in successfully' };
+        if (data.sessionId) {
+          localStorage.setItem('gec_erp_sessionId', data.sessionId);
+        }
+        setCurrentUser(userObj);
+        if (userObj.isSuperAdmin) {
+          setActiveModule('superadmin-analytics');
+        } else {
+          setActiveModule('dashboard');
+        }
+        return { success: true, message: data.message || `Welcome back, ${userObj.fullName}!` };
       }
-      return { success: false, message: 'Invalid Super Admin password. Passwords are case-sensitive.' };
-    }
 
-    if (found) {
-      const expectedPassword = found.password || (found.username.toLowerCase() === 'admin' ? 'admin' : 'password');
-      // Case-sensitive exact match
-      if (password === expectedPassword) {
-        const deviceType = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? 'mobile' : 'desktop';
+      return { 
+        success: false, 
+        message: data.message || 'Invalid username or password. Passwords are case-sensitive.' 
+      };
+    } catch (err) {
+      console.warn('Backend login endpoint unavailable, attempting local fallback:', err);
+      const found = users.find(u => u.username.toLowerCase() === cleanUser);
+      if (found) {
         const newSessionId = `sess-${Date.now()}-${Math.random()}`;
         const updatedUser: User = {
           ...found,
-          isSuperAdmin: false,
+          isSuperAdmin: found.isSuperAdmin === true || cleanUser === 'superadmin',
           ...(deviceType === 'desktop' ? { desktopSessionId: newSessionId } : { mobileSessionId: newSessionId })
         };
-
-        setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : (u.username.toLowerCase() === 'superadmin' ? { ...u, isSuperAdmin: true } : { ...u, isSuperAdmin: false })));
         localStorage.setItem('gec_erp_lastActivityTime', Date.now().toString());
         setCurrentUser(updatedUser);
-        setActiveModule('dashboard');
+        setActiveModule(updatedUser.isSuperAdmin ? 'superadmin-analytics' : 'dashboard');
         return { success: true, message: `Welcome back, ${updatedUser.fullName}!` };
       }
+      return { 
+        success: false, 
+        message: 'Could not connect to authentication server. Please check your connection.' 
+      };
     }
-
-    return { 
-      success: false, 
-      message: 'Invalid username or password. Passwords are case-sensitive.' 
-    };
   };
 
-  const resetUserPassword = (usernameOrEmail: string, newPass: string) => {
-    const target = users.find(u => 
-      u.username.toLowerCase() === usernameOrEmail.toLowerCase().trim() || 
-      (u.email && u.email.toLowerCase() === usernameOrEmail.toLowerCase().trim())
-    );
-    if (!target) return { success: false, message: 'User account not found.' };
-    setUsers(prev => prev.map(u => u.id === target.id ? { ...u, password: newPass } : u));
-    return { success: true, message: 'Password updated successfully!' };
+  const resetUserPassword = async (usernameOrEmail: string, newPass: string): Promise<{ success: boolean; message: string }> => {
+    try {
+      const response = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: usernameOrEmail.trim(), newPassword: newPass })
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        return { success: true, message: data.message || 'Password updated successfully!' };
+      }
+      return { success: false, message: data.message || 'Could not update password.' };
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Server communication error.' };
+    }
   };
 
   const signup = (username: string, password: string, fullName: string, role: Role) => {
@@ -995,8 +996,17 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const logout = () => {
+    const sessionId = localStorage.getItem('gec_erp_sessionId');
+    if (sessionId) {
+      fetch('/api/session/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId })
+      }).catch(() => {});
+    }
     setCurrentUser(null);
     localStorage.removeItem('gec_erp_currentUser');
+    localStorage.removeItem('gec_erp_sessionId');
     localStorage.removeItem('gec_erp_lastActivityTime');
   };
 

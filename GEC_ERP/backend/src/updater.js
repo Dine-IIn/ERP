@@ -1,4 +1,4 @@
-﻿// ====================================================================
+// ====================================================================
 // GEC ERP - Enterprise Automated Updater & Release Gateway
 // ====================================================================
 import fs from 'fs';
@@ -57,11 +57,11 @@ class AutoUpdater {
         'User-Agent': 'GEC-ERP-AutoUpdater'
       };
       if (token) {
-        headers['Authorization'] = 	oken ;
+        headers['Authorization'] = `token ${token}`;
       }
 
       // 1. Check GitHub latest release
-      const url = https://api.github.com/repos//releases/latest;
+      const url = `https://api.github.com/repos/${repo}/releases/latest`;
       const res = await fetch(url, { headers, signal: AbortSignal.timeout(6000) });
       
       if (res.ok) {
@@ -75,7 +75,7 @@ class AutoUpdater {
           if (this.compareVersions(this.latestVersion, this.currentVersion) > 0) {
             this.updateAvailable = true;
             this.isUpdateStaged = true;
-            console.log(🚀 [AutoUpdater] New release available: v (Current: v));
+            console.log(`🚀 [AutoUpdater] New release available: v${this.latestVersion} (Current: v${this.currentVersion})`);
             return { updateAvailable: true, version: this.latestVersion };
           }
         }
@@ -107,10 +107,10 @@ class AutoUpdater {
 
     const activeSessions = sessionManager.getActiveSessionsCount();
     if (activeSessions === 0) {
-      console.log(⚡ [AutoUpdater] Zero active user sessions detected. Applying staged update v...);
+      console.log(`⚡ [AutoUpdater] Zero active user sessions detected. Applying staged update v${this.latestVersion}...`);
       await this.applyUpdate();
     } else {
-      console.log(⏳ [AutoUpdater] Update v staged. Waiting for  active session(s) to drain.);
+      console.log(`⏳ [AutoUpdater] Update v${this.latestVersion} staged. Waiting for ${activeSessions} active session(s) to drain.`);
     }
   }
 
@@ -121,7 +121,7 @@ class AutoUpdater {
     if (activeSessions > 0 && !force) {
       return {
         success: false,
-        message: Cannot update now:  user(s) are currently active. Update will apply automatically when sessions end.
+        message: `Cannot update now: ${activeSessions} user(s) are currently active. Update will apply automatically when sessions end.`
       };
     }
 

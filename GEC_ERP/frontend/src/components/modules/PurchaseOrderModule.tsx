@@ -5,7 +5,7 @@ import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { SinglePOPrintView, POListPrintView } from '../printTemplates/POPrintTemplates';
 import { TabularShortagePrintView, TabularShortageRow } from '../printTemplates/ShortagePrintTemplates';
 import { ShoppingCart, Plus, Trash2, Edit2, Search, Printer, FileSpreadsheet, Send, AlertTriangle, CheckCircle2, XCircle, FileText, ArrowRight, ShieldCheck, ArrowUpDown, ArrowUp, ArrowDown, Percent, Hash, ArrowLeft, X, AlertCircle, RefreshCw, Layers } from 'lucide-react';
-import { POLineItem, PurchaseOrder, Item, POStatus, ItemMappedVendor, generateNextPONumber } from '../../types/erp';
+import { POLineItem, PurchaseOrder, Item, POStatus, ItemMappedVendor, generateNextPONumber, BOM } from '../../types/erp';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
 
 type POSortField = 'poNumber' | 'vendorName' | 'orderDate' | 'deliveryDate' | 'poCreateDateTime' | 'totalAmount';
@@ -72,48 +72,83 @@ export const PurchaseOrderModule: React.FC = () => {
       }, 0);
   };
 
-  // Helper: Item Work Order Demand (Multi-Level Exploded & woComponents supported)
-  const getItemWorkOrderDemand = (itemId: string, itemCode: string) => {
-    let demand = 0;
-    const activeWOs = workOrders.filter(w => w.status !== 'COMPLETED' && w.status !== 'CANCELLED');
+  // Pre-indexed Single Pass Demand Maps for O(1) Instant Demand Lookups
+  const aggregateDemandMaps = useMemo(() => {
+    const woDemandMap = new Map<string, number>();
+    const jcDemandMap = new Map<string, number>();
+    const jwDemandMap = new Map<string, number>();
+
+    const addWoDemand = (key: string | undefined, qty: number) => {
+      if (!key || qty <= 0) return;
+      const clean = key.trim().toLowerCase();
+      woDemandMap.set(clean, (woDemandMap.get(clean) || 0) + qty);
+    };
+
+    const addJcDemand = (key: string | undefined, qty: number) => {
+      if (!key || qty <= 0) return;
+      const clean = key.trim().toLowerCase();
+      jcDemandMap.set(clean, (jcDemandMap.get(clean) || 0) + qty);
+    };
+
+    const addJwDemand = (key: string | undefined, qty: number) => {
+      if (!key || qty <= 0) return;
+      const clean = key.trim().toLowerCase();
+      jwDemandMap.set(clean, (jwDemandMap.get(clean) || 0) + qty);
+    };
+
+    const bomById = new Map<string, BOM>();
+    const bomByCode = new Map<string, BOM>();
+    const bomByModel = new Map<string, BOM>();
+    boms.forEach(b => {
+      if (b.id) bomById.set(b.id, b);
+      if (b.bomCode) bomByCode.set(b.bomCode.toLowerCase(), b);
+      if (b.machineModel) bomByModel.set(b.machineModel.toLowerCase(), b);
+    });
+
+    const itemByIdOrCode = new Map<string, Item>();
+    items.forEach(i => {
+      if (i.id) itemByIdOrCode.set(i.id, i);
+      if (i.itemCode) itemByIdOrCode.set(i.itemCode.toLowerCase(), i);
+    });
 
     const explodeDemand = (
       components: Array<{ itemId?: string; itemCode?: string; qtyPerMachine?: number; qtyRequired?: number }>,
       multiplier: number,
       visited = new Set<string>()
     ) => {
-      components.forEach(comp => {
-        const cItemId = comp.itemId || '';
-        const cItemCode = comp.itemCode || '';
+      for (let i = 0; i < components.length; i++) {
+        const comp = components[i];
+        const cItemId = comp.itemId;
+        const cItemCode = comp.itemCode;
         const qtyPer = comp.qtyPerMachine !== undefined ? comp.qtyPerMachine : (comp.qtyRequired || 1);
         const totalCompQty = qtyPer * multiplier;
 
-        if (
-          (itemId && cItemId && cItemId === itemId) ||
-          (itemCode && cItemCode && cItemCode.toLowerCase() === itemCode.toLowerCase())
-        ) {
-          demand += totalCompQty;
-        }
+        if (cItemId) addWoDemand(cItemId, totalCompQty);
+        if (cItemCode) addWoDemand(cItemCode, totalCompQty);
 
-        // Check if child component has its own BOM (Multi-level Sub-Assembly)
-        const childItem = items.find(i => (cItemId && i.id === cItemId) || (cItemCode && i.itemCode.toLowerCase() === cItemCode.toLowerCase()));
+        const childItem = (cItemId && itemByIdOrCode.get(cItemId)) || (cItemCode && itemByIdOrCode.get(cItemCode.toLowerCase()));
         if (childItem) {
-          const subBOM = boms.find(b => b.id === childItem.id || b.bomCode?.toLowerCase() === childItem.itemCode.toLowerCase() || b.machineModel?.toLowerCase() === childItem.name?.toLowerCase());
+          const subBOM = (childItem.id && bomById.get(childItem.id)) || 
+                         (childItem.itemCode && bomByCode.get(childItem.itemCode.toLowerCase())) || 
+                         (childItem.name && bomByModel.get(childItem.name.toLowerCase()));
           if (subBOM && subBOM.components && subBOM.components.length > 0 && !visited.has(subBOM.id)) {
             const nextVisited = new Set(visited);
             nextVisited.add(subBOM.id);
             explodeDemand(subBOM.components, totalCompQty, nextVisited);
           }
         }
-      });
+      }
     };
 
-    activeWOs.forEach(wo => {
+    // 1. Process active Work Orders
+    const activeWOs = workOrders.filter(w => w.status !== 'COMPLETED' && w.status !== 'CANCELLED');
+    for (let w = 0; w < activeWOs.length; w++) {
+      const wo = activeWOs[w];
       const dispatchedQty = (finishedGoods || [])
         .filter(fg => (fg.woId === wo.id || fg.woNumber === wo.workOrderNo) && fg.status === 'DISPATCHED')
         .length;
       const remainingQty = Math.max(0, (wo.targetQuantity || wo.quantity || 1) - Math.max(wo.completedQuantity || 0, dispatchedQty));
-      if (remainingQty <= 0) return;
+      if (remainingQty <= 0) continue;
 
       if (wo.woComponents && wo.woComponents.length > 0) {
         explodeDemand(wo.woComponents.map(c => ({
@@ -122,51 +157,67 @@ export const PurchaseOrderModule: React.FC = () => {
           qtyPerMachine: c.qtyRequired ? c.qtyRequired / (wo.quantity || wo.targetQuantity || 1) : 1
         })), remainingQty);
       } else {
-        const bom = boms.find(b => b.id === wo.bomId || b.bomCode === (wo as any).bomCode || b.machineModel?.toLowerCase() === wo.machineModel?.toLowerCase());
+        const bom = (wo.bomId && bomById.get(wo.bomId)) || 
+                    ((wo as any).bomCode && bomByCode.get((wo as any).bomCode.toLowerCase())) || 
+                    (wo.machineModel && bomByModel.get(wo.machineModel.toLowerCase()));
         if (bom && bom.components) {
           explodeDemand(bom.components, remainingQty, new Set([bom.id]));
         }
       }
-    });
+    }
 
-    return demand;
-  };
-
-  // Helper: Item Job Card Demand (Materials required for active Job Cards)
-  const getItemJobCardDemand = (itemId: string, itemCode: string) => {
+    // 2. Process active Job Cards
     const activeJCs = jobCards.filter(jc => jc.status !== 'COMPLETED' && jc.status !== 'CANCELLED' && !(jc as any).isDeleted);
-    let demand = 0;
-    activeJCs.forEach(jc => {
+    for (let j = 0; j < activeJCs.length; j++) {
+      const jc = activeJCs[j];
       const remainingJCQty = Math.max(0, (jc.targetQuantity || 1) - (jc.completedQuantity || 0));
-      if (remainingJCQty <= 0) return;
+      if (remainingJCQty <= 0) continue;
 
-      if (jc.itemId === itemId || jc.itemCode === itemCode) {
-        demand += remainingJCQty;
-      }
+      if (jc.itemId) addJcDemand(jc.itemId, remainingJCQty);
+      if (jc.itemCode) addJcDemand(jc.itemCode, remainingJCQty);
 
       if (jc.components && jc.components.length > 0) {
-        jc.components.forEach(comp => {
-          if (comp.itemId === itemId || comp.itemCode === itemCode) {
-            const qtyPer = comp.qtyPerUnit !== undefined ? comp.qtyPerUnit : (comp.totalRequiredQty ? comp.totalRequiredQty / (jc.targetQuantity || 1) : 1);
-            demand += qtyPer * remainingJCQty;
-          }
-        });
+        for (let c = 0; c < jc.components.length; c++) {
+          const comp = jc.components[c];
+          const qtyPer = comp.qtyPerUnit !== undefined ? comp.qtyPerUnit : (comp.totalRequiredQty ? comp.totalRequiredQty / (jc.targetQuantity || 1) : 1);
+          const compTotal = qtyPer * remainingJCQty;
+          if (comp.itemId) addJcDemand(comp.itemId, compTotal);
+          if (comp.itemCode) addJcDemand(comp.itemCode, compTotal);
+        }
       }
-    });
-    return demand;
+    }
+
+    // 3. Process active Jobworks
+    const activeJWs = jobworks.filter(jw => jw.status !== 'COMPLETED' && jw.status !== 'CANCELLED');
+    for (let k = 0; k < activeJWs.length; k++) {
+      const jw = activeJWs[k];
+      const bal = jw.pendingBalance !== undefined ? jw.pendingBalance : (jw.sentQuantity || 0);
+      if (bal > 0) {
+        if (jw.itemId) addJwDemand(jw.itemId, bal);
+        if (jw.itemCode) addJwDemand(jw.itemCode, bal);
+      }
+    }
+
+    return { woDemandMap, jcDemandMap, jwDemandMap };
+  }, [workOrders, boms, items, finishedGoods, jobCards, jobworks]);
+
+  // Fast O(1) Helper Lookups
+  const getItemWorkOrderDemand = (itemId: string, itemCode: string) => {
+    const idDemand = itemId ? (aggregateDemandMaps.woDemandMap.get(itemId.toLowerCase()) || 0) : 0;
+    const codeDemand = itemCode ? (aggregateDemandMaps.woDemandMap.get(itemCode.toLowerCase()) || 0) : 0;
+    return Math.max(idDemand, codeDemand);
   };
 
-  // Helper: Item Job Work Demand (Raw material components needed for open jobwork challans)
+  const getItemJobCardDemand = (itemId: string, itemCode: string) => {
+    const idDemand = itemId ? (aggregateDemandMaps.jcDemandMap.get(itemId.toLowerCase()) || 0) : 0;
+    const codeDemand = itemCode ? (aggregateDemandMaps.jcDemandMap.get(itemCode.toLowerCase()) || 0) : 0;
+    return Math.max(idDemand, codeDemand);
+  };
+
   const getItemJobworkDemand = (itemId: string, itemCode: string) => {
-    const activeJWs = jobworks.filter(jw => jw.status !== 'COMPLETED' && jw.status !== 'CANCELLED');
-    let demand = 0;
-    activeJWs.forEach(jw => {
-      if (jw.itemId === itemId || jw.itemCode === itemCode) {
-        const bal = jw.pendingBalance !== undefined ? jw.pendingBalance : (jw.sentQuantity || 0);
-        demand += bal;
-      }
-    });
-    return demand;
+    const idDemand = itemId ? (aggregateDemandMaps.jwDemandMap.get(itemId.toLowerCase()) || 0) : 0;
+    const codeDemand = itemCode ? (aggregateDemandMaps.jwDemandMap.get(itemCode.toLowerCase()) || 0) : 0;
+    return Math.max(idDemand, codeDemand);
   };
 
   // Helper: Pipeline Pending Supplies

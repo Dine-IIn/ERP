@@ -7,7 +7,7 @@ import { TabularShortagePrintView } from '../printTemplates/ShortagePrintTemplat
 import { 
   ClipboardList, Plus, CheckCircle, Search, ArrowUp, ArrowDown, ArrowUpDown, Package, Printer, RefreshCw, AlertTriangle, Layers, X, CheckCircle2, Edit2, Trash2, RotateCcw
 } from 'lucide-react';
-import { JobCard, Item } from '../../types/erp';
+import { JobCard, Item, BOM } from '../../types/erp';
 
 type JCSortKey = 'jobCardNo' | 'itemType' | 'itemName' | 'woNumber' | 'targetQuantity' | 'completedQuantity' | 'assignedOperator' | 'status';
 
@@ -59,44 +59,72 @@ export const JobCardModule: React.FC = () => {
   const [assignedOperator, setAssignedOperator] = useState('');
   const [remarks, setRemarks] = useState('');
 
-  // Helper: Item Work Order Demand (Multi-Level Exploded & woComponents supported)
-  const getItemWorkOrderDemand = (itemId: string, itemCode: string) => {
-    let demand = 0;
-    const activeWOs = workOrders.filter(w => w.status !== 'COMPLETED' && w.status !== 'CANCELLED');
+  // Pre-indexed Single Pass Demand Map for O(1) Instant Shortage Lookups
+  const woDemandMap = useMemo(() => {
+    const demandMap = new Map<string, number>();
+
+    const addDemand = (key: string | undefined, qty: number) => {
+      if (!key || qty <= 0) return;
+      const clean = key.trim().toLowerCase();
+      demandMap.set(clean, (demandMap.get(clean) || 0) + qty);
+    };
+
+    const bomById = new Map<string, BOM>();
+    const bomByCode = new Map<string, BOM>();
+    const bomByModel = new Map<string, BOM>();
+    boms.forEach(b => {
+      if (b.id) bomById.set(b.id, b);
+      if (b.bomCode) bomByCode.set(b.bomCode.toLowerCase(), b);
+      if (b.machineModel) bomByModel.set(b.machineModel.toLowerCase(), b);
+    });
+
+    const itemByIdOrCode = new Map<string, Item>();
+    items.forEach(i => {
+      if (i.id) itemByIdOrCode.set(i.id, i);
+      if (i.itemCode) itemByIdOrCode.set(i.itemCode.toLowerCase(), i);
+    });
 
     const explodeDemand = (
       components: Array<{ itemId?: string; itemCode?: string; qtyPerMachine?: number; qtyRequired?: number }>,
       multiplier: number,
       visited = new Set<string>()
     ) => {
-      components.forEach(comp => {
-        const cItemId = comp.itemId || '';
-        const cItemCode = comp.itemCode || '';
+      for (let i = 0; i < components.length; i++) {
+        const comp = components[i];
+        const cItemId = comp.itemId;
+        const cItemCode = comp.itemCode;
         const qtyPer = comp.qtyPerMachine !== undefined ? comp.qtyPerMachine : (comp.qtyRequired || 1);
         const totalCompQty = qtyPer * multiplier;
 
-        if (
-          (itemId && cItemId && cItemId === itemId) ||
-          (itemCode && cItemCode && cItemCode.toLowerCase() === itemCode.toLowerCase())
-        ) {
-          demand += totalCompQty;
-        }
+        if (cItemId) addDemand(cItemId, totalCompQty);
+        if (cItemCode) addDemand(cItemCode, totalCompQty);
 
-        const childItem = items.find(i => (cItemId && i.id === cItemId) || (cItemCode && i.itemCode.toLowerCase() === cItemCode.toLowerCase()));
+        const childItem = (cItemId && itemByIdOrCode.get(cItemId)) || (cItemCode && itemByIdOrCode.get(cItemCode.toLowerCase()));
         if (childItem) {
-          const subBOM = boms.find(b => b.id === childItem.id || b.bomCode?.toLowerCase() === childItem.itemCode.toLowerCase() || b.machineModel?.toLowerCase() === childItem.name?.toLowerCase());
+          const subBOM = (childItem.id && bomById.get(childItem.id)) || 
+                         (childItem.itemCode && bomByCode.get(childItem.itemCode.toLowerCase())) || 
+                         (childItem.name && bomByModel.get(childItem.name.toLowerCase()));
           if (subBOM && subBOM.components && subBOM.components.length > 0 && !visited.has(subBOM.id)) {
             const nextVisited = new Set(visited);
             nextVisited.add(subBOM.id);
             explodeDemand(subBOM.components, totalCompQty, nextVisited);
           }
         }
-      });
+      }
     };
 
-    activeWOs.forEach(wo => {
-      const remainingQty = Math.max(0, (wo.targetQuantity || wo.quantity || 1) - (wo.completedQuantity || 0));
-      if (remainingQty <= 0) return;
+    const activeWOs = workOrders.filter(w => w.status !== 'COMPLETED' && w.status !== 'CANCELLED');
+    for (let w = 0; w < activeWOs.length; w++) {
+      const wo = activeWOs[w];
+      const dispatchedQty = (finishedGoods || [])
+        .filter(fg => (fg.woId === wo.id || fg.woNumber === wo.workOrderNo) && fg.status === 'DISPATCHED')
+        .length;
+      const remainingQty = Math.max(0, (wo.targetQuantity || wo.quantity || 1) - Math.max(wo.completedQuantity || 0, dispatchedQty));
+      if (remainingQty <= 0) continue;
+
+      if (wo.machineModel) addDemand(wo.machineModel, remainingQty);
+      if (wo.itemId) addDemand(wo.itemId, remainingQty);
+      if (wo.itemCode) addDemand(wo.itemCode, remainingQty);
 
       if (wo.woComponents && wo.woComponents.length > 0) {
         explodeDemand(wo.woComponents.map(c => ({
@@ -105,14 +133,23 @@ export const JobCardModule: React.FC = () => {
           qtyPerMachine: c.qtyRequired ? c.qtyRequired / (wo.quantity || wo.targetQuantity || 1) : 1
         })), remainingQty);
       } else {
-        const bom = boms.find(b => b.id === wo.bomId || b.bomCode === (wo as any).bomCode || b.machineModel?.toLowerCase() === wo.machineModel?.toLowerCase());
+        const bom = (wo.bomId && bomById.get(wo.bomId)) || 
+                    ((wo as any).bomCode && bomByCode.get((wo as any).bomCode.toLowerCase())) || 
+                    (wo.machineModel && bomByModel.get(wo.machineModel.toLowerCase()));
         if (bom && bom.components) {
           explodeDemand(bom.components, remainingQty, new Set([bom.id]));
         }
       }
-    });
+    }
 
-    return demand;
+    return demandMap;
+  }, [workOrders, boms, items, finishedGoods]);
+
+  // Fast O(1) demand lookup
+  const getItemWorkOrderDemand = (itemId: string, itemCode: string) => {
+    const idDemand = itemId ? (woDemandMap.get(itemId.toLowerCase()) || 0) : 0;
+    const codeDemand = itemCode ? (woDemandMap.get(itemCode.toLowerCase()) || 0) : 0;
+    return Math.max(idDemand, codeDemand);
   };
 
   // Shortage Calculation for In-House manufactured & Final Product components
@@ -125,24 +162,7 @@ export const JobCardModule: React.FC = () => {
   const getInHouseItemShortage = (item: Item) => {
     const currentStock = item.inHouseStock || 0;
     const minReq = item.minStockQty !== undefined ? item.minStockQty : (item.reorderLevel || 0);
-
-    // Check WO demand for this machine / final product model
-    let woDemand = getItemWorkOrderDemand(item.id, item.itemCode);
-    workOrders.filter(w => w.status === 'PLANNED' || w.status === 'IN_PROGRESS').forEach(wo => {
-      if (wo.machineModel === item.name || wo.machineModel === item.itemCode || wo.bomId === item.id || (wo as any).itemId === item.id) {
-        const totalWOQty = wo.targetQuantity || wo.quantity || 1;
-        const dispatchedQty = (finishedGoods || []).filter(fg => 
-          fg.status === 'DISPATCHED' && (
-            fg.woId === wo.id ||
-            (wo.workOrderNo && fg.woNumber === wo.workOrderNo) ||
-            (wo.woNumber && fg.woNumber === wo.woNumber)
-          )
-        ).length;
-        woDemand += Math.max(0, totalWOQty - dispatchedQty);
-      }
-    });
-
-    // Min Level Shortage Formula: (woDemand + minReq) - currentStock
+    const woDemand = getItemWorkOrderDemand(item.id, item.itemCode);
     return Math.max(0, (woDemand + minReq) - currentStock);
   };
 
@@ -159,7 +179,9 @@ export const JobCardModule: React.FC = () => {
     return hasBOM || hasProcess;
   };
 
-  const inHouseShortageItems = items.filter(i => isInHouseItem(i) && !i.isBlocked && hasBOMorProcess(i) && getInHouseItemShortage(i) >= 1);
+  const inHouseShortageItems = useMemo(() => {
+    return items.filter(i => isInHouseItem(i) && !i.isBlocked && hasBOMorProcess(i) && getInHouseItemShortage(i) >= 1);
+  }, [items, woDemandMap, boms]);
 
   const handleOpenShortageJCModal = (item: Item) => {
     const shortage = getInHouseItemShortage(item);
@@ -172,13 +194,15 @@ export const JobCardModule: React.FC = () => {
   };
 
   // Filter items that are In-house or Sub-Assembly
-  const buildableItems = items.filter(i => 
-    i.processType === 'In-house' || 
-    i.category.includes('Assembly') || 
-    i.category.includes('Machined') ||
-    i.category === 'SA' ||
-    i.category === 'FG'
-  );
+  const buildableItems = useMemo(() => {
+    return items.filter(i => 
+      i.processType === 'In-house' || 
+      i.category.includes('Assembly') || 
+      i.category.includes('Machined') ||
+      i.category === 'SA' ||
+      i.category === 'FG'
+    );
+  }, [items]);
 
   // Helper to check if an item is used in a Work Order (top-level, woComponents, or sub-BOMs)
   const isItemUsedInWorkOrder = (targetItem: Item | undefined, wo: any): boolean => {

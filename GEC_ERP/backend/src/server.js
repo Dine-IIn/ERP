@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import { pool, isPostgresConnected, initDatabase } from './db.js';
 import { sessionManager } from './sessionManager.js';
 import { autoUpdater } from './updater.js';
+import { hashPassword, verifyPassword } from './auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -31,6 +32,79 @@ if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Standard Industrial Security Headers Middleware
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+
+// Robust In-Memory Rate Limiter Factory (sliding window)
+function createRateLimiter(options = { windowMs: 60000, maxRequests: 300, message: 'Too many requests' }) {
+  const ipRequests = new Map(); // ip -> [timestamps]
+
+  // Periodic cleanup of stale timestamps every 2 minutes
+  setInterval(() => {
+    const now = Date.now();
+    for (const [ip, timestamps] of ipRequests.entries()) {
+      const valid = timestamps.filter(t => now - t < options.windowMs);
+      if (valid.length === 0) {
+        ipRequests.delete(ip);
+      } else {
+        ipRequests.set(ip, valid);
+      }
+    }
+  }, 120000);
+
+  return (req, res, next) => {
+    const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1';
+    const now = Date.now();
+    const timestamps = (ipRequests.get(ip) || []).filter(t => now - t < options.windowMs);
+
+    if (timestamps.length >= options.maxRequests) {
+      const oldest = timestamps[0];
+      const retryAfter = Math.ceil((options.windowMs - (now - oldest)) / 1000);
+      res.setHeader('Retry-After', retryAfter);
+      return res.status(429).json({
+        success: false,
+        error: 'RATE_LIMIT_EXCEEDED',
+        message: options.message || 'Too many requests. Please try again later.',
+        retryAfterSeconds: retryAfter
+      });
+    }
+
+    timestamps.push(now);
+    ipRequests.set(ip, timestamps);
+    next();
+  };
+}
+
+// Global General API Rate Limiter (1200 req / minute per IP for high-throughput ERP sync)
+const generalLimiter = createRateLimiter({ windowMs: 60000, maxRequests: 1200, message: 'High request rate detected.' });
+app.use('/api', generalLimiter);
+
+// Strict Rate Limiter for Heavy / Admin Mutating Endpoints (e.g. Backup, Force Updates)
+const strictLimiter = createRateLimiter({ windowMs: 60000, maxRequests: 60, message: 'Too many administrative requests.' });
+
+// RBAC & Admin Verification Middleware
+function requireAdmin(req, res, next) {
+  const role = req.headers['x-user-role'] || req.body?.role || req.query?.role;
+  const isSuperAdmin = req.headers['x-is-superadmin'] === 'true' || req.body?.isSuperAdmin === true;
+  const user = req.body?.user || req.body?.username;
+
+  // If role is explicitly provided, verify admin privileges
+  if (role && !['Admin', 'SuperAdmin', 'Super Admin'].includes(role) && !isSuperAdmin && user !== 'superadmin' && user !== 'admin') {
+    return res.status(403).json({
+      success: false,
+      error: 'FORBIDDEN',
+      message: 'Administrative privileges required to perform this action.'
+    });
+  }
+  next();
+}
 
 // Helper function to get local Network IPs
 function getLocalNetworkIps() {
@@ -102,6 +176,32 @@ function loadStateFromDisk() {
     }
   } catch (err) {
     console.warn('⚠️ Could not load state from disk:', err.message);
+  }
+
+  // Ensure all users have salted cryptographic password hashes
+  if (Array.isArray(centralStore.users)) {
+    let hasUpdated = false;
+    centralStore.users = centralStore.users.map(u => {
+      if (u.username === 'superadmin' && !u.password_hash) {
+        hasUpdated = true;
+        const { password, ...rest } = u;
+        return { ...rest, password_hash: hashPassword(password || 'GEC_SuperAdmin#2026!Secured$') };
+      }
+      if (u.username === 'admin' && !u.password_hash) {
+        hasUpdated = true;
+        const { password, ...rest } = u;
+        return { ...rest, password_hash: hashPassword(password || 'admin') };
+      }
+      if (u.password && !u.password_hash) {
+        hasUpdated = true;
+        const { password, ...rest } = u;
+        return { ...rest, password_hash: hashPassword(password) };
+      }
+      return u;
+    });
+    if (hasUpdated) {
+      persistStateToDiskDebounced();
+    }
   }
 }
 
@@ -227,27 +327,171 @@ app.post('/api/updates/check-now', async (req, res) => {
   res.json({ success: true, ...result, ...autoUpdater.getStatus() });
 });
 
-app.post('/api/updates/apply-now', async (req, res) => {
+app.post('/api/updates/apply-now', strictLimiter, requireAdmin, async (req, res) => {
   const { force } = req.body;
   const result = await autoUpdater.applyUpdate(Boolean(force));
   res.json(result);
 });
 
 // ==========================================
+// 1.3 DYNAMIC AUTHENTICATION & CREDENTIAL API
+// ==========================================
+app.post('/api/auth/login', (req, res) => {
+  try {
+    const { username, password, platform, deviceType } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({ success: false, message: 'Username and password are required.' });
+    }
+
+    const cleanUser = username.trim().toLowerCase();
+    const user = (centralStore.users || []).find(u => u.username && u.username.toLowerCase() === cleanUser);
+
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'Invalid username or password.' });
+    }
+
+    // Verify against password_hash or fallback password
+    const storedHash = user.password_hash || user.password;
+    const isValid = verifyPassword(password, storedHash);
+
+    if (!isValid) {
+      return res.status(401).json({ success: false, message: 'Invalid username or password. Passwords are case-sensitive.' });
+    }
+
+    // Upgrade hash if it was plaintext
+    if (user.password && !user.password_hash) {
+      user.password_hash = hashPassword(password);
+      delete user.password;
+      persistStateToDiskDebounced();
+    }
+
+    const sessionId = `sess-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
+    const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1';
+    
+    // Record active session
+    sessionManager.recordHeartbeat(sessionId, { username: user.username, role: user.role }, platform || deviceType || 'desktop', ip);
+
+    // Return sanitized user object
+    const safeUser = {
+      id: user.id,
+      username: user.username,
+      fullName: user.fullName || user.username,
+      role: user.role || 'Staff',
+      email: user.email || '',
+      isSuperAdmin: user.isSuperAdmin === true || user.username.toLowerCase() === 'superadmin',
+      is_admin: user.is_admin === true || ['Admin', 'SuperAdmin'].includes(user.role)
+    };
+
+    logActivity(user.id, user.username, user.role, 'LOGIN', 'AUTHENTICATION', `User ${user.username} logged in successfully`, req);
+
+    return res.json({
+      success: true,
+      message: `Welcome back, ${safeUser.fullName}!`,
+      user: safeUser,
+      sessionId
+    });
+  } catch (err) {
+    console.error('Login error:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error during authentication.' });
+  }
+});
+
+app.post('/api/auth/change-password', (req, res) => {
+  try {
+    const { userId, username, currentPassword, newPassword } = req.body;
+    if (!newPassword || newPassword.length < 4) {
+      return res.status(400).json({ success: false, message: 'New password must be at least 4 characters long.' });
+    }
+
+    const user = (centralStore.users || []).find(u => 
+      (userId && u.id === userId) || (username && u.username && u.username.toLowerCase() === username.trim().toLowerCase())
+    );
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+
+    // If currentPassword is provided, verify it first
+    if (currentPassword) {
+      const storedHash = user.password_hash || user.password;
+      if (!verifyPassword(currentPassword, storedHash)) {
+        return res.status(401).json({ success: false, message: 'Current password does not match.' });
+      }
+    }
+
+    user.password_hash = hashPassword(newPassword);
+    delete user.password;
+    persistStateToDiskDebounced();
+
+    logActivity(user.id, user.username, user.role, 'PASSWORD_CHANGE', 'AUTHENTICATION', `Password changed for user ${user.username}`, req);
+
+    return res.json({ success: true, message: 'Password updated successfully!' });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/auth/create-user', requireAdmin, (req, res) => {
+  try {
+    const { username, password, fullName, role, email, isSuperAdmin } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({ success: false, message: 'Username and password are required.' });
+    }
+
+    const cleanUser = username.trim().toLowerCase();
+    if ((centralStore.users || []).some(u => u.username && u.username.toLowerCase() === cleanUser)) {
+      return res.status(400).json({ success: false, message: 'Username already exists.' });
+    }
+
+    const newUser = {
+      id: `usr-${Date.now()}`,
+      username: cleanUser,
+      fullName: fullName || username,
+      role: role || 'Staff',
+      email: email || '',
+      isSuperAdmin: Boolean(isSuperAdmin),
+      is_admin: role === 'Admin' || Boolean(isSuperAdmin),
+      password_hash: hashPassword(password)
+    };
+
+    centralStore.users = [newUser, ...(centralStore.users || [])];
+    persistStateToDiskDebounced();
+
+    logActivity(newUser.id, newUser.username, newUser.role, 'USER_CREATE', 'USER_MANAGEMENT', `New user ${newUser.username} created`, req);
+
+    const safeUser = { ...newUser };
+    delete safeUser.password_hash;
+    delete safeUser.password;
+
+    return res.json({ success: true, user: safeUser, message: 'User created successfully.' });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ==========================================
 // 2. COMPREHENSIVE SYNC API (Bootstrap & State)
 // ==========================================
-// GET /api/sync/all - Send full central dataset to client
+// GET /api/sync/all - Send full central dataset to client (passwords sanitized)
 app.get('/api/sync/all', (req, res) => {
+  const sanitizedUsers = (centralStore.users || []).map(u => {
+    const { password, password_hash, ...safe } = u;
+    return safe;
+  });
+
   res.json({
     success: true,
-    data: centralStore,
+    data: {
+      ...centralStore,
+      users: sanitizedUsers
+    },
     serverTime: new Date().toISOString(),
     message: 'Central GEC ERP state synchronized successfully.'
   });
 });
 
 // POST /api/sync/save-all - Client bulk syncs entire state
-app.post('/api/sync/save-all', (req, res) => {
+app.post('/api/sync/save-all', strictLimiter, (req, res) => {
   try {
     const payload = req.body;
     if (payload && typeof payload === 'object') {
@@ -387,7 +631,7 @@ async function performBackup(backupType = 'MANUAL') {
   return backupRecord;
 }
 
-app.post('/api/backup/now', async (req, res) => {
+app.post('/api/backup/now', strictLimiter, requireAdmin, async (req, res) => {
   try {
     const record = await performBackup('MANUAL');
     await logActivity(req.body.userId, req.body.username, req.body.role || 'Admin', 'CREATE_BACKUP', 'Backup Management', `Created manual backup file ${record.fileName} (${record.fileSizeKb} KB)`, req);

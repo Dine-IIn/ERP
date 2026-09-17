@@ -22,7 +22,7 @@ export const LoginSignup: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [forgotMsg, setForgotMsg] = useState<{ text: string; type: 'success' | 'danger' } | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
 
@@ -31,7 +31,7 @@ export const LoginSignup: React.FC = () => {
       return;
     }
 
-    const res = login(username.trim(), password);
+    const res = await login(username.trim(), password);
     if (!res.success) {
       setErrorMsg(res.message);
     } else {
@@ -61,7 +61,7 @@ export const LoginSignup: React.FC = () => {
     });
   };
 
-  const handleVerifyOtpAndReset = (e: React.FormEvent) => {
+  const handleVerifyOtpAndReset = async (e: React.FormEvent) => {
     e.preventDefault();
     setForgotMsg(null);
 
@@ -80,8 +80,8 @@ export const LoginSignup: React.FC = () => {
       return;
     }
 
-    // Update user password in ERPContext
-    const resetRes = resetUserPassword(forgotEmail, newPassword);
+    // Update user password in backend
+    const resetRes = await resetUserPassword(forgotEmail, newPassword);
     if (resetRes.success) {
       setOtpStep('SUCCESS');
       setForgotMsg({ text: 'Password reset successfully! You may now sign in with your new credentials.', type: 'success' });

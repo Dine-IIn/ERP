@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useDeferredValue } from 'react';
+import React, { useState, useMemo, useEffect, useLayoutEffect, useRef, useDeferredValue } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { 
@@ -38,6 +38,24 @@ export const ShortageModule: React.FC = () => {
 
   // Simulation Quantities (key: woId -> simulated qty)
   const [simulatedQuantities, setSimulatedQuantities] = useState<Record<string, number>>({});
+
+  // Dynamic Sticky Filter Bar Height for Tab 1
+  const card2Ref = useRef<HTMLDivElement>(null);
+  const [card2Height, setCard2Height] = useState<number>(82);
+
+  useLayoutEffect(() => {
+    if (card2Ref.current) {
+      const updateHeight = () => {
+        if (card2Ref.current) {
+          setCard2Height(card2Ref.current.offsetHeight);
+        }
+      };
+      updateHeight();
+      const ro = new ResizeObserver(updateHeight);
+      ro.observe(card2Ref.current);
+      return () => ro.disconnect();
+    }
+  }, []);
 
   // Helper to get open PO quantity
   const getOpenPOQuantity = (item: Item | undefined, itemCode: string) => {
@@ -1609,123 +1627,128 @@ export const ShortageModule: React.FC = () => {
   const totalPlannedUnitsCount = plannedItemDetails.reduce((sum, p) => sum + p.targetQty, 0);
 
   return (
-    <div className="module-layout-container" style={{ flex: 1, minHeight: 0, height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingRight: '0.25rem' }}>
+    <div className="module-layout-container" style={{ flex: 1, minHeight: 0, height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
       
-      {/* Header */}
-      <div className="sticky-module-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', paddingBottom: '0.5rem' }}>
-        <div>
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-primary)' }}>
-            <AlertTriangle size={20} color="var(--warning)" />
-            Shortage Planning & Production Capacity Engine
-          </h2>
-        </div>
-
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <button 
-            type="button" 
-            className={`btn ${isExplodeAllBOMs ? 'btn-primary' : 'btn-outline'}`} 
-            onClick={() => setIsExplodeAllBOMs(!isExplodeAllBOMs)} 
-            title="Explode all components and sub-assemblies across multi-level BOMs"
-            style={{ fontWeight: 700, fontSize: '0.82rem', gap: '0.35rem', display: 'inline-flex', alignItems: 'center' }}
-          >
-            <Layers size={14} />
-            {isExplodeAllBOMs ? '💥 Multi-Level BOMs Exploded' : '💥 Explode All BOMs'}
-          </button>
-
-          {/* Universal Shortage vs All Items Mode Toggle */}
-          <div style={{ display: 'inline-flex', borderRadius: '0.375rem', border: '1px solid var(--border-color)', overflow: 'hidden' }}>
-            <button
-              type="button"
-              className={`btn ${shortageFilterMode === 'SHORTAGE_ONLY' ? 'btn-warning' : 'btn-outline'}`}
-              style={{ 
-                padding: '0.3rem 0.65rem', 
-                fontSize: '0.78rem', 
-                fontWeight: 700, 
-                border: 'none', 
-                borderRadius: 0,
-                backgroundColor: shortageFilterMode === 'SHORTAGE_ONLY' ? '#d97706' : undefined,
-                color: shortageFilterMode === 'SHORTAGE_ONLY' ? '#fff' : undefined
-              }}
-              onClick={() => setShortageFilterMode('SHORTAGE_ONLY')}
-            >
-              ⚠️ Shortage Only
-            </button>
-            <button
-              type="button"
-              className={`btn ${shortageFilterMode === 'ALL_ITEMS' ? 'btn-primary' : 'btn-outline'}`}
-              style={{ padding: '0.3rem 0.65rem', fontSize: '0.78rem', fontWeight: 700, border: 'none', borderRadius: 0 }}
-              onClick={() => setShortageFilterMode('ALL_ITEMS')}
-            >
-              📋 All Items (Full BOM)
-            </button>
+      {/* Static Top Header & Tabs (Non-scrollable, always visible) */}
+      <div className="sticky-module-header" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', paddingBottom: '0.25rem', flexShrink: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', width: '100%' }}>
+          <div>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-primary)' }}>
+              <AlertTriangle size={20} color="var(--warning)" />
+              Shortage Planning & Production Capacity Engine
+            </h2>
           </div>
 
-          {/* Direct Print Button */}
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <button 
+              type="button" 
+              className={`btn ${isExplodeAllBOMs ? 'btn-primary' : 'btn-outline'}`} 
+              onClick={() => setIsExplodeAllBOMs(!isExplodeAllBOMs)} 
+              title="Explode all components and sub-assemblies across multi-level BOMs"
+              style={{ fontWeight: 700, fontSize: '0.82rem', gap: '0.35rem', display: 'inline-flex', alignItems: 'center' }}
+            >
+              <Layers size={14} />
+              {isExplodeAllBOMs ? '💥 Multi-Level BOMs Exploded' : '💥 Explode All BOMs'}
+            </button>
+
+            {/* Universal Shortage vs All Items Mode Toggle */}
+            <div style={{ display: 'inline-flex', borderRadius: '0.375rem', border: '1px solid var(--border-color)', overflow: 'hidden' }}>
+              <button
+                type="button"
+                className={`btn ${shortageFilterMode === 'SHORTAGE_ONLY' ? 'btn-warning' : 'btn-outline'}`}
+                style={{ 
+                  padding: '0.3rem 0.65rem', 
+                  fontSize: '0.78rem', 
+                  fontWeight: 700, 
+                  border: 'none', 
+                  borderRadius: 0,
+                  backgroundColor: shortageFilterMode === 'SHORTAGE_ONLY' ? '#d97706' : undefined,
+                  color: shortageFilterMode === 'SHORTAGE_ONLY' ? '#fff' : undefined
+                }}
+                onClick={() => setShortageFilterMode('SHORTAGE_ONLY')}
+              >
+                ⚠️ Shortage Only
+              </button>
+              <button
+                type="button"
+                className={`btn ${shortageFilterMode === 'ALL_ITEMS' ? 'btn-primary' : 'btn-outline'}`}
+                style={{ padding: '0.3rem 0.65rem', fontSize: '0.78rem', fontWeight: 700, border: 'none', borderRadius: 0 }}
+                onClick={() => setShortageFilterMode('ALL_ITEMS')}
+              >
+                📋 All Items (Full BOM)
+              </button>
+            </div>
+
+            {/* Direct Print Button */}
+            <button 
+              type="button" 
+              className="btn btn-primary" 
+              onClick={handleQuickPrint} 
+              title="Direct Print Shortage Report"
+              style={{ fontSize: '0.8rem', padding: '0.45rem 0.85rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+            >
+              <Printer size={15} /> Print Shortage Report
+            </button>
+          </div>
+        </div>
+
+        {/* Top 5 Routing Tabs - Static & Fixed below title */}
+        <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', flexShrink: 0, width: '100%', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.4rem' }}>
           <button 
-            type="button" 
-            className="btn btn-primary" 
-            onClick={handleQuickPrint} 
-            title="Direct Print Shortage Report"
-            style={{ fontSize: '0.8rem', padding: '0.45rem 0.85rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+            className={`btn ${activeTab === 'ITEM_WISE_SHORTAGE' ? 'btn-primary' : 'btn-outline'}`}
+            style={{ padding: '0.38rem 0.85rem', fontSize: '0.82rem', border: 'none' }}
+            onClick={() => setActiveTab('ITEM_WISE_SHORTAGE')}
           >
-            <Printer size={15} /> Print Shortage Report
+            <Package size={14} /> Item-Wise
+          </button>
+          <button 
+            className={`btn ${activeTab === 'WO_SHORTAGE' ? 'btn-primary' : 'btn-outline'}`}
+            style={{ padding: '0.38rem 0.85rem', fontSize: '0.82rem', border: 'none' }}
+            onClick={() => setActiveTab('WO_SHORTAGE')}
+          >
+            <Layers size={14} /> Work Order Shortage Tree
+          </button>
+          <button 
+            className={`btn ${activeTab === 'PO_SHORTAGE' ? 'btn-primary' : 'btn-outline'}`}
+            style={{ padding: '0.38rem 0.85rem', fontSize: '0.82rem', border: 'none' }}
+            onClick={() => setActiveTab('PO_SHORTAGE')}
+          >
+            <ShoppingCart size={14} /> PO / Bought-Out Shortage
+          </button>
+          <button 
+            className={`btn ${activeTab === 'JOBWORK_SHORTAGE' ? 'btn-primary' : 'btn-outline'}`}
+            style={{ padding: '0.38rem 0.85rem', fontSize: '0.82rem', border: 'none' }}
+            onClick={() => setActiveTab('JOBWORK_SHORTAGE')}
+          >
+            <Truck size={14} /> Job Work Shortage
+          </button>
+          <button 
+            className={`btn ${activeTab === 'JOBCARD_SHORTAGE' ? 'btn-primary' : 'btn-outline'}`}
+            style={{ padding: '0.38rem 0.85rem', fontSize: '0.82rem', border: 'none' }}
+            onClick={() => setActiveTab('JOBCARD_SHORTAGE')}
+          >
+            <ClipboardList size={14} /> In-House Job Card Shortage
           </button>
         </div>
       </div>
 
-      {/* Top 5 Routing Tabs */}
-      <div style={{ display: 'flex', gap: '0.35rem', backgroundColor: 'var(--bg-tertiary)', padding: '0.35rem', borderRadius: '0.5rem', flexWrap: 'wrap', flexShrink: 0 }}>
-        <button 
-          className={`btn ${activeTab === 'ITEM_WISE_SHORTAGE' ? 'btn-primary' : 'btn-outline'}`}
-          style={{ padding: '0.4rem 0.9rem', fontSize: '0.82rem', border: 'none' }}
-          onClick={() => setActiveTab('ITEM_WISE_SHORTAGE')}
-        >
-          <Package size={14} /> Item-Wise
-        </button>
-        <button 
-          className={`btn ${activeTab === 'WO_SHORTAGE' ? 'btn-primary' : 'btn-outline'}`}
-          style={{ padding: '0.4rem 0.9rem', fontSize: '0.82rem', border: 'none' }}
-          onClick={() => setActiveTab('WO_SHORTAGE')}
-        >
-          <Layers size={14} /> Work Order Shortage Tree
-        </button>
-        <button 
-          className={`btn ${activeTab === 'PO_SHORTAGE' ? 'btn-primary' : 'btn-outline'}`}
-          style={{ padding: '0.4rem 0.9rem', fontSize: '0.82rem', border: 'none' }}
-          onClick={() => setActiveTab('PO_SHORTAGE')}
-        >
-          <ShoppingCart size={14} /> PO / Bought-Out Shortage
-        </button>
-        <button 
-          className={`btn ${activeTab === 'JOBWORK_SHORTAGE' ? 'btn-primary' : 'btn-outline'}`}
-          style={{ padding: '0.4rem 0.9rem', fontSize: '0.82rem', border: 'none' }}
-          onClick={() => setActiveTab('JOBWORK_SHORTAGE')}
-        >
-          <Truck size={14} /> Job Work Shortage
-        </button>
-        <button 
-          className={`btn ${activeTab === 'JOBCARD_SHORTAGE' ? 'btn-primary' : 'btn-outline'}`}
-          style={{ padding: '0.4rem 0.9rem', fontSize: '0.82rem', border: 'none' }}
-          onClick={() => setActiveTab('JOBCARD_SHORTAGE')}
-        >
-          <ClipboardList size={14} /> In-House Job Card Shortage
-        </button>
-      </div>
-
-      {/* ========================================================= */}
-      {/* TAB 1: ITEM-WISE SHORTAGE & CONSOLIDATED CAPACITY ($X+Y$) */}
-      {/* ========================================================= */}
-      {activeTab === 'ITEM_WISE_SHORTAGE' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: 1, minHeight: 0 }}>
-          
-          {/* Top Panel: Search & Add Parent Finished Items / Assemblies */}
-          <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.65rem', flexShrink: 0 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-              <div>
-                <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-                  1. Select Target Finished Items / Assemblies for Production Planning:
-                </span>
-              </div>
+      {/* MAIN SHORTAGE CONTENT AREA - Single Vertical Scroll Container */}
+      <div className="shortage-single-scroll-container" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', gap: '0.5rem', paddingRight: '0.25rem' }}>
+        
+        {/* ========================================================= */}
+        {/* TAB 1: ITEM-WISE SHORTAGE & CONSOLIDATED CAPACITY ($X+Y$) */}
+        {/* ========================================================= */}
+        {activeTab === 'ITEM_WISE_SHORTAGE' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%' }}>
+            
+            {/* Top Panel: Search & Add Parent Finished Items / Assemblies */}
+            <div className="card" style={{ padding: '0.65rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', flexShrink: 0, position: 'relative', zIndex: 50, overflow: 'visible' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+                <div>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                    1. Select Target Finished Items / Assemblies for Production Planning:
+                  </span>
+                </div>
 
               {/* Item Search & Add Input */}
               <div style={{ position: 'relative', width: '380px', maxWidth: '100%' }}>
@@ -1750,10 +1773,10 @@ export const ShortageModule: React.FC = () => {
                     backgroundColor: 'var(--bg-card)',
                     border: '1px solid var(--border-color)',
                     borderRadius: '0.375rem',
-                    boxShadow: 'var(--shadow-md)',
+                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.3)',
                     maxHeight: '220px',
                     overflowY: 'auto',
-                    zIndex: 20
+                    zIndex: 100
                   }}>
                     {itemSuggestions.length > 0 ? (
                       itemSuggestions.map(it => (
@@ -1796,7 +1819,7 @@ export const ShortageModule: React.FC = () => {
 
             {/* Added Planned Items in Compact Single Rows */}
             {selectedItemIds.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', paddingTop: '0.4rem', borderTop: '1px solid var(--border-color)' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', paddingTop: '0.35rem', borderTop: '1px solid var(--border-color)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--text-primary)' }}>
                     Planned Items ({selectedItemIds.length}):
@@ -1913,114 +1936,154 @@ export const ShortageModule: React.FC = () => {
             )}
           </div>
 
-          {/* Consolidated Component Table Filter & Search Controls */}
-          {selectedItemIds.length > 0 && (
-            <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.65rem', flexShrink: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
-                
-                {/* Search Bar for Consolidated Component List */}
-                <div style={{ position: 'relative', width: '380px', maxWidth: '100%' }}>
-                  <Search size={15} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                  <input
-                    type="text"
-                    placeholder="Search in combined list (Part Code, Item Code, Description)..."
-                    className="input-field"
-                    style={{ paddingLeft: '2.25rem', fontSize: '0.82rem' }}
-                    value={componentSearchTerm}
-                    onChange={(e) => setComponentSearchTerm(e.target.value)}
-                  />
-                  {componentSearchTerm && (
+          {/* Consolidated Component Table Filter & Table Section (Zero Gap for Clean Sticky Scroll) */}
+          <div 
+            style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              gap: 0, 
+              width: '100%',
+              ['--shortage-filter-height' as any]: `${card2Height}px`
+            }}
+          >
+            {/* Filter & Search Controls (Sticky at top: 0) */}
+            {selectedItemIds.length > 0 && (
+              <div 
+                ref={card2Ref}
+                className="card shortage-sticky-card2" 
+                style={{ 
+                  position: 'sticky',
+                  top: 0,
+                  zIndex: 30,
+                  backgroundColor: 'var(--bg-card)', 
+                  padding: '0.55rem 0.85rem', 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  gap: '0.45rem', 
+                  flexShrink: 0, 
+                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)', 
+                  border: '1px solid var(--border-color)',
+                  borderBottom: 'none',
+                  borderRadius: '0.5rem 0.5rem 0 0',
+                  margin: 0
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+                  
+                  {/* Search Bar for Consolidated Component List */}
+                  <div style={{ position: 'relative', width: '380px', maxWidth: '100%' }}>
+                    <Search size={15} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                    <input
+                      type="text"
+                      placeholder="Search in combined list (Part Code, Item Code, Description)..."
+                      className="input-field"
+                      style={{ paddingLeft: '2.25rem', fontSize: '0.82rem' }}
+                      value={componentSearchTerm}
+                      onChange={(e) => setComponentSearchTerm(e.target.value)}
+                    />
+                    {componentSearchTerm && (
+                      <button
+                        type="button"
+                        onClick={() => setComponentSearchTerm('')}
+                        style={{ position: 'absolute', right: '0.65rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Class Filters */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>Class:</span>
                     <button
                       type="button"
-                      onClick={() => setComponentSearchTerm('')}
-                      style={{ position: 'absolute', right: '0.65rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                      className={`badge ${selectedClassFilters.length === 0 ? 'badge-primary' : 'badge-neutral'}`}
+                      style={{ cursor: 'pointer', padding: '0.2rem 0.45rem', fontSize: '0.72rem' }}
+                      onClick={() => setSelectedClassFilters([])}
                     >
-                      <X size={14} />
+                      ALL
+                    </button>
+                    {FIXED_ITEM_CLASSES.map(cls => {
+                      const isSelected = selectedClassFilters.includes(cls.code);
+                      return (
+                        <button
+                          key={cls.code}
+                          type="button"
+                          className={`badge ${isSelected ? 'badge-primary' : 'badge-neutral'}`}
+                          style={{ cursor: 'pointer', padding: '0.2rem 0.45rem', fontSize: '0.72rem' }}
+                          title={cls.name}
+                          onClick={() => {
+                            if (isSelected) {
+                              setSelectedClassFilters(selectedClassFilters.filter(c => c !== cls.code));
+                            } else {
+                              setSelectedClassFilters([...selectedClassFilters, cls.code]);
+                            }
+                          }}
+                        >
+                          {cls.code}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Process Type Filter */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Source:</span>
+                    <select
+                      className="input-field"
+                      style={{ fontSize: '0.78rem', padding: '0.28rem 0.6rem', width: 'auto' }}
+                      value={selectedProcessFilter}
+                      onChange={(e) => setSelectedProcessFilter(e.target.value)}
+                    >
+                      <option value="ALL">All Sources</option>
+                      <option value="BO">Bought Out (BO)</option>
+                      <option value="JW">Job Work (JW)</option>
+                      <option value="IH">In-House (IH)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* KPI Badges */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', paddingTop: '0.35rem', borderTop: '1px solid var(--border-color)', fontSize: '0.8rem' }}>
+                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <span>Consolidated Components: <strong>{filteredConsolidatedItems.length}</strong></span>
+                    <span style={{ color: totalConsolidatedShortageCount > 0 ? 'var(--danger)' : 'var(--success)', fontWeight: 700 }}>
+                      Shortage Components: <strong>{totalConsolidatedShortageCount}</strong>
+                    </span>
+                    <span>Total Planned Product Units: <strong>{totalPlannedUnitsCount}</strong></span>
+                  </div>
+
+                  {(selectedClassFilters.length > 0 || selectedProcessFilter !== 'ALL' || componentSearchTerm) && (
+                    <button
+                      type="button"
+                      className="btn btn-outline"
+                      style={{ padding: '0.15rem 0.45rem', fontSize: '0.72rem' }}
+                      onClick={() => {
+                        setSelectedClassFilters([]);
+                        setSelectedProcessFilter('ALL');
+                        setComponentSearchTerm('');
+                      }}
+                    >
+                      Reset Component Filters
                     </button>
                   )}
                 </div>
-
-                {/* Class Filters */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>Class:</span>
-                  <button
-                    type="button"
-                    className={`badge ${selectedClassFilters.length === 0 ? 'badge-primary' : 'badge-neutral'}`}
-                    style={{ cursor: 'pointer', padding: '0.2rem 0.45rem', fontSize: '0.72rem' }}
-                    onClick={() => setSelectedClassFilters([])}
-                  >
-                    ALL
-                  </button>
-                  {FIXED_ITEM_CLASSES.map(cls => {
-                    const isSelected = selectedClassFilters.includes(cls.code);
-                    return (
-                      <button
-                        key={cls.code}
-                        type="button"
-                        className={`badge ${isSelected ? 'badge-primary' : 'badge-neutral'}`}
-                        style={{ cursor: 'pointer', padding: '0.2rem 0.45rem', fontSize: '0.72rem' }}
-                        title={cls.name}
-                        onClick={() => {
-                          if (isSelected) {
-                            setSelectedClassFilters(selectedClassFilters.filter(c => c !== cls.code));
-                          } else {
-                            setSelectedClassFilters([...selectedClassFilters, cls.code]);
-                          }
-                        }}
-                      >
-                        {cls.code}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Process Type Filter */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Source:</span>
-                  <select
-                    className="input-field"
-                    style={{ fontSize: '0.78rem', padding: '0.28rem 0.6rem', width: 'auto' }}
-                    value={selectedProcessFilter}
-                    onChange={(e) => setSelectedProcessFilter(e.target.value)}
-                  >
-                    <option value="ALL">All Sources</option>
-                    <option value="BO">Bought Out (BO)</option>
-                    <option value="JW">Job Work (JW)</option>
-                    <option value="IH">In-House (IH)</option>
-                  </select>
-                </div>
               </div>
+            )}
 
-              {/* KPI Badges */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', paddingTop: '0.35rem', borderTop: '1px solid var(--border-color)', fontSize: '0.8rem' }}>
-                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <span>Consolidated Components: <strong>{filteredConsolidatedItems.length}</strong></span>
-                  <span style={{ color: totalConsolidatedShortageCount > 0 ? 'var(--danger)' : 'var(--success)', fontWeight: 700 }}>
-                    Shortage Components: <strong>{totalConsolidatedShortageCount}</strong>
-                  </span>
-                  <span>Total Planned Product Units: <strong>{totalPlannedUnitsCount}</strong></span>
-                </div>
-
-                {(selectedClassFilters.length > 0 || selectedProcessFilter !== 'ALL' || componentSearchTerm) && (
-                  <button
-                    type="button"
-                    className="btn btn-outline"
-                    style={{ padding: '0.15rem 0.45rem', fontSize: '0.72rem' }}
-                    onClick={() => {
-                      setSelectedClassFilters([]);
-                      setSelectedProcessFilter('ALL');
-                      setComponentSearchTerm('');
-                    }}
-                  >
-                    Reset Component Filters
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Consolidated Component Table ($X + Y$) */}
-          <div className="table-container" style={{ flex: 1, overflowY: 'auto', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '0.5rem' }}>
+            {/* Consolidated Component Table ($X + Y$) - Single-Scroll Table Flow */}
+            <div 
+              className="table-container-flow" 
+              style={{ 
+                backgroundColor: 'var(--bg-card)', 
+                border: '1px solid var(--border-color)', 
+                borderRadius: selectedItemIds.length > 0 ? '0 0 0.5rem 0.5rem' : '0.5rem', 
+                overflow: 'visible', 
+                width: '100%', 
+                maxWidth: '100%',
+                margin: 0
+              }}
+            >
             {selectedItemIds.length === 0 ? (
               <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
                 <Package size={40} color="var(--accent-primary)" style={{ margin: '0 auto 0.75rem auto' }} />
@@ -2036,8 +2099,8 @@ export const ShortageModule: React.FC = () => {
                   : 'No components found matching the active search or filters.'}
               </div>
             ) : (
-              <table>
-                <thead>
+              <table className="shortage-itemwise-table">
+                <thead style={{ position: 'sticky', top: `${card2Height}px`, zIndex: 20, backgroundColor: 'var(--bg-tertiary)' }}>
                   <tr>
                     {/* 1. # */}
                     <th onClick={() => handleItemWiseSortToggle('srNo')} style={{ width: '40px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
@@ -2205,6 +2268,7 @@ export const ShortageModule: React.FC = () => {
                 </tbody>
               </table>
             )}
+            </div>
           </div>
         </div>
       )}
@@ -2213,7 +2277,7 @@ export const ShortageModule: React.FC = () => {
       {/* TAB 2-4: WORK ORDER SHORTAGE & COMBINED AGGREGATION       */}
       {/* ========================================================= */}
       {activeTab !== 'ITEM_WISE_SHORTAGE' && activeTab !== 'JOBCARD_SHORTAGE' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: 1, minHeight: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%' }}>
           
           {/* WO Filter Bar with Search Bar */}
           <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.65rem', flexShrink: 0 }}>
@@ -2245,7 +2309,7 @@ export const ShortageModule: React.FC = () => {
             </div>
 
             {/* Multi-Select Work Order Badges */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', maxHeight: '95px', overflowY: 'auto', padding: '0.4rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: '0.375rem', border: '1px solid var(--border-color)' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', padding: '0.4rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: '0.375rem', border: '1px solid var(--border-color)' }}>
               {filteredWorkOrdersForSelection
                 .map(wo => {
                   const isSelected = selectedWOIds.length === 0 || selectedWOIds.includes(wo.id);
@@ -2273,7 +2337,7 @@ export const ShortageModule: React.FC = () => {
 
           {/* Tab 2: Work Order Shortage Tree View */}
           {activeTab === 'WO_SHORTAGE' && (
-            <div className="table-container" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div className="table-container-flow" style={{ border: 'none', background: 'none', boxShadow: 'none', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               {filteredWOShortages.length === 0 ? (
                 <div className="card" style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
                   <CheckCircle size={36} color="var(--success)" style={{ margin: '0 auto 0.5rem auto' }} />
@@ -2321,7 +2385,7 @@ export const ShortageModule: React.FC = () => {
 
                       {/* Tree Child Table */}
                       {isExpanded && (
-                        <div className="table-container" style={{ marginTop: '0.65rem', maxHeight: '250px', overflowY: 'auto' }}>
+                        <div style={{ marginTop: '0.65rem', border: '1px solid var(--border-color)', borderRadius: '0.375rem' }}>
                           <table>
                             <thead>
                               <tr>
@@ -2394,8 +2458,8 @@ export const ShortageModule: React.FC = () => {
 
           {/* Tab 3-4: Process-Specific Consolidated Tables (PO, JW) */}
           {(activeTab === 'PO_SHORTAGE' || activeTab === 'JOBWORK_SHORTAGE') && (
-            <div className="table-container" style={{ flex: 1, overflowY: 'auto' }}>
-              <div style={{ padding: '0.5rem 0.75rem', backgroundColor: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="table-container-flow" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '0.5rem', overflowX: 'auto', overflowY: 'visible', width: '100%', maxWidth: '100%' }}>
+              <div style={{ padding: '0.5rem 0.75rem', backgroundColor: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 25, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
                 <span style={{ fontSize: '0.82rem', fontWeight: 700 }}>
                   Combined Shortage Breakdown ({activeTabConsolidatedShortages.length} items from {relevantWOs.length} Work Orders):
                 </span>
@@ -2409,8 +2473,8 @@ export const ShortageModule: React.FC = () => {
                 />
               </div>
 
-              <table>
-                <thead>
+              <table className="shortage-proc-table">
+                <thead style={{ position: 'sticky', top: '38px', zIndex: 20, backgroundColor: 'var(--bg-tertiary)' }}>
                   <tr>
                     <th style={{ width: '30px' }}>#</th>
                     <th>Item Code</th>
@@ -2562,7 +2626,7 @@ export const ShortageModule: React.FC = () => {
       {/* TAB 5: UPGRADED IN-HOUSE JOB CARD SHORTAGE                */}
       {/* ========================================================= */}
       {activeTab === 'JOBCARD_SHORTAGE' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: 1, minHeight: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%' }}>
           {/* Card 1: Selection & Filtering Control Panel */}
           <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', flexShrink: 0 }}>
             {/* Header / Checkbox row */}
@@ -2655,8 +2719,6 @@ export const ShortageModule: React.FC = () => {
                   display: 'flex', 
                   flexWrap: 'wrap', 
                   gap: '0.35rem', 
-                  maxHeight: '90px', 
-                  overflowY: 'auto', 
                   padding: '0.35rem', 
                   backgroundColor: 'var(--bg-tertiary)', 
                   borderRadius: '0.25rem', 
@@ -2769,8 +2831,6 @@ export const ShortageModule: React.FC = () => {
               display: 'flex', 
               flexWrap: 'wrap', 
               gap: '0.35rem', 
-              maxHeight: '110px', 
-              overflowY: 'auto', 
               padding: '0.35rem', 
               backgroundColor: 'var(--bg-tertiary)', 
               borderRadius: '0.25rem', 
@@ -2824,8 +2884,8 @@ export const ShortageModule: React.FC = () => {
           </div>
 
           {/* Card 2: Consolidated Job Card Shortage Table */}
-          <div className="table-container" style={{ flex: 1, overflowY: 'auto' }}>
-            <div style={{ padding: '0.5rem 0.75rem', backgroundColor: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <div className="table-container-flow" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '0.5rem', overflowX: 'auto', overflowY: 'visible', width: '100%', maxWidth: '100%' }}>
+            <div style={{ padding: '0.5rem 0.75rem', backgroundColor: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', position: 'sticky', top: 0, zIndex: 25, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <span style={{ fontSize: '0.82rem', fontWeight: 700 }}>
                   Job Card Material Shortage ({consolidatedJCShortages.length} parts required for {selectedJCIds.length} Job Cards):
@@ -2868,8 +2928,8 @@ export const ShortageModule: React.FC = () => {
                 </p>
               </div>
             ) : (
-              <table>
-                <thead>
+              <table className="shortage-proc-table">
+                <thead style={{ position: 'sticky', top: '42px', zIndex: 20, backgroundColor: 'var(--bg-tertiary)' }}>
                   <tr>
                     <th style={{ width: '30px' }}>#</th>
                     <th onClick={() => { setJcSortField('itemCode'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ cursor: 'pointer' }}>Item Code</th>
@@ -3082,6 +3142,8 @@ export const ShortageModule: React.FC = () => {
           </div>
         </div>
       )}
+
+      </div>
 
       {/* Print Preview Modal - Landscape */}
       {isPrintModalOpen && (
