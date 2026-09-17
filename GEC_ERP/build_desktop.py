@@ -28,48 +28,73 @@ def log(msg, symbol="[*]"):
     print(f"\n{symbol} {msg}")
 
 def kill_running_instances(root_dir):
-    try:
-        # Terminate any running instances holding locks
-        for proc in ["gec-erp.exe", "makensis.exe", "GEC ERP_1.0.0_x64-setup.exe", "tauri.exe"]:
-            subprocess.run(["taskkill", "/F", "/IM", proc, "/T"], capture_output=True, shell=True)
-        time.sleep(1)
+    """
+    Forcefully terminates any active GEC ERP app instances, installers,
+    or makensis compilers to ensure Windows file locks are completely released.
+    """
+    # 1. Standard taskkill by exact executable names
+    kill_targets = [
+        "gec-erp.exe",
+        "GEC ERP.exe",
+        "GEC ERP_1.0.0_x64-setup.exe",
+        "makensis.exe",
+        "tauri.exe"
+    ]
+    for proc in kill_targets:
+        subprocess.run(f'taskkill /F /IM "{proc}" /T', capture_output=True, shell=True)
 
-        # Clear stale release binaries and dependency files that can hold user-mapped sections
-        release_dir = root_dir / "frontend" / "src-tauri" / "target" / "release"
-        if release_dir.exists():
-            for f in (release_dir / "deps").glob("gec_erp*"):
+    # 2. PowerShell wildcard process killer for any lingering subprocesses (Edge WebView2, background workers)
+    ps_killer = (
+        'powershell -NoProfile -Command "'
+        'Get-Process -ErrorAction SilentlyContinue | '
+        'Where-Object { $_.ProcessName -match \'(?i)gec|makensis\' } | '
+        'Stop-Process -Force -ErrorAction SilentlyContinue"'
+    )
+    subprocess.run(ps_killer, capture_output=True, shell=True)
+    time.sleep(1.5)
+
+    # 3. Clean up locked release binaries and NSIS bundles
+    release_dir = root_dir / "frontend" / "src-tauri" / "target" / "release"
+    if release_dir.exists():
+        # Clean deps
+        deps_dir = release_dir / "deps"
+        if deps_dir.exists():
+            for f in deps_dir.glob("gec_erp*"):
                 try:
-                    f.unlink()
+                    f.unlink(missing_ok=True)
                 except Exception:
                     pass
-            for f in release_dir.glob("gec-erp.*"):
-                try:
-                    f.unlink()
-                except Exception:
-                    pass
 
-        # Remove previous nsis bundle if present so makensis can write cleanly
+        # Clean release executables
+        for f in release_dir.glob("gec-erp.*"):
+            try:
+                f.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+        # Clean previous NSIS setup executables
         nsis_bundle = release_dir / "bundle" / "nsis"
         if nsis_bundle.exists():
             for f in nsis_bundle.glob("*.exe"):
-                try:
-                    f.unlink()
-                except Exception:
-                    pass
-    except Exception:
-        pass
+                for _ in range(3):
+                    try:
+                        f.unlink(missing_ok=True)
+                        break
+                    except PermissionError:
+                        subprocess.run(ps_killer, capture_output=True, shell=True)
+                        time.sleep(1)
 
-def run_build_with_retry(pnpm_cmd, frontend_dir, root_dir, max_retries=2):
+def run_build_with_retry(pnpm_cmd, frontend_dir, root_dir, max_retries=3):
     for attempt in range(1, max_retries + 1):
         print(f"  [EXEC] {pnpm_cmd} (Attempt {attempt}/{max_retries})")
         res = subprocess.run(pnpm_cmd, shell=True, cwd=str(frontend_dir))
         if res.returncode == 0:
             return True
-        print(f"\n[WARN] Build attempt {attempt} encountered lock or exit code {res.returncode}. Releasing locks and retrying in 3 seconds...")
+        print(f"\n[WARN] Build attempt {attempt} encountered lock or exit code {res.returncode}. Terminating running processes and retrying...")
         kill_running_instances(root_dir)
-        time.sleep(3)
+        time.sleep(2)
     
-    print(f"\n[ERROR] Command failed after {max_retries} attempts: {pnpm_cmd}")
+    print(f"\n[ERROR] Build failed after {max_retries} attempts: {pnpm_cmd}")
     sys.exit(1)
 
 def main():
