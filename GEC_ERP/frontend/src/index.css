@@ -204,7 +204,8 @@ label {
   background-color: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 0.75rem;
-  overflow: visible !important;
+  overflow-x: auto !important;
+  overflow-y: visible !important;
   box-shadow: var(--shadow-sm);
   width: 100%;
   max-width: 100%;
@@ -248,7 +249,7 @@ th {
   flex: 1;
   min-height: 0;
   overflow-y: auto !important;
-  overflow-x: auto !important;
+  overflow-x: hidden !important;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -257,26 +258,48 @@ th {
 
 .shortage-itemwise-table th {
   position: sticky !important;
-  top: var(--shortage-filter-height, 82px) !important;
-  z-index: 20 !important;
+  top: 0 !important;
+  z-index: 15 !important;
   background-color: var(--bg-tertiary) !important;
   box-shadow: 0 1px 0 var(--border-color);
 }
 
 .shortage-proc-table th {
   position: sticky !important;
-  top: 46px !important;
-  z-index: 20 !important;
+  top: 0 !important;
+  z-index: 15 !important;
   background-color: var(--bg-tertiary) !important;
   box-shadow: 0 1px 0 var(--border-color);
 }
 
 .shortage-sticky-th th {
   position: sticky !important;
-  top: var(--shortage-filter-height, 82px) !important;
-  z-index: 20 !important;
+  top: 0 !important;
+  z-index: 15 !important;
   background-color: var(--bg-tertiary) !important;
   box-shadow: 0 1px 0 var(--border-color);
+}
+
+/* Priority Badges */
+.badge-p1 {
+  background-color: rgba(239, 68, 68, 0.2) !important;
+  color: #ef4444 !important;
+  border: 1px solid #ef4444 !important;
+  font-weight: 800 !important;
+}
+
+.badge-p2 {
+  background-color: rgba(249, 115, 22, 0.2) !important;
+  color: #f97316 !important;
+  border: 1px solid #f97316 !important;
+  font-weight: 800 !important;
+}
+
+.badge-p3 {
+  background-color: rgba(245, 158, 11, 0.2) !important;
+  color: #f59e0b !important;
+  border: 1px solid #f59e0b !important;
+  font-weight: 800 !important;
 }
 
 td {

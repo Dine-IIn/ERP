@@ -10,6 +10,8 @@ import { Item, FIXED_ITEM_CLASSES, WorkOrder, BOM, JobCard, PurchaseOrder, Jobwo
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
 
 type SortField = 
+  | 'priority'
+  | 'leadTimeDays'
   | 'partCode' 
   | 'itemCode' 
   | 'name'
@@ -349,6 +351,8 @@ export const PlanningModule: React.FC = () => {
         ? [item.processType]
         : ['In-house'];
 
+      const leadTimeDays = item.leadTimeDays !== undefined ? item.leadTimeDays : 10;
+
       return {
         item,
         partCode,
@@ -357,6 +361,7 @@ export const PlanningModule: React.FC = () => {
         category: item.category || 'BO',
         processType: pSources.join(', '),
         unit: item.unit || 'PCS',
+        leadTimeDays,
         pendingWO,
         pendingJobCard,
         totalRequired,
@@ -380,9 +385,9 @@ export const PlanningModule: React.FC = () => {
   const cleanSearchTerm = deferredSearch.replace(/@history|@deleted|@archived/gi, '').replace(/^@+/g, '').trim().toLowerCase();
   const searchTokens = useMemo(() => cleanSearchTerm ? cleanSearchTerm.split(/\s+/).filter(Boolean) : [], [cleanSearchTerm]);
 
-  // Filtered & Sorted Records
+  // Filtered & Sorted Records with Dynamic Priority Ranking
   const filteredData = useMemo(() => {
-    return planningData
+    const list = planningData
       .filter(row => {
         // Fast pre-computed tokenized search filter
         const matchesSearch = searchTokens.length === 0 || searchTokens.every(t => row._searchStr.includes(t));
@@ -403,20 +408,49 @@ export const PlanningModule: React.FC = () => {
         const matchesShortage = !showShortageOnly || row.shortage > 0 || row.minShortage > 0;
 
         return matchesSearch && matchesClass && matchesProcess && matchesShortage;
-      })
-      .sort((a, b) => {
-        let valA: any = a[sortField];
-        let valB: any = b[sortField];
-
-        if (typeof valA === 'string') {
-          valA = valA.toLowerCase();
-          valB = valB.toLowerCase();
-        }
-
-        if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
-        if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
-        return 0;
       });
+
+    // Dynamic Priority: Higher lead time = Higher priority (P1, P2, P3...)
+    const sortedByLeadTime = [...list].sort((a, b) => {
+      if (b.leadTimeDays !== a.leadTimeDays) return b.leadTimeDays - a.leadTimeDays;
+      if (b.shortage !== a.shortage) return b.shortage - a.shortage;
+      return (a.itemCode || '').localeCompare(b.itemCode || '');
+    });
+
+    const rankMap = new Map<string, number>();
+    sortedByLeadTime.forEach((it, idx) => {
+      rankMap.set(it.item?.id || it.itemCode, idx + 1);
+    });
+
+    const withPriorities = list.map(row => {
+      const rank = rankMap.get(row.item?.id || row.itemCode) || 1;
+      return {
+        ...row,
+        priorityRank: `P${rank}`,
+        priorityNum: rank
+      };
+    });
+
+    return withPriorities.sort((a, b) => {
+      if (sortField === 'priority') {
+        return sortOrder === 'asc' ? a.priorityNum - b.priorityNum : b.priorityNum - a.priorityNum;
+      }
+      if (sortField === 'leadTimeDays') {
+        return sortOrder === 'asc' ? a.leadTimeDays - b.leadTimeDays : b.leadTimeDays - a.leadTimeDays;
+      }
+
+      let valA: any = a[sortField];
+      let valB: any = b[sortField];
+
+      if (typeof valA === 'string') {
+        valA = valA.toLowerCase();
+        valB = valB.toLowerCase();
+      }
+
+      if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+      if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
   }, [planningData, searchTokens, selectedClasses, selectedProcessType, showShortageOnly, sortField, sortOrder]);
 
   const totalShortageItemsCount = planningData.filter(d => d.shortage > 0).length;
@@ -595,11 +629,25 @@ export const PlanningModule: React.FC = () => {
         </div>
       </div>
 
-      {/* 13-Column Planning Table */}
+      {/* 15-Column Planning Table */}
       <div className="table-container" style={{ flex: 1, minHeight: '350px', backgroundColor: 'var(--bg-card)' }}>
         <table>
           <thead>
             <tr>
+              {/* 0. Priority */}
+              <th onClick={() => handleSortToggle('priority')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', whiteSpace: 'nowrap', textAlign: 'center', width: '60px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
+                  Priority {sortField === 'priority' ? (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+                </div>
+              </th>
+
+              {/* 0b. Lead Time */}
+              <th onClick={() => handleSortToggle('leadTimeDays')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', whiteSpace: 'nowrap', textAlign: 'center', width: '80px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
+                  Lead Time {sortField === 'leadTimeDays' ? (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+                </div>
+              </th>
+
               {/* 1. Part Code */}
               <th onClick={() => handleSortToggle('partCode')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
@@ -695,7 +743,7 @@ export const PlanningModule: React.FC = () => {
           <tbody>
             {filteredData.length === 0 ? (
               <tr>
-                <td colSpan={13} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-muted)' }}>
+                <td colSpan={15} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-muted)' }}>
                   <Package size={36} style={{ margin: '0 auto 0.5rem', opacity: 0.4 }} />
                   <div style={{ fontWeight: 600 }}>No planning records found matching active filters.</div>
                 </td>
@@ -717,6 +765,22 @@ export const PlanningModule: React.FC = () => {
                       cursor: 'pointer'
                     }}
                   >
+                    {/* 0. Priority */}
+                    <td style={{ padding: '0.35rem 0.5rem', textAlign: 'center' }}>
+                      <span 
+                        className={`badge ${row.priorityNum <= 3 ? 'badge-p1' : row.priorityNum <= 8 ? 'badge-p2' : 'badge-neutral'}`}
+                        style={{ fontSize: '0.72rem', minWidth: '32px', justifyContent: 'center' }}
+                        title={`Priority #${row.priorityNum} (Lead Time: ${row.leadTimeDays} Days)`}
+                      >
+                        {row.priorityRank}
+                      </span>
+                    </td>
+
+                    {/* 0b. Lead Time */}
+                    <td style={{ padding: '0.35rem 0.5rem', textAlign: 'center', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                      {row.leadTimeDays} D
+                    </td>
+
                     {/* 1. Part Code */}
                     <td style={{ padding: '0.35rem 0.5rem', fontFamily: 'monospace', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
                       {row.partCode}

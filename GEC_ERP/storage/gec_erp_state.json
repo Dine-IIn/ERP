@@ -397,12 +397,12 @@
       "conversionFactor": 1,
       "inHouseStock": 1,
       "externalStock": 0,
-      "minStockQty": 10,
+      "minStockQty": 1,
       "minOrderQty": 20,
       "unitPrice": 1200,
-      "leadTimeDays": 0,
+      "leadTimeDays": 70,
       "location": "Raw Material Yard",
-      "qcTrigger": "",
+      "qcTrigger": "NO_QC",
       "testReportRequired": false,
       "materialProcessSources": [
         "Bought out"
@@ -417,7 +417,11 @@
         }
       ],
       "isBlocked": false,
-      "reorderLevel": 1200
+      "reorderLevel": 1200,
+      "partNo": "",
+      "note": "",
+      "weightKg": 0,
+      "isDirectJobworkShipment": false
     },
     {
       "id": "itm-1789299669861-10-u27jm",
@@ -431,12 +435,12 @@
       "conversionFactor": 1,
       "inHouseStock": 1,
       "externalStock": 0,
-      "minStockQty": 10,
+      "minStockQty": 1,
       "minOrderQty": 20,
       "unitPrice": 1200,
-      "leadTimeDays": 0,
+      "leadTimeDays": 70,
       "location": "Raw Material Yard",
-      "qcTrigger": "",
+      "qcTrigger": "NO_QC",
       "testReportRequired": false,
       "materialProcessSources": [
         "Bought out"
@@ -457,7 +461,11 @@
         }
       ],
       "isBlocked": false,
-      "reorderLevel": 1200
+      "reorderLevel": 1200,
+      "partNo": "",
+      "note": "",
+      "weightKg": 0,
+      "isDirectJobworkShipment": false
     },
     {
       "id": "itm-1789299669861-11-lwbuq",
@@ -3683,16 +3691,21 @@
       "minStockQty": 3,
       "minOrderQty": 5,
       "unitPrice": 2400,
-      "leadTimeDays": 0,
+      "leadTimeDays": 50,
       "location": "Machine Shop Bay",
-      "qcTrigger": "",
+      "qcTrigger": "NO_QC",
       "testReportRequired": false,
       "materialProcessSources": [
         "In-house",
         "Job work"
       ],
       "processType": "Job work",
-      "isBlocked": false
+      "isBlocked": false,
+      "partNo": "",
+      "mappedVendors": [],
+      "note": "",
+      "weightKg": 0,
+      "isDirectJobworkShipment": false
     },
     {
       "id": "itm-1789299669862-114-uq10s",
@@ -3709,16 +3722,21 @@
       "minStockQty": 3,
       "minOrderQty": 5,
       "unitPrice": 2400,
-      "leadTimeDays": 0,
+      "leadTimeDays": 50,
       "location": "Machine Shop Bay",
-      "qcTrigger": "",
+      "qcTrigger": "NO_QC",
       "testReportRequired": false,
       "materialProcessSources": [
         "In-house",
         "Job work"
       ],
       "processType": "Job work",
-      "isBlocked": false
+      "isBlocked": false,
+      "partNo": "",
+      "mappedVendors": [],
+      "note": "",
+      "weightKg": 0,
+      "isDirectJobworkShipment": false
     },
     {
       "id": "itm-1789299669862-115-cvf9j",
@@ -4004,16 +4022,21 @@
       "minStockQty": 3,
       "minOrderQty": 5,
       "unitPrice": 2400,
-      "leadTimeDays": 0,
+      "leadTimeDays": 40,
       "location": "Machine Shop Bay",
-      "qcTrigger": "",
+      "qcTrigger": "NO_QC",
       "testReportRequired": false,
       "materialProcessSources": [
         "In-house",
         "Job work"
       ],
       "processType": "Job work",
-      "isBlocked": false
+      "isBlocked": false,
+      "partNo": "",
+      "mappedVendors": [],
+      "note": "",
+      "weightKg": 0,
+      "isDirectJobworkShipment": false
     },
     {
       "id": "itm-1789299669862-126-01zl0",
@@ -18832,6 +18855,83 @@
   "jobCardMaterialReissues": [],
   "intermediateProcessItems": [],
   "auditLogs": [
+    {
+      "id": "log-1789642323271-dz4esd",
+      "userId": "usr-superadmin",
+      "username": "GEC System Super Admin (superadmin)",
+      "role": "Admin",
+      "action": "UPDATE_ITEM",
+      "module": "Item Master",
+      "details": "Updated item: GEC0000011 - MOVING PLATE TOGGLE - 90 TON (CASTING)",
+      "ipAddress": "127.0.0.1",
+      "timestamp": "2026-09-17T10:52:03.271Z"
+    },
+    {
+      "id": "log-1789642316865-vzegtn",
+      "userId": "usr-superadmin",
+      "username": "GEC System Super Admin (superadmin)",
+      "role": "Admin",
+      "action": "UPDATE_ITEM",
+      "module": "Item Master",
+      "details": "Updated item: GEC0000010 - STATIONARY PLATE TOGGLE - 90 TON (CASTING)",
+      "ipAddress": "127.0.0.1",
+      "timestamp": "2026-09-17T10:51:56.865Z"
+    },
+    {
+      "id": "log-1789642096569-q15b9x",
+      "userId": "usr-superadmin",
+      "username": "GEC System Super Admin (superadmin)",
+      "role": "Admin",
+      "action": "UPDATE_ITEM",
+      "module": "Item Master",
+      "details": "Updated item: GEC0000126 - TIE BAR Ø65 - 90 TON TOGGLE",
+      "ipAddress": "127.0.0.1",
+      "timestamp": "2026-09-17T10:48:16.569Z"
+    },
+    {
+      "id": "log-1789642075289-58u8u7",
+      "userId": "usr-superadmin",
+      "username": "GEC System Super Admin (superadmin)",
+      "role": "Admin",
+      "action": "UPDATE_ITEM",
+      "module": "Item Master",
+      "details": "Updated item: GEC0000115 - MOVING PLATE TOGGLE - 90 TON",
+      "ipAddress": "127.0.0.1",
+      "timestamp": "2026-09-17T10:47:55.289Z"
+    },
+    {
+      "id": "log-1789642059014-fa83bl",
+      "userId": "usr-superadmin",
+      "username": "GEC System Super Admin (superadmin)",
+      "role": "Admin",
+      "action": "UPDATE_ITEM",
+      "module": "Item Master",
+      "details": "Updated item: GEC0000114 - STATIONARY PLATE TOGGLE - 90 TON",
+      "ipAddress": "127.0.0.1",
+      "timestamp": "2026-09-17T10:47:39.014Z"
+    },
+    {
+      "id": "log-1789642039069-0b935y",
+      "userId": "usr-superadmin",
+      "username": "GEC System Super Admin (superadmin)",
+      "role": "Admin",
+      "action": "UPDATE_ITEM",
+      "module": "Item Master",
+      "details": "Updated item: GEC0000011 - MOVING PLATE TOGGLE - 90 TON (CASTING)",
+      "ipAddress": "127.0.0.1",
+      "timestamp": "2026-09-17T10:47:19.069Z"
+    },
+    {
+      "id": "log-1789642026923-p2p88a",
+      "userId": "usr-superadmin",
+      "username": "GEC System Super Admin (superadmin)",
+      "role": "Admin",
+      "action": "UPDATE_ITEM",
+      "module": "Item Master",
+      "details": "Updated item: GEC0000010 - STATIONARY PLATE TOGGLE - 90 TON (CASTING)",
+      "ipAddress": "127.0.0.1",
+      "timestamp": "2026-09-17T10:47:06.923Z"
+    },
     {
       "id": "log-1789474112991-3mk67k",
       "userId": "usr-superadmin",

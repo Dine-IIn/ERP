@@ -73,6 +73,8 @@ export const ShortageModule: React.FC = () => {
   // --- ITEM-WISE SHORTAGE STATE ---
   type ItemWiseSortField = 
     | 'srNo'
+    | 'priority'
+    | 'leadTimeDays'
     | 'partCode' 
     | 'itemCode' 
     | 'itemName' 
@@ -154,8 +156,21 @@ export const ShortageModule: React.FC = () => {
     });
   }, [workOrders, deferredWoSearchTerm]);
 
-  const [itemWiseSortField, setItemWiseSortField] = useState<ItemWiseSortField>('shortage');
-  const [itemWiseSortOrder, setItemWiseSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [itemWiseSortField, setItemWiseSortField] = useState<ItemWiseSortField>('priority');
+  const [itemWiseSortOrder, setItemWiseSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  // --- TAB 3-4 (PO / JOB WORK) SHORTAGE SORT STATE ---
+  const [procSortField, setProcSortField] = useState<'priority' | 'leadTimeDays' | 'itemCode' | 'itemName' | 'category' | 'processType' | 'totalRequired' | 'inHouseStock' | 'openPO' | 'pendingJW' | 'netShortage'>('priority');
+  const [procSortOrder, setProcSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  const handleProcSortToggle = (field: typeof procSortField) => {
+    if (procSortField === field) {
+      setProcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setProcSortField(field);
+      setProcSortOrder('asc');
+    }
+  };
 
   // --- IN-HOUSE JOB CARD SHORTAGE UPGRADE STATE ---
   const [jcFilterByWO, setJcFilterByWO] = useState<boolean>(false);
@@ -167,15 +182,24 @@ export const ShortageModule: React.FC = () => {
   const deferredJcSearchTerm = useDeferredValue(jcSearchTerm);
   const [jcTableSearchTerm, setJcTableSearchTerm] = useState<string>('');
   const deferredJcTableSearchTerm = useDeferredValue(jcTableSearchTerm);
-  const [jcSortField, setJcSortField] = useState<'itemCode' | 'itemName' | 'category' | 'processType' | 'totalRequired' | 'issuedQty' | 'netRemainingReq' | 'inHouseStock' | 'shortage'>('shortage');
-  const [jcSortOrder, setJcSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [jcSortField, setJcSortField] = useState<'priority' | 'leadTimeDays' | 'itemCode' | 'itemName' | 'category' | 'processType' | 'totalRequired' | 'issuedQty' | 'netRemainingReq' | 'inHouseStock' | 'shortage'>('priority');
+  const [jcSortOrder, setJcSortOrder] = useState<'asc' | 'desc'>('asc');
 
   const handleItemWiseSortToggle = (field: ItemWiseSortField) => {
     if (itemWiseSortField === field) {
       setItemWiseSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
     } else {
       setItemWiseSortField(field);
-      setItemWiseSortOrder('desc');
+      setItemWiseSortOrder(field === 'priority' ? 'asc' : 'desc');
+    }
+  };
+
+  const handleJcSortToggle = (field: typeof jcSortField) => {
+    if (jcSortField === field) {
+      setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setJcSortField(field);
+      setJcSortOrder(field === 'priority' ? 'asc' : 'desc');
     }
   };
 
@@ -829,14 +853,48 @@ export const ShortageModule: React.FC = () => {
       return true;
     });
 
-    return list.sort((a, b) => {
+    // Attach leadTimeDays & dynamically assign priority based on filtered items sorted by lead time desc
+    const withLeadTime = list.map(c => {
+      const childItem = c.itemObj || items.find(i => i.id === c.itemId || i.itemCode === c.itemCode);
+      const leadTime = childItem?.leadTimeDays !== undefined ? childItem.leadTimeDays : 10;
+      return { ...c, childItem, leadTimeDays: leadTime };
+    });
+
+    const sortedByLeadTime = [...withLeadTime].sort((a, b) => {
+      if (b.leadTimeDays !== a.leadTimeDays) return b.leadTimeDays - a.leadTimeDays;
+      if (b.shortage !== a.shortage) return b.shortage - a.shortage;
+      return (a.itemCode || '').localeCompare(b.itemCode || '');
+    });
+
+    const rankMap = new Map<string, number>();
+    sortedByLeadTime.forEach((it, idx) => {
+      rankMap.set(it.itemId || it.itemCode, idx + 1);
+    });
+
+    const withPriorities = withLeadTime.map(c => {
+      const rank = rankMap.get(c.itemId || c.itemCode) || 1;
+      return {
+        ...c,
+        priorityRank: `P${rank}`,
+        priorityNum: rank
+      };
+    });
+
+    return withPriorities.sort((a, b) => {
+      if (itemWiseSortField === 'priority') {
+        return itemWiseSortOrder === 'asc' ? a.priorityNum - b.priorityNum : b.priorityNum - a.priorityNum;
+      }
+      if (itemWiseSortField === 'leadTimeDays') {
+        return itemWiseSortOrder === 'asc' ? a.leadTimeDays - b.leadTimeDays : b.leadTimeDays - a.leadTimeDays;
+      }
+      if (itemWiseSortField === 'demandFrom') {
+        const valA = (a.requiredByItems || []).map((r: any) => r.itemCode).join(', ');
+        const valB = (b.requiredByItems || []).map((r: any) => r.itemCode).join(', ');
+        return itemWiseSortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+      }
+
       let valA: any = a[itemWiseSortField as keyof typeof a];
       let valB: any = b[itemWiseSortField as keyof typeof b];
-
-      if (itemWiseSortField === 'demandFrom') {
-        valA = (a.requiredByItems || []).map((r: any) => r.itemCode).join(', ');
-        valB = (b.requiredByItems || []).map((r: any) => r.itemCode).join(', ');
-      }
 
       if (typeof valA === 'string') {
         valA = valA.toLowerCase();
@@ -847,7 +905,7 @@ export const ShortageModule: React.FC = () => {
       if (valA > valB) return itemWiseSortOrder === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [consolidatedItemWiseData, selectedClassFilters, selectedProcessFilter, shortageFilterMode, deferredComponentSearchTerm, itemWiseSortField, itemWiseSortOrder]);
+  }, [consolidatedItemWiseData, selectedClassFilters, selectedProcessFilter, shortageFilterMode, deferredComponentSearchTerm, itemWiseSortField, itemWiseSortOrder, items]);
 
   // -------------------------------------------------------------
   // WORK ORDER SHORTAGE & COMBINED AGGREGATION CALCULATIONS
@@ -1149,6 +1207,62 @@ export const ShortageModule: React.FC = () => {
     return true;
   });
 
+  const filteredActiveTabShortages = useMemo(() => {
+    const list = activeTabConsolidatedShortages.filter(c => {
+      if (!deferredTableSearchTerm.trim()) return true;
+      const tokens = deferredTableSearchTerm.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      const s = `${c.itemCode} ${c.itemName} ${c.category || ''} ${c.processType || ''}`.toLowerCase();
+      return tokens.every(t => s.includes(t));
+    });
+
+    const withLeadTime = list.map(c => {
+      const childItem = c.itemObj || items.find(i => i.id === c.itemId || i.itemCode === c.itemCode);
+      const leadTime = childItem?.leadTimeDays !== undefined ? childItem.leadTimeDays : 10;
+      return { ...c, childItem, leadTimeDays: leadTime };
+    });
+
+    const sortedByLeadTime = [...withLeadTime].sort((a, b) => {
+      if (b.leadTimeDays !== a.leadTimeDays) return b.leadTimeDays - a.leadTimeDays;
+      if (b.netShortage !== a.netShortage) return b.netShortage - a.netShortage;
+      return (a.itemCode || '').localeCompare(b.itemCode || '');
+    });
+
+    const rankMap = new Map<string, number>();
+    sortedByLeadTime.forEach((it, idx) => {
+      rankMap.set(it.itemId || it.itemCode, idx + 1);
+    });
+
+    const withPriorities = withLeadTime.map(c => {
+      const rank = rankMap.get(c.itemId || c.itemCode) || 1;
+      return {
+        ...c,
+        priorityRank: `P${rank}`,
+        priorityNum: rank
+      };
+    });
+
+    return withPriorities.sort((a, b) => {
+      if (procSortField === 'priority') {
+        return procSortOrder === 'asc' ? a.priorityNum - b.priorityNum : b.priorityNum - a.priorityNum;
+      }
+      if (procSortField === 'leadTimeDays') {
+        return procSortOrder === 'asc' ? a.leadTimeDays - b.leadTimeDays : b.leadTimeDays - a.leadTimeDays;
+      }
+
+      let valA: any = a[procSortField as keyof typeof a];
+      let valB: any = b[procSortField as keyof typeof b];
+
+      if (typeof valA === 'string') {
+        valA = valA.toLowerCase();
+        valB = (valB || '').toString().toLowerCase();
+      }
+
+      if (valA < valB) return procSortOrder === 'asc' ? -1 : 1;
+      if (valA > valB) return procSortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [activeTabConsolidatedShortages, deferredTableSearchTerm, procSortField, procSortOrder, items]);
+
   // -------------------------------------------------------------
   // IN-HOUSE JOB CARD SHORTAGE DEDICATED ENGINE
   // -------------------------------------------------------------
@@ -1321,9 +1435,42 @@ export const ShortageModule: React.FC = () => {
       return true;
     });
 
-    return list.sort((a, b) => {
-      let valA: any = a[jcSortField];
-      let valB: any = b[jcSortField];
+    const withLeadTime = list.map(c => {
+      const childItem = c.itemObj || items.find(i => i.id === c.itemId || i.itemCode === c.itemCode);
+      const leadTime = childItem?.leadTimeDays !== undefined ? childItem.leadTimeDays : 10;
+      return { ...c, childItem, leadTimeDays: leadTime };
+    });
+
+    const sortedByLeadTime = [...withLeadTime].sort((a, b) => {
+      if (b.leadTimeDays !== a.leadTimeDays) return b.leadTimeDays - a.leadTimeDays;
+      if (b.shortage !== a.shortage) return b.shortage - a.shortage;
+      return (a.itemCode || '').localeCompare(b.itemCode || '');
+    });
+
+    const rankMap = new Map<string, number>();
+    sortedByLeadTime.forEach((it, idx) => {
+      rankMap.set(it.itemId || it.itemCode, idx + 1);
+    });
+
+    const withPriorities = withLeadTime.map(c => {
+      const rank = rankMap.get(c.itemId || c.itemCode) || 1;
+      return {
+        ...c,
+        priorityRank: `P${rank}`,
+        priorityNum: rank
+      };
+    });
+
+    return withPriorities.sort((a, b) => {
+      if (jcSortField === 'priority') {
+        return jcSortOrder === 'asc' ? a.priorityNum - b.priorityNum : b.priorityNum - a.priorityNum;
+      }
+      if (jcSortField === 'leadTimeDays') {
+        return jcSortOrder === 'asc' ? a.leadTimeDays - b.leadTimeDays : b.leadTimeDays - a.leadTimeDays;
+      }
+
+      let valA: any = a[jcSortField as keyof typeof a];
+      let valB: any = b[jcSortField as keyof typeof b];
       if (typeof valA === 'string') {
         valA = valA.toLowerCase();
         valB = (valB || '').toString().toLowerCase();
@@ -1332,7 +1479,7 @@ export const ShortageModule: React.FC = () => {
       if (valA > valB) return jcSortOrder === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [consolidatedJCShortages, shortageFilterMode, deferredJcTableSearchTerm, jcSortField, jcSortOrder]);
+  }, [consolidatedJCShortages, shortageFilterMode, deferredJcTableSearchTerm, jcSortField, jcSortOrder, items]);
 
   const getWOShortageData = (wo: WorkOrder) => {
     const linkedBOM = boms.find(b => b.machineModel === wo.machineModel || b.id === wo.bomId);
@@ -2078,7 +2225,8 @@ export const ShortageModule: React.FC = () => {
                 backgroundColor: 'var(--bg-card)', 
                 border: '1px solid var(--border-color)', 
                 borderRadius: selectedItemIds.length > 0 ? '0 0 0.5rem 0.5rem' : '0.5rem', 
-                overflow: 'visible', 
+                overflow: 'auto',
+                maxHeight: 'calc(100vh - 290px)',
                 width: '100%', 
                 maxWidth: '100%',
                 margin: 0
@@ -2100,24 +2248,38 @@ export const ShortageModule: React.FC = () => {
               </div>
             ) : (
               <table className="shortage-itemwise-table">
-                <thead style={{ position: 'sticky', top: `${card2Height}px`, zIndex: 20, backgroundColor: 'var(--bg-tertiary)' }}>
+                <thead>
                   <tr>
                     {/* 1. # */}
-                    <th onClick={() => handleItemWiseSortToggle('srNo')} style={{ width: '40px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
+                    <th onClick={() => handleItemWiseSortToggle('srNo')} style={{ width: '38px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
                         # {itemWiseSortField === 'srNo' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={10} color="var(--text-muted)" />}
                       </div>
                     </th>
 
+                    {/* 1b. Priority */}
+                    <th onClick={() => handleItemWiseSortToggle('priority')} style={{ width: '62px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
+                        Priority {itemWiseSortField === 'priority' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={10} color="var(--text-muted)" />}
+                      </div>
+                    </th>
+
+                    {/* 1c. Lead Time */}
+                    <th onClick={() => handleItemWiseSortToggle('leadTimeDays')} style={{ width: '78px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
+                        Lead Time {itemWiseSortField === 'leadTimeDays' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={10} color="var(--text-muted)" />}
+                      </div>
+                    </th>
+
                     {/* 2. Part Code */}
-                    <th onClick={() => handleItemWiseSortToggle('partCode')} style={{ width: '115px', cursor: 'pointer', userSelect: 'none' }}>
+                    <th onClick={() => handleItemWiseSortToggle('partCode')} style={{ width: '110px', cursor: 'pointer', userSelect: 'none' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
                         Part Code {itemWiseSortField === 'partCode' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                       </div>
                     </th>
 
                     {/* 3. Item Code */}
-                    <th onClick={() => handleItemWiseSortToggle('itemCode')} style={{ width: '120px', cursor: 'pointer', userSelect: 'none' }}>
+                    <th onClick={() => handleItemWiseSortToggle('itemCode')} style={{ width: '115px', cursor: 'pointer', userSelect: 'none' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
                         Item Code {itemWiseSortField === 'itemCode' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                       </div>
@@ -2131,21 +2293,21 @@ export const ShortageModule: React.FC = () => {
                     </th>
 
                     {/* 5. Class */}
-                    <th onClick={() => handleItemWiseSortToggle('category')} style={{ width: '70px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
+                    <th onClick={() => handleItemWiseSortToggle('category')} style={{ width: '65px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
                         Class {itemWiseSortField === 'category' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                       </div>
                     </th>
 
                     {/* 6. Source */}
-                    <th onClick={() => handleItemWiseSortToggle('processType')} style={{ width: '95px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
+                    <th onClick={() => handleItemWiseSortToggle('processType')} style={{ width: '90px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
                         Source {itemWiseSortField === 'processType' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                       </div>
                     </th>
 
                     {/* 7. Demand From */}
-                    <th onClick={() => handleItemWiseSortToggle('demandFrom')} style={{ width: '135px', cursor: 'pointer', userSelect: 'none' }}>
+                    <th onClick={() => handleItemWiseSortToggle('demandFrom')} style={{ width: '130px', cursor: 'pointer', userSelect: 'none' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
                         Demand From {itemWiseSortField === 'demandFrom' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                       </div>
@@ -2159,42 +2321,42 @@ export const ShortageModule: React.FC = () => {
                     </th>
 
                     {/* 9. In Stock */}
-                    <th onClick={() => handleItemWiseSortToggle('inHouseStock')} style={{ textAlign: 'right', width: '85px', cursor: 'pointer', userSelect: 'none' }}>
+                    <th onClick={() => handleItemWiseSortToggle('inHouseStock')} style={{ textAlign: 'right', width: '80px', cursor: 'pointer', userSelect: 'none' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
                         In Stock {itemWiseSortField === 'inHouseStock' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                       </div>
                     </th>
 
                     {/* 10. Pend PO */}
-                    <th onClick={() => handleItemWiseSortToggle('pendingPO')} style={{ textAlign: 'right', width: '75px', cursor: 'pointer', userSelect: 'none' }}>
+                    <th onClick={() => handleItemWiseSortToggle('pendingPO')} style={{ textAlign: 'right', width: '70px', cursor: 'pointer', userSelect: 'none' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
                         Pend PO {itemWiseSortField === 'pendingPO' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                       </div>
                     </th>
 
                     {/* 11. Pend JW */}
-                    <th onClick={() => handleItemWiseSortToggle('pendingJW')} style={{ textAlign: 'right', width: '75px', cursor: 'pointer', userSelect: 'none' }}>
+                    <th onClick={() => handleItemWiseSortToggle('pendingJW')} style={{ textAlign: 'right', width: '70px', cursor: 'pointer', userSelect: 'none' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
                         Pend JW {itemWiseSortField === 'pendingJW' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                       </div>
                     </th>
 
                     {/* 12. Pend QC */}
-                    <th onClick={() => handleItemWiseSortToggle('pendingQC')} style={{ textAlign: 'right', width: '75px', cursor: 'pointer', userSelect: 'none' }}>
+                    <th onClick={() => handleItemWiseSortToggle('pendingQC')} style={{ textAlign: 'right', width: '70px', cursor: 'pointer', userSelect: 'none' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
                         Pend QC {itemWiseSortField === 'pendingQC' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                       </div>
                     </th>
 
                     {/* 13. Shortage */}
-                    <th onClick={() => handleItemWiseSortToggle('shortage')} style={{ textAlign: 'right', width: '90px', cursor: 'pointer', userSelect: 'none' }}>
+                    <th onClick={() => handleItemWiseSortToggle('shortage')} style={{ textAlign: 'right', width: '85px', cursor: 'pointer', userSelect: 'none' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
                         Shortage {itemWiseSortField === 'shortage' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                       </div>
                     </th>
 
                     {/* 14. Min Stock */}
-                    <th onClick={() => handleItemWiseSortToggle('minStockLevel')} style={{ textAlign: 'right', width: '85px', cursor: 'pointer', userSelect: 'none' }}>
+                    <th onClick={() => handleItemWiseSortToggle('minStockLevel')} style={{ textAlign: 'right', width: '80px', cursor: 'pointer', userSelect: 'none' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
                         Min Stock {itemWiseSortField === 'minStockLevel' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                       </div>
@@ -2204,33 +2366,61 @@ export const ShortageModule: React.FC = () => {
                 <tbody>
                   {filteredConsolidatedItems.map((comp, idx) => {
                     const isLineShortage = comp.shortage > 0 || comp.minShortage > 0;
-                    const childItem = comp.itemObj;
 
                     return (
                       <tr 
                         key={idx} 
                         style={{ backgroundColor: isLineShortage ? 'rgba(239, 68, 68, 0.06)' : 'transparent' }}
                       >
+                        {/* 1. # */}
                         <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}>{idx + 1}</td>
+
+                        {/* 1b. Priority */}
+                        <td style={{ textAlign: 'center' }}>
+                          <span 
+                            className={`badge ${comp.priorityNum <= 3 ? 'badge-p1' : comp.priorityNum <= 8 ? 'badge-p2' : 'badge-neutral'}`}
+                            style={{ fontSize: '0.72rem', minWidth: '32px', justifyContent: 'center' }}
+                            title={`Priority #${comp.priorityNum} (Lead Time: ${comp.leadTimeDays} Days)`}
+                          >
+                            {comp.priorityRank}
+                          </span>
+                        </td>
+
+                        {/* 1c. Lead Time */}
+                        <td style={{ textAlign: 'center', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                          {comp.leadTimeDays} D
+                        </td>
+
+                        {/* 2. Part Code */}
                         <td style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--text-primary)' }}>
                           {comp.partCode || '-'}
                         </td>
+
+                        {/* 3. Item Code */}
                         <td style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>
                           {comp.itemCode}
                         </td>
+
+                        {/* 4. Description */}
                         <td style={{ fontWeight: 600 }}>
                           {comp.itemName}
                         </td>
+
+                        {/* 5. Class */}
                         <td style={{ textAlign: 'center' }}>
                           <span className="badge badge-neutral" style={{ fontSize: '0.72rem' }}>
                             {comp.category}
                           </span>
                         </td>
+
+                        {/* 6. Source */}
                         <td style={{ textAlign: 'center' }}>
                           <span className={`badge ${comp.processType === 'Bought out' || comp.processType === 'Job work + Bought out' ? 'badge-primary' : comp.processType === 'In-house' ? 'badge-success' : comp.processType === 'Job work' ? 'badge-purple' : 'badge-neutral'}`} style={{ fontSize: '0.72rem' }}>
                             {comp.processType || 'In-house'}
                           </span>
                         </td>
+
+                        {/* 7. Demand From */}
                         <td>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '0.72rem' }}>
                             {(comp.requiredByItems || []).map((req: any, rIdx: number) => (
@@ -2240,28 +2430,41 @@ export const ShortageModule: React.FC = () => {
                             ))}
                           </div>
                         </td>
+
+                        {/* 8. Total Req */}
                         <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--text-primary)' }}>
                           {comp.totalRequired} {comp.unit}
                         </td>
+
+                        {/* 9. In Stock */}
                         <td style={{ textAlign: 'right', fontWeight: 700 }}>
                           {comp.inHouseStock} {comp.unit}
                         </td>
+
+                        {/* 10. Pend PO */}
                         <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
                           {comp.pendingPO || 0}
                         </td>
+
+                        {/* 11. Pend JW */}
                         <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
                           {comp.pendingJW || 0}
                         </td>
+
+                        {/* 12. Pend QC */}
                         <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
                           {comp.pendingQC || 0}
                         </td>
+
+                        {/* 13. Shortage */}
                         <td style={{ textAlign: 'right', fontWeight: 900, color: comp.shortage > 0 ? 'var(--danger)' : 'var(--success)' }}>
                           {comp.shortage > 0 ? `${comp.shortage} ${comp.unit}` : 'OK (0)'}
                         </td>
+
+                        {/* 14. Min Stock */}
                         <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
                           {comp.minStockLevel || 0} {comp.unit}
                         </td>
-                        
                       </tr>
                     );
                   })}
@@ -2458,62 +2661,69 @@ export const ShortageModule: React.FC = () => {
 
           {/* Tab 3-4: Process-Specific Consolidated Tables (PO, JW) */}
           {(activeTab === 'PO_SHORTAGE' || activeTab === 'JOBWORK_SHORTAGE') && (
-            <div className="table-container-flow" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '0.5rem', overflowX: 'auto', overflowY: 'visible', width: '100%', maxWidth: '100%' }}>
+            <div className="table-container-flow" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '0.5rem', overflow: 'auto', maxHeight: 'calc(100vh - 230px)', width: '100%', maxWidth: '100%' }}>
               <div style={{ padding: '0.5rem 0.75rem', backgroundColor: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 25, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
                 <span style={{ fontSize: '0.82rem', fontWeight: 700 }}>
-                  Combined Shortage Breakdown ({activeTabConsolidatedShortages.length} items from {relevantWOs.length} Work Orders):
+                  Combined Shortage Breakdown ({filteredActiveTabShortages.length} items from {relevantWOs.length} Work Orders):
                 </span>
                 <input
                   type="text"
-                  placeholder="Filter table..."
+                  placeholder="Filter table (code, name, class, source)..."
                   className="input-field"
-                  style={{ width: '220px', padding: '0.2rem 0.5rem', fontSize: '0.78rem' }}
+                  style={{ width: '260px', padding: '0.2rem 0.5rem', fontSize: '0.78rem' }}
                   value={tableSearchTerm}
                   onChange={(e) => setTableSearchTerm(e.target.value)}
                 />
               </div>
 
               <table className="shortage-proc-table">
-                <thead style={{ position: 'sticky', top: '38px', zIndex: 20, backgroundColor: 'var(--bg-tertiary)' }}>
+                <thead>
                   <tr>
                     <th style={{ width: '30px' }}>#</th>
-                    <th>Item Code</th>
-                    <th>Item Description</th>
-                    <th>Class</th>
-                    <th>Source Process</th>
-                    <th style={{ textAlign: 'right' }}>Total Req</th>
-                    <th style={{ textAlign: 'right' }}>Current Stock</th>
-                    <th style={{ textAlign: 'right' }}>Open PO</th>
-                    <th style={{ textAlign: 'right' }}>Pend JW</th>
-                    <th style={{ textAlign: 'right' }}>Shortage</th>
+                    <th onClick={() => handleProcSortToggle('priority')} style={{ width: '60px', textAlign: 'center', cursor: 'pointer' }}>Priority</th>
+                    <th onClick={() => handleProcSortToggle('leadTimeDays')} style={{ width: '75px', textAlign: 'center', cursor: 'pointer' }}>Lead Time</th>
+                    <th onClick={() => handleProcSortToggle('itemCode')} style={{ cursor: 'pointer' }}>Item Code</th>
+                    <th onClick={() => handleProcSortToggle('itemName')} style={{ cursor: 'pointer' }}>Item Description</th>
+                    <th onClick={() => handleProcSortToggle('category')} style={{ textAlign: 'center', cursor: 'pointer' }}>Class</th>
+                    <th onClick={() => handleProcSortToggle('processType')} style={{ textAlign: 'center', cursor: 'pointer' }}>Source Process</th>
+                    <th onClick={() => handleProcSortToggle('totalRequired')} style={{ textAlign: 'right', cursor: 'pointer' }}>Total Req</th>
+                    <th onClick={() => handleProcSortToggle('inHouseStock')} style={{ textAlign: 'right', cursor: 'pointer' }}>Current Stock</th>
+                    <th onClick={() => handleProcSortToggle('openPO')} style={{ textAlign: 'right', cursor: 'pointer' }}>Open PO</th>
+                    <th onClick={() => handleProcSortToggle('pendingJW')} style={{ textAlign: 'right', cursor: 'pointer' }}>Pend JW</th>
+                    <th onClick={() => handleProcSortToggle('netShortage')} style={{ textAlign: 'right', cursor: 'pointer' }}>Shortage</th>
                     <th style={{ textAlign: 'center', minWidth: '180px' }}>Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {activeTabConsolidatedShortages
-                    .filter(c => {
-                      if (!deferredTableSearchTerm.trim()) return true;
-                      const tokens = deferredTableSearchTerm.trim().toLowerCase().split(/\s+/).filter(Boolean);
-                      const s = `${c.itemCode} ${c.itemName} ${c.category || ''} ${c.processType || ''}`.toLowerCase();
-                      return tokens.every(t => s.includes(t));
-                    })
-                    .map((c, idx) => {
-                      const childItem = c.itemObj || items.find(i => i.id === c.itemId || i.itemCode === c.itemCode);
-                      return (
-                        <tr key={idx} style={{ backgroundColor: c.isShortage ? 'rgba(239, 68, 68, 0.06)' : 'transparent' }}>
-                          <td>{idx + 1}</td>
-                          <td style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>{c.itemCode}</td>
-                          <td style={{ fontWeight: 600 }}>{c.itemName}</td>
-                          <td><span className="badge badge-neutral" style={{ fontSize: '0.7rem' }}>{c.category}</span></td>
-                          <td><span className="badge badge-outline" style={{ fontSize: '0.7rem' }}>{c.processType}</span></td>
-                          <td style={{ textAlign: 'right', fontWeight: 700 }}>{c.totalRequired} {c.unit}</td>
-                          <td style={{ textAlign: 'right' }}>{c.inHouseStock} {c.unit}</td>
-                          <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{c.openPO || 0}</td>
-                          <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{c.pendingJW || 0}</td>
-                          <td style={{ textAlign: 'right', fontWeight: 800, color: c.isShortage ? 'var(--danger)' : 'var(--success)' }}>
-                            {c.isShortage ? `${c.netShortage} ${c.unit}` : 'OK (0)'}
-                          </td>
-                          <td style={{ textAlign: 'center' }}>
+                  {filteredActiveTabShortages.map((c, idx) => {
+                    const childItem = c.childItem || c.itemObj || items.find(i => i.id === c.itemId || i.itemCode === c.itemCode);
+                    return (
+                      <tr key={idx} style={{ backgroundColor: c.isShortage ? 'rgba(239, 68, 68, 0.06)' : 'transparent' }}>
+                        <td>{idx + 1}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          <span 
+                            className={`badge ${c.priorityNum <= 3 ? 'badge-p1' : c.priorityNum <= 8 ? 'badge-p2' : 'badge-neutral'}`}
+                            style={{ fontSize: '0.72rem', minWidth: '32px', justifyContent: 'center' }}
+                            title={`Priority #${c.priorityNum} (Lead Time: ${c.leadTimeDays} Days)`}
+                          >
+                            {c.priorityRank}
+                          </span>
+                        </td>
+                        <td style={{ textAlign: 'center', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                          {c.leadTimeDays} D
+                        </td>
+                        <td style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>{c.itemCode}</td>
+                        <td style={{ fontWeight: 600 }}>{c.itemName}</td>
+                        <td style={{ textAlign: 'center' }}><span className="badge badge-neutral" style={{ fontSize: '0.7rem' }}>{c.category}</span></td>
+                        <td style={{ textAlign: 'center' }}><span className="badge badge-outline" style={{ fontSize: '0.7rem' }}>{c.processType}</span></td>
+                        <td style={{ textAlign: 'right', fontWeight: 700 }}>{c.totalRequired} {c.unit}</td>
+                        <td style={{ textAlign: 'right' }}>{c.inHouseStock} {c.unit}</td>
+                        <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{c.openPO || 0}</td>
+                        <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{c.pendingJW || 0}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 800, color: c.isShortage ? 'var(--danger)' : 'var(--success)' }}>
+                          {c.isShortage ? `${c.netShortage} ${c.unit}` : 'OK (0)'}
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
                             {c.isShortage && childItem && (
                               <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'center' }}>
                                 {activeTab === 'PO_SHORTAGE' && (
@@ -2928,106 +3138,118 @@ export const ShortageModule: React.FC = () => {
                 </p>
               </div>
             ) : (
-              <table className="shortage-proc-table">
-                <thead style={{ position: 'sticky', top: '42px', zIndex: 20, backgroundColor: 'var(--bg-tertiary)' }}>
-                  <tr>
-                    <th style={{ width: '30px' }}>#</th>
-                    <th onClick={() => { setJcSortField('itemCode'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ cursor: 'pointer' }}>Item Code</th>
-                    <th onClick={() => { setJcSortField('itemName'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ cursor: 'pointer' }}>Item Description</th>
-                    <th onClick={() => { setJcSortField('category'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ textAlign: 'center', cursor: 'pointer' }}>Class</th>
-                    <th onClick={() => { setJcSortField('processType'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ textAlign: 'center', cursor: 'pointer' }}>Source</th>
-                    <th style={{ minWidth: '150px' }}>Required By Job Cards</th>
-                    <th onClick={() => { setJcSortField('totalRequired'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ textAlign: 'right', cursor: 'pointer' }}>Total Req</th>
-                    <th onClick={() => { setJcSortField('issuedQty'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ textAlign: 'right', cursor: 'pointer' }}>Issued</th>
-                    <th onClick={() => { setJcSortField('netRemainingReq'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ textAlign: 'right', cursor: 'pointer' }}>Net Req</th>
-                    <th onClick={() => { setJcSortField('inHouseStock'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ textAlign: 'right', cursor: 'pointer' }}>In Stock</th>
-                    <th style={{ textAlign: 'right' }}>Open PO</th>
-                    <th style={{ textAlign: 'right' }}>Pend JW</th>
-                    <th onClick={() => { setJcSortField('shortage'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ textAlign: 'right', cursor: 'pointer' }}>Shortage</th>
-                    <th style={{ textAlign: 'center', minWidth: '160px' }}>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredJCShortages.map((c, idx) => {
-                    const childItem = c.itemObj || items.find(i => i.id === c.itemId || i.itemCode === c.itemCode);
-                    return (
-                      <tr key={idx} style={{ backgroundColor: c.isShortage ? 'rgba(239, 68, 68, 0.06)' : 'transparent' }}>
-                        <td>{idx + 1}</td>
-                        <td style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>
-                          {c.itemCode}
-                          {c.partCode && <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{c.partCode}</div>}
-                        </td>
-                        <td style={{ fontWeight: 600 }}>{c.itemName}</td>
-                        <td style={{ textAlign: 'center' }}>
-                          <span className="badge badge-neutral" style={{ fontSize: '0.7rem' }}>{c.category}</span>
-                        </td>
-                        <td style={{ textAlign: 'center' }}>
-                          <span className={`badge ${c.processType === 'Bought out' || c.processType === 'Job work + Bought out' ? 'badge-primary' : c.processType === 'In-house' ? 'badge-success' : 'badge-outline'}`} style={{ fontSize: '0.7rem' }}>
-                            {c.processType}
-                          </span>
-                        </td>
-                        <td>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '0.72rem' }}>
-                            {(c.requiredByJCs || []).map((req, rIdx) => (
-                              <span key={rIdx} style={{ color: 'var(--text-secondary)' }}>
-                                <strong>{req.jcNo}</strong>: {req.requiredQty} {c.unit}
-                                {req.issuedQty > 0 && <span style={{ color: 'var(--success)', marginLeft: '4px' }}>(Issued: {req.issuedQty})</span>}
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-                        <td style={{ textAlign: 'right', fontWeight: 700 }}>{c.totalRequired} {c.unit}</td>
-                        <td style={{ textAlign: 'right', color: c.issuedQty > 0 ? 'var(--success)' : 'var(--text-muted)', fontWeight: 600 }}>
-                          {c.issuedQty} {c.unit}
-                        </td>
-                        <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--text-primary)' }}>
-                          {c.netRemainingReq} {c.unit}
-                        </td>
-                        <td style={{ textAlign: 'right', fontWeight: 700 }}>{c.inHouseStock} {c.unit}</td>
-                        <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{c.openPO || 0}</td>
-                        <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{c.pendingJW || 0}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 800, color: c.isShortage ? 'var(--danger)' : 'var(--success)' }}>
-                          {c.isShortage ? `${c.shortage} ${c.unit}` : 'OK (0)'}
-                        </td>
-                        <td style={{ textAlign: 'center' }}>
-                          <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-                            {c.isShortage && childItem && (
-                              <>
-                                {(c.processType === 'Bought out' || c.processType === 'Job work + Bought out') && (
-                                  <button type="button" className="btn btn-primary" style={{ padding: '0.15rem 0.35rem', fontSize: '0.68rem' }} onClick={() => handleRaisePO(childItem, c.shortage)}>
-                                    +PO
-                                  </button>
-                                )}
-                                {(c.processType === 'Job work' || c.processType === 'Job work + Bought out') && (
-                                  <button type="button" className="btn btn-outline" style={{ padding: '0.15rem 0.35rem', fontSize: '0.68rem', color: 'var(--accent-primary)' }} onClick={() => handleIssueJobwork(childItem, c.shortage)}>
-                                    +JW
-                                  </button>
-                                )}
-                                {c.processType === 'In-house' && (
-                                  <button type="button" className="btn btn-outline" style={{ padding: '0.15rem 0.35rem', fontSize: '0.68rem', color: 'var(--success)' }} onClick={() => handleIssueJobCard(childItem, c.shortage)}>
-                                    +JC
-                                  </button>
-                                )}
-                              </>
-                            )}
-                            {c.inHouseStock > 0 && c.netRemainingReq > 0 && (
-                              <button
-                                type="button"
-                                className="btn btn-success"
-                                style={{ padding: '0.15rem 0.4rem', fontSize: '0.68rem', fontWeight: 700 }}
-                                onClick={() => setActiveModule('material-issue')}
-                                title="Go to Material Issue & Store to issue available items"
-                              >
-                                Store Issue
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <div className="table-container-flow" style={{ overflow: 'auto', maxHeight: 'calc(100vh - 230px)', width: '100%', border: '1px solid var(--border-color)', borderRadius: '0.375rem' }}>
+                <table className="shortage-proc-table" style={{ width: '100%', minWidth: '1300px' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: '30px' }}>#</th>
+                      <th onClick={() => { setJcSortField('priority'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ textAlign: 'center', cursor: 'pointer', minWidth: '70px' }}>Priority</th>
+                      <th onClick={() => { setJcSortField('leadTimeDays'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ textAlign: 'center', cursor: 'pointer', minWidth: '75px' }}>Lead Time</th>
+                      <th onClick={() => { setJcSortField('itemCode'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ cursor: 'pointer' }}>Item Code</th>
+                      <th onClick={() => { setJcSortField('itemName'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ cursor: 'pointer' }}>Item Description</th>
+                      <th onClick={() => { setJcSortField('category'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ textAlign: 'center', cursor: 'pointer' }}>Class</th>
+                      <th onClick={() => { setJcSortField('processType'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ textAlign: 'center', cursor: 'pointer' }}>Source</th>
+                      <th style={{ minWidth: '150px' }}>Required By Job Cards</th>
+                      <th onClick={() => { setJcSortField('totalRequired'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ textAlign: 'right', cursor: 'pointer' }}>Total Req</th>
+                      <th onClick={() => { setJcSortField('issuedQty'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ textAlign: 'right', cursor: 'pointer' }}>Issued</th>
+                      <th onClick={() => { setJcSortField('netRemainingReq'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ textAlign: 'right', cursor: 'pointer' }}>Net Req</th>
+                      <th onClick={() => { setJcSortField('inHouseStock'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ textAlign: 'right', cursor: 'pointer' }}>In Stock</th>
+                      <th style={{ textAlign: 'right' }}>Open PO</th>
+                      <th style={{ textAlign: 'right' }}>Pend JW</th>
+                      <th onClick={() => { setJcSortField('shortage'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ textAlign: 'right', cursor: 'pointer' }}>Shortage</th>
+                      <th style={{ textAlign: 'center', minWidth: '160px' }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredJCShortages.map((c, idx) => {
+                      const childItem = c.itemObj || items.find(i => i.id === c.itemId || i.itemCode === c.itemCode);
+                      return (
+                        <tr key={idx} style={{ backgroundColor: c.isShortage ? 'rgba(239, 68, 68, 0.06)' : 'transparent' }}>
+                          <td>{idx + 1}</td>
+                          <td style={{ textAlign: 'center' }}>
+                            <span className={`badge ${c.priorityRank === 'P1' ? 'badge-p1' : c.priorityRank === 'P2' ? 'badge-p2' : 'badge-neutral'}`} style={{ fontWeight: 800, fontSize: '0.72rem' }}>
+                              {c.priorityRank || 'P3'}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'center', fontWeight: 600, fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
+                            {c.leadTimeDays ? `${c.leadTimeDays} D` : '-'}
+                          </td>
+                          <td style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>
+                            {c.itemCode}
+                            {c.partCode && <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{c.partCode}</div>}
+                          </td>
+                          <td style={{ fontWeight: 600 }}>{c.itemName}</td>
+                          <td style={{ textAlign: 'center' }}>
+                            <span className="badge badge-neutral" style={{ fontSize: '0.7rem' }}>{c.category}</span>
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <span className={`badge ${c.processType === 'Bought out' || c.processType === 'Job work + Bought out' ? 'badge-primary' : c.processType === 'In-house' ? 'badge-success' : 'badge-outline'}`} style={{ fontSize: '0.7rem' }}>
+                              {c.processType}
+                            </span>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '0.72rem' }}>
+                              {(c.requiredByJCs || []).map((req, rIdx) => (
+                                <span key={rIdx} style={{ color: 'var(--text-secondary)' }}>
+                                  <strong>{req.jcNo}</strong>: {req.requiredQty} {c.unit}
+                                  {req.issuedQty > 0 && <span style={{ color: 'var(--success)', marginLeft: '4px' }}>(Issued: {req.issuedQty})</span>}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 700 }}>{c.totalRequired} {c.unit}</td>
+                          <td style={{ textAlign: 'right', color: c.issuedQty > 0 ? 'var(--success)' : 'var(--text-muted)', fontWeight: 600 }}>
+                            {c.issuedQty} {c.unit}
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--text-primary)' }}>
+                            {c.netRemainingReq} {c.unit}
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 700 }}>{c.inHouseStock} {c.unit}</td>
+                          <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{c.openPO || 0}</td>
+                          <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{c.pendingJW || 0}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 800, color: c.isShortage ? 'var(--danger)' : 'var(--success)' }}>
+                            {c.isShortage ? `${c.shortage} ${c.unit}` : 'OK (0)'}
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                              {c.isShortage && childItem && (
+                                <>
+                                  {(c.processType === 'Bought out' || c.processType === 'Job work + Bought out') && (
+                                    <button type="button" className="btn btn-primary" style={{ padding: '0.15rem 0.35rem', fontSize: '0.68rem' }} onClick={() => handleRaisePO(childItem, c.shortage)}>
+                                      +PO
+                                    </button>
+                                  )}
+                                  {(c.processType === 'Job work' || c.processType === 'Job work + Bought out') && (
+                                    <button type="button" className="btn btn-outline" style={{ padding: '0.15rem 0.35rem', fontSize: '0.68rem', color: 'var(--accent-primary)' }} onClick={() => handleIssueJobwork(childItem, c.shortage)}>
+                                      +JW
+                                    </button>
+                                  )}
+                                  {c.processType === 'In-house' && (
+                                    <button type="button" className="btn btn-outline" style={{ padding: '0.15rem 0.35rem', fontSize: '0.68rem', color: 'var(--success)' }} onClick={() => handleIssueJobCard(childItem, c.shortage)}>
+                                      +JC
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                              {c.inHouseStock > 0 && c.netRemainingReq > 0 && (
+                                <button
+                                  type="button"
+                                  className="btn btn-success"
+                                  style={{ padding: '0.15rem 0.4rem', fontSize: '0.68rem', fontWeight: 700 }}
+                                  onClick={() => setActiveModule('material-issue')}
+                                  title="Go to Material Issue & Store to issue available items"
+                                >
+                                  Store Issue
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         </div>

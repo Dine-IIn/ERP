@@ -4,6 +4,8 @@ import './printStyles.css';
 
 export interface ConsolidatedComponentRow {
   srNo: number;
+  priorityRank?: string;
+  leadTimeDays?: number;
   partCode: string;
   itemCode: string;
   itemName: string;
@@ -98,50 +100,61 @@ export const ConsolidatedItemWiseShortagePrintReport: React.FC<ConsolidatedItemW
           </div>
         </div>
 
-        {/* Selected Assemblies Scope Banner */}
-        {selectedItems.length > 0 && (
-          <div style={{ marginTop: '4px', padding: '3px 6px', backgroundColor: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '7.5pt', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
-            <span style={{ fontWeight: 800, color: '#0f172a' }}>Planned Items:</span>
-            {selectedItems.map((it, idx) => (
-              <span key={idx} style={{ padding: '1px 5px', backgroundColor: '#e2e8f0', borderRadius: '3px', fontWeight: 700 }}>
-                {it.itemCode} {it.itemName ? `- ${it.itemName}` : ''} (Target: {it.targetQuantity} | Max: <strong style={{ color: it.maxBuildableQty >= it.targetQuantity ? '#15803d' : '#b91c1c' }}>{it.maxBuildableQty}</strong>)
-              </span>
-            ))}
-          </div>
-        )}
+        {/* Selected Parent Items Summary Bar */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
+          {selectedItems.map((it, idx) => (
+            <span 
+              key={idx} 
+              style={{ 
+                fontSize: '7pt', 
+                backgroundColor: '#f1f5f9', 
+                border: '1px solid #cbd5e1', 
+                borderRadius: '3px', 
+                padding: '2px 5px',
+                color: '#1e293b'
+              }}
+            >
+              <strong>{it.itemCode}</strong>: Plan <strong>{it.targetQuantity}</strong> (Max: <span style={{ color: it.maxBuildableQty >= it.targetQuantity ? '#059669' : '#dc2626', fontWeight: 700 }}>{it.maxBuildableQty}</span>)
+            </span>
+          ))}
+        </div>
       </div>
 
-      {/* High-Density Consolidated Component Table */}
+      {/* ------------------------------------------------------------- */}
+      {/* 17-COLUMN CONSOLIDATED SHORTAGE DATA TABLE */}
+      {/* ------------------------------------------------------------- */}
       <table style={{
         width: '100%',
         borderCollapse: 'collapse',
         fontSize: '9pt',
-        border: '1.5px solid #000000',
+        border: '1px solid #000000',
         tableLayout: 'fixed'
       }}>
-        <thead style={{ fontSize: '5.8pt', lineHeight: '1.2', letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
+        <thead style={{ fontSize: '5.6pt', lineHeight: '1.2', letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
           <tr style={{ minHeight: '26px' }}>
             <th style={{ ...thBaseStyle, width: '2.5%', textAlign: 'center' }}>#</th>
-            <th style={{ ...thBaseStyle, width: '9.5%', textAlign: 'left' }}>Part<br/>Code</th>
-            <th style={{ ...thBaseStyle, width: '10%', textAlign: 'left' }}>Item<br/>Code</th>
-            <th style={{ ...thBaseStyle, width: '24%', textAlign: 'left' }}>Item<br/>Description</th>
-            <th style={{ ...thBaseStyle, width: '4.5%', textAlign: 'center' }}>Class</th>
-            <th style={{ ...thBaseStyle, width: '6%', textAlign: 'center' }}>Source</th>
-            <th style={{ ...thBaseStyle, width: '8.5%', textAlign: 'left' }}>Demand<br/>From</th>
-            <th style={{ ...thBaseStyle, width: '5.5%', textAlign: 'center' }}>Total<br/>Req</th>
-            <th style={{ ...thBaseStyle, width: '5.5%', textAlign: 'center' }}>Curr<br/>Stock</th>
+            <th style={{ ...thBaseStyle, width: '4%', textAlign: 'center' }}>Pri<br/>ority</th>
+            <th style={{ ...thBaseStyle, width: '4.5%', textAlign: 'center' }}>Lead<br/>Time</th>
+            <th style={{ ...thBaseStyle, width: '8.5%', textAlign: 'left' }}>Part<br/>Code</th>
+            <th style={{ ...thBaseStyle, width: '9%', textAlign: 'left' }}>Item<br/>Code</th>
+            <th style={{ ...thBaseStyle, width: '20%', textAlign: 'left' }}>Item<br/>Description</th>
+            <th style={{ ...thBaseStyle, width: '4%', textAlign: 'center' }}>Class</th>
+            <th style={{ ...thBaseStyle, width: '5.5%', textAlign: 'center' }}>Source</th>
+            <th style={{ ...thBaseStyle, width: '8%', textAlign: 'left' }}>Demand<br/>From</th>
+            <th style={{ ...thBaseStyle, width: '5%', textAlign: 'center' }}>Total<br/>Req</th>
+            <th style={{ ...thBaseStyle, width: '5%', textAlign: 'center' }}>Curr<br/>Stock</th>
             <th style={{ ...thBaseStyle, width: '4.5%', textAlign: 'center' }}>Pend<br/>PO</th>
             <th style={{ ...thBaseStyle, width: '5%', textAlign: 'center' }}>Pend<br/>JobWork</th>
             <th style={{ ...thBaseStyle, width: '4.5%', textAlign: 'center' }}>Pend<br/>QC</th>
-            <th style={{ ...thBaseStyle, width: '5.5%', textAlign: 'center' }}>Short<br/>age</th>
+            <th style={{ ...thBaseStyle, width: '5%', textAlign: 'center' }}>Short<br/>age</th>
             <th style={{ ...thBaseStyle, width: '4.5%', textAlign: 'center' }}>Min<br/>Level</th>
-            <th style={{ ...thBaseStyle, width: '5.5%', textAlign: 'center' }}>Min Level<br/>Shortage</th>
+            <th style={{ ...thBaseStyle, width: '5%', textAlign: 'center' }}>Min Level<br/>Shortage</th>
           </tr>
         </thead>
         <tbody style={{ fontSize: '8.5pt' }}>
           {data.length === 0 ? (
             <tr>
-              <td colSpan={15} style={{ textAlign: 'center', padding: '12px', color: '#6b7280', fontStyle: 'italic', border: '1px solid #cbd5e1' }}>
+              <td colSpan={17} style={{ textAlign: 'center', padding: '12px', color: '#6b7280', fontStyle: 'italic', border: '1px solid #cbd5e1' }}>
                 No components or shortages match the selected items or filter criteria.
               </td>
             </tr>
@@ -159,6 +172,12 @@ export const ConsolidatedItemWiseShortagePrintReport: React.FC<ConsolidatedItemW
                 <tr key={idx} style={{ backgroundColor: rowBg }}>
                   <td style={{ ...tdBaseStyle, textAlign: 'center', color: '#64748b', fontSize: '8pt' }}>
                     {idx + 1}
+                  </td>
+                  <td style={{ ...tdBaseStyle, textAlign: 'center', fontWeight: 800, color: '#000000', fontSize: '7.5pt' }}>
+                    {row.priorityRank || `P${idx + 1}`}
+                  </td>
+                  <td style={{ ...tdBaseStyle, textAlign: 'center', fontWeight: 600, color: '#000000', fontSize: '7.5pt' }}>
+                    {row.leadTimeDays || 10}D
                   </td>
                   <td style={{ ...tdBaseStyle, textAlign: 'left', fontFamily: 'monospace', fontWeight: 700, color: '#1e293b', fontSize: '8pt', whiteSpace: 'nowrap' }}>
                     {row.partCode || '-'}
@@ -236,7 +255,7 @@ export const ConsolidatedItemWiseShortagePrintReport: React.FC<ConsolidatedItemW
         {data.length > 0 && (
           <tfoot style={{ fontSize: '8pt' }}>
             <tr style={{ backgroundColor: '#e2e8f0' }}>
-              <td colSpan={7} style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'right' }}>
+              <td colSpan={9} style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'right' }}>
                 TOTALS ({data.length} Components):
               </td>
               <td style={{ ...thBaseStyle, backgroundColor: '#e2e8f0', textAlign: 'center', color: '#000000' }}>
@@ -291,6 +310,8 @@ export interface ItemWiseShortagePrintItem {
     inHouseStock: number;
     netShortage: number;
     unit: string;
+    leadTimeDays?: number;
+    priorityRank?: string;
   }>;
 }
 
@@ -342,6 +363,8 @@ export const ItemWiseShortagePrintView: React.FC<{
           <thead>
             <tr>
               <th style={{ width: '30px' }}>#</th>
+              <th style={{ width: '50px', textAlign: 'center' }}>Priority</th>
+              <th style={{ width: '60px', textAlign: 'center' }}>Lead Time</th>
               <th>Component Code</th>
               <th>Component Name</th>
               <th>Class</th>
@@ -355,7 +378,7 @@ export const ItemWiseShortagePrintView: React.FC<{
           <tbody>
             {itemPlan.components.length === 0 ? (
               <tr>
-                <td colSpan={9} style={{ textAlign: 'center', padding: '8px', color: '#6b7280' }}>
+                <td colSpan={11} style={{ textAlign: 'center', padding: '8px', color: '#6b7280' }}>
                   No BOM sub-components found for this item.
                 </td>
               </tr>
@@ -363,6 +386,8 @@ export const ItemWiseShortagePrintView: React.FC<{
               itemPlan.components.map((comp, cIdx) => (
                 <tr key={cIdx} style={{ backgroundColor: comp.netShortage > 0 ? '#fef2f2' : 'transparent' }}>
                   <td>{cIdx + 1}</td>
+                  <td style={{ textAlign: 'center', fontWeight: 800 }}>{comp.priorityRank || `P${cIdx + 1}`}</td>
+                  <td style={{ textAlign: 'center' }}>{comp.leadTimeDays || 10}D</td>
                   <td style={{ fontFamily: 'monospace', fontWeight: 700, color: '#2563eb' }}>{comp.itemCode}</td>
                   <td style={{ fontWeight: 600 }}>{comp.itemName}</td>
                   <td>{comp.category}</td>
@@ -460,6 +485,8 @@ export const POShortagePrintView: React.FC<{
       <thead>
         <tr>
           <th style={{ width: '30px' }}>#</th>
+          <th style={{ width: '50px', textAlign: 'center' }}>Priority</th>
+          <th style={{ width: '60px', textAlign: 'center' }}>Lead Time</th>
           <th>Item Code</th>
           <th>Description</th>
           <th>Class</th>
@@ -473,8 +500,10 @@ export const POShortagePrintView: React.FC<{
         {items.map((it, idx) => (
           <tr key={idx}>
             <td>{idx + 1}</td>
+            <td style={{ textAlign: 'center', fontWeight: 800 }}>{it.priorityRank || `P${idx + 1}`}</td>
+            <td style={{ textAlign: 'center' }}>{it.leadTimeDays || it.itemObj?.leadTimeDays || 10}D</td>
             <td style={{ fontFamily: 'monospace', fontWeight: 700, color: '#2563eb' }}>{it.itemCode}</td>
-            <td style={{ fontWeight: 600 }}>{it.name}</td>
+            <td style={{ fontWeight: 600 }}>{it.name || it.itemName}</td>
             <td>{it.category}</td>
             <td style={{ textAlign: 'right' }}>{it.inHouseStock} {it.unit}</td>
             <td style={{ textAlign: 'right' }}>{it.reorderLevel || it.minStockQty || 0} {it.unit}</td>
@@ -492,6 +521,8 @@ export const POShortagePrintView: React.FC<{
 // 4. Unified Tabular Shortage Print View
 export interface TabularShortageRow {
   srNo: number;
+  priorityRank?: string;
+  leadTimeDays?: number | string;
   itemCode?: string;
   itemDescription: string;
   partCode: string;
@@ -528,6 +559,8 @@ export const TabularShortagePrintView: React.FC<{
       <thead>
         <tr>
           <th style={{ width: '35px', textAlign: 'center' }}>Sr No</th>
+          <th style={{ width: '50px', textAlign: 'center' }}>Priority</th>
+          <th style={{ width: '60px', textAlign: 'center' }}>Lead Time</th>
           <th>Item Code</th>
           <th>Item Description</th>
           <th>Part Code</th>
@@ -542,7 +575,7 @@ export const TabularShortagePrintView: React.FC<{
       <tbody>
         {rows.length === 0 ? (
           <tr>
-            <td colSpan={showMOQAndInPO ? 10 : 8} style={{ textAlign: 'center', padding: '12px', color: '#059669', fontWeight: 600 }}>
+            <td colSpan={showMOQAndInPO ? 12 : 10} style={{ textAlign: 'center', padding: '12px', color: '#059669', fontWeight: 600 }}>
               ✓ No active shortage found. All inventory requirements are satisfied!
             </td>
           </tr>
@@ -550,6 +583,8 @@ export const TabularShortagePrintView: React.FC<{
           rows.map((r, idx) => (
             <tr key={idx} style={{ backgroundColor: Number(r.shortage) > 0 ? '#fef2f2' : 'transparent' }}>
               <td style={{ textAlign: 'center' }}>{r.srNo}</td>
+              <td style={{ textAlign: 'center', fontWeight: 800 }}>{r.priorityRank || `P${r.srNo}`}</td>
+              <td style={{ textAlign: 'center' }}>{r.leadTimeDays || 10}D</td>
               <td style={{ fontFamily: 'monospace', fontWeight: 700, color: '#2563eb' }}>{r.itemCode || r.partCode}</td>
               <td style={{ fontWeight: 600 }}>
                 {r.itemDescription}

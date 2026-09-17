@@ -9,10 +9,13 @@ export interface PlanningPrintRow {
     name: string;
     category?: string;
     unit?: string;
+    leadTimeDays?: number;
   };
   partCode: string;
   itemCode: string;
   name: string;
+  priorityRank?: string;
+  leadTimeDays?: number;
   pendingWO: number;
   pendingJobCard: number;
   totalRequired: number;
@@ -71,7 +74,7 @@ export const PlanningPrintReport: React.FC<PlanningPrintReportProps> = ({ data }
       }}
     >
       {/* ------------------------------------------------------------- */}
-      {/* 14-COLUMN INDUSTRIAL PLANNING DATA TABLE */}
+      {/* 16-COLUMN INDUSTRIAL PLANNING DATA TABLE */}
       {/* ------------------------------------------------------------- */}
       <table style={{
         width: '100%',
@@ -80,28 +83,30 @@ export const PlanningPrintReport: React.FC<PlanningPrintReportProps> = ({ data }
         border: '1px solid #000000',
         tableLayout: 'fixed'
       }}>
-        <thead style={{ fontSize: '5.8pt', lineHeight: '1.2', letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
+        <thead style={{ fontSize: '5.6pt', lineHeight: '1.2', letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
           <tr style={{ minHeight: '26px' }}>
             <th style={{ ...thBaseStyle, width: '2.5%', textAlign: 'center' }}>#</th>
-            <th style={{ ...thBaseStyle, width: '9.5%', textAlign: 'left' }}>Part<br/>Code</th>
-            <th style={{ ...thBaseStyle, width: '10%', textAlign: 'left' }}>Item<br/>Code</th>
-            <th style={{ ...thBaseStyle, width: '26%', textAlign: 'left' }}>Item<br/>Description</th>
-            <th style={{ ...thBaseStyle, width: '5%', textAlign: 'center' }}>WO<br/>Req</th>
-            <th style={{ ...thBaseStyle, width: '6%', textAlign: 'center' }}>Pend<br/>JobCard</th>
-            <th style={{ ...thBaseStyle, width: '5.5%', textAlign: 'center' }}>Total<br/>Req</th>
-            <th style={{ ...thBaseStyle, width: '5.5%', textAlign: 'center' }}>Curr<br/>Stock</th>
-            <th style={{ ...thBaseStyle, width: '5%', textAlign: 'center' }}>Pend<br/>PO</th>
-            <th style={{ ...thBaseStyle, width: '6%', textAlign: 'center' }}>Pend<br/>JobWork</th>
-            <th style={{ ...thBaseStyle, width: '5%', textAlign: 'center' }}>Pend<br/>QC</th>
-            <th style={{ ...thBaseStyle, width: '5.5%', textAlign: 'center' }}>Short<br/>age</th>
-            <th style={{ ...thBaseStyle, width: '5%', textAlign: 'center' }}>Min<br/>Level</th>
-            <th style={{ ...thBaseStyle, width: '6.5%', textAlign: 'center' }}>Min Level<br/>Shortage</th>
+            <th style={{ ...thBaseStyle, width: '4.5%', textAlign: 'center' }}>Pri<br/>ority</th>
+            <th style={{ ...thBaseStyle, width: '5%', textAlign: 'center' }}>Lead<br/>Time</th>
+            <th style={{ ...thBaseStyle, width: '9%', textAlign: 'left' }}>Part<br/>Code</th>
+            <th style={{ ...thBaseStyle, width: '9.5%', textAlign: 'left' }}>Item<br/>Code</th>
+            <th style={{ ...thBaseStyle, width: '21.5%', textAlign: 'left' }}>Item<br/>Description</th>
+            <th style={{ ...thBaseStyle, width: '4.5%', textAlign: 'center' }}>WO<br/>Req</th>
+            <th style={{ ...thBaseStyle, width: '5.5%', textAlign: 'center' }}>Pend<br/>JobCard</th>
+            <th style={{ ...thBaseStyle, width: '5%', textAlign: 'center' }}>Total<br/>Req</th>
+            <th style={{ ...thBaseStyle, width: '5%', textAlign: 'center' }}>Curr<br/>Stock</th>
+            <th style={{ ...thBaseStyle, width: '4.5%', textAlign: 'center' }}>Pend<br/>PO</th>
+            <th style={{ ...thBaseStyle, width: '5.5%', textAlign: 'center' }}>Pend<br/>JobWork</th>
+            <th style={{ ...thBaseStyle, width: '4.5%', textAlign: 'center' }}>Pend<br/>QC</th>
+            <th style={{ ...thBaseStyle, width: '5%', textAlign: 'center' }}>Short<br/>age</th>
+            <th style={{ ...thBaseStyle, width: '4.5%', textAlign: 'center' }}>Min<br/>Level</th>
+            <th style={{ ...thBaseStyle, width: '5.5%', textAlign: 'center' }}>Min Level<br/>Shortage</th>
           </tr>
         </thead>
         <tbody style={{ fontSize: '8.5pt' }}>
           {data.length === 0 ? (
             <tr>
-              <td colSpan={14} style={{ textAlign: 'center', padding: '12px', color: '#000000', fontStyle: 'italic', border: '1px solid #000000' }}>
+              <td colSpan={16} style={{ textAlign: 'center', padding: '12px', color: '#000000', fontStyle: 'italic', border: '1px solid #000000' }}>
                 No items match the active filters or search criteria.
               </td>
             </tr>
@@ -118,6 +123,12 @@ export const PlanningPrintReport: React.FC<PlanningPrintReportProps> = ({ data }
                 >
                   <td style={{ ...tdBaseStyle, textAlign: 'center', color: '#000000', fontSize: '8pt' }}>
                     {idx + 1}
+                  </td>
+                  <td style={{ ...tdBaseStyle, textAlign: 'center', fontWeight: 800, color: '#000000', fontSize: '7.5pt' }}>
+                    {row.priorityRank || `P${idx + 1}`}
+                  </td>
+                  <td style={{ ...tdBaseStyle, textAlign: 'center', fontWeight: 600, color: '#000000', fontSize: '7.5pt' }}>
+                    {row.leadTimeDays || row.item?.leadTimeDays || 10}D
                   </td>
                   <td style={{ ...tdBaseStyle, textAlign: 'left', fontFamily: 'monospace', fontWeight: 700, color: '#000000', fontSize: '8pt', whiteSpace: 'nowrap' }}>
                     {row.partCode || '-'}
