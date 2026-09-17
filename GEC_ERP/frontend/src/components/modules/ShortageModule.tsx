@@ -43,6 +43,11 @@ export const ShortageModule: React.FC = () => {
   const [card2Height, setCard2Height] = useState<number>(0);
   const card2ObserverRef = useRef<ResizeObserver | null>(null);
 
+  // Synchronized Header Scroll Refs for horizontal scrolling
+  const itemWiseHeaderScrollRef = useRef<HTMLDivElement>(null);
+  const procHeaderScrollRef = useRef<HTMLDivElement>(null);
+  const jcHeaderScrollRef = useRef<HTMLDivElement>(null);
+
   const card2RefCallback = useCallback((node: HTMLDivElement | null) => {
     if (card2ObserverRef.current) {
       card2ObserverRef.current.disconnect();
@@ -1960,8 +1965,8 @@ export const ShortageModule: React.FC = () => {
         </div>
       </div>
 
-      {/* MAIN SHORTAGE CONTENT AREA - Single Vertical Scroll Container */}
-      <div className="shortage-single-scroll-container" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', gap: '0.5rem', paddingRight: '0.25rem' }}>
+      {/* MAIN SHORTAGE CONTENT AREA - Single Page Vertical Scroll */}
+      <div className="shortage-single-scroll-container" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%' }}>
         
         {/* ========================================================= */}
         {/* TAB 1: ITEM-WISE SHORTAGE & CONSOLIDATED CAPACITY ($X+Y$) */}
@@ -1970,7 +1975,7 @@ export const ShortageModule: React.FC = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%' }}>
             
             {/* Top Panel: Search & Add Parent Finished Items / Assemblies */}
-            <div className="card" style={{ padding: '0.65rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', flexShrink: 0, position: 'relative', zIndex: 50, overflow: 'visible' }}>
+            <div className="card" style={{ padding: '0.65rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', flexShrink: 0, width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
                 <div>
                   <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-primary)' }}>
@@ -2171,15 +2176,13 @@ export const ShortageModule: React.FC = () => {
               backgroundColor: 'var(--bg-card)', 
               border: '1px solid var(--border-color)', 
               borderRadius: '0.5rem', 
-              overflowX: 'auto',
-              overflowY: 'visible',
+              overflow: 'visible',
               width: '100%', 
               maxWidth: '100%',
-              margin: 0,
-              ['--shortage-filter-height' as any]: `${card2Height}px`
+              margin: 0
             }}
           >
-            {/* Filter & Search Controls (Sticky at top: 0, left: 0 inside table container) */}
+            {/* Filter & Search Controls (Sticky at top: 0 inside table container) */}
             {selectedItemIds.length > 0 && (
               <div 
                 ref={card2RefCallback}
@@ -2187,7 +2190,6 @@ export const ShortageModule: React.FC = () => {
                 style={{ 
                   position: 'sticky',
                   top: 0,
-                  left: 0,
                   zIndex: 30,
                   backgroundColor: 'var(--bg-card)', 
                   padding: '0.55rem 0.85rem', 
@@ -2197,7 +2199,8 @@ export const ShortageModule: React.FC = () => {
                   flexShrink: 0, 
                   borderBottom: '1px solid var(--border-color)',
                   borderRadius: '0.5rem 0.5rem 0 0',
-                  minWidth: '100%',
+                  width: '100%',
+                  maxWidth: '100%',
                   boxSizing: 'border-box'
                 }}
               >
@@ -2318,241 +2321,309 @@ export const ShortageModule: React.FC = () => {
                   : 'No components found matching the active search or filters.'}
               </div>
             ) : (
-              <table className="shortage-itemwise-table">
-                <thead>
-                  <tr>
-                    {/* 1. # */}
-                    <th onClick={() => handleItemWiseSortToggle('srNo')} style={{ width: '38px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
-                        # {itemWiseSortField === 'srNo' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={10} color="var(--text-muted)" />}
-                      </div>
-                    </th>
-
-                    {/* 1b. Priority */}
-                    <th onClick={() => handleItemWiseSortToggle('priority')} style={{ width: '62px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
-                        Priority {itemWiseSortField === 'priority' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={10} color="var(--text-muted)" />}
-                      </div>
-                    </th>
-
-                    {/* 1c. Lead Time */}
-                    <th onClick={() => handleItemWiseSortToggle('leadTimeDays')} style={{ width: '78px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
-                        Lead Time {itemWiseSortField === 'leadTimeDays' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={10} color="var(--text-muted)" />}
-                      </div>
-                    </th>
-
-                    {/* 2. Part Code */}
-                    <th onClick={() => handleItemWiseSortToggle('partCode')} style={{ width: '110px', cursor: 'pointer', userSelect: 'none' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
-                        Part Code {itemWiseSortField === 'partCode' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
-                      </div>
-                    </th>
-
-                    {/* 3. Item Code */}
-                    <th onClick={() => handleItemWiseSortToggle('itemCode')} style={{ width: '115px', cursor: 'pointer', userSelect: 'none' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
-                        Item Code {itemWiseSortField === 'itemCode' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
-                      </div>
-                    </th>
-
-                    {/* 4. Item Description */}
-                    <th onClick={() => handleItemWiseSortToggle('itemName')} style={{ cursor: 'pointer', userSelect: 'none', minWidth: '160px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
-                        Item Description {itemWiseSortField === 'itemName' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
-                      </div>
-                    </th>
-
-                    {/* 5. Class */}
-                    <th onClick={() => handleItemWiseSortToggle('category')} style={{ width: '70px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
-                        Class {itemWiseSortField === 'category' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
-                      </div>
-                    </th>
-
-                    {/* 6. Source */}
-                    <th onClick={() => handleItemWiseSortToggle('processType')} style={{ width: '90px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
-                        Source {itemWiseSortField === 'processType' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
-                      </div>
-                    </th>
-
-                    {/* 7. Demand From */}
-                    <th onClick={() => handleItemWiseSortToggle('demandFrom')} style={{ width: '130px', cursor: 'pointer', userSelect: 'none' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
-                        Demand From {itemWiseSortField === 'demandFrom' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
-                      </div>
-                    </th>
-
-                    {/* 8. Total Req */}
-                    <th onClick={() => handleItemWiseSortToggle('totalRequired')} style={{ textAlign: 'right', width: '85px', cursor: 'pointer', userSelect: 'none' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
-                        Total Req {itemWiseSortField === 'totalRequired' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
-                      </div>
-                    </th>
-
-                    {/* 9. In Stock */}
-                    <th onClick={() => handleItemWiseSortToggle('inHouseStock')} style={{ textAlign: 'right', width: '80px', cursor: 'pointer', userSelect: 'none' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
-                        In Stock {itemWiseSortField === 'inHouseStock' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
-                      </div>
-                    </th>
-
-                    {/* 10. Pend PO */}
-                    <th onClick={() => handleItemWiseSortToggle('pendingPO')} style={{ textAlign: 'right', width: '70px', cursor: 'pointer', userSelect: 'none' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
-                        Pend PO {itemWiseSortField === 'pendingPO' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
-                      </div>
-                    </th>
-
-                    {/* 11. Pend JW */}
-                    <th onClick={() => handleItemWiseSortToggle('pendingJW')} style={{ textAlign: 'right', width: '70px', cursor: 'pointer', userSelect: 'none' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
-                        Pend JW {itemWiseSortField === 'pendingJW' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
-                      </div>
-                    </th>
-
-                    {/* 12. Pend QC */}
-                    <th onClick={() => handleItemWiseSortToggle('pendingQC')} style={{ textAlign: 'right', width: '70px', cursor: 'pointer', userSelect: 'none' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
-                        Pend QC {itemWiseSortField === 'pendingQC' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
-                      </div>
-                    </th>
-
-                    {/* 13. Shortage */}
-                    <th onClick={() => handleItemWiseSortToggle('shortage')} style={{ textAlign: 'right', width: '85px', cursor: 'pointer', userSelect: 'none' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
-                        Shortage {itemWiseSortField === 'shortage' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
-                      </div>
-                    </th>
-
-                    {/* 14. Min Stock */}
-                    <th onClick={() => handleItemWiseSortToggle('minStockLevel')} style={{ textAlign: 'right', width: '80px', cursor: 'pointer', userSelect: 'none' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
-                        Min Stock {itemWiseSortField === 'minStockLevel' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
-                      </div>
-                    </th>
-
-                    {/* 15. Min Level Shortage */}
-                    <th onClick={() => handleItemWiseSortToggle('minShortage')} style={{ textAlign: 'right', width: '110px', cursor: 'pointer', userSelect: 'none' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
-                        Min Level Shortage {itemWiseSortField === 'minShortage' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
-                      </div>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredConsolidatedItems.map((comp, idx) => {
-                    const isLineShortage = comp.shortage > 0 || comp.minShortage > 0;
-
-                    return (
-                      <tr 
-                        key={idx} 
-                        style={{ backgroundColor: isLineShortage ? 'rgba(239, 68, 68, 0.06)' : 'transparent' }}
-                      >
+              <>
+                {/* Sticky Header Container (Synchronized with Body horizontal scroll) */}
+                <div 
+                  ref={itemWiseHeaderScrollRef}
+                  style={{ 
+                    position: 'sticky',
+                    top: `${card2Height > 0 ? card2Height : 76}px`,
+                    zIndex: 25,
+                    overflow: 'hidden',
+                    width: '100%',
+                    backgroundColor: 'var(--bg-tertiary)',
+                    borderBottom: '1px solid var(--border-color)'
+                  }}
+                >
+                  <table className="shortage-itemwise-table" style={{ width: '100%', minWidth: '1800px', tableLayout: 'fixed', margin: 0, borderCollapse: 'separate', borderSpacing: 0 }}>
+                    <colgroup>
+                      <col style={{ width: '38px' }} />
+                      <col style={{ width: '65px' }} />
+                      <col style={{ width: '85px' }} />
+                      <col style={{ width: '110px' }} />
+                      <col style={{ width: '120px' }} />
+                      <col style={{ width: '220px' }} />
+                      <col style={{ width: '70px' }} />
+                      <col style={{ width: '135px' }} />
+                      <col style={{ width: '140px' }} />
+                      <col style={{ width: '95px' }} />
+                      <col style={{ width: '90px' }} />
+                      <col style={{ width: '85px' }} />
+                      <col style={{ width: '85px' }} />
+                      <col style={{ width: '85px' }} />
+                      <col style={{ width: '95px' }} />
+                      <col style={{ width: '105px' }} />
+                      <col style={{ width: '165px' }} />
+                    </colgroup>
+                    <thead>
+                      <tr>
                         {/* 1. # */}
-                        <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}>{idx + 1}</td>
+                        <th onClick={() => handleItemWiseSortToggle('srNo')} style={{ width: '38px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
+                            # {itemWiseSortField === 'srNo' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={10} color="var(--text-muted)" />}
+                          </div>
+                        </th>
 
                         {/* 1b. Priority */}
-                        <td style={{ textAlign: 'center' }}>
-                          <span 
-                            className={`badge ${comp.priorityNum <= 3 ? 'badge-p1' : comp.priorityNum <= 8 ? 'badge-p2' : 'badge-neutral'}`}
-                            style={{ fontSize: '0.72rem', minWidth: '32px', justifyContent: 'center' }}
-                            title={`Priority #${comp.priorityNum} (Lead Time: ${comp.leadTimeDays} Days)`}
-                          >
-                            {comp.priorityRank}
-                          </span>
-                        </td>
+                        <th onClick={() => handleItemWiseSortToggle('priority')} style={{ width: '65px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
+                            Priority {itemWiseSortField === 'priority' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={10} color="var(--text-muted)" />}
+                          </div>
+                        </th>
 
                         {/* 1c. Lead Time */}
-                        <td style={{ textAlign: 'center', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                          {comp.leadTimeDays} D
-                        </td>
+                        <th onClick={() => handleItemWiseSortToggle('leadTimeDays')} style={{ width: '85px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
+                            Lead Time {itemWiseSortField === 'leadTimeDays' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={10} color="var(--text-muted)" />}
+                          </div>
+                        </th>
 
                         {/* 2. Part Code */}
-                        <td style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--text-primary)' }}>
-                          {comp.partCode || '-'}
-                        </td>
+                        <th onClick={() => handleItemWiseSortToggle('partCode')} style={{ width: '110px', cursor: 'pointer', userSelect: 'none' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                            Part Code {itemWiseSortField === 'partCode' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+                          </div>
+                        </th>
 
                         {/* 3. Item Code */}
-                        <td style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>
-                          {comp.itemCode}
-                        </td>
+                        <th onClick={() => handleItemWiseSortToggle('itemCode')} style={{ width: '120px', cursor: 'pointer', userSelect: 'none' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                            Item Code {itemWiseSortField === 'itemCode' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+                          </div>
+                        </th>
 
-                        {/* 4. Description */}
-                        <td style={{ fontWeight: 600 }}>
-                          {comp.itemName}
-                        </td>
+                        {/* 4. Item Description */}
+                        <th onClick={() => handleItemWiseSortToggle('itemName')} style={{ width: '220px', cursor: 'pointer', userSelect: 'none' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                            Item Description {itemWiseSortField === 'itemName' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+                          </div>
+                        </th>
 
                         {/* 5. Class */}
-                        <td style={{ textAlign: 'center' }}>
-                          <span className="badge badge-neutral" style={{ fontSize: '0.72rem' }}>
-                            {comp.category}
-                          </span>
-                        </td>
+                        <th onClick={() => handleItemWiseSortToggle('category')} style={{ width: '70px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
+                            Class {itemWiseSortField === 'category' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+                          </div>
+                        </th>
 
                         {/* 6. Source */}
-                        <td style={{ textAlign: 'center' }}>
-                          <span className={`badge ${comp.processType === 'Bought out' || comp.processType === 'Job work + Bought out' ? 'badge-primary' : comp.processType === 'In-house' ? 'badge-success' : comp.processType === 'Job work' ? 'badge-purple' : 'badge-neutral'}`} style={{ fontSize: '0.72rem' }}>
-                            {comp.processType || 'In-house'}
-                          </span>
-                        </td>
+                        <th onClick={() => handleItemWiseSortToggle('processType')} style={{ width: '135px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
+                            Source {itemWiseSortField === 'processType' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+                          </div>
+                        </th>
 
                         {/* 7. Demand From */}
-                        <td>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '0.72rem' }}>
-                            {(comp.requiredByItems || []).map((req: any, rIdx: number) => (
-                              <span key={rIdx} style={{ color: 'var(--text-secondary)' }}>
-                                <strong>{req.itemCode}</strong>: {req.requiredQty} {comp.unit}
-                              </span>
-                            ))}
+                        <th onClick={() => handleItemWiseSortToggle('demandFrom')} style={{ width: '140px', cursor: 'pointer', userSelect: 'none' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                            Demand From {itemWiseSortField === 'demandFrom' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                           </div>
-                        </td>
+                        </th>
 
                         {/* 8. Total Req */}
-                        <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--text-primary)' }}>
-                          {comp.totalRequired} {comp.unit}
-                        </td>
+                        <th onClick={() => handleItemWiseSortToggle('totalRequired')} style={{ width: '95px', textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
+                            Total Req {itemWiseSortField === 'totalRequired' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+                          </div>
+                        </th>
 
                         {/* 9. In Stock */}
-                        <td style={{ textAlign: 'right', fontWeight: 700 }}>
-                          {comp.inHouseStock} {comp.unit}
-                        </td>
+                        <th onClick={() => handleItemWiseSortToggle('inHouseStock')} style={{ width: '90px', textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
+                            In Stock {itemWiseSortField === 'inHouseStock' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+                          </div>
+                        </th>
 
                         {/* 10. Pend PO */}
-                        <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
-                          {comp.pendingPO || 0}
-                        </td>
+                        <th onClick={() => handleItemWiseSortToggle('pendingPO')} style={{ width: '85px', textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
+                            Pend PO {itemWiseSortField === 'pendingPO' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+                          </div>
+                        </th>
 
                         {/* 11. Pend JW */}
-                        <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
-                          {comp.pendingJW || 0}
-                        </td>
+                        <th onClick={() => handleItemWiseSortToggle('pendingJW')} style={{ width: '85px', textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
+                            Pend JW {itemWiseSortField === 'pendingJW' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+                          </div>
+                        </th>
 
                         {/* 12. Pend QC */}
-                        <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
-                          {comp.pendingQC || 0}
-                        </td>
+                        <th onClick={() => handleItemWiseSortToggle('pendingQC')} style={{ width: '85px', textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
+                            Pend QC {itemWiseSortField === 'pendingQC' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+                          </div>
+                        </th>
 
                         {/* 13. Shortage */}
-                        <td style={{ textAlign: 'right', fontWeight: 900, color: comp.shortage > 0 ? 'var(--danger)' : 'var(--success)' }}>
-                          {comp.shortage > 0 ? `${comp.shortage} ${comp.unit}` : 'OK (0)'}
-                        </td>
+                        <th onClick={() => handleItemWiseSortToggle('shortage')} style={{ width: '95px', textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
+                            Shortage {itemWiseSortField === 'shortage' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+                          </div>
+                        </th>
 
                         {/* 14. Min Stock */}
-                        <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
-                          {comp.minStockLevel || 0} {comp.unit}
-                        </td>
+                        <th onClick={() => handleItemWiseSortToggle('minStockLevel')} style={{ width: '105px', textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
+                            Min Stock {itemWiseSortField === 'minStockLevel' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+                          </div>
+                        </th>
 
                         {/* 15. Min Level Shortage */}
-                        <td style={{ textAlign: 'right', fontWeight: 800, color: (comp.minShortage || 0) > 0 ? '#ea580c' : 'var(--text-muted)' }}>
-                          {(comp.minShortage || 0) > 0 ? `${comp.minShortage} ${comp.unit}` : 'OK (0)'}
-                        </td>
+                        <th onClick={() => handleItemWiseSortToggle('minShortage')} style={{ width: '165px', textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
+                            Min Level Shortage {itemWiseSortField === 'minShortage' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+                          </div>
+                        </th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    </thead>
+                  </table>
+                </div>
+
+                {/* Table Body Container (Horizontal Scrollable) */}
+                <div 
+                  className="shortage-table-scroll-wrapper"
+                  onScroll={(e) => {
+                    if (itemWiseHeaderScrollRef.current) {
+                      itemWiseHeaderScrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
+                    }
+                  }}
+                  style={{ overflowX: 'auto', width: '100%', maxWidth: '100%', borderRadius: '0 0 0.5rem 0.5rem' }}
+                >
+                  <table className="shortage-itemwise-table" style={{ width: '100%', minWidth: '1800px', tableLayout: 'fixed', margin: 0, borderCollapse: 'separate', borderSpacing: 0 }}>
+                    <colgroup>
+                      <col style={{ width: '38px' }} />
+                      <col style={{ width: '65px' }} />
+                      <col style={{ width: '85px' }} />
+                      <col style={{ width: '110px' }} />
+                      <col style={{ width: '120px' }} />
+                      <col style={{ width: '220px' }} />
+                      <col style={{ width: '70px' }} />
+                      <col style={{ width: '135px' }} />
+                      <col style={{ width: '140px' }} />
+                      <col style={{ width: '95px' }} />
+                      <col style={{ width: '90px' }} />
+                      <col style={{ width: '85px' }} />
+                      <col style={{ width: '85px' }} />
+                      <col style={{ width: '85px' }} />
+                      <col style={{ width: '95px' }} />
+                      <col style={{ width: '105px' }} />
+                      <col style={{ width: '165px' }} />
+                    </colgroup>
+                    <tbody>
+                      {filteredConsolidatedItems.map((comp, idx) => {
+                        const isLineShortage = comp.shortage > 0 || comp.minShortage > 0;
+
+                        return (
+                          <tr 
+                            key={idx} 
+                            style={{ backgroundColor: isLineShortage ? 'rgba(239, 68, 68, 0.06)' : 'transparent' }}
+                          >
+                            {/* 1. # */}
+                            <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}>{idx + 1}</td>
+
+                            {/* 1b. Priority */}
+                            <td style={{ textAlign: 'center' }}>
+                              <span 
+                                className={`badge ${comp.priorityNum <= 3 ? 'badge-p1' : comp.priorityNum <= 8 ? 'badge-p2' : 'badge-neutral'}`}
+                                style={{ fontSize: '0.72rem', minWidth: '32px', justifyContent: 'center' }}
+                                title={`Priority #${comp.priorityNum} (Lead Time: ${comp.leadTimeDays} Days)`}
+                              >
+                                {comp.priorityRank}
+                              </span>
+                            </td>
+
+                            {/* 1c. Lead Time */}
+                            <td style={{ textAlign: 'center', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                              {comp.leadTimeDays} D
+                            </td>
+
+                            {/* 2. Part Code */}
+                            <td style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--text-primary)' }}>
+                              {comp.partCode || '-'}
+                            </td>
+
+                            {/* 3. Item Code */}
+                            <td style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>
+                              {comp.itemCode}
+                            </td>
+
+                            {/* 4. Description */}
+                            <td style={{ fontWeight: 600 }}>
+                              {comp.itemName}
+                            </td>
+
+                            {/* 5. Class */}
+                            <td style={{ textAlign: 'center' }}>
+                              <span className="badge badge-neutral" style={{ fontSize: '0.72rem' }}>
+                                {comp.category}
+                              </span>
+                            </td>
+
+                            {/* 6. Source */}
+                            <td style={{ textAlign: 'center' }}>
+                              <span className={`badge ${comp.processType === 'Bought out' || comp.processType === 'Job work + Bought out' ? 'badge-primary' : comp.processType === 'In-house' ? 'badge-success' : comp.processType === 'Job work' ? 'badge-purple' : 'badge-neutral'}`} style={{ fontSize: '0.72rem' }}>
+                                {comp.processType || 'In-house'}
+                              </span>
+                            </td>
+
+                            {/* 7. Demand From */}
+                            <td>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '0.72rem' }}>
+                                {(comp.requiredByItems || []).map((req: any, rIdx: number) => (
+                                  <span key={rIdx} style={{ color: 'var(--text-secondary)' }}>
+                                    <strong>{req.itemCode}</strong>: {req.requiredQty} {comp.unit}
+                                  </span>
+                                ))}
+                              </div>
+                            </td>
+
+                            {/* 8. Total Req */}
+                            <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--text-primary)' }}>
+                              {comp.totalRequired} {comp.unit}
+                            </td>
+
+                            {/* 9. In Stock */}
+                            <td style={{ textAlign: 'right', fontWeight: 700 }}>
+                              {comp.inHouseStock} {comp.unit}
+                            </td>
+
+                            {/* 10. Pend PO */}
+                            <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
+                              {comp.pendingPO || 0}
+                            </td>
+
+                            {/* 11. Pend JW */}
+                            <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
+                              {comp.pendingJW || 0}
+                            </td>
+
+                            {/* 12. Pend QC */}
+                            <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
+                              {comp.pendingQC || 0}
+                            </td>
+
+                            {/* 13. Shortage */}
+                            <td style={{ textAlign: 'right', fontWeight: 900, color: comp.shortage > 0 ? 'var(--danger)' : 'var(--success)' }}>
+                              {comp.shortage > 0 ? `${comp.shortage} ${comp.unit}` : 'OK (0)'}
+                            </td>
+
+                            {/* 14. Min Stock */}
+                            <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
+                              {comp.minStockLevel || 0} {comp.unit}
+                            </td>
+
+                            {/* 15. Min Level Shortage */}
+                            <td style={{ textAlign: 'right', fontWeight: 800, color: (comp.minShortage || 0) > 0 ? '#ea580c' : 'var(--text-muted)' }}>
+                              {(comp.minShortage || 0) > 0 ? `${comp.minShortage} ${comp.unit}` : 'OK (0)'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
             </div>
         </div>
@@ -2562,10 +2633,10 @@ export const ShortageModule: React.FC = () => {
       {/* TAB 2-4: WORK ORDER SHORTAGE & COMBINED AGGREGATION       */}
       {/* ========================================================= */}
       {activeTab !== 'ITEM_WISE_SHORTAGE' && activeTab !== 'JOBCARD_SHORTAGE' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%', flex: 1, minHeight: 0 }}>
           
           {/* WO Filter Bar with Search Bar */}
-          <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.65rem', flexShrink: 0 }}>
+          <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.65rem', flexShrink: 0, width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
                 <label style={{ fontSize: '0.82rem', fontWeight: 700, margin: 0 }}>Select Work Orders for Combined Shortage:</label>
@@ -2634,7 +2705,7 @@ export const ShortageModule: React.FC = () => {
 
           {/* Tab 2: Work Order Shortage Tree View */}
           {activeTab === 'WO_SHORTAGE' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%', flex: 1, minHeight: 0, overflowY: 'auto' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.35rem 0.5rem' }}>
                 <span style={{ fontSize: '0.82rem', fontWeight: 700 }}>
                   Active Work Orders ({relevantWOs.length}):
@@ -2816,8 +2887,8 @@ export const ShortageModule: React.FC = () => {
 
           {/* Tab 3-4: Process-Specific Consolidated Tables (PO, JW) */}
           {(activeTab === 'PO_SHORTAGE' || activeTab === 'JOBWORK_SHORTAGE') && (
-            <div className="table-container-flow" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '0.5rem', overflowX: 'auto', overflowY: 'visible', width: '100%', maxWidth: '100%' }}>
-              <div style={{ padding: '0.5rem 0.75rem', backgroundColor: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 25, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+            <div className="table-container-flow" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '0.5rem', overflow: 'visible', width: '100%', maxWidth: '100%' }}>
+              <div style={{ padding: '0.5rem 0.75rem', backgroundColor: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 30, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
                 <span style={{ fontSize: '0.82rem', fontWeight: 700 }}>
                   Combined Shortage Breakdown ({filteredActiveTabShortages.length} items from {relevantWOs.length} Work Orders):
                 </span>
@@ -2831,54 +2902,111 @@ export const ShortageModule: React.FC = () => {
                 />
               </div>
 
-              <table className="shortage-proc-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: '30px' }}>#</th>
-                    <th onClick={() => handleProcSortToggle('priority')} style={{ width: '60px', textAlign: 'center', cursor: 'pointer' }}>Priority</th>
-                    <th onClick={() => handleProcSortToggle('leadTimeDays')} style={{ width: '75px', textAlign: 'center', cursor: 'pointer' }}>Lead Time</th>
-                    <th onClick={() => handleProcSortToggle('itemCode')} style={{ cursor: 'pointer' }}>Item Code</th>
-                    <th onClick={() => handleProcSortToggle('itemName')} style={{ cursor: 'pointer' }}>Item Description</th>
-                    <th onClick={() => handleProcSortToggle('category')} style={{ textAlign: 'center', cursor: 'pointer' }}>Class</th>
-                    <th onClick={() => handleProcSortToggle('processType')} style={{ textAlign: 'center', cursor: 'pointer' }}>Source Process</th>
-                    <th onClick={() => handleProcSortToggle('totalRequired')} style={{ textAlign: 'right', cursor: 'pointer' }}>Total Req</th>
-                    <th onClick={() => handleProcSortToggle('inHouseStock')} style={{ textAlign: 'right', cursor: 'pointer' }}>Current Stock</th>
-                    <th onClick={() => handleProcSortToggle('openPO')} style={{ textAlign: 'right', cursor: 'pointer' }}>Open PO</th>
-                    <th onClick={() => handleProcSortToggle('pendingJW')} style={{ textAlign: 'right', cursor: 'pointer' }}>Pend JW</th>
-                    <th onClick={() => handleProcSortToggle('netShortage')} style={{ textAlign: 'right', cursor: 'pointer' }}>Shortage</th>
-                    <th style={{ textAlign: 'center', minWidth: '180px' }}>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredActiveTabShortages.map((c, idx) => {
-                    const childItem = c.childItem || c.itemObj || items.find(i => i.id === c.itemId || i.itemCode === c.itemCode);
-                    return (
-                      <tr key={idx} style={{ backgroundColor: c.isShortage ? 'rgba(239, 68, 68, 0.06)' : 'transparent' }}>
-                        <td>{idx + 1}</td>
-                        <td style={{ textAlign: 'center' }}>
-                          <span 
-                            className={`badge ${c.priorityNum <= 3 ? 'badge-p1' : c.priorityNum <= 8 ? 'badge-p2' : 'badge-neutral'}`}
-                            style={{ fontSize: '0.72rem', minWidth: '32px', justifyContent: 'center' }}
-                            title={`Priority #${c.priorityNum} (Lead Time: ${c.leadTimeDays} Days)`}
-                          >
-                            {c.priorityRank}
-                          </span>
-                        </td>
-                        <td style={{ textAlign: 'center', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                          {c.leadTimeDays} D
-                        </td>
-                        <td style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>{c.itemCode}</td>
-                        <td style={{ fontWeight: 600 }}>{c.itemName}</td>
-                        <td style={{ textAlign: 'center' }}><span className="badge badge-neutral" style={{ fontSize: '0.7rem' }}>{c.category}</span></td>
-                        <td style={{ textAlign: 'center' }}><span className="badge badge-outline" style={{ fontSize: '0.7rem' }}>{c.processType}</span></td>
-                        <td style={{ textAlign: 'right', fontWeight: 700 }}>{c.totalRequired} {c.unit}</td>
-                        <td style={{ textAlign: 'right' }}>{c.inHouseStock} {c.unit}</td>
-                        <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{c.openPO || 0}</td>
-                        <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{c.pendingJW || 0}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 800, color: c.isShortage ? 'var(--danger)' : 'var(--success)' }}>
-                          {c.isShortage ? `${c.netShortage} ${c.unit}` : 'OK (0)'}
-                        </td>
-                        <td style={{ textAlign: 'center' }}>
+              {/* Sticky Header Container */}
+              <div 
+                ref={procHeaderScrollRef}
+                style={{ 
+                  position: 'sticky',
+                  top: '38px',
+                  zIndex: 25,
+                  overflow: 'hidden',
+                  width: '100%',
+                  backgroundColor: 'var(--bg-tertiary)',
+                  borderBottom: '1px solid var(--border-color)'
+                }}
+              >
+                <table className="shortage-proc-table" style={{ width: '100%', minWidth: '1330px', tableLayout: 'fixed', margin: 0, borderCollapse: 'separate', borderSpacing: 0 }}>
+                  <colgroup>
+                    <col style={{ width: '38px' }} />
+                    <col style={{ width: '65px' }} />
+                    <col style={{ width: '80px' }} />
+                    <col style={{ width: '120px' }} />
+                    <col style={{ width: '220px' }} />
+                    <col style={{ width: '75px' }} />
+                    <col style={{ width: '130px' }} />
+                    <col style={{ width: '90px' }} />
+                    <col style={{ width: '90px' }} />
+                    <col style={{ width: '75px' }} />
+                    <col style={{ width: '75px' }} />
+                    <col style={{ width: '90px' }} />
+                    <col style={{ width: '180px' }} />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th style={{ width: '38px', textAlign: 'center' }}>#</th>
+                      <th onClick={() => handleProcSortToggle('priority')} style={{ width: '65px', textAlign: 'center', cursor: 'pointer' }}>Priority</th>
+                      <th onClick={() => handleProcSortToggle('leadTimeDays')} style={{ width: '80px', textAlign: 'center', cursor: 'pointer' }}>Lead Time</th>
+                      <th onClick={() => handleProcSortToggle('itemCode')} style={{ width: '120px', cursor: 'pointer' }}>Item Code</th>
+                      <th onClick={() => handleProcSortToggle('itemName')} style={{ width: '220px', cursor: 'pointer' }}>Item Description</th>
+                      <th onClick={() => handleProcSortToggle('category')} style={{ width: '75px', textAlign: 'center', cursor: 'pointer' }}>Class</th>
+                      <th onClick={() => handleProcSortToggle('processType')} style={{ width: '130px', textAlign: 'center', cursor: 'pointer' }}>Source Process</th>
+                      <th onClick={() => handleProcSortToggle('totalRequired')} style={{ width: '90px', textAlign: 'right', cursor: 'pointer' }}>Total Req</th>
+                      <th onClick={() => handleProcSortToggle('inHouseStock')} style={{ width: '90px', textAlign: 'right', cursor: 'pointer' }}>Current Stock</th>
+                      <th onClick={() => handleProcSortToggle('openPO')} style={{ width: '75px', textAlign: 'right', cursor: 'pointer' }}>Open PO</th>
+                      <th onClick={() => handleProcSortToggle('pendingJW')} style={{ width: '75px', textAlign: 'right', cursor: 'pointer' }}>Pend JW</th>
+                      <th onClick={() => handleProcSortToggle('netShortage')} style={{ width: '90px', textAlign: 'right', cursor: 'pointer' }}>Shortage</th>
+                      <th style={{ width: '180px', textAlign: 'center' }}>Action</th>
+                    </tr>
+                  </thead>
+                </table>
+              </div>
+
+              {/* Table Body Container */}
+              <div 
+                className="shortage-table-scroll-wrapper"
+                onScroll={(e) => {
+                  if (procHeaderScrollRef.current) {
+                    procHeaderScrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
+                  }
+                }}
+                style={{ overflowX: 'auto', width: '100%', maxWidth: '100%', borderRadius: '0 0 0.5rem 0.5rem' }}
+              >
+                <table className="shortage-proc-table" style={{ width: '100%', minWidth: '1330px', tableLayout: 'fixed', margin: 0, borderCollapse: 'separate', borderSpacing: 0 }}>
+                  <colgroup>
+                    <col style={{ width: '38px' }} />
+                    <col style={{ width: '65px' }} />
+                    <col style={{ width: '80px' }} />
+                    <col style={{ width: '120px' }} />
+                    <col style={{ width: '220px' }} />
+                    <col style={{ width: '75px' }} />
+                    <col style={{ width: '130px' }} />
+                    <col style={{ width: '90px' }} />
+                    <col style={{ width: '90px' }} />
+                    <col style={{ width: '75px' }} />
+                    <col style={{ width: '75px' }} />
+                    <col style={{ width: '90px' }} />
+                    <col style={{ width: '180px' }} />
+                  </colgroup>
+                  <tbody>
+                    {filteredActiveTabShortages.map((c, idx) => {
+                      const childItem = c.childItem || c.itemObj || items.find(i => i.id === c.itemId || i.itemCode === c.itemCode);
+                      return (
+                        <tr key={idx} style={{ backgroundColor: c.isShortage ? 'rgba(239, 68, 68, 0.06)' : 'transparent' }}>
+                          <td style={{ textAlign: 'center' }}>{idx + 1}</td>
+                          <td style={{ textAlign: 'center' }}>
+                            <span 
+                              className={`badge ${c.priorityNum <= 3 ? 'badge-p1' : c.priorityNum <= 8 ? 'badge-p2' : 'badge-neutral'}`}
+                              style={{ fontSize: '0.72rem', minWidth: '32px', justifyContent: 'center' }}
+                              title={`Priority #${c.priorityNum} (Lead Time: ${c.leadTimeDays} Days)`}
+                            >
+                              {c.priorityRank}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'center', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                            {c.leadTimeDays} D
+                          </td>
+                          <td style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>{c.itemCode}</td>
+                          <td style={{ fontWeight: 600 }}>{c.itemName}</td>
+                          <td style={{ textAlign: 'center' }}><span className="badge badge-neutral" style={{ fontSize: '0.7rem' }}>{c.category}</span></td>
+                          <td style={{ textAlign: 'center' }}><span className="badge badge-outline" style={{ fontSize: '0.7rem' }}>{c.processType}</span></td>
+                          <td style={{ textAlign: 'right', fontWeight: 700 }}>{c.totalRequired} {c.unit}</td>
+                          <td style={{ textAlign: 'right' }}>{c.inHouseStock} {c.unit}</td>
+                          <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{c.openPO || 0}</td>
+                          <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{c.pendingJW || 0}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 800, color: c.isShortage ? 'var(--danger)' : 'var(--success)' }}>
+                            {c.isShortage ? `${c.netShortage} ${c.unit}` : 'OK (0)'}
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
                             {c.isShortage && childItem && (
                               <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'center' }}>
                                 {activeTab === 'PO_SHORTAGE' && (
@@ -2980,8 +3108,9 @@ export const ShortageModule: React.FC = () => {
                         </tr>
                       );
                     })}
-                </tbody>
-              </table>
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
@@ -2991,9 +3120,9 @@ export const ShortageModule: React.FC = () => {
       {/* TAB 5: UPGRADED IN-HOUSE JOB CARD SHORTAGE                */}
       {/* ========================================================= */}
       {activeTab === 'JOBCARD_SHORTAGE' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%', flex: 1, minHeight: 0 }}>
           {/* Card 1: Selection & Filtering Control Panel */}
-          <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', flexShrink: 0 }}>
+          <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', flexShrink: 0, width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
             {/* Header / Checkbox row */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
@@ -3249,8 +3378,8 @@ export const ShortageModule: React.FC = () => {
           </div>
 
           {/* Card 2: Consolidated Job Card Shortage Table */}
-          <div className="table-container-flow" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '0.5rem', overflowX: 'auto', overflowY: 'visible', width: '100%', maxWidth: '100%' }}>
-            <div style={{ padding: '0.5rem 0.75rem', backgroundColor: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', position: 'sticky', top: 0, zIndex: 25, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+          <div className="table-container-flow" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '0.5rem', overflow: 'visible', width: '100%', maxWidth: '100%' }}>
+            <div style={{ padding: '0.5rem 0.75rem', backgroundColor: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', position: 'sticky', top: 0, zIndex: 30, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <span style={{ fontSize: '0.82rem', fontWeight: 700 }}>
                   Job Card Material Shortage ({consolidatedJCShortages.length} parts required for {selectedJCIds.length} Job Cards):
@@ -3293,118 +3422,182 @@ export const ShortageModule: React.FC = () => {
                 </p>
               </div>
             ) : (
-              <div className="table-container-flow" style={{ overflowX: 'auto', overflowY: 'visible', width: '100%', border: '1px solid var(--border-color)', borderRadius: '0.375rem' }}>
-                <table className="shortage-proc-table" style={{ width: '100%', minWidth: '1300px' }}>
-                  <thead>
-                    <tr>
-                      <th style={{ width: '30px' }}>#</th>
-                      <th onClick={() => { setJcSortField('priority'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ textAlign: 'center', cursor: 'pointer', minWidth: '70px' }}>Priority</th>
-                      <th onClick={() => { setJcSortField('leadTimeDays'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ textAlign: 'center', cursor: 'pointer', minWidth: '75px' }}>Lead Time</th>
-                      <th onClick={() => { setJcSortField('itemCode'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ cursor: 'pointer' }}>Item Code</th>
-                      <th onClick={() => { setJcSortField('itemName'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ cursor: 'pointer' }}>Item Description</th>
-                      <th onClick={() => { setJcSortField('category'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ textAlign: 'center', cursor: 'pointer' }}>Class</th>
-                      <th onClick={() => { setJcSortField('processType'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ textAlign: 'center', cursor: 'pointer' }}>Source</th>
-                      <th style={{ minWidth: '150px' }}>Required By Job Cards</th>
-                      <th onClick={() => { setJcSortField('totalRequired'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ textAlign: 'right', cursor: 'pointer' }}>Total Req</th>
-                      <th onClick={() => { setJcSortField('issuedQty'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ textAlign: 'right', cursor: 'pointer' }}>Issued</th>
-                      <th onClick={() => { setJcSortField('netRemainingReq'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ textAlign: 'right', cursor: 'pointer' }}>Net Req</th>
-                      <th onClick={() => { setJcSortField('inHouseStock'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ textAlign: 'right', cursor: 'pointer' }}>In Stock</th>
-                      <th style={{ textAlign: 'right' }}>Open PO</th>
-                      <th style={{ textAlign: 'right' }}>Pend JW</th>
-                      <th onClick={() => { setJcSortField('shortage'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ textAlign: 'right', cursor: 'pointer' }}>Shortage</th>
-                      <th style={{ textAlign: 'center', minWidth: '160px' }}>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredJCShortages.map((c, idx) => {
-                      const childItem = c.itemObj || items.find(i => i.id === c.itemId || i.itemCode === c.itemCode);
-                      return (
-                        <tr key={idx} style={{ backgroundColor: c.isShortage ? 'rgba(239, 68, 68, 0.06)' : 'transparent' }}>
-                          <td>{idx + 1}</td>
-                          <td style={{ textAlign: 'center' }}>
-                            <span className={`badge ${c.priorityRank === 'P1' ? 'badge-p1' : c.priorityRank === 'P2' ? 'badge-p2' : 'badge-neutral'}`} style={{ fontWeight: 800, fontSize: '0.72rem' }}>
-                              {c.priorityRank || 'P3'}
-                            </span>
-                          </td>
-                          <td style={{ textAlign: 'center', fontWeight: 600, fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
-                            {c.leadTimeDays ? `${c.leadTimeDays} D` : '-'}
-                          </td>
-                          <td style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>
-                            {c.itemCode}
-                            {c.partCode && <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{c.partCode}</div>}
-                          </td>
-                          <td style={{ fontWeight: 600 }}>{c.itemName}</td>
-                          <td style={{ textAlign: 'center' }}>
-                            <span className="badge badge-neutral" style={{ fontSize: '0.7rem' }}>{c.category}</span>
-                          </td>
-                          <td style={{ textAlign: 'center' }}>
-                            <span className={`badge ${c.processType === 'Bought out' || c.processType === 'Job work + Bought out' ? 'badge-primary' : c.processType === 'In-house' ? 'badge-success' : 'badge-outline'}`} style={{ fontSize: '0.7rem' }}>
-                              {c.processType}
-                            </span>
-                          </td>
-                          <td>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '0.72rem' }}>
-                              {(c.requiredByJCs || []).map((req, rIdx) => (
-                                <span key={rIdx} style={{ color: 'var(--text-secondary)' }}>
-                                  <strong>{req.jcNo}</strong>: {req.requiredQty} {c.unit}
-                                  {req.issuedQty > 0 && <span style={{ color: 'var(--success)', marginLeft: '4px' }}>(Issued: {req.issuedQty})</span>}
-                                </span>
-                              ))}
-                            </div>
-                          </td>
-                          <td style={{ textAlign: 'right', fontWeight: 700 }}>{c.totalRequired} {c.unit}</td>
-                          <td style={{ textAlign: 'right', color: c.issuedQty > 0 ? 'var(--success)' : 'var(--text-muted)', fontWeight: 600 }}>
-                            {c.issuedQty} {c.unit}
-                          </td>
-                          <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--text-primary)' }}>
-                            {c.netRemainingReq} {c.unit}
-                          </td>
-                          <td style={{ textAlign: 'right', fontWeight: 700 }}>{c.inHouseStock} {c.unit}</td>
-                          <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{c.openPO || 0}</td>
-                          <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{c.pendingJW || 0}</td>
-                          <td style={{ textAlign: 'right', fontWeight: 800, color: c.isShortage ? 'var(--danger)' : 'var(--success)' }}>
-                            {c.isShortage ? `${c.shortage} ${c.unit}` : 'OK (0)'}
-                          </td>
-                          <td style={{ textAlign: 'center' }}>
-                            <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-                              {c.isShortage && childItem && (
-                                <>
-                                  {(c.processType === 'Bought out' || c.processType === 'Job work + Bought out') && (
-                                    <button type="button" className="btn btn-primary" style={{ padding: '0.15rem 0.35rem', fontSize: '0.68rem' }} onClick={() => handleRaisePO(childItem, c.shortage)}>
-                                      +PO
-                                    </button>
-                                  )}
-                                  {(c.processType === 'Job work' || c.processType === 'Job work + Bought out') && (
-                                    <button type="button" className="btn btn-outline" style={{ padding: '0.15rem 0.35rem', fontSize: '0.68rem', color: 'var(--accent-primary)' }} onClick={() => handleIssueJobwork(childItem, c.shortage)}>
-                                      +JW
-                                    </button>
-                                  )}
-                                  {c.processType === 'In-house' && (
-                                    <button type="button" className="btn btn-outline" style={{ padding: '0.15rem 0.35rem', fontSize: '0.68rem', color: 'var(--success)' }} onClick={() => handleIssueJobCard(childItem, c.shortage)}>
-                                      +JC
-                                    </button>
-                                  )}
-                                </>
-                              )}
-                              {c.inHouseStock > 0 && c.netRemainingReq > 0 && (
-                                <button
-                                  type="button"
-                                  className="btn btn-success"
-                                  style={{ padding: '0.15rem 0.4rem', fontSize: '0.68rem', fontWeight: 700 }}
-                                  onClick={() => setActiveModule('material-issue')}
-                                  title="Go to Material Issue & Store to issue available items"
-                                >
-                                  Store Issue
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <>
+                {/* Sticky Header Container */}
+                <div 
+                  ref={jcHeaderScrollRef}
+                  style={{ 
+                    position: 'sticky',
+                    top: '38px',
+                    zIndex: 25,
+                    overflow: 'hidden',
+                    width: '100%',
+                    backgroundColor: 'var(--bg-tertiary)',
+                    borderBottom: '1px solid var(--border-color)'
+                  }}
+                >
+                  <table className="shortage-proc-table" style={{ width: '100%', minWidth: '1660px', tableLayout: 'fixed', margin: 0, borderCollapse: 'separate', borderSpacing: 0 }}>
+                    <colgroup>
+                      <col style={{ width: '38px' }} />
+                      <col style={{ width: '70px' }} />
+                      <col style={{ width: '80px' }} />
+                      <col style={{ width: '120px' }} />
+                      <col style={{ width: '220px' }} />
+                      <col style={{ width: '70px' }} />
+                      <col style={{ width: '130px' }} />
+                      <col style={{ width: '160px' }} />
+                      <col style={{ width: '90px' }} />
+                      <col style={{ width: '80px' }} />
+                      <col style={{ width: '90px' }} />
+                      <col style={{ width: '85px' }} />
+                      <col style={{ width: '75px' }} />
+                      <col style={{ width: '75px' }} />
+                      <col style={{ width: '90px' }} />
+                      <col style={{ width: '180px' }} />
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th style={{ width: '38px', textAlign: 'center' }}>#</th>
+                        <th onClick={() => { setJcSortField('priority'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ width: '70px', textAlign: 'center', cursor: 'pointer' }}>Priority</th>
+                        <th onClick={() => { setJcSortField('leadTimeDays'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ width: '80px', textAlign: 'center', cursor: 'pointer' }}>Lead Time</th>
+                        <th onClick={() => { setJcSortField('itemCode'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ width: '120px', cursor: 'pointer' }}>Item Code</th>
+                        <th onClick={() => { setJcSortField('itemName'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ width: '220px', cursor: 'pointer' }}>Item Description</th>
+                        <th onClick={() => { setJcSortField('category'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ width: '70px', textAlign: 'center', cursor: 'pointer' }}>Class</th>
+                        <th onClick={() => { setJcSortField('processType'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ width: '130px', textAlign: 'center', cursor: 'pointer' }}>Source</th>
+                        <th style={{ width: '160px' }}>Required By Job Cards</th>
+                        <th onClick={() => { setJcSortField('totalRequired'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ width: '90px', textAlign: 'right', cursor: 'pointer' }}>Total Req</th>
+                        <th onClick={() => { setJcSortField('issuedQty'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ width: '80px', textAlign: 'right', cursor: 'pointer' }}>Issued</th>
+                        <th onClick={() => { setJcSortField('netRemainingReq'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ width: '90px', textAlign: 'right', cursor: 'pointer' }}>Net Req</th>
+                        <th onClick={() => { setJcSortField('inHouseStock'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ width: '85px', textAlign: 'right', cursor: 'pointer' }}>In Stock</th>
+                        <th style={{ width: '75px', textAlign: 'right' }}>Open PO</th>
+                        <th style={{ width: '75px', textAlign: 'right' }}>Pend JW</th>
+                        <th onClick={() => { setJcSortField('shortage'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ width: '90px', textAlign: 'right', cursor: 'pointer' }}>Shortage</th>
+                        <th style={{ width: '180px', textAlign: 'center' }}>Action</th>
+                      </tr>
+                    </thead>
+                  </table>
+                </div>
+
+                {/* Table Body Container */}
+                <div 
+                  className="shortage-table-scroll-wrapper"
+                  onScroll={(e) => {
+                    if (jcHeaderScrollRef.current) {
+                      jcHeaderScrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
+                    }
+                  }}
+                  style={{ overflowX: 'auto', width: '100%', maxWidth: '100%', borderRadius: '0 0 0.5rem 0.5rem' }}
+                >
+                  <table className="shortage-proc-table" style={{ width: '100%', minWidth: '1660px', tableLayout: 'fixed', margin: 0, borderCollapse: 'separate', borderSpacing: 0 }}>
+                    <colgroup>
+                      <col style={{ width: '38px' }} />
+                      <col style={{ width: '70px' }} />
+                      <col style={{ width: '80px' }} />
+                      <col style={{ width: '120px' }} />
+                      <col style={{ width: '220px' }} />
+                      <col style={{ width: '70px' }} />
+                      <col style={{ width: '130px' }} />
+                      <col style={{ width: '160px' }} />
+                      <col style={{ width: '90px' }} />
+                      <col style={{ width: '80px' }} />
+                      <col style={{ width: '90px' }} />
+                      <col style={{ width: '85px' }} />
+                      <col style={{ width: '75px' }} />
+                      <col style={{ width: '75px' }} />
+                      <col style={{ width: '90px' }} />
+                      <col style={{ width: '180px' }} />
+                    </colgroup>
+                    <tbody>
+                      {filteredJCShortages.map((c, idx) => {
+                        const childItem = c.itemObj || items.find(i => i.id === c.itemId || i.itemCode === c.itemCode);
+                        return (
+                          <tr key={idx} style={{ backgroundColor: c.isShortage ? 'rgba(239, 68, 68, 0.06)' : 'transparent' }}>
+                            <td style={{ textAlign: 'center' }}>{idx + 1}</td>
+                            <td style={{ textAlign: 'center' }}>
+                              <span className={`badge ${c.priorityRank === 'P1' ? 'badge-p1' : c.priorityRank === 'P2' ? 'badge-p2' : 'badge-neutral'}`} style={{ fontWeight: 800, fontSize: '0.72rem' }}>
+                                {c.priorityRank || 'P3'}
+                              </span>
+                            </td>
+                            <td style={{ textAlign: 'center', fontWeight: 600, fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
+                              {c.leadTimeDays ? `${c.leadTimeDays} D` : '-'}
+                            </td>
+                            <td style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>
+                              {c.itemCode}
+                              {c.partCode && <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{c.partCode}</div>}
+                            </td>
+                            <td style={{ fontWeight: 600 }}>{c.itemName}</td>
+                            <td style={{ textAlign: 'center' }}>
+                              <span className="badge badge-neutral" style={{ fontSize: '0.7rem' }}>{c.category}</span>
+                            </td>
+                            <td style={{ textAlign: 'center' }}>
+                              <span className={`badge ${c.processType === 'Bought out' || c.processType === 'Job work + Bought out' ? 'badge-primary' : c.processType === 'In-house' ? 'badge-success' : 'badge-outline'}`} style={{ fontSize: '0.7rem' }}>
+                                {c.processType}
+                              </span>
+                            </td>
+                            <td>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '0.72rem' }}>
+                                {(c.requiredByJCs || []).map((req, rIdx) => (
+                                  <span key={rIdx} style={{ color: 'var(--text-secondary)' }}>
+                                    <strong>{req.jcNo}</strong>: {req.requiredQty} {c.unit}
+                                    {req.issuedQty > 0 && <span style={{ color: 'var(--success)', marginLeft: '4px' }}>(Issued: {req.issuedQty})</span>}
+                                  </span>
+                                ))}
+                              </div>
+                            </td>
+                            <td style={{ textAlign: 'right', fontWeight: 700 }}>{c.totalRequired} {c.unit}</td>
+                            <td style={{ textAlign: 'right', color: c.issuedQty > 0 ? 'var(--success)' : 'var(--text-muted)', fontWeight: 600 }}>
+                              {c.issuedQty} {c.unit}
+                            </td>
+                            <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--text-primary)' }}>
+                              {c.netRemainingReq} {c.unit}
+                            </td>
+                            <td style={{ textAlign: 'right', fontWeight: 700 }}>{c.inHouseStock} {c.unit}</td>
+                            <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{c.openPO || 0}</td>
+                            <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{c.pendingJW || 0}</td>
+                            <td style={{ textAlign: 'right', fontWeight: 800, color: c.isShortage ? 'var(--danger)' : 'var(--success)' }}>
+                              {c.isShortage ? `${c.shortage} ${c.unit}` : 'OK (0)'}
+                            </td>
+                            <td style={{ textAlign: 'center' }}>
+                              <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                                {c.isShortage && childItem && (
+                                  <>
+                                    {(c.processType === 'Bought out' || c.processType === 'Job work + Bought out') && (
+                                      <button type="button" className="btn btn-primary" style={{ padding: '0.15rem 0.35rem', fontSize: '0.68rem' }} onClick={() => handleRaisePO(childItem, c.shortage)}>
+                                        +PO
+                                      </button>
+                                    )}
+                                    {(c.processType === 'Job work' || c.processType === 'Job work + Bought out') && (
+                                      <button type="button" className="btn btn-outline" style={{ padding: '0.15rem 0.35rem', fontSize: '0.68rem', color: 'var(--accent-primary)' }} onClick={() => handleIssueJobwork(childItem, c.shortage)}>
+                                        +JW
+                                      </button>
+                                    )}
+                                    {c.processType === 'In-house' && (
+                                      <button type="button" className="btn btn-outline" style={{ padding: '0.15rem 0.35rem', fontSize: '0.68rem', color: 'var(--success)' }} onClick={() => handleIssueJobCard(childItem, c.shortage)}>
+                                        +JC
+                                      </button>
+                                    )}
+                                  </>
+                                )}
+                                {c.inHouseStock > 0 && c.netRemainingReq > 0 && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-success"
+                                    style={{ padding: '0.15rem 0.4rem', fontSize: '0.68rem', fontWeight: 700 }}
+                                    onClick={() => setActiveModule('material-issue')}
+                                    title="Go to Material Issue & Store to issue available items"
+                                  >
+                                    Store Issue
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         </div>

@@ -90,9 +90,9 @@ def run_build_with_retry(pnpm_cmd, frontend_dir, root_dir, max_retries=3):
         res = subprocess.run(pnpm_cmd, shell=True, cwd=str(frontend_dir))
         if res.returncode == 0:
             return True
-        print(f"\n[WARN] Build attempt {attempt} encountered lock or exit code {res.returncode}. Terminating running processes and retrying...")
+        print(f"\n[WARN] Build attempt {attempt} encountered lock or exit code {res.returncode}. Terminating running processes, cleaning temporary artifacts and retrying...")
         kill_running_instances(root_dir)
-        time.sleep(2)
+        time.sleep(4)
     
     print(f"\n[ERROR] Build failed after {max_retries} attempts: {pnpm_cmd}")
     sys.exit(1)

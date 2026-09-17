@@ -1977,7 +1977,7 @@
       "minStockQty": 2,
       "minOrderQty": 5,
       "unitPrice": 500,
-      "leadTimeDays": 10,
+      "leadTimeDays": 9,
       "location": "General Stores",
       "qcTrigger": "NO_QC",
       "testReportRequired": false,
@@ -18909,6 +18909,17 @@
   "jobCardMaterialReissues": [],
   "intermediateProcessItems": [],
   "auditLogs": [
+    {
+      "id": "log-1789650007004-li85f4",
+      "userId": "usr-superadmin",
+      "username": "GEC System Super Admin (superadmin)",
+      "role": "Admin",
+      "action": "UPDATE_ITEM",
+      "module": "Item Master",
+      "details": "Updated item: GEC0000064 - PLC BOX COVER",
+      "ipAddress": "127.0.0.1",
+      "timestamp": "2026-09-17T13:00:07.004Z"
+    },
     {
       "id": "log-1789646951045-671jqq",
       "userId": "usr-superadmin",

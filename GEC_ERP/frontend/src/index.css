@@ -204,8 +204,7 @@ label {
   background-color: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 0.75rem;
-  overflow-x: auto !important;
-  overflow-y: visible !important;
+  overflow: visible !important;
   box-shadow: var(--shadow-sm);
   width: 100%;
   max-width: 100%;
@@ -256,20 +255,64 @@ th {
   width: 100%;
 }
 
+.shortage-itemwise-table {
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  table-layout: fixed !important;
+}
+
 .shortage-itemwise-table th {
-  position: sticky !important;
-  top: var(--shortage-filter-height, 0px) !important;
-  z-index: 20 !important;
   background-color: var(--bg-tertiary) !important;
-  box-shadow: 0 1px 0 var(--border-color);
+  border-bottom: 1px solid var(--border-color) !important;
+  padding: 0.5rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-sizing: border-box;
+}
+
+.shortage-itemwise-table td {
+  border-bottom: 1px solid var(--border-color);
+  padding: 0.5rem 0.5rem;
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.shortage-proc-table {
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  table-layout: fixed !important;
 }
 
 .shortage-proc-table th {
-  position: sticky !important;
-  top: var(--shortage-proc-filter-height, 38px) !important;
-  z-index: 20 !important;
   background-color: var(--bg-tertiary) !important;
-  box-shadow: 0 1px 0 var(--border-color);
+  border-bottom: 1px solid var(--border-color) !important;
+  padding: 0.45rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-sizing: border-box;
+}
+
+.shortage-proc-table td {
+  border-bottom: 1px solid var(--border-color);
+  padding: 0.45rem 0.5rem;
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-sizing: border-box;
 }
 
 .shortage-sticky-th th {
@@ -277,6 +320,7 @@ th {
   top: var(--shortage-proc-filter-height, 38px) !important;
   z-index: 20 !important;
   background-color: var(--bg-tertiary) !important;
+  border-bottom: 1px solid var(--border-color) !important;
   box-shadow: 0 1px 0 var(--border-color);
 }
 

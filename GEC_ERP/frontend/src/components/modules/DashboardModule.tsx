@@ -67,38 +67,74 @@ export const DashboardModule: React.FC = () => {
       let woStartDate = new Date(woDateStr);
       if (isNaN(woStartDate.getTime())) woStartDate = new Date();
 
-      // Find components from WO or matching BOM
-      let components: Array<{ itemId?: string; itemCode?: string; itemName?: string; qtyPerMachine?: number; qtyRequired?: number; unit?: string }> = [];
+      // Collect raw components with correct total required quantities
+      const compList: Array<{ itemId?: string; itemCode?: string; totalRequired: number }> = [];
+
       if (wo.woComponents && wo.woComponents.length > 0) {
-        components = wo.woComponents;
+        wo.woComponents.forEach(c => {
+          const totReq = c.qtyRequired !== undefined 
+            ? Number(c.qtyRequired) 
+            : (Number(c.qtyPerMachine) || 1) * woTargetQty;
+          compList.push({
+            itemId: c.itemId,
+            itemCode: c.itemCode,
+            totalRequired: totReq
+          });
+        });
       } else {
         const bom = boms.find(b => b.id === wo.bomId || b.machineModel === wo.machineModel);
         if (bom && bom.components) {
-          components = bom.components;
+          const explode = (comps: typeof bom.components, mult: number, visited = new Set<string>()) => {
+            comps.forEach(c => {
+              const req = (Number(c.qtyPerMachine) || 1) * mult;
+              compList.push({ itemId: c.itemId, itemCode: c.itemCode, totalRequired: req });
+              const subBOM = boms.find(b => 
+                (c.itemId && b.id === c.itemId) || 
+                (c.itemCode && (b.bomCode?.toLowerCase() === c.itemCode.toLowerCase() || b.machineModel?.toLowerCase() === c.itemCode.toLowerCase()))
+              );
+              if (subBOM && subBOM.components && subBOM.components.length > 0 && !visited.has(subBOM.id)) {
+                const nextVis = new Set(visited);
+                nextVis.add(subBOM.id);
+                explode(subBOM.components, req, nextVis);
+              }
+            });
+          };
+          explode(bom.components, woTargetQty, new Set([bom.id]));
         }
       }
 
-      if (components.length === 0) return;
+      if (compList.length === 0) return;
 
-      // Find all resolved items and their lead times
-      const resolved = components.map(c => {
+      // Aggregate components by item to avoid duplicates and compute lead times
+      const aggregatedMap = new Map<string, { item: Item; totalRequired: number; leadTime: number; isBO: boolean }>();
+
+      compList.forEach(c => {
         const it = items.find(i => (c.itemId && i.id === c.itemId) || (c.itemCode && i.itemCode === c.itemCode));
-        const leadTime = it?.leadTimeDays !== undefined ? it.leadTimeDays : 10;
-        const pType = (it?.processType || (it as any)?.materialProcessType || '').toLowerCase();
-        const cat = (it?.category || '').toUpperCase();
-        const sources = (it?.materialProcessSources || []).map(s => s.toLowerCase());
+        if (!it) return;
+        const key = it.id || it.itemCode;
+        const leadTime = it.leadTimeDays !== undefined ? it.leadTimeDays : 10;
+        const pType = (it.processType || (it as any).materialProcessType || '').toLowerCase();
+        const cat = (it.category || '').toUpperCase();
+        const sources = (it.materialProcessSources || []).map(s => s.toLowerCase());
         const isBO = cat === 'BO' || pType.includes('bought out') || pType.includes('brought out') || sources.includes('bought out') || sources.includes('brought out');
-        return { comp: c, item: it, leadTime, isBO };
+
+        if (!aggregatedMap.has(key)) {
+          aggregatedMap.set(key, { item: it, totalRequired: c.totalRequired, leadTime, isBO });
+        } else {
+          aggregatedMap.get(key)!.totalRequired += c.totalRequired;
+        }
       });
 
-      // Find maximum lead time in this WO
-      const maxLeadTimeInWO = resolved.reduce((max, r) => Math.max(max, r.leadTime), 10);
+      const resolvedList = Array.from(aggregatedMap.values());
+      if (resolvedList.length === 0) return;
 
-      // Evaluate Bought-Out items
-      resolved.filter(r => r.isBO && r.item).forEach(r => {
-        const it = r.item!;
-        const qtyPerMachine = r.comp.qtyPerMachine || (r.comp as any).qtyRequired || (r.comp as any).qty || 1;
-        const totalRequired = woTargetQty * qtyPerMachine;
+      // Maximum lead time in this WO for staggered JIT scheduling
+      const maxLeadTimeInWO = resolvedList.reduce((max, r) => Math.max(max, r.leadTime), 10);
+
+      // Evaluate Bought-Out items for PO reminders
+      resolvedList.filter(r => r.isBO).forEach(r => {
+        const it = r.item;
+        const totalRequired = r.totalRequired;
 
         // Check Open POs for this item
         const openPOQty = purchaseOrders
