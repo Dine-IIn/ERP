@@ -7,6 +7,7 @@ import { SingleJobworkPrintView, JobworkListPrintView } from '../printTemplates/
 import { TabularShortagePrintView } from '../printTemplates/ShortagePrintTemplates';
 import { Truck, Plus, ArrowRightLeft, CheckCircle, Search, Printer, FileSpreadsheet, ArrowUp, ArrowDown, ArrowUpDown, RefreshCw, AlertTriangle, Layers, X, CheckCircle2, ClipboardList, ShoppingCart } from 'lucide-react';
 import { JobworkChallan, Item, ItemProcessCard, VendorDebitChallan, generateNextJobworkNumber, BOM } from '../../types/erp';
+import { compareItemPriority } from '../../utils/priorityUtils';
 
 type JWSortKey = 'challanNo' | 'vendorName' | 'itemName' | 'processRequired' | 'sentQuantity' | 'receivedQuantity' | 'scrapQuantity' | 'pendingBalance' | 'expectedReturnDate' | 'status';
 
@@ -372,16 +373,17 @@ export const ExternalInventoryModule: React.FC = () => {
       explodeItemShortage(key, qty, new Set());
     });
 
-    // Compute planning metrics for all items (MIN LEVEL SHORTAGE)
-    const resultMap = new Map<string, { totalRequired: number; inHouseStock: number; shortage: number; minStockLevel: number }>();
+    // Compute planning metrics for all items (ACTIVE SHORTAGE & MIN LEVEL SHORTAGE)
+    const resultMap = new Map<string, { totalRequired: number; inHouseStock: number; shortage: number; minShortage: number; minStockLevel: number }>();
     (items || []).forEach(item => {
       const totalRequired = (item.id && demandMap.get(item.id)) || (item.itemCode && demandMap.get(item.itemCode.toLowerCase())) || (item.itemCode && demandMap.get(item.itemCode)) || 0;
       const inHouseStock = item.inHouseStock || 0;
       const minStockLevel = item.minStockQty !== undefined ? item.minStockQty : (item.reorderLevel || 0);
 
-      // Min Level Shortage Formula: (totalRequired + minStockLevel) - inHouseStock
-      const shortage = Math.max(0, (totalRequired + minStockLevel) - inHouseStock);
-      const data = { totalRequired, inHouseStock, shortage, minStockLevel };
+      // Active Shortage & Min Level Shortage Formulas:
+      const shortage = Math.max(0, totalRequired - inHouseStock);
+      const minShortage = Math.max(0, (totalRequired + minStockLevel) - inHouseStock);
+      const data = { totalRequired, inHouseStock, shortage, minShortage, minStockLevel };
       resultMap.set(item.id, data);
       if (item.itemCode) resultMap.set(item.itemCode.toLowerCase(), data);
     });
@@ -401,17 +403,24 @@ export const ExternalInventoryModule: React.FC = () => {
     return data ? data.shortage : 0;
   };
 
+  const getJobworkItemMinShortage = (item: Item) => {
+    const data = jwPlanningMap.get(item.id) || (item.itemCode && jwPlanningMap.get(item.itemCode.toLowerCase()));
+    return data ? data.minShortage : 0;
+  };
+
   const getJobworkItemTotalRequired = (item: Item) => {
     const data = jwPlanningMap.get(item.id) || (item.itemCode && jwPlanningMap.get(item.itemCode.toLowerCase()));
     return data ? data.totalRequired : 0;
   };
 
   const jwShortageItems = useMemo(() => {
-    return items.filter(i => isJobworkItem(i) && !i.isBlocked && getJobworkItemShortage(i) >= 1);
+    return items.filter(i => isJobworkItem(i) && !i.isBlocked && (getJobworkItemShortage(i) >= 1 || getJobworkItemMinShortage(i) >= 1));
   }, [items, jwPlanningMap]);
 
   const handleOpenShortageJWModal = (item: Item) => {
     const shortage = getJobworkItemShortage(item);
+    const minShortage = getJobworkItemMinShortage(item);
+    const defaultQty = minShortage > 0 ? minShortage : (shortage > 0 ? shortage : 1);
     const matchingBOM = boms.find(b => b.id === item.id || b.bomCode === item.itemCode || b.machineModel?.toLowerCase() === item.name.toLowerCase());
     const rawItemId = matchingBOM?.components?.[0]?.itemId || item.id;
 
@@ -432,7 +441,7 @@ export const ExternalInventoryModule: React.FC = () => {
       vendorId: p1VendorId,
       itemId: rawItemId,
       producedItemId: item.id,
-      sentQuantity: Math.max(1, shortage),
+      sentQuantity: Math.max(1, defaultQty),
       processRequired: activeStep ? (activeStep.processName || activeStep.processShortCode) : 'External Machining & Processing',
       issueDate: new Date().toISOString().split('T')[0],
       expectedReturnDate: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
@@ -533,8 +542,24 @@ export const ExternalInventoryModule: React.FC = () => {
   const getWizardTableRows = () => {
     const term = deferredWizardSearchTerm.trim().toLowerCase();
 
+    let rawList: Array<{
+      item: Item;
+      itemCode: string;
+      itemDescription: string;
+      partCode: string;
+      requiredQty: number;
+      currentStock: number;
+      externalStock: number;
+      minStockQty: number;
+      minShortage: number;
+      leadTimeDays: number;
+      shortage: number;
+      unit: string;
+      extraInfo?: string;
+    }> = [];
+
     if (!isExplodeShortage) {
-      return jwShortageItems
+      rawList = jwShortageItems
         .filter(item => {
           if (!term) return true;
           return (
@@ -544,84 +569,89 @@ export const ExternalInventoryModule: React.FC = () => {
             (item.category && item.category.toLowerCase().includes(term))
           );
         })
-        .map((item, idx) => {
+        .map(item => {
           const reqQty = getJobworkItemTotalRequired(item);
           const inHouseStock = item.inHouseStock || 0;
           const externalStock = item.externalStock || 0;
-          const shortage = getJobworkItemShortage(item);
+          const minStock = item.minStockQty !== undefined ? item.minStockQty : (item.reorderLevel || 0);
+          const shortage = Math.max(0, reqQty - inHouseStock);
+          const minShortage = Math.max(0, (reqQty + minStock) - inHouseStock);
+          const leadTimeDays = item.leadTimeDays !== undefined ? item.leadTimeDays : 10;
 
           return {
-            srNo: idx + 1,
             item,
+            itemCode: item.itemCode,
             itemDescription: item.name,
             partCode: item.partCode || item.itemCode,
             requiredQty: reqQty,
             currentStock: inHouseStock,
             externalStock,
+            minStockQty: minStock,
+            minShortage,
+            leadTimeDays,
             shortage,
             unit: item.unit || 'PCS',
             extraInfo: item.category ? `Class: ${item.category}` : undefined
           };
         });
-    }
+    } else {
+      // Exploded View across active WOs
+      const activeWOs = workOrders.filter(w => w.status === 'PLANNED' || w.status === 'IN_PROGRESS');
 
-    // Exploded View across active WOs
-    const explodedRows: Array<{
-      srNo: number;
-      item: Item;
-      itemDescription: string;
-      partCode: string;
-      requiredQty: number;
-      currentStock: number;
-      externalStock: number;
-      shortage: number;
-      unit: string;
-      extraInfo?: string;
-    }> = [];
+      activeWOs.forEach(wo => {
+        const bom = boms.find(b => b.id === wo.bomId || b.bomCode === (wo as any).bomCode || b.machineModel?.toLowerCase() === wo.machineModel?.toLowerCase());
+        if (!bom || !bom.components) return;
 
-    let count = 1;
-    const activeWOs = workOrders.filter(w => w.status === 'PLANNED' || w.status === 'IN_PROGRESS');
+        bom.components.forEach(comp => {
+          const it = items.find(i => i.id === comp.itemId || i.itemCode === comp.itemCode);
+          if (!it || !isJobworkItem(it) || it.isBlocked) return;
 
-    activeWOs.forEach(wo => {
-      const bom = boms.find(b => b.id === wo.bomId || b.bomCode === (wo as any).bomCode || b.machineModel?.toLowerCase() === wo.machineModel?.toLowerCase());
-      if (!bom || !bom.components) return;
+          const reqQty = (comp.qtyPerMachine || 1) * (wo.quantity || 1);
+          const inHouseStock = it.inHouseStock || 0;
+          const externalStock = it.externalStock || 0;
+          const minStock = it.minStockQty !== undefined ? it.minStockQty : (it.reorderLevel || 0);
+          const shortage = Math.max(0, reqQty - inHouseStock);
+          const minShortage = Math.max(0, (reqQty + minStock) - inHouseStock);
+          const leadTimeDays = it.leadTimeDays !== undefined ? it.leadTimeDays : 10;
 
-      bom.components.forEach(comp => {
-        const it = items.find(i => i.id === comp.itemId || i.itemCode === comp.itemCode);
-        if (!it || !isJobworkItem(it) || it.isBlocked) return;
+          if (shortage < 1 && minShortage <= 0) return;
 
-        const shortage = getJobworkItemShortage(it);
-        if (shortage < 1) return;
+          if (term) {
+            const matches = it.itemCode.toLowerCase().includes(term) ||
+              it.name.toLowerCase().includes(term) ||
+              (it.partCode && it.partCode.toLowerCase().includes(term)) ||
+              (wo.workOrderNo && wo.workOrderNo.toLowerCase().includes(term)) ||
+              (wo.machineModel && wo.machineModel.toLowerCase().includes(term));
+            if (!matches) return;
+          }
 
-        const reqQty = (comp.qtyPerMachine || 1) * (wo.quantity || 1);
-        const inHouseStock = it.inHouseStock || 0;
-        const externalStock = it.externalStock || 0;
-
-        if (term) {
-          const matches = it.itemCode.toLowerCase().includes(term) ||
-            it.name.toLowerCase().includes(term) ||
-            (it.partCode && it.partCode.toLowerCase().includes(term)) ||
-            (wo.workOrderNo && wo.workOrderNo.toLowerCase().includes(term)) ||
-            (wo.machineModel && wo.machineModel.toLowerCase().includes(term));
-          if (!matches) return;
-        }
-
-        explodedRows.push({
-          srNo: count++,
-          item: it,
-          itemDescription: it.name,
-          partCode: it.partCode || it.itemCode,
-          requiredQty: reqQty,
-          currentStock: inHouseStock,
-          externalStock,
-          shortage,
-          unit: it.unit || 'PCS',
-          extraInfo: `WO: ${wo.workOrderNo || wo.woNumber} (${wo.machineModel}) - Target Qty: ${wo.quantity} units`
+          rawList.push({
+            item: it,
+            itemCode: it.itemCode,
+            itemDescription: it.name,
+            partCode: it.partCode || it.itemCode,
+            requiredQty: reqQty,
+            currentStock: inHouseStock,
+            externalStock,
+            minStockQty: minStock,
+            minShortage,
+            leadTimeDays,
+            shortage,
+            unit: it.unit || 'PCS',
+            extraInfo: `WO: ${wo.workOrderNo || wo.woNumber} (${wo.machineModel}) - Target Qty: ${wo.quantity} units`
+          });
         });
       });
-    });
+    }
 
-    return explodedRows;
+    const sorted = [...rawList].sort((a, b) => compareItemPriority(a, b));
+
+    return sorted.map((row, idx) => ({
+      ...row,
+      srNo: idx + 1,
+      priorityRank: `P${idx + 1}`,
+      priorityNum: idx + 1
+    }));
   };
 
   const wizardTableRows = useMemo(() => getWizardTableRows(), [
@@ -726,11 +756,16 @@ export const ExternalInventoryModule: React.FC = () => {
                 <thead>
                   <tr>
                     <th style={{ width: '45px', textAlign: 'center' }}>Sr No</th>
+                    <th style={{ width: '60px', textAlign: 'center' }}>Priority</th>
+                    <th style={{ width: '75px', textAlign: 'center' }}>Lead Time</th>
+                    <th>Item Code</th>
                     <th>Item Description</th>
                     <th>Part Code</th>
                     <th style={{ textAlign: 'right' }}>Required Quantity</th>
                     <th style={{ textAlign: 'right' }}>In-House Stock</th>
                     <th style={{ textAlign: 'right' }}>Jobwork (Vendor) Stock</th>
+                    <th style={{ textAlign: 'right' }}>Min Stock Qty</th>
+                    <th style={{ textAlign: 'right' }}>Min Level Shortage</th>
                     <th style={{ textAlign: 'right' }}>Shortage</th>
                     <th style={{ minWidth: '200px', textAlign: 'center' }}>Action</th>
                   </tr>
@@ -749,8 +784,21 @@ export const ExternalInventoryModule: React.FC = () => {
                     const hasBoughtOut = sources.includes('bought out') || sources.includes('brought out') || row.item.category === 'BO';
 
                     return (
-                      <tr key={idx} style={{ backgroundColor: row.shortage > 0 ? 'rgba(239, 68, 68, 0.04)' : 'transparent' }}>
+                      <tr key={idx} style={{ backgroundColor: row.shortage > 0 ? 'rgba(239, 68, 68, 0.04)' : (row.minShortage > 0 ? 'rgba(245, 158, 11, 0.04)' : 'transparent') }}>
                         <td style={{ textAlign: 'center', fontWeight: 600 }}>{idx + 1}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          <span className="badge badge-info" style={{ fontWeight: 800, fontSize: '0.78rem' }}>
+                            {row.priorityRank || `P${idx + 1}`}
+                          </span>
+                        </td>
+                        <td style={{ textAlign: 'center', fontWeight: 600, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                          {row.leadTimeDays || 10} Days
+                        </td>
+                        <td>
+                          <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>
+                            {row.itemCode}
+                          </span>
+                        </td>
                         <td>
                           <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{row.itemDescription}</div>
                           {row.extraInfo && (
@@ -760,7 +808,7 @@ export const ExternalInventoryModule: React.FC = () => {
                           )}
                         </td>
                         <td>
-                          <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>
+                          <span style={{ fontFamily: 'monospace', color: 'var(--text-secondary)' }}>
                             {row.partCode}
                           </span>
                         </td>
@@ -772,6 +820,14 @@ export const ExternalInventoryModule: React.FC = () => {
                         </td>
                         <td style={{ textAlign: 'right', color: 'var(--accent-primary)', fontWeight: 600 }}>
                           {row.externalStock} {row.unit}
+                        </td>
+                        <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
+                          {row.minStockQty} {row.unit}
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          <span className={row.minShortage > 0 ? "badge badge-warning" : ""} style={{ fontWeight: row.minShortage > 0 ? 800 : 400, fontSize: '0.78rem', color: row.minShortage > 0 ? undefined : 'var(--text-muted)' }}>
+                            {row.minShortage} {row.unit}
+                          </span>
                         </td>
                         <td style={{ textAlign: 'right' }}>
                           <span className="badge badge-danger" style={{ fontWeight: 800, fontSize: '0.8rem', padding: '0.2rem 0.5rem' }}>

@@ -7,6 +7,7 @@ import { TabularShortagePrintView, TabularShortageRow } from '../printTemplates/
 import { ShoppingCart, Plus, Trash2, Edit2, Search, Printer, FileSpreadsheet, Send, AlertTriangle, CheckCircle2, XCircle, FileText, ArrowRight, ShieldCheck, ArrowUpDown, ArrowUp, ArrowDown, Percent, Hash, ArrowLeft, X, AlertCircle, RefreshCw, Layers } from 'lucide-react';
 import { POLineItem, PurchaseOrder, Item, POStatus, ItemMappedVendor, generateNextPONumber, BOM } from '../../types/erp';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
+import { compareItemPriority } from '../../utils/priorityUtils';
 
 type POSortField = 'poNumber' | 'vendorName' | 'orderDate' | 'deliveryDate' | 'poCreateDateTime' | 'totalAmount';
 
@@ -374,9 +375,18 @@ export const PurchaseOrderModule: React.FC = () => {
   const handleOpenShortagePOModal = (item: Item) => {
     setSelectedShortageItem(item);
 
-    const shortage = getItemEffectiveShortage(item);
+    const woReq = getItemWorkOrderDemand(item.id, item.itemCode);
+    const jcReq = getItemJobCardDemand(item.id, item.itemCode);
+    const jwReq = getItemJobworkDemand(item.id, item.itemCode);
+    const reqQty = woReq + jcReq + jwReq;
+    const minStock = item.minStockQty !== undefined ? item.minStockQty : (item.reorderLevel || 0);
+    const currentStock = item.inHouseStock || 0;
+    const minShortage = Math.max(0, (reqQty + minStock) - currentStock);
+    const activeShortage = Math.max(0, reqQty - currentStock);
+    const shortageToOrder = minShortage > 0 ? minShortage : activeShortage;
+
     const moq = item.minOrderQty || item.reorderLevel || 1;
-    const targetQty = Math.max(moq, shortage);
+    const targetQty = Math.max(moq, shortageToOrder || 1);
     setSelectedPOQty(targetQty);
 
     const mapped = item.mappedVendors || [];
@@ -696,7 +706,7 @@ export const PurchaseOrderModule: React.FC = () => {
 
   // Build rows for Tabular Shortage Matrix
   const wizardTableRows = useMemo(() => {
-    return wizardShortageItemsFiltered.map((item, idx) => {
+    const list = wizardShortageItemsFiltered.map(item => {
       const woReq = getItemWorkOrderDemand(item.id, item.itemCode);
       const jcReq = getItemJobCardDemand(item.id, item.itemCode);
       const jwReq = getItemJobworkDemand(item.id, item.itemCode);
@@ -704,10 +714,11 @@ export const PurchaseOrderModule: React.FC = () => {
       const minStock = item.minStockQty !== undefined ? item.minStockQty : (item.reorderLevel || 0);
       const currentStock = item.inHouseStock || 0;
       const inPO = getOpenPOQuantity(item);
-      const shortage = getItemEffectiveShortage(item);
+      const shortage = Math.max(0, reqQty - currentStock);
+      const minShortage = Math.max(0, (reqQty + minStock) - currentStock);
+      const leadTimeDays = item.leadTimeDays !== undefined ? item.leadTimeDays : 10;
 
       return {
-        srNo: idx + 1,
         item,
         itemCode: item.itemCode,
         itemDescription: item.name,
@@ -715,13 +726,24 @@ export const PurchaseOrderModule: React.FC = () => {
         requiredQty: reqQty,
         currentStock,
         minStockQty: minStock,
+        minShortage,
+        leadTimeDays,
         moq: item.minOrderQty || 1,
         inPO,
         shortage,
         unit: item.unit
       };
     });
-  }, [wizardShortageItemsFiltered, workOrders, finishedGoods, boms, jobCards, jobworks]);
+
+    const sorted = [...list].sort((a, b) => compareItemPriority(a, b));
+
+    return sorted.map((row, idx) => ({
+      ...row,
+      srNo: idx + 1,
+      priorityRank: `P${idx + 1}`,
+      priorityNum: idx + 1
+    }));
+  }, [wizardShortageItemsFiltered, aggregateDemandMaps, items, purchaseOrders]);
 
   return (
     <div className="module-layout-container">
@@ -833,12 +855,15 @@ export const PurchaseOrderModule: React.FC = () => {
                 <thead>
                   <tr>
                     <th style={{ width: '45px', textAlign: 'center' }}>Sr No</th>
+                    <th style={{ width: '60px', textAlign: 'center' }}>Priority</th>
+                    <th style={{ width: '75px', textAlign: 'center' }}>Lead Time</th>
                     <th>Item Code</th>
                     <th>Item Description</th>
                     <th>Part Code</th>
                     <th style={{ textAlign: 'right' }}>Required Qty</th>
                     <th style={{ textAlign: 'right' }}>Current Stock</th>
                     <th style={{ textAlign: 'right' }}>Min Stock Qty</th>
+                    <th style={{ textAlign: 'right' }}>Min Level Shortage</th>
                     <th style={{ textAlign: 'right' }}>MOQ</th>
                     <th style={{ textAlign: 'right' }}>In PO</th>
                     <th style={{ textAlign: 'right' }}>Shortage</th>
@@ -847,8 +872,16 @@ export const PurchaseOrderModule: React.FC = () => {
                 </thead>
                 <tbody>
                   {wizardTableRows.map((row, idx) => (
-                    <tr key={idx} style={{ backgroundColor: row.shortage > 0 ? 'rgba(239, 68, 68, 0.04)' : 'transparent' }}>
+                    <tr key={idx} style={{ backgroundColor: row.shortage > 0 ? 'rgba(239, 68, 68, 0.04)' : (row.minShortage > 0 ? 'rgba(245, 158, 11, 0.04)' : 'transparent') }}>
                       <td style={{ textAlign: 'center', fontWeight: 600 }}>{idx + 1}</td>
+                      <td style={{ textAlign: 'center' }}>
+                        <span className="badge badge-info" style={{ fontWeight: 800, fontSize: '0.78rem' }}>
+                          {row.priorityRank || `P${idx + 1}`}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'center', fontWeight: 600, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                        {row.leadTimeDays || 10} Days
+                      </td>
                       <td>
                         <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>
                           {row.itemCode}
@@ -870,6 +903,11 @@ export const PurchaseOrderModule: React.FC = () => {
                       </td>
                       <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
                         {row.minStockQty} {row.unit}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <span className={row.minShortage > 0 ? "badge badge-warning" : ""} style={{ fontWeight: row.minShortage > 0 ? 800 : 400, fontSize: '0.78rem', color: row.minShortage > 0 ? undefined : 'var(--text-muted)' }}>
+                          {row.minShortage} {row.unit}
+                        </span>
                       </td>
                       <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
                         {row.moq} {row.unit}

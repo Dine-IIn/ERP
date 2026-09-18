@@ -248,6 +248,16 @@ interface ERPContextType {
   materialIssueRecords: MaterialIssueRecord[];
   issueMaterialForJobCard: (jcId: string, itemId: string, qty: number, issuedTo?: string, notes?: string) => boolean;
   issueMaterialForWorkOrder: (woId: string, itemId: string, qty: number, issuedTo?: string, notes?: string) => boolean;
+  issueManualStoreMaterial: (payload: {
+    itemId: string;
+    qty: number;
+    issuedTo: string;
+    destinationType: 'WORK_ORDER' | 'JOB_CARD' | 'DEPARTMENT';
+    destinationRef?: string;
+    destinationId?: string;
+    purposeReason?: string;
+    notes?: string;
+  }) => boolean;
   issueAllAvailableForCard: (cardType: 'JOB_CARD' | 'WORK_ORDER', cardId: string, issuedTo?: string) => number;
 
   // Floor Planning Methods
@@ -309,6 +319,7 @@ interface ERPContextType {
 
   // Operational methods
   addJobworkChallan: (challan: Omit<JobworkChallan, 'id' | 'pendingBalance' | 'status'>) => void;
+  updateJobworkChallan: (challan: JobworkChallan) => void;
   recordJobworkReturn: (challanId: string, receivedQty: number, scrapQty: number) => void;
 
   addPurchaseOrder: (po: Omit<PurchaseOrder, 'id' | 'status' | 'subtotal' | 'taxAmount' | 'totalAmount'>) => void;
@@ -1682,14 +1693,19 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let jcRefNo = '';
     let jcModel = '';
 
+    const itemObj = items.find(i => i.id === itemId || i.itemCode === itemId);
+    if (!itemObj) return false;
+
     setJobCards(prev => prev.map(jc => {
       if (jc.id !== jcId) return jc;
       jcRefNo = jc.jobCardNo;
       jcModel = jc.itemName || jc.itemCode;
-      const updatedComps = jc.components.map(comp => {
-        if (comp.itemId === itemId || comp.itemCode === itemId) {
-          targetItemCode = comp.itemCode;
-          targetItemName = comp.itemName;
+      let found = false;
+      const updatedComps = (jc.components || []).map(comp => {
+        if (comp.itemId === itemId || comp.itemCode === itemId || (itemObj && (comp.itemId === itemObj.id || comp.itemCode === itemObj.itemCode))) {
+          found = true;
+          targetItemCode = comp.itemCode || itemObj.itemCode;
+          targetItemName = comp.itemName || itemObj.name;
           const currentIssued = comp.issuedQty || 0;
           return {
             ...comp,
@@ -1698,6 +1714,21 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         return comp;
       });
+
+      if (!found) {
+        targetItemCode = itemObj.itemCode;
+        targetItemName = itemObj.name;
+        updatedComps.push({
+          itemId: itemObj.id,
+          itemCode: itemObj.itemCode,
+          itemName: itemObj.name,
+          qtyPerUnit: 1,
+          totalRequiredQty: qty,
+          issuedQty: qty,
+          unit: itemObj.unit || 'PCS'
+        });
+      }
+
       success = true;
       return { ...jc, components: updatedComps };
     }));
@@ -1722,18 +1753,18 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         referenceId: jcId,
         referenceNo: jcRefNo,
         machineModel: jcModel,
-        itemId,
-        itemCode: targetItemCode,
-        itemName: targetItemName,
+        itemId: itemObj.id,
+        itemCode: targetItemCode || itemObj.itemCode,
+        itemName: targetItemName || itemObj.name,
         issuedQty: qty,
-        unit: 'PCS',
+        unit: itemObj.unit || 'PCS',
         issuedDate: new Date().toISOString().split('T')[0],
         issuedBy: currentUser?.fullName || currentUser?.username || 'Store Keeper',
         issuedTo: issuedTo || 'Assembly Floor',
         notes: notes || `Store material issue for Job Card ${jcRefNo}`
       };
       setMaterialIssueRecords(prev => [newRecord, ...prev]);
-      addAuditLog('MATERIAL_ISSUE', 'Material Issue & Store', `Issued ${qty}x ${targetItemCode} for Job Card ${jcRefNo}`);
+      addAuditLog('MATERIAL_ISSUE', 'Material Issue & Store', `Issued ${qty}x ${targetItemCode || itemObj.itemCode} for Job Card ${jcRefNo}`);
     }
     return success;
   };
@@ -1746,15 +1777,20 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let woRefNo = '';
     let woModel = '';
 
+    const itemObj = items.find(i => i.id === itemId || i.itemCode === itemId);
+    if (!itemObj) return false;
+
     setWorkOrders(prev => prev.map(wo => {
       if (wo.id !== woId) return wo;
       woRefNo = wo.workOrderNo || wo.woNumber || wo.id;
       woModel = wo.machineModel;
+      let found = false;
       const comps = wo.woComponents || [];
       const updatedComps = comps.map(comp => {
-        if (comp.itemId === itemId || comp.itemCode === itemId) {
-          targetItemCode = comp.itemCode || '';
-          targetItemName = comp.itemName || '';
+        if (comp.itemId === itemId || comp.itemCode === itemId || (itemObj && (comp.itemId === itemObj.id || comp.itemCode === itemObj.itemCode))) {
+          found = true;
+          targetItemCode = comp.itemCode || itemObj.itemCode;
+          targetItemName = comp.itemName || itemObj.name;
           const currentIssued = comp.issuedQty || 0;
           return {
             ...comp,
@@ -1763,6 +1799,23 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         return comp;
       });
+
+      if (!found) {
+        targetItemCode = itemObj.itemCode;
+        targetItemName = itemObj.name;
+        updatedComps.push({
+          itemId: itemObj.id,
+          itemCode: itemObj.itemCode,
+          itemName: itemObj.name,
+          qtyRequired: qty,
+          qtyPerMachine: 1,
+          issuedQty: qty,
+          unit: itemObj.unit || 'PCS',
+          subAssemblyTag: 'General / Store Issue',
+          isCustomExtra: true
+        });
+      }
+
       success = true;
       return { ...wo, woComponents: updatedComps };
     }));
@@ -1787,20 +1840,82 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         referenceId: woId,
         referenceNo: woRefNo,
         machineModel: woModel,
-        itemId,
-        itemCode: targetItemCode,
-        itemName: targetItemName,
+        itemId: itemObj.id,
+        itemCode: targetItemCode || itemObj.itemCode,
+        itemName: targetItemName || itemObj.name,
         issuedQty: qty,
-        unit: 'PCS',
+        unit: itemObj.unit || 'PCS',
         issuedDate: new Date().toISOString().split('T')[0],
         issuedBy: currentUser?.fullName || currentUser?.username || 'Store Keeper',
         issuedTo: issuedTo || 'Shopfloor Assembly',
         notes: notes || `Store material issue for Work Order ${woRefNo}`
       };
       setMaterialIssueRecords(prev => [newRecord, ...prev]);
-      addAuditLog('MATERIAL_ISSUE', 'Material Issue & Store', `Issued ${qty}x ${targetItemCode} for Work Order ${woRefNo}`);
+      addAuditLog('MATERIAL_ISSUE', 'Material Issue & Store', `Issued ${qty}x ${targetItemCode || itemObj.itemCode} for Work Order ${woRefNo}`);
     }
     return success;
+  };
+
+  const issueManualStoreMaterial = (payload: {
+    itemId: string;
+    qty: number;
+    issuedTo: string;
+    destinationType: 'WORK_ORDER' | 'JOB_CARD' | 'DEPARTMENT';
+    destinationRef?: string;
+    destinationId?: string;
+    purposeReason?: string;
+    notes?: string;
+  }): boolean => {
+    const { itemId, qty, issuedTo, destinationType, destinationRef, destinationId, purposeReason, notes } = payload;
+    if (qty <= 0) return false;
+
+    const itemObj = items.find(i => i.id === itemId || i.itemCode === itemId);
+    if (!itemObj) return false;
+
+    if ((itemObj.inHouseStock || 0) < qty) {
+      alert(`❌ Insufficient stock! Available in-house stock for ${itemObj.itemCode} is ${itemObj.inHouseStock} ${itemObj.unit}, requested ${qty} ${itemObj.unit}.`);
+      return false;
+    }
+
+    if (destinationType === 'JOB_CARD' && destinationId) {
+      return issueMaterialForJobCard(destinationId, itemId, qty, issuedTo, `${purposeReason ? `[${purposeReason}] ` : ''}${notes || ''}`);
+    } else if (destinationType === 'WORK_ORDER' && destinationId) {
+      return issueMaterialForWorkOrder(destinationId, itemId, qty, issuedTo, `${purposeReason ? `[${purposeReason}] ` : ''}${notes || ''}`);
+    } else {
+      // General / Department Issue
+      setItems(prev => prev.map(it => {
+        if (it.id === itemId || it.itemCode === itemId) {
+          return {
+            ...it,
+            inHouseStock: Math.max(0, it.inHouseStock - qty)
+          };
+        }
+        return it;
+      }));
+
+      const refNumber = destinationRef || 'General Store Issue';
+      const newRecord: MaterialIssueRecord = {
+        id: `iss-man-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        issueNo: `MIS-${Date.now().toString().slice(-4)}`,
+        type: 'MANUAL',
+        referenceId: destinationId || 'manual',
+        referenceNo: refNumber,
+        machineModel: destinationRef,
+        itemId: itemObj.id,
+        itemCode: itemObj.itemCode,
+        itemName: itemObj.name,
+        issuedQty: qty,
+        unit: itemObj.unit || 'PCS',
+        issuedDate: new Date().toISOString().split('T')[0],
+        issuedBy: currentUser?.fullName || currentUser?.username || 'Store Keeper',
+        issuedTo: issuedTo || 'Store Department',
+        notes: `${purposeReason ? `[${purposeReason}] ` : ''}${notes || 'Manual store material issue'}`
+      };
+
+      setMaterialIssueRecords(prev => [newRecord, ...prev]);
+      addAuditLog('MANUAL_STORE_ISSUE', 'Material Issue & Store', `Manually issued ${qty}x ${itemObj.itemCode} to ${refNumber} (${issuedTo})`);
+      return true;
+    }
   };
 
   const issueAllAvailableForCard = (cardType: 'JOB_CARD' | 'WORK_ORDER', cardId: string, issuedTo?: string): number => {
@@ -2172,6 +2287,10 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return item;
       }));
     }
+  };
+
+  const updateJobworkChallan = (challan: JobworkChallan) => {
+    setJobworks(prev => prev.map(j => j.id === challan.id ? challan : j));
   };
 
   const recordJobworkReturn = (challanId: string, receivedQty: number, scrapQty: number) => {
@@ -2962,6 +3081,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       materialIssueRecords,
       issueMaterialForJobCard,
       issueMaterialForWorkOrder,
+      issueManualStoreMaterial,
       issueAllAvailableForCard,
       assignWOToStation,
       moveWOStation,
@@ -3007,6 +3127,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       massUpsertItemProcessCards,
       massUpdateInventory,
       addJobworkChallan,
+      updateJobworkChallan,
       recordJobworkReturn,
       addPurchaseOrder,
       updatePurchaseOrder,

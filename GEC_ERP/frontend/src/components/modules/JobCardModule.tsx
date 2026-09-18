@@ -8,6 +8,7 @@ import {
   ClipboardList, Plus, CheckCircle, Search, ArrowUp, ArrowDown, ArrowUpDown, Package, Printer, RefreshCw, AlertTriangle, Layers, X, CheckCircle2, Edit2, Trash2, RotateCcw
 } from 'lucide-react';
 import { JobCard, Item, BOM } from '../../types/erp';
+import { compareItemPriority } from '../../utils/priorityUtils';
 
 type JCSortKey = 'jobCardNo' | 'itemType' | 'itemName' | 'woNumber' | 'targetQuantity' | 'completedQuantity' | 'assignedOperator' | 'status';
 
@@ -334,7 +335,7 @@ export const JobCardModule: React.FC = () => {
       itemName: c.itemName || '',
       qtyPerUnit: c.qtyPerMachine || 1,
       totalRequiredQty: (c.qtyPerMachine || 1) * targetQuantity,
-      issuedQty: (c.qtyPerMachine || 1) * targetQuantity,
+      issuedQty: 0,
       unit: c.unit || 'PCS'
     })) : [
       {
@@ -343,7 +344,7 @@ export const JobCardModule: React.FC = () => {
         itemName: selectedItemObj.name,
         qtyPerUnit: 1,
         totalRequiredQty: targetQuantity,
-        issuedQty: targetQuantity,
+        issuedQty: 0,
         unit: selectedItemObj.unit
       }
     ];
@@ -485,90 +486,111 @@ export const JobCardModule: React.FC = () => {
   const getWizardTableRows = () => {
     const term = deferredWizardSearchTerm.trim().toLowerCase();
 
-    if (!isExplodeShortage) {
-      return inHouseShortageItems
-        .filter(item => {
-          if (!term) return true;
-          return item.itemCode.toLowerCase().includes(term) || item.name.toLowerCase().includes(term) || item.category.toLowerCase().includes(term);
-        })
-        .map((item, idx) => {
-          const reqQty = getItemWorkOrderDemand(item.id, item.itemCode) || (item.minStockQty || 5);
-          const currentStock = item.inHouseStock || 0;
-          const shortage = getInHouseItemShortage(item);
-          const maxBuildable = calculateMaxBuildable(item);
-
-          return {
-            srNo: idx + 1,
-            item,
-            itemDescription: item.name,
-            partCode: item.partCode || item.itemCode,
-            requiredQty: reqQty,
-            currentStock,
-            shortage,
-            maxBuildable,
-            unit: item.unit,
-            extraInfo: item.category ? `Class: ${item.category}` : undefined
-          };
-        });
-    }
-
-    // Exploded View across active WOs
-    const explodedRows: Array<{
-      srNo: number;
+    let rawList: Array<{
       item: Item;
+      itemCode: string;
       itemDescription: string;
       partCode: string;
       requiredQty: number;
       currentStock: number;
+      minStockQty: number;
+      minShortage: number;
+      leadTimeDays: number;
       shortage: number;
       maxBuildable: number;
       unit: string;
       extraInfo?: string;
     }> = [];
 
-    let count = 1;
-    const activeWOs = workOrders.filter(w => w.status !== 'COMPLETED' && w.status !== 'CANCELLED');
+    if (!isExplodeShortage) {
+      rawList = inHouseShortageItems
+        .filter(item => {
+          if (!term) return true;
+          return item.itemCode.toLowerCase().includes(term) || item.name.toLowerCase().includes(term) || item.category.toLowerCase().includes(term);
+        })
+        .map(item => {
+          const reqQty = getItemWorkOrderDemand(item.id, item.itemCode);
+          const currentStock = item.inHouseStock || 0;
+          const minStock = item.minStockQty !== undefined ? item.minStockQty : (item.reorderLevel || 0);
+          const shortage = Math.max(0, reqQty - currentStock);
+          const minShortage = Math.max(0, (reqQty + minStock) - currentStock);
+          const leadTimeDays = item.leadTimeDays !== undefined ? item.leadTimeDays : 10;
+          const maxBuildable = calculateMaxBuildable(item);
 
-    activeWOs.forEach(wo => {
-      const bom = boms.find(b => b.id === wo.bomId || b.bomCode === (wo as any).bomCode || b.machineModel?.toLowerCase() === wo.machineModel?.toLowerCase());
-      if (!bom || !bom.components) return;
+          return {
+            item,
+            itemCode: item.itemCode,
+            itemDescription: item.name,
+            partCode: item.partCode || item.itemCode,
+            requiredQty: reqQty,
+            currentStock,
+            minStockQty: minStock,
+            minShortage,
+            leadTimeDays,
+            shortage,
+            maxBuildable,
+            unit: item.unit,
+            extraInfo: item.category ? `Class: ${item.category}` : undefined
+          };
+        });
+    } else {
+      // Exploded View across active WOs
+      const activeWOs = workOrders.filter(w => w.status !== 'COMPLETED' && w.status !== 'CANCELLED');
 
-      bom.components.forEach(comp => {
-        const it = items.find(i => i.id === comp.itemId || i.itemCode === comp.itemCode);
-        if (!it || !isInHouseItem(it) || it.isBlocked) return;
+      activeWOs.forEach(wo => {
+        const bom = boms.find(b => b.id === wo.bomId || b.bomCode === (wo as any).bomCode || b.machineModel?.toLowerCase() === wo.machineModel?.toLowerCase());
+        if (!bom || !bom.components) return;
 
-        const reqQty = (comp.qtyPerMachine || 1) * (wo.quantity || 1);
-        const currentStock = it.inHouseStock || 0;
-        const shortage = getInHouseItemShortage(it);
-        const maxBuildable = calculateMaxBuildable(it);
+        bom.components.forEach(comp => {
+          const it = items.find(i => i.id === comp.itemId || i.itemCode === comp.itemCode);
+          if (!it || !isInHouseItem(it) || it.isBlocked) return;
 
-        if (shortage <= 0 && currentStock >= reqQty) return;
+          const reqQty = (comp.qtyPerMachine || 1) * (wo.quantity || 1);
+          const currentStock = it.inHouseStock || 0;
+          const minStock = it.minStockQty !== undefined ? it.minStockQty : (it.reorderLevel || 0);
+          const shortage = Math.max(0, reqQty - currentStock);
+          const minShortage = Math.max(0, (reqQty + minStock) - currentStock);
+          const leadTimeDays = it.leadTimeDays !== undefined ? it.leadTimeDays : 10;
+          const maxBuildable = calculateMaxBuildable(it);
 
-        if (term) {
-          const matches = it.itemCode.toLowerCase().includes(term) ||
-            it.name.toLowerCase().includes(term) ||
-            (it.partCode && it.partCode.toLowerCase().includes(term)) ||
-            (wo.workOrderNo && wo.workOrderNo.toLowerCase().includes(term)) ||
-            (wo.machineModel && wo.machineModel.toLowerCase().includes(term));
-          if (!matches) return;
-        }
+          if (shortage <= 0 && minShortage <= 0) return;
 
-        explodedRows.push({
-          srNo: count++,
-          item: it,
-          itemDescription: it.name,
-          partCode: it.partCode || it.itemCode,
-          requiredQty: reqQty,
-          currentStock,
-          shortage,
-          maxBuildable,
-          unit: it.unit,
-          extraInfo: `WO: ${wo.workOrderNo || wo.woNumber} (${wo.machineModel}) - Target Qty: ${wo.quantity} units`
+          if (term) {
+            const matches = it.itemCode.toLowerCase().includes(term) ||
+              it.name.toLowerCase().includes(term) ||
+              (it.partCode && it.partCode.toLowerCase().includes(term)) ||
+              (wo.workOrderNo && wo.workOrderNo.toLowerCase().includes(term)) ||
+              (wo.machineModel && wo.machineModel.toLowerCase().includes(term));
+            if (!matches) return;
+          }
+
+          rawList.push({
+            item: it,
+            itemCode: it.itemCode,
+            itemDescription: it.name,
+            partCode: it.partCode || it.itemCode,
+            requiredQty: reqQty,
+            currentStock,
+            minStockQty: minStock,
+            minShortage,
+            leadTimeDays,
+            shortage,
+            maxBuildable,
+            unit: it.unit,
+            extraInfo: `WO: ${wo.workOrderNo || wo.woNumber} (${wo.machineModel}) - Target Qty: ${wo.quantity} units`
+          });
         });
       });
-    });
+    }
 
-    return explodedRows;
+    const sorted = [...rawList].sort((a, b) => compareItemPriority(a, b));
+
+    return sorted.map((row, idx) => ({
+      ...row,
+      srNo: idx + 1,
+      priorityRank: `P${idx + 1}`,
+      priorityNum: idx + 1
+    }));
   };
 
   const wizardTableRows = useMemo(() => getWizardTableRows(), [
@@ -683,10 +705,15 @@ export const JobCardModule: React.FC = () => {
                 <thead>
                   <tr>
                     <th style={{ width: '45px', textAlign: 'center' }}>Sr No</th>
+                    <th style={{ width: '60px', textAlign: 'center' }}>Priority</th>
+                    <th style={{ width: '75px', textAlign: 'center' }}>Lead Time</th>
+                    <th>Item Code</th>
                     <th>Assembly / Item Description</th>
                     <th>Part Code</th>
                     <th style={{ textAlign: 'right' }}>Required Quantity</th>
                     <th style={{ textAlign: 'right' }}>Current In-House Stock</th>
+                    <th style={{ textAlign: 'right' }}>Min Stock Qty</th>
+                    <th style={{ textAlign: 'right' }}>Min Level Shortage</th>
                     <th style={{ textAlign: 'right' }}>Shortage</th>
                     <th style={{ textAlign: 'right' }}>Max Buildable</th>
                     <th style={{ width: '150px', textAlign: 'center' }}>Action</th>
@@ -694,8 +721,21 @@ export const JobCardModule: React.FC = () => {
                 </thead>
                 <tbody>
                   {wizardTableRows.map((row, idx) => (
-                    <tr key={idx} style={{ backgroundColor: row.shortage > 0 ? 'rgba(239, 68, 68, 0.04)' : 'transparent' }}>
+                    <tr key={idx} style={{ backgroundColor: row.shortage > 0 ? 'rgba(239, 68, 68, 0.04)' : (row.minShortage > 0 ? 'rgba(245, 158, 11, 0.04)' : 'transparent') }}>
                       <td style={{ textAlign: 'center', fontWeight: 600 }}>{idx + 1}</td>
+                      <td style={{ textAlign: 'center' }}>
+                        <span className="badge badge-info" style={{ fontWeight: 800, fontSize: '0.78rem' }}>
+                          {row.priorityRank || `P${idx + 1}`}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'center', fontWeight: 600, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                        {row.leadTimeDays || 10} Days
+                      </td>
+                      <td>
+                        <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>
+                          {row.itemCode}
+                        </span>
+                      </td>
                       <td>
                         <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{row.itemDescription}</div>
                         {row.extraInfo && (
@@ -705,7 +745,7 @@ export const JobCardModule: React.FC = () => {
                         )}
                       </td>
                       <td>
-                        <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>
+                        <span style={{ fontFamily: 'monospace', color: 'var(--text-secondary)' }}>
                           {row.partCode}
                         </span>
                       </td>
@@ -714,6 +754,14 @@ export const JobCardModule: React.FC = () => {
                       </td>
                       <td style={{ textAlign: 'right', color: row.currentStock <= 0 ? 'var(--danger)' : 'var(--text-primary)' }}>
                         {row.currentStock} {row.unit}
+                      </td>
+                      <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
+                        {row.minStockQty} {row.unit}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <span className={row.minShortage > 0 ? "badge badge-warning" : ""} style={{ fontWeight: row.minShortage > 0 ? 800 : 400, fontSize: '0.78rem', color: row.minShortage > 0 ? undefined : 'var(--text-muted)' }}>
+                          {row.minShortage} {row.unit}
+                        </span>
                       </td>
                       <td style={{ textAlign: 'right' }}>
                         <span className="badge badge-danger" style={{ fontWeight: 800, fontSize: '0.8rem', padding: '0.2rem 0.5rem' }}>

@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { Item, FIXED_ITEM_CLASSES, WorkOrder, BOM, JobCard, PurchaseOrder, JobworkChallan } from '../../types/erp';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
+import { compareItemPriority } from '../../utils/priorityUtils';
 
 type SortField = 
   | 'priority'
@@ -410,34 +411,13 @@ export const PlanningModule: React.FC = () => {
         return matchesSearch && matchesClass && matchesProcess && matchesShortage;
       });
 
-    // Dynamic Priority: 4-Tier Composite Formula (Lead Time + Net Shortage + Min Shortage + WO Demand)
-    const sortedByPriority = [...list].sort((a, b) => {
-      // 1. Lead Time Days (higher lead time = higher priority)
-      const ltA = a.leadTimeDays ?? 0;
-      const ltB = b.leadTimeDays ?? 0;
-      if (ltB !== ltA) return ltB - ltA;
-
-      // 2. Net Shortage (items with active shortage > 0 have higher priority, then shortage amount desc)
-      const hasShortageA = (a.shortage || 0) > 0 ? 1 : 0;
-      const hasShortageB = (b.shortage || 0) > 0 ? 1 : 0;
-      if (hasShortageB !== hasShortageA) return hasShortageB - hasShortageA;
-      if ((b.shortage || 0) !== (a.shortage || 0)) return (b.shortage || 0) - (a.shortage || 0);
-
-      // 3. Min Level Safety Shortage (minShortage > 0 has higher priority, then amount desc)
-      const hasMinShortA = (a.minShortage || 0) > 0 ? 1 : 0;
-      const hasMinShortB = (b.minShortage || 0) > 0 ? 1 : 0;
-      if (hasMinShortB !== hasMinShortA) return hasMinShortB - hasMinShortA;
-      if ((b.minShortage || 0) !== (a.minShortage || 0)) return (b.minShortage || 0) - (a.minShortage || 0);
-
-      // 4. WO Required / BOM Demand (totalRequired > 0 has higher priority, then amount desc)
-      const hasReqA = (a.totalRequired || 0) > 0 ? 1 : 0;
-      const hasReqB = (b.totalRequired || 0) > 0 ? 1 : 0;
-      if (hasReqB !== hasReqA) return hasReqB - hasReqA;
-      if ((b.totalRequired || 0) !== (a.totalRequired || 0)) return (b.totalRequired || 0) - (a.totalRequired || 0);
-
-      // 5. Alphabetical tie-breaker
-      return (a.itemCode || '').localeCompare(b.itemCode || '');
-    });
+    // Dynamic Priority: Tiered Shortage-First Ranking (Active Shortage > Min Safety Shortage > No Shortage)
+    // Within Active Shortage: Shortage Qty desc -> if equal, Lead Time Days desc
+    // Dynamic Tiered Priority Formula:
+    // Group 1 (Active Shortage): Lead Time Days desc -> Shortage Qty desc -> Min Level Shortage desc -> Item Code
+    // Group 2 (Min Level Shortage): Lead Time Days desc -> Min Level Shortage desc -> Item Code
+    // Group 3 (No Shortage): Lead Time Days desc -> Total Demand desc -> Item Code
+    const sortedByPriority = [...list].sort((a, b) => compareItemPriority(a, b));
 
     const rankMap = new Map<string, number>();
     sortedByPriority.forEach((it, idx) => {

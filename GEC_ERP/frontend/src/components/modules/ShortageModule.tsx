@@ -13,6 +13,7 @@ import {
   Layers, Package, Truck, ClipboardList, ShoppingCart, Search, RefreshCw, CheckCircle, Split, ArrowUpDown, ArrowUp, ArrowDown, X, Plus, Sparkles, CheckSquare, Square 
 } from 'lucide-react';
 import { WorkOrder, BOM, Item, PurchaseOrder, JobworkChallan, JobCard, FIXED_ITEM_CLASSES, generateNextPONumber } from '../../types/erp';
+import { compareItemPriority } from '../../utils/priorityUtils';
 
 export const ShortageModule: React.FC = () => {
   const { 
@@ -874,41 +875,28 @@ export const ShortageModule: React.FC = () => {
       return { ...c, childItem, leadTimeDays: leadTime };
     });
 
-    const sortedByPriority = [...withLeadTime].sort((a, b) => {
-      // 1. Lead Time Days (higher lead time = higher priority)
-      const ltA = a.leadTimeDays ?? 0;
-      const ltB = b.leadTimeDays ?? 0;
-      if (ltB !== ltA) return ltB - ltA;
-
-      // 2. Net Shortage (items with active shortage > 0 have higher priority, then shortage amount desc)
-      const hasShortageA = (a.shortage || 0) > 0 ? 1 : 0;
-      const hasShortageB = (b.shortage || 0) > 0 ? 1 : 0;
-      if (hasShortageB !== hasShortageA) return hasShortageB - hasShortageA;
-      if ((b.shortage || 0) !== (a.shortage || 0)) return (b.shortage || 0) - (a.shortage || 0);
-
-      // 3. Min Level Safety Shortage (minShortage > 0 has higher priority, then amount desc)
-      const hasMinShortA = (a.minShortage || 0) > 0 ? 1 : 0;
-      const hasMinShortB = (b.minShortage || 0) > 0 ? 1 : 0;
-      if (hasMinShortB !== hasMinShortA) return hasMinShortB - hasMinShortA;
-      if ((b.minShortage || 0) !== (a.minShortage || 0)) return (b.minShortage || 0) - (a.minShortage || 0);
-
-      // 4. WO Required / BOM Demand (totalRequired > 0 has higher priority, then amount desc)
-      const hasReqA = (a.totalRequired || 0) > 0 ? 1 : 0;
-      const hasReqB = (b.totalRequired || 0) > 0 ? 1 : 0;
-      if (hasReqB !== hasReqA) return hasReqB - hasReqA;
-      if ((b.totalRequired || 0) !== (a.totalRequired || 0)) return (b.totalRequired || 0) - (a.totalRequired || 0);
-
-      // 5. Alphabetical tie-breaker
-      return (a.itemCode || '').localeCompare(b.itemCode || '');
-    });
+    const sortedByPriority = [...withLeadTime].sort((a, b) => compareItemPriority(a, b));
 
     const rankMap = new Map<string, number>();
     sortedByPriority.forEach((it, idx) => {
-      rankMap.set(it.itemId || it.itemCode, idx + 1);
+      const r = idx + 1;
+      if (it.itemId) rankMap.set(it.itemId, r);
+      if (it.childItem?.id) rankMap.set(it.childItem.id, r);
+      if (it.itemObj?.id) rankMap.set(it.itemObj.id, r);
+      if (it.itemCode) {
+        rankMap.set(it.itemCode, r);
+        rankMap.set(it.itemCode.toLowerCase(), r);
+      }
+      if ((it as any).id) rankMap.set((it as any).id, r);
     });
 
     const withPriorities = withLeadTime.map(c => {
-      const rank = rankMap.get(c.itemId || c.itemCode) || 1;
+      const rank = (c.itemId && rankMap.get(c.itemId)) ||
+                   (c.childItem?.id && rankMap.get(c.childItem.id)) ||
+                   (c.itemObj?.id && rankMap.get(c.itemObj.id)) ||
+                   (c.itemCode && rankMap.get(c.itemCode)) ||
+                   (c.itemCode && rankMap.get(c.itemCode.toLowerCase())) ||
+                   1;
       return {
         ...c,
         priorityRank: `P${rank}`,
@@ -1254,38 +1242,13 @@ export const ShortageModule: React.FC = () => {
     const withLeadTime = list.map(c => {
       const childItem = c.itemObj || items.find(i => i.id === c.itemId || i.itemCode === c.itemCode);
       const leadTime = childItem?.leadTimeDays !== undefined ? childItem.leadTimeDays : 10;
-      return { ...c, childItem, leadTimeDays: leadTime };
+      const minStock = childItem?.minStockQty !== undefined ? childItem.minStockQty : (childItem?.reorderLevel || (c as any).minStockQty || 0);
+      const totalPipeline = (c.inHouseStock || 0) + (c.openPO || 0) + (c.pendingJW || 0) + (c.pendingQC || 0);
+      const minShortage = Math.max(0, ((c.totalRequired || 0) + minStock) - totalPipeline);
+      return { ...c, childItem, leadTimeDays: leadTime, minStockQty: minStock, minShortage };
     });
 
-    const sortedByPriority = [...withLeadTime].sort((a, b) => {
-      // 1. Lead Time Days (higher lead time = higher priority)
-      const ltA = a.leadTimeDays ?? 0;
-      const ltB = b.leadTimeDays ?? 0;
-      if (ltB !== ltA) return ltB - ltA;
-
-      // 2. Net Shortage (items with active shortage > 0 have higher priority, then shortage amount desc)
-      const hasShortageA = (a.netShortage || 0) > 0 ? 1 : 0;
-      const hasShortageB = (b.netShortage || 0) > 0 ? 1 : 0;
-      if (hasShortageB !== hasShortageA) return hasShortageB - hasShortageA;
-      if ((b.netShortage || 0) !== (a.netShortage || 0)) return (b.netShortage || 0) - (a.netShortage || 0);
-
-      // 3. Min Level Safety Shortage
-      const minShortA = Math.max(0, (a.minStockQty || 0) - (a.inHouseStock || 0));
-      const minShortB = Math.max(0, (b.minStockQty || 0) - (b.inHouseStock || 0));
-      const hasMinShortA = minShortA > 0 ? 1 : 0;
-      const hasMinShortB = minShortB > 0 ? 1 : 0;
-      if (hasMinShortB !== hasMinShortA) return hasMinShortB - hasMinShortA;
-      if (minShortB !== minShortA) return minShortB - minShortA;
-
-      // 4. WO Required / BOM Demand (totalRequired > 0 has higher priority, then amount desc)
-      const hasReqA = (a.totalRequired || 0) > 0 ? 1 : 0;
-      const hasReqB = (b.totalRequired || 0) > 0 ? 1 : 0;
-      if (hasReqB !== hasReqA) return hasReqB - hasReqA;
-      if ((b.totalRequired || 0) !== (a.totalRequired || 0)) return (b.totalRequired || 0) - (a.totalRequired || 0);
-
-      // 5. Alphabetical tie-breaker
-      return (a.itemCode || '').localeCompare(b.itemCode || '');
-    });
+    const sortedByPriority = [...withLeadTime].sort((a, b) => compareItemPriority(a, b));
 
     const rankMap = new Map<string, number>();
     sortedByPriority.forEach((it, idx) => {
@@ -1498,40 +1461,12 @@ export const ShortageModule: React.FC = () => {
     const withLeadTime = list.map(c => {
       const childItem = c.itemObj || items.find(i => i.id === c.itemId || i.itemCode === c.itemCode);
       const leadTime = childItem?.leadTimeDays !== undefined ? childItem.leadTimeDays : 10;
-      return { ...c, childItem, leadTimeDays: leadTime };
+      const minStock = childItem ? (childItem.minStockQty !== undefined ? childItem.minStockQty : (childItem.reorderLevel || 0)) : 0;
+      const minShortage = Math.max(0, (c.netRemainingReq + minStock) - (c.inHouseStock || 0));
+      return { ...c, childItem, leadTimeDays: leadTime, minStockQty: minStock, minShortage };
     });
 
-    const sortedByPriority = [...withLeadTime].sort((a, b) => {
-      // 1. Lead Time Days (higher lead time = higher priority)
-      const ltA = a.leadTimeDays ?? 0;
-      const ltB = b.leadTimeDays ?? 0;
-      if (ltB !== ltA) return ltB - ltA;
-
-      // 2. Net Shortage (items with active shortage > 0 have higher priority, then shortage amount desc)
-      const hasShortageA = (a.shortage || 0) > 0 ? 1 : 0;
-      const hasShortageB = (b.shortage || 0) > 0 ? 1 : 0;
-      if (hasShortageB !== hasShortageA) return hasShortageB - hasShortageA;
-      if ((b.shortage || 0) !== (a.shortage || 0)) return (b.shortage || 0) - (a.shortage || 0);
-
-      // 3. Min Level Safety Shortage
-      const minStockA = a.childItem ? (a.childItem.minStockQty !== undefined ? a.childItem.minStockQty : (a.childItem.reorderLevel || 0)) : 0;
-      const minStockB = b.childItem ? (b.childItem.minStockQty !== undefined ? b.childItem.minStockQty : (b.childItem.reorderLevel || 0)) : 0;
-      const minShortA = Math.max(0, minStockA - (a.inHouseStock || 0));
-      const minShortB = Math.max(0, minStockB - (b.inHouseStock || 0));
-      const hasMinShortA = minShortA > 0 ? 1 : 0;
-      const hasMinShortB = minShortB > 0 ? 1 : 0;
-      if (hasMinShortB !== hasMinShortA) return hasMinShortB - hasMinShortA;
-      if (minShortB !== minShortA) return minShortB - minShortA;
-
-      // 4. Job Card Required Demand
-      const hasReqA = (a.totalRequired || 0) > 0 ? 1 : 0;
-      const hasReqB = (b.totalRequired || 0) > 0 ? 1 : 0;
-      if (hasReqB !== hasReqA) return hasReqB - hasReqA;
-      if ((b.totalRequired || 0) !== (a.totalRequired || 0)) return (b.totalRequired || 0) - (a.totalRequired || 0);
-
-      // 5. Alphabetical tie-breaker
-      return (a.itemCode || '').localeCompare(b.itemCode || '');
-    });
+    const sortedByPriority = [...withLeadTime].sort((a, b) => compareItemPriority(a, b));
 
     const rankMap = new Map<string, number>();
     sortedByPriority.forEach((it, idx) => {
@@ -2335,16 +2270,16 @@ export const ShortageModule: React.FC = () => {
                     borderBottom: '1px solid var(--border-color)'
                   }}
                 >
-                  <table className="shortage-itemwise-table" style={{ width: '100%', minWidth: '1800px', tableLayout: 'fixed', margin: 0, borderCollapse: 'separate', borderSpacing: 0 }}>
+                  <table className="shortage-itemwise-table" style={{ width: '100%', minWidth: '1910px', tableLayout: 'fixed', margin: 0, borderCollapse: 'separate', borderSpacing: 0 }}>
                     <colgroup>
                       <col style={{ width: '38px' }} />
                       <col style={{ width: '65px' }} />
                       <col style={{ width: '85px' }} />
                       <col style={{ width: '110px' }} />
                       <col style={{ width: '120px' }} />
-                      <col style={{ width: '220px' }} />
+                      <col style={{ width: '280px' }} />
                       <col style={{ width: '70px' }} />
-                      <col style={{ width: '135px' }} />
+                      <col style={{ width: '175px' }} />
                       <col style={{ width: '140px' }} />
                       <col style={{ width: '95px' }} />
                       <col style={{ width: '90px' }} />
@@ -2393,7 +2328,7 @@ export const ShortageModule: React.FC = () => {
                         </th>
 
                         {/* 4. Item Description */}
-                        <th onClick={() => handleItemWiseSortToggle('itemName')} style={{ width: '220px', cursor: 'pointer', userSelect: 'none' }}>
+                        <th onClick={() => handleItemWiseSortToggle('itemName')} style={{ width: '280px', cursor: 'pointer', userSelect: 'none' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
                             Item Description {itemWiseSortField === 'itemName' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                           </div>
@@ -2407,7 +2342,7 @@ export const ShortageModule: React.FC = () => {
                         </th>
 
                         {/* 6. Source */}
-                        <th onClick={() => handleItemWiseSortToggle('processType')} style={{ width: '135px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
+                        <th onClick={() => handleItemWiseSortToggle('processType')} style={{ width: '175px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
                             Source {itemWiseSortField === 'processType' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                           </div>
@@ -2421,57 +2356,57 @@ export const ShortageModule: React.FC = () => {
                         </th>
 
                         {/* 8. Total Req */}
-                        <th onClick={() => handleItemWiseSortToggle('totalRequired')} style={{ width: '95px', textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
+                        <th onClick={() => handleItemWiseSortToggle('totalRequired')} style={{ width: '95px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
                             Total Req {itemWiseSortField === 'totalRequired' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                           </div>
                         </th>
 
                         {/* 9. In Stock */}
-                        <th onClick={() => handleItemWiseSortToggle('inHouseStock')} style={{ width: '90px', textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
+                        <th onClick={() => handleItemWiseSortToggle('inHouseStock')} style={{ width: '90px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
                             In Stock {itemWiseSortField === 'inHouseStock' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                           </div>
                         </th>
 
                         {/* 10. Pend PO */}
-                        <th onClick={() => handleItemWiseSortToggle('pendingPO')} style={{ width: '85px', textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
+                        <th onClick={() => handleItemWiseSortToggle('pendingPO')} style={{ width: '85px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
                             Pend PO {itemWiseSortField === 'pendingPO' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                           </div>
                         </th>
 
                         {/* 11. Pend JW */}
-                        <th onClick={() => handleItemWiseSortToggle('pendingJW')} style={{ width: '85px', textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
+                        <th onClick={() => handleItemWiseSortToggle('pendingJW')} style={{ width: '85px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
                             Pend JW {itemWiseSortField === 'pendingJW' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                           </div>
                         </th>
 
                         {/* 12. Pend QC */}
-                        <th onClick={() => handleItemWiseSortToggle('pendingQC')} style={{ width: '85px', textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
+                        <th onClick={() => handleItemWiseSortToggle('pendingQC')} style={{ width: '85px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
                             Pend QC {itemWiseSortField === 'pendingQC' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                           </div>
                         </th>
 
                         {/* 13. Shortage */}
-                        <th onClick={() => handleItemWiseSortToggle('shortage')} style={{ width: '95px', textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
+                        <th onClick={() => handleItemWiseSortToggle('shortage')} style={{ width: '95px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
                             Shortage {itemWiseSortField === 'shortage' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                           </div>
                         </th>
 
                         {/* 14. Min Stock */}
-                        <th onClick={() => handleItemWiseSortToggle('minStockLevel')} style={{ width: '105px', textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
+                        <th onClick={() => handleItemWiseSortToggle('minStockLevel')} style={{ width: '105px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
                             Min Stock {itemWiseSortField === 'minStockLevel' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                           </div>
                         </th>
 
                         {/* 15. Min Level Shortage */}
-                        <th onClick={() => handleItemWiseSortToggle('minShortage')} style={{ width: '165px', textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
+                        <th onClick={() => handleItemWiseSortToggle('minShortage')} style={{ width: '165px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
                             Min Level Shortage {itemWiseSortField === 'minShortage' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
                           </div>
                         </th>
@@ -2490,16 +2425,16 @@ export const ShortageModule: React.FC = () => {
                   }}
                   style={{ overflowX: 'auto', width: '100%', maxWidth: '100%', borderRadius: '0 0 0.5rem 0.5rem' }}
                 >
-                  <table className="shortage-itemwise-table" style={{ width: '100%', minWidth: '1800px', tableLayout: 'fixed', margin: 0, borderCollapse: 'separate', borderSpacing: 0 }}>
+                  <table className="shortage-itemwise-table" style={{ width: '100%', minWidth: '1910px', tableLayout: 'fixed', margin: 0, borderCollapse: 'separate', borderSpacing: 0 }}>
                     <colgroup>
                       <col style={{ width: '38px' }} />
                       <col style={{ width: '65px' }} />
                       <col style={{ width: '85px' }} />
                       <col style={{ width: '110px' }} />
                       <col style={{ width: '120px' }} />
-                      <col style={{ width: '220px' }} />
+                      <col style={{ width: '280px' }} />
                       <col style={{ width: '70px' }} />
-                      <col style={{ width: '135px' }} />
+                      <col style={{ width: '175px' }} />
                       <col style={{ width: '140px' }} />
                       <col style={{ width: '95px' }} />
                       <col style={{ width: '90px' }} />
@@ -2548,9 +2483,11 @@ export const ShortageModule: React.FC = () => {
                               {comp.itemCode}
                             </td>
 
-                            {/* 4. Description */}
-                            <td style={{ fontWeight: 600 }}>
-                              {comp.itemName}
+                            {/* 4. Description (Full multi-line wrap, completely visible) */}
+                            <td>
+                              <div style={{ fontWeight: 600, whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: '1.35', fontSize: '0.8rem' }} title={comp.itemName}>
+                                {comp.itemName}
+                              </div>
                             </td>
 
                             {/* 5. Class */}
@@ -2562,7 +2499,7 @@ export const ShortageModule: React.FC = () => {
 
                             {/* 6. Source */}
                             <td style={{ textAlign: 'center' }}>
-                              <span className={`badge ${comp.processType === 'Bought out' || comp.processType === 'Job work + Bought out' ? 'badge-primary' : comp.processType === 'In-house' ? 'badge-success' : comp.processType === 'Job work' ? 'badge-purple' : 'badge-neutral'}`} style={{ fontSize: '0.72rem' }}>
+                              <span className={`badge ${comp.processType === 'Bought out' || comp.processType === 'Job work + Bought out' ? 'badge-primary' : comp.processType === 'In-house' ? 'badge-success' : comp.processType === 'Job work' ? 'badge-purple' : 'badge-neutral'}`} style={{ fontSize: '0.72rem', whiteSpace: 'normal', lineHeight: '1.2' }}>
                                 {comp.processType || 'In-house'}
                               </span>
                             </td>
@@ -2579,43 +2516,43 @@ export const ShortageModule: React.FC = () => {
                             </td>
 
                             {/* 8. Total Req */}
-                            <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--text-primary)' }}>
+                            <td style={{ textAlign: 'center', fontWeight: 800, color: 'var(--text-primary)' }}>
                               {comp.totalRequired} {comp.unit}
                             </td>
 
                             {/* 9. In Stock */}
-                            <td style={{ textAlign: 'right', fontWeight: 700 }}>
+                            <td style={{ textAlign: 'center', fontWeight: 700 }}>
                               {comp.inHouseStock} {comp.unit}
                             </td>
 
                             {/* 10. Pend PO */}
-                            <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
+                            <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
                               {comp.pendingPO || 0}
                             </td>
 
                             {/* 11. Pend JW */}
-                            <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
+                            <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
                               {comp.pendingJW || 0}
                             </td>
 
                             {/* 12. Pend QC */}
-                            <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
+                            <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
                               {comp.pendingQC || 0}
                             </td>
 
                             {/* 13. Shortage */}
-                            <td style={{ textAlign: 'right', fontWeight: 900, color: comp.shortage > 0 ? 'var(--danger)' : 'var(--success)' }}>
+                            <td style={{ textAlign: 'center', fontWeight: 900, color: comp.shortage > 0 ? 'var(--danger)' : 'var(--success)' }}>
                               {comp.shortage > 0 ? `${comp.shortage} ${comp.unit}` : 'OK (0)'}
                             </td>
 
                             {/* 14. Min Stock */}
-                            <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
+                            <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
                               {comp.minStockLevel || 0} {comp.unit}
                             </td>
 
                             {/* 15. Min Level Shortage */}
-                            <td style={{ textAlign: 'right', fontWeight: 800, color: (comp.minShortage || 0) > 0 ? '#ea580c' : 'var(--text-muted)' }}>
-                              {(comp.minShortage || 0) > 0 ? `${comp.minShortage} ${comp.unit}` : 'OK (0)'}
+                            <td style={{ textAlign: 'center', fontWeight: 800, color: comp.minShortage > 0 ? 'var(--warning-text, #d97706)' : 'var(--text-secondary)' }}>
+                              {comp.minShortage > 0 ? `${comp.minShortage} ${comp.unit}` : '0'}
                             </td>
                           </tr>
                         );
@@ -2915,15 +2852,15 @@ export const ShortageModule: React.FC = () => {
                   borderBottom: '1px solid var(--border-color)'
                 }}
               >
-                <table className="shortage-proc-table" style={{ width: '100%', minWidth: '1330px', tableLayout: 'fixed', margin: 0, borderCollapse: 'separate', borderSpacing: 0 }}>
+                <table className="shortage-proc-table" style={{ width: '100%', minWidth: '1440px', tableLayout: 'fixed', margin: 0, borderCollapse: 'separate', borderSpacing: 0 }}>
                   <colgroup>
                     <col style={{ width: '38px' }} />
                     <col style={{ width: '65px' }} />
                     <col style={{ width: '80px' }} />
                     <col style={{ width: '120px' }} />
-                    <col style={{ width: '220px' }} />
+                    <col style={{ width: '280px' }} />
                     <col style={{ width: '75px' }} />
-                    <col style={{ width: '130px' }} />
+                    <col style={{ width: '175px' }} />
                     <col style={{ width: '90px' }} />
                     <col style={{ width: '90px' }} />
                     <col style={{ width: '75px' }} />
@@ -2937,14 +2874,14 @@ export const ShortageModule: React.FC = () => {
                       <th onClick={() => handleProcSortToggle('priority')} style={{ width: '65px', textAlign: 'center', cursor: 'pointer' }}>Priority</th>
                       <th onClick={() => handleProcSortToggle('leadTimeDays')} style={{ width: '80px', textAlign: 'center', cursor: 'pointer' }}>Lead Time</th>
                       <th onClick={() => handleProcSortToggle('itemCode')} style={{ width: '120px', cursor: 'pointer' }}>Item Code</th>
-                      <th onClick={() => handleProcSortToggle('itemName')} style={{ width: '220px', cursor: 'pointer' }}>Item Description</th>
+                      <th onClick={() => handleProcSortToggle('itemName')} style={{ width: '280px', cursor: 'pointer' }}>Item Description</th>
                       <th onClick={() => handleProcSortToggle('category')} style={{ width: '75px', textAlign: 'center', cursor: 'pointer' }}>Class</th>
-                      <th onClick={() => handleProcSortToggle('processType')} style={{ width: '130px', textAlign: 'center', cursor: 'pointer' }}>Source Process</th>
-                      <th onClick={() => handleProcSortToggle('totalRequired')} style={{ width: '90px', textAlign: 'right', cursor: 'pointer' }}>Total Req</th>
-                      <th onClick={() => handleProcSortToggle('inHouseStock')} style={{ width: '90px', textAlign: 'right', cursor: 'pointer' }}>Current Stock</th>
-                      <th onClick={() => handleProcSortToggle('openPO')} style={{ width: '75px', textAlign: 'right', cursor: 'pointer' }}>Open PO</th>
-                      <th onClick={() => handleProcSortToggle('pendingJW')} style={{ width: '75px', textAlign: 'right', cursor: 'pointer' }}>Pend JW</th>
-                      <th onClick={() => handleProcSortToggle('netShortage')} style={{ width: '90px', textAlign: 'right', cursor: 'pointer' }}>Shortage</th>
+                      <th onClick={() => handleProcSortToggle('processType')} style={{ width: '175px', textAlign: 'center', cursor: 'pointer' }}>Source Process</th>
+                      <th onClick={() => handleProcSortToggle('totalRequired')} style={{ width: '90px', textAlign: 'center', cursor: 'pointer' }}>Total Req</th>
+                      <th onClick={() => handleProcSortToggle('inHouseStock')} style={{ width: '90px', textAlign: 'center', cursor: 'pointer' }}>Current Stock</th>
+                      <th onClick={() => handleProcSortToggle('openPO')} style={{ width: '75px', textAlign: 'center', cursor: 'pointer' }}>Open PO</th>
+                      <th onClick={() => handleProcSortToggle('pendingJW')} style={{ width: '75px', textAlign: 'center', cursor: 'pointer' }}>Pend JW</th>
+                      <th onClick={() => handleProcSortToggle('netShortage')} style={{ width: '90px', textAlign: 'center', cursor: 'pointer' }}>Shortage</th>
                       <th style={{ width: '180px', textAlign: 'center' }}>Action</th>
                     </tr>
                   </thead>
@@ -2961,15 +2898,15 @@ export const ShortageModule: React.FC = () => {
                 }}
                 style={{ overflowX: 'auto', width: '100%', maxWidth: '100%', borderRadius: '0 0 0.5rem 0.5rem' }}
               >
-                <table className="shortage-proc-table" style={{ width: '100%', minWidth: '1330px', tableLayout: 'fixed', margin: 0, borderCollapse: 'separate', borderSpacing: 0 }}>
+                <table className="shortage-proc-table" style={{ width: '100%', minWidth: '1440px', tableLayout: 'fixed', margin: 0, borderCollapse: 'separate', borderSpacing: 0 }}>
                   <colgroup>
                     <col style={{ width: '38px' }} />
                     <col style={{ width: '65px' }} />
                     <col style={{ width: '80px' }} />
                     <col style={{ width: '120px' }} />
-                    <col style={{ width: '220px' }} />
+                    <col style={{ width: '280px' }} />
                     <col style={{ width: '75px' }} />
-                    <col style={{ width: '130px' }} />
+                    <col style={{ width: '175px' }} />
                     <col style={{ width: '90px' }} />
                     <col style={{ width: '90px' }} />
                     <col style={{ width: '75px' }} />
@@ -2996,21 +2933,25 @@ export const ShortageModule: React.FC = () => {
                             {c.leadTimeDays} D
                           </td>
                           <td style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>{c.itemCode}</td>
-                          <td style={{ fontWeight: 600 }}>{c.itemName}</td>
+                          <td>
+                            <div style={{ fontWeight: 600, whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: '1.35', fontSize: '0.8rem' }} title={c.itemName}>
+                              {c.itemName}
+                            </div>
+                          </td>
                           <td style={{ textAlign: 'center' }}><span className="badge badge-neutral" style={{ fontSize: '0.7rem' }}>{c.category}</span></td>
-                          <td style={{ textAlign: 'center' }}><span className="badge badge-outline" style={{ fontSize: '0.7rem' }}>{c.processType}</span></td>
-                          <td style={{ textAlign: 'right', fontWeight: 700 }}>{c.totalRequired} {c.unit}</td>
-                          <td style={{ textAlign: 'right' }}>{c.inHouseStock} {c.unit}</td>
-                          <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{c.openPO || 0}</td>
-                          <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{c.pendingJW || 0}</td>
-                          <td style={{ textAlign: 'right', fontWeight: 800, color: c.isShortage ? 'var(--danger)' : 'var(--success)' }}>
+                          <td style={{ textAlign: 'center' }}><span className="badge badge-outline" style={{ fontSize: '0.7rem', whiteSpace: 'normal', lineHeight: '1.2' }}>{c.processType}</span></td>
+                          <td style={{ textAlign: 'center', fontWeight: 700 }}>{c.totalRequired} {c.unit}</td>
+                          <td style={{ textAlign: 'center' }}>{c.inHouseStock} {c.unit}</td>
+                          <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>{c.openPO || 0}</td>
+                          <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>{c.pendingJW || 0}</td>
+                          <td style={{ textAlign: 'center', fontWeight: 800, color: c.isShortage ? 'var(--danger)' : 'var(--success)' }}>
                             {c.isShortage ? `${c.netShortage} ${c.unit}` : 'OK (0)'}
                           </td>
                           <td style={{ textAlign: 'center' }}>
                             {c.isShortage && childItem && (
                               <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'center' }}>
                                 {activeTab === 'PO_SHORTAGE' && (
-                                  <button type="button" className="btn btn-primary" style={{ padding: '0.2rem 0.4rem', fontSize: '0.7rem' }} onClick={() => handleRaisePO(childItem, c.netShortage)}>
+                                  <button type="button" className="btn btn-primary" style={{ padding: '0.2rem 0.4rem', fontSize: '0.7rem' }} onClick={() => handleRaisePO(childItem, c.minShortage && c.minShortage > 0 ? c.minShortage : c.netShortage)}>
                                     Raise PO
                                   </button>
                                 )}
@@ -3436,15 +3377,15 @@ export const ShortageModule: React.FC = () => {
                     borderBottom: '1px solid var(--border-color)'
                   }}
                 >
-                  <table className="shortage-proc-table" style={{ width: '100%', minWidth: '1660px', tableLayout: 'fixed', margin: 0, borderCollapse: 'separate', borderSpacing: 0 }}>
+                  <table className="shortage-proc-table" style={{ width: '100%', minWidth: '1770px', tableLayout: 'fixed', margin: 0, borderCollapse: 'separate', borderSpacing: 0 }}>
                     <colgroup>
                       <col style={{ width: '38px' }} />
                       <col style={{ width: '70px' }} />
                       <col style={{ width: '80px' }} />
                       <col style={{ width: '120px' }} />
-                      <col style={{ width: '220px' }} />
+                      <col style={{ width: '280px' }} />
                       <col style={{ width: '70px' }} />
-                      <col style={{ width: '130px' }} />
+                      <col style={{ width: '175px' }} />
                       <col style={{ width: '160px' }} />
                       <col style={{ width: '90px' }} />
                       <col style={{ width: '80px' }} />
@@ -3461,17 +3402,17 @@ export const ShortageModule: React.FC = () => {
                         <th onClick={() => { setJcSortField('priority'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ width: '70px', textAlign: 'center', cursor: 'pointer' }}>Priority</th>
                         <th onClick={() => { setJcSortField('leadTimeDays'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ width: '80px', textAlign: 'center', cursor: 'pointer' }}>Lead Time</th>
                         <th onClick={() => { setJcSortField('itemCode'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ width: '120px', cursor: 'pointer' }}>Item Code</th>
-                        <th onClick={() => { setJcSortField('itemName'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ width: '220px', cursor: 'pointer' }}>Item Description</th>
+                        <th onClick={() => { setJcSortField('itemName'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ width: '280px', cursor: 'pointer' }}>Item Description</th>
                         <th onClick={() => { setJcSortField('category'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ width: '70px', textAlign: 'center', cursor: 'pointer' }}>Class</th>
-                        <th onClick={() => { setJcSortField('processType'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ width: '130px', textAlign: 'center', cursor: 'pointer' }}>Source</th>
+                        <th onClick={() => { setJcSortField('processType'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ width: '175px', textAlign: 'center', cursor: 'pointer' }}>Source</th>
                         <th style={{ width: '160px' }}>Required By Job Cards</th>
-                        <th onClick={() => { setJcSortField('totalRequired'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ width: '90px', textAlign: 'right', cursor: 'pointer' }}>Total Req</th>
-                        <th onClick={() => { setJcSortField('issuedQty'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ width: '80px', textAlign: 'right', cursor: 'pointer' }}>Issued</th>
-                        <th onClick={() => { setJcSortField('netRemainingReq'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ width: '90px', textAlign: 'right', cursor: 'pointer' }}>Net Req</th>
-                        <th onClick={() => { setJcSortField('inHouseStock'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ width: '85px', textAlign: 'right', cursor: 'pointer' }}>In Stock</th>
-                        <th style={{ width: '75px', textAlign: 'right' }}>Open PO</th>
-                        <th style={{ width: '75px', textAlign: 'right' }}>Pend JW</th>
-                        <th onClick={() => { setJcSortField('shortage'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ width: '90px', textAlign: 'right', cursor: 'pointer' }}>Shortage</th>
+                        <th onClick={() => { setJcSortField('totalRequired'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ width: '90px', textAlign: 'center', cursor: 'pointer' }}>Total Req</th>
+                        <th onClick={() => { setJcSortField('issuedQty'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ width: '80px', textAlign: 'center', cursor: 'pointer' }}>Issued</th>
+                        <th onClick={() => { setJcSortField('netRemainingReq'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ width: '90px', textAlign: 'center', cursor: 'pointer' }}>Net Req</th>
+                        <th onClick={() => { setJcSortField('inHouseStock'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ width: '85px', textAlign: 'center', cursor: 'pointer' }}>In Stock</th>
+                        <th style={{ width: '75px', textAlign: 'center' }}>Open PO</th>
+                        <th style={{ width: '75px', textAlign: 'center' }}>Pend JW</th>
+                        <th onClick={() => { setJcSortField('shortage'); setJcSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} style={{ width: '90px', textAlign: 'center', cursor: 'pointer' }}>Shortage</th>
                         <th style={{ width: '180px', textAlign: 'center' }}>Action</th>
                       </tr>
                     </thead>
@@ -3488,15 +3429,15 @@ export const ShortageModule: React.FC = () => {
                   }}
                   style={{ overflowX: 'auto', width: '100%', maxWidth: '100%', borderRadius: '0 0 0.5rem 0.5rem' }}
                 >
-                  <table className="shortage-proc-table" style={{ width: '100%', minWidth: '1660px', tableLayout: 'fixed', margin: 0, borderCollapse: 'separate', borderSpacing: 0 }}>
+                  <table className="shortage-proc-table" style={{ width: '100%', minWidth: '1770px', tableLayout: 'fixed', margin: 0, borderCollapse: 'separate', borderSpacing: 0 }}>
                     <colgroup>
                       <col style={{ width: '38px' }} />
                       <col style={{ width: '70px' }} />
                       <col style={{ width: '80px' }} />
                       <col style={{ width: '120px' }} />
-                      <col style={{ width: '220px' }} />
+                      <col style={{ width: '280px' }} />
                       <col style={{ width: '70px' }} />
-                      <col style={{ width: '130px' }} />
+                      <col style={{ width: '175px' }} />
                       <col style={{ width: '160px' }} />
                       <col style={{ width: '90px' }} />
                       <col style={{ width: '80px' }} />
@@ -3525,12 +3466,16 @@ export const ShortageModule: React.FC = () => {
                               {c.itemCode}
                               {c.partCode && <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{c.partCode}</div>}
                             </td>
-                            <td style={{ fontWeight: 600 }}>{c.itemName}</td>
+                            <td>
+                              <div style={{ fontWeight: 600, whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: '1.35', fontSize: '0.8rem' }} title={c.itemName}>
+                                {c.itemName}
+                              </div>
+                            </td>
                             <td style={{ textAlign: 'center' }}>
                               <span className="badge badge-neutral" style={{ fontSize: '0.7rem' }}>{c.category}</span>
                             </td>
                             <td style={{ textAlign: 'center' }}>
-                              <span className={`badge ${c.processType === 'Bought out' || c.processType === 'Job work + Bought out' ? 'badge-primary' : c.processType === 'In-house' ? 'badge-success' : 'badge-outline'}`} style={{ fontSize: '0.7rem' }}>
+                              <span className={`badge ${c.processType === 'Bought out' || c.processType === 'Job work + Bought out' ? 'badge-primary' : c.processType === 'In-house' ? 'badge-success' : 'badge-outline'}`} style={{ fontSize: '0.7rem', whiteSpace: 'normal', lineHeight: '1.2' }}>
                                 {c.processType}
                               </span>
                             </td>
@@ -3544,17 +3489,17 @@ export const ShortageModule: React.FC = () => {
                                 ))}
                               </div>
                             </td>
-                            <td style={{ textAlign: 'right', fontWeight: 700 }}>{c.totalRequired} {c.unit}</td>
-                            <td style={{ textAlign: 'right', color: c.issuedQty > 0 ? 'var(--success)' : 'var(--text-muted)', fontWeight: 600 }}>
+                            <td style={{ textAlign: 'center', fontWeight: 700 }}>{c.totalRequired} {c.unit}</td>
+                            <td style={{ textAlign: 'center', color: c.issuedQty > 0 ? 'var(--success)' : 'var(--text-muted)', fontWeight: 600 }}>
                               {c.issuedQty} {c.unit}
                             </td>
-                            <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--text-primary)' }}>
+                            <td style={{ textAlign: 'center', fontWeight: 800, color: 'var(--text-primary)' }}>
                               {c.netRemainingReq} {c.unit}
                             </td>
-                            <td style={{ textAlign: 'right', fontWeight: 700 }}>{c.inHouseStock} {c.unit}</td>
-                            <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{c.openPO || 0}</td>
-                            <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{c.pendingJW || 0}</td>
-                            <td style={{ textAlign: 'right', fontWeight: 800, color: c.isShortage ? 'var(--danger)' : 'var(--success)' }}>
+                            <td style={{ textAlign: 'center', fontWeight: 700 }}>{c.inHouseStock} {c.unit}</td>
+                            <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>{c.openPO || 0}</td>
+                            <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>{c.pendingJW || 0}</td>
+                            <td style={{ textAlign: 'center', fontWeight: 800, color: c.isShortage ? 'var(--danger)' : 'var(--success)' }}>
                               {c.isShortage ? `${c.shortage} ${c.unit}` : 'OK (0)'}
                             </td>
                             <td style={{ textAlign: 'center' }}>

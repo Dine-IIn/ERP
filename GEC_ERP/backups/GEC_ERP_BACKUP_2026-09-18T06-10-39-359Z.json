@@ -19183,22 +19183,11 @@
       "timestamp": "2026-09-15T12:03:54.075Z"
     }
   ],
-  "backups": [
-    {
-      "id": "bak-1789711839390",
-      "fileName": "GEC_ERP_BACKUP_2026-09-18T06-10-39-359Z.json",
-      "filePath": "D:\\ERP\\GEC_ERP\\backups\\GEC_ERP_BACKUP_2026-09-18T06-10-39-359Z.json",
-      "fileSizeKb": 549,
-      "backupType": "SCHEDULED",
-      "status": "SUCCESS",
-      "createdAt": "2026-09-18T06:10:39.391Z"
-    }
-  ],
+  "backups": [],
   "backupSettings": {
     "cycleValue": 2,
     "cycleUnit": "Days",
-    "retentionLife": "Infinite",
-    "lastBackupDate": "2026-09-18T06:10:39.391Z"
+    "retentionLife": "Infinite"
   },
   "materialIssueRecords": []
 }

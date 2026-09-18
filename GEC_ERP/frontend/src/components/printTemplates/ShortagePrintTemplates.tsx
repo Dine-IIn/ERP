@@ -529,6 +529,7 @@ export interface TabularShortageRow {
   requiredQty: number | string;
   currentStock: number | string;
   minStockQty?: number | string;
+  minShortage?: number | string;
   moq?: number | string;
   inPO?: number | string;
   shortage: number | string;
@@ -567,6 +568,7 @@ export const TabularShortagePrintView: React.FC<{
           <th style={{ width: '85px', textAlign: 'right' }}>Required Qty</th>
           <th style={{ width: '85px', textAlign: 'right' }}>Current Stock</th>
           <th style={{ width: '85px', textAlign: 'right' }}>Min Stock Qty</th>
+          <th style={{ width: '85px', textAlign: 'right' }}>Min Level Shortage</th>
           {showMOQAndInPO && <th style={{ width: '70px', textAlign: 'right' }}>MOQ</th>}
           {showMOQAndInPO && <th style={{ width: '70px', textAlign: 'right' }}>In PO</th>}
           <th style={{ width: '85px', textAlign: 'right' }}>Shortage</th>
@@ -575,7 +577,7 @@ export const TabularShortagePrintView: React.FC<{
       <tbody>
         {rows.length === 0 ? (
           <tr>
-            <td colSpan={showMOQAndInPO ? 12 : 10} style={{ textAlign: 'center', padding: '12px', color: '#059669', fontWeight: 600 }}>
+            <td colSpan={showMOQAndInPO ? 13 : 11} style={{ textAlign: 'center', padding: '12px', color: '#059669', fontWeight: 600 }}>
               ✓ No active shortage found. All inventory requirements are satisfied!
             </td>
           </tr>
@@ -594,6 +596,9 @@ export const TabularShortagePrintView: React.FC<{
               <td style={{ textAlign: 'right', fontWeight: 600 }}>{r.requiredQty} {r.unit || ''}</td>
               <td style={{ textAlign: 'right' }}>{r.currentStock} {r.unit || ''}</td>
               <td style={{ textAlign: 'right' }}>{r.minStockQty ?? 0} {r.unit || ''}</td>
+              <td style={{ textAlign: 'right', fontWeight: Number(r.minShortage) > 0 ? 700 : 400, color: Number(r.minShortage) > 0 ? '#d97706' : '#6b7280' }}>
+                {r.minShortage ?? 0} {r.unit || ''}
+              </td>
               {showMOQAndInPO && <td style={{ textAlign: 'right' }}>{r.moq || '-'}</td>}
               {showMOQAndInPO && <td style={{ textAlign: 'right', color: '#2563eb' }}>{r.inPO || '0'}</td>}
               <td style={{ textAlign: 'right', fontWeight: 800, color: Number(r.shortage) > 0 ? '#dc2626' : '#059669' }}>
