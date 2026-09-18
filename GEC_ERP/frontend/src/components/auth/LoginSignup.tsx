@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useERP } from '../../context/ERPContext';
-import { Lock, UserCheck, Building2, Sun, Moon, ArrowRight, KeyRound, Mail, CheckCircle2, AlertCircle, X, Eye, EyeOff } from 'lucide-react';
+import { apiClient, ServerHealthResponse } from '../../services/apiClient';
+import { Lock, UserCheck, Building2, Sun, Moon, ArrowRight, Mail, CheckCircle2, AlertCircle, Eye, EyeOff, Server, Wifi, WifiOff, Settings, RefreshCw, Globe, Radio } from 'lucide-react';
 import { Modal } from '../common/Modal';
 
 export const LoginSignup: React.FC = () => {
@@ -11,6 +12,21 @@ export const LoginSignup: React.FC = () => {
   const [showNewPassword, setShowNewPassword] = useState<boolean>(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  // Server Connection Status State
+  const [serverMode, setServerMode] = useState<'LAN' | 'CLOUD' | 'LOCALHOST' | 'OFFLINE' | 'CHECKING'>('CHECKING');
+  const [isServerOnline, setIsServerOnline] = useState<boolean>(false);
+  const [activeEndpoint, setActiveEndpoint] = useState<string>(apiClient.getBaseUrl());
+  const [isProbingServer, setIsProbingServer] = useState<boolean>(false);
+  const [serverHealthData, setServerHealthData] = useState<ServerHealthResponse | null>(null);
+
+  // Server Settings Modal State
+  const [isServerConfigOpen, setIsServerConfigOpen] = useState<boolean>(false);
+  const [lanInput, setLanInput] = useState<string>(apiClient.getLanUrl() || '');
+  const [cloudInput, setCloudInput] = useState<string>(apiClient.getCloudUrl() || '');
+  const [configFeedback, setConfigFeedback] = useState<{ text: string; type: 'success' | 'danger' | 'info' } | null>(null);
+  const [isTestingConfig, setIsTestingConfig] = useState<boolean>(false);
 
   // Forgot Password Modal State
   const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
@@ -22,6 +38,68 @@ export const LoginSignup: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [forgotMsg, setForgotMsg] = useState<{ text: string; type: 'success' | 'danger' } | null>(null);
 
+  // Check Server Health
+  const checkServerStatus = async () => {
+    setIsProbingServer(true);
+    try {
+      const res = await apiClient.checkHealth();
+      setIsServerOnline(res.online);
+      setServerMode(res.mode);
+      setActiveEndpoint(apiClient.getBaseUrl());
+      setServerHealthData(res.data || null);
+    } catch {
+      setIsServerOnline(false);
+      setServerMode('OFFLINE');
+    } finally {
+      setIsProbingServer(false);
+    }
+  };
+
+  useEffect(() => {
+    checkServerStatus();
+    const timer = setInterval(checkServerStatus, 5000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const handleSaveAndTestConfig = async (overrideLan?: string, overrideCloud?: string) => {
+    const targetLan = overrideLan !== undefined ? overrideLan : lanInput;
+    const targetCloud = overrideCloud !== undefined ? overrideCloud : cloudInput;
+
+    setIsTestingConfig(true);
+    setConfigFeedback({ text: 'Testing server connectivity...', type: 'info' });
+
+    apiClient.setLanUrl(targetLan);
+    apiClient.setCloudUrl(targetCloud);
+    apiClient.setCustomServerUrl('');
+
+    setLanInput(apiClient.getLanUrl() || '');
+    setCloudInput(apiClient.getCloudUrl() || '');
+
+    try {
+      const res = await apiClient.checkHealth();
+      setIsServerOnline(res.online);
+      setServerMode(res.mode);
+      setActiveEndpoint(apiClient.getBaseUrl());
+      setServerHealthData(res.data || null);
+
+      if (res.online) {
+        setConfigFeedback({
+          text: `Connected to ${res.mode === 'CLOUD' ? 'Cloud Tunnel' : (res.mode === 'LOCALHOST' ? 'Localhost' : 'LAN Server')} (${apiClient.getBaseUrl()})`,
+          type: 'success'
+        });
+      } else {
+        setConfigFeedback({
+          text: 'Unable to reach server. Please ensure backend server or Cloudflare tunnel is running.',
+          type: 'danger'
+        });
+      }
+    } catch (e: any) {
+      setConfigFeedback({ text: `Connection check failed: ${e?.message || 'Network error'}`, type: 'danger' });
+    } finally {
+      setIsTestingConfig(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
@@ -31,13 +109,22 @@ export const LoginSignup: React.FC = () => {
       return;
     }
 
-    const res = await login(username.trim(), password);
-    if (!res.success) {
-      setErrorMsg(res.message);
-    } else {
-      // Clear inputs
-      setUsername('');
-      setPassword('');
+    if (!isServerOnline && serverMode === 'OFFLINE') {
+      setErrorMsg('Cannot log in: Central server is offline or unreachable. Please connect to network/internet and try again.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const res = await login(username.trim(), password);
+      if (!res.success) {
+        setErrorMsg(res.message);
+      } else {
+        setUsername('');
+        setPassword('');
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -155,6 +242,119 @@ export const LoginSignup: React.FC = () => {
           </p>
         </div>
 
+        {/* Live Server Connection Status Card */}
+        <div style={{
+          marginBottom: '1.5rem',
+          padding: '0.75rem 1rem',
+          borderRadius: '0.75rem',
+          backgroundColor: isServerOnline 
+            ? (serverMode === 'CLOUD' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(59, 130, 246, 0.1)') 
+            : 'rgba(239, 68, 68, 0.12)',
+          border: `1px solid ${isServerOnline 
+            ? (serverMode === 'CLOUD' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(59, 130, 246, 0.3)') 
+            : 'rgba(239, 68, 68, 0.3)'}`,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '0.4rem'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{
+                display: 'inline-block',
+                width: '10px',
+                height: '10px',
+                borderRadius: '50%',
+                backgroundColor: isServerOnline 
+                  ? (serverMode === 'CLOUD' ? 'var(--success)' : 'var(--accent-primary)') 
+                  : 'var(--danger)',
+                boxShadow: isServerOnline 
+                  ? `0 0 8px ${serverMode === 'CLOUD' ? 'var(--success)' : 'var(--accent-primary)'}` 
+                  : '0 0 8px var(--danger)',
+                animation: isProbingServer ? 'pulse 1s infinite' : 'none'
+              }} />
+              <span style={{
+                fontSize: '0.82rem',
+                fontWeight: 700,
+                color: isServerOnline 
+                  ? (serverMode === 'CLOUD' ? 'var(--success)' : 'var(--accent-primary)') 
+                  : 'var(--danger)'
+              }}>
+                {serverMode === 'CHECKING' ? 'Checking Server...' : (
+                  isServerOnline 
+                    ? `Server Online (${serverMode === 'CLOUD' ? 'Cloud Tunnel' : (serverMode === 'LOCALHOST' ? 'Localhost' : 'High-Speed LAN')})` 
+                    : 'Server Offline'
+                )}
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+              <button
+                type="button"
+                onClick={checkServerStatus}
+                title="Refresh connection status"
+                disabled={isProbingServer}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer',
+                  padding: '0.25rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  borderRadius: '0.25rem'
+                }}
+              >
+                <RefreshCw size={14} className={isProbingServer ? 'animate-spin' : ''} />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setLanInput(apiClient.getLanUrl() || '');
+                  setCloudInput(apiClient.getCloudUrl() || '');
+                  setConfigFeedback(null);
+                  setIsServerConfigOpen(true);
+                }}
+                title="Configure Server Endpoints (LAN / Cloud)"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer',
+                  padding: '0.25rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  borderRadius: '0.25rem'
+                }}
+              >
+                <Settings size={14} />
+              </button>
+            </div>
+          </div>
+
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: '0.72rem',
+            color: 'var(--text-muted)'
+          }}>
+            <span style={{ wordBreak: 'break-all', maxWidth: '280px' }}>
+              <strong>Endpoint:</strong> {activeEndpoint}
+            </span>
+            {isServerOnline && serverHealthData && (
+              <span className="badge badge-neutral" style={{ fontSize: '0.62rem', padding: '0.1rem 0.4rem' }}>
+                {serverHealthData.database.includes('PostgreSQL') ? 'Postgres' : 'Cache'}
+              </span>
+            )}
+          </div>
+
+          {!isServerOnline && (
+            <p style={{ margin: '0.25rem 0 0', fontSize: '0.72rem', color: 'var(--danger)', fontWeight: 600 }}>
+              ⚠️ Offline login is disabled. Please connect to internet or check server.
+            </p>
+          )}
+        </div>
+
         {errorMsg && (
           <div style={{
             padding: '0.75rem 1rem',
@@ -243,20 +443,133 @@ export const LoginSignup: React.FC = () => {
 
           <button
             type="submit"
+            disabled={isSubmitting}
             className="btn btn-primary"
-            style={{ width: '100%', padding: '0.75rem', fontSize: '0.95rem', fontWeight: 700, marginTop: '0.5rem' }}
+            style={{ 
+              width: '100%', 
+              padding: '0.75rem', 
+              fontSize: '0.95rem', 
+              fontWeight: 700, 
+              marginTop: '0.5rem',
+              opacity: isSubmitting ? 0.7 : 1,
+              cursor: isSubmitting ? 'not-allowed' : 'pointer'
+            }}
           >
-            <span>Sign In to GEC ERP</span>
-            <ArrowRight size={18} />
+            <span>{isSubmitting ? 'Verifying with Server...' : 'Sign In to GEC ERP'}</span>
+            {!isSubmitting && <ArrowRight size={18} />}
           </button>
         </form>
 
         <div style={{ marginTop: '2rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-color)', textAlign: 'center' }}>
           <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>
-            🔒 Role-based access protected. New accounts must be provisioned by System Administrators.
+            🔒 Server-authenticated access. Offline login fallback is disabled.
           </p>
         </div>
       </div>
+
+      {/* Server Connection Settings Modal */}
+      <Modal
+        isOpen={isServerConfigOpen}
+        onClose={() => setIsServerConfigOpen(false)}
+        title="Server Connection Settings"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: 0 }}>
+            Configure and test central ERP server endpoints. The app will automatically prioritize high-speed LAN when on the local Wi-Fi, and fall back to Cloud Domain elsewhere.
+          </p>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, marginBottom: '0.35rem' }}>
+              🌐 Cloud Domain Server (Cloudflare Tunnel / Public HTTPS)
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. https://erpdev.manavkalola.xyz"
+              className="input-field"
+              value={cloudInput}
+              onChange={(e) => setCloudInput(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, marginBottom: '0.35rem' }}>
+              🚀 Local LAN Server IP (High-Speed Office Wi-Fi)
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. http://192.168.1.88:5000"
+              className="input-field"
+              value={lanInput}
+              onChange={(e) => setLanInput(e.target.value)}
+            />
+          </div>
+
+          {configFeedback && (
+            <div style={{
+              padding: '0.75rem 1rem',
+              borderRadius: '0.5rem',
+              fontSize: '0.82rem',
+              fontWeight: 600,
+              backgroundColor: configFeedback.type === 'success' 
+                ? 'rgba(16, 185, 129, 0.15)' 
+                : configFeedback.type === 'danger' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+              color: configFeedback.type === 'success' 
+                ? 'var(--success)' 
+                : configFeedback.type === 'danger' ? 'var(--danger)' : 'var(--accent-primary)',
+              border: `1px solid ${configFeedback.type === 'success' 
+                ? 'var(--success)' 
+                : configFeedback.type === 'danger' ? 'var(--danger)' : 'var(--accent-primary)'}`
+            }}>
+              {configFeedback.text}
+            </div>
+          )}
+
+          <div style={{
+            padding: '0.75rem',
+            borderRadius: '0.5rem',
+            backgroundColor: 'var(--bg-tertiary)',
+            fontSize: '0.75rem',
+            lineHeight: 1.5,
+            color: 'var(--text-secondary)'
+          }}>
+            <div><strong>Active Endpoint:</strong> <code style={{ color: 'var(--accent-primary)' }}>{activeEndpoint}</code></div>
+            <div><strong>Current Status:</strong> {isServerOnline ? `🟢 Connected (${serverMode})` : '🔴 Server Offline'}</div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem' }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ fontSize: '0.78rem' }}
+              onClick={() => {
+                setLanInput('http://192.168.1.88:5000');
+                setCloudInput('https://erpdev.manavkalola.xyz');
+                handleSaveAndTestConfig('http://192.168.1.88:5000', 'https://erpdev.manavkalola.xyz');
+              }}
+            >
+              🔄 Reset to Defaults
+            </button>
+
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={() => setIsServerConfigOpen(false)}
+              >
+                Cancel
+              </button>
+              <button 
+                type="button" 
+                disabled={isTestingConfig}
+                className="btn btn-primary" 
+                onClick={() => handleSaveAndTestConfig()}
+              >
+                {isTestingConfig ? 'Testing...' : 'Test & Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </Modal>
 
       {/* Forgot Password OTP Modal */}
       <Modal

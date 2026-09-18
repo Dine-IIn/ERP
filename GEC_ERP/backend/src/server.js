@@ -9,6 +9,7 @@ import { pool, isPostgresConnected, initDatabase } from './db.js';
 import { sessionManager } from './sessionManager.js';
 import { autoUpdater } from './updater.js';
 import { hashPassword, verifyPassword } from './auth.js';
+import { tunnelManager } from './tunnelManager.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -263,6 +264,7 @@ async function logActivity(userId, username, role, action, module, details, req)
 app.get('/api/health', (req, res) => {
   const localIps = getLocalNetworkIps();
   const updaterStatus = autoUpdater.getStatus();
+  const tunnelStatus = tunnelManager.getStatus();
   res.json({
     status: 'ONLINE',
     system: 'GEC ERP Enterprise Hybrid Server',
@@ -279,6 +281,7 @@ app.get('/api/health', (req, res) => {
     latestVersion: updaterStatus.latestVersion,
     updateAvailable: updaterStatus.updateAvailable,
     activeSessionsCount: updaterStatus.activeSessionsCount,
+    tunnel: tunnelStatus,
     timestamp: new Date().toISOString()
   });
 });
@@ -691,4 +694,19 @@ app.listen(PORT, '0.0.0.0', async () => {
   console.log(`================================================================`);
   
   await initDatabase();
+
+  // Automatically start supervised Cloudflare Tunnel
+  tunnelManager.start();
+});
+
+// Graceful process exit cleanup
+process.on('SIGINT', () => {
+  console.log('\n🛑 Shutting down GEC ERP Backend Server...');
+  tunnelManager.stop();
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  tunnelManager.stop();
+  process.exit(0);
 });

@@ -51,7 +51,12 @@ export function getApiBaseUrl(): string {
     if ((import.meta as any).env?.VITE_API_URL) {
       return ((import.meta as any).env.VITE_API_URL as string).replace(/\/$/, '');
     }
-    return 'http://localhost:5000';
+    const savedCloud = localStorage.getItem('gec_erp_cloud_url');
+    if (savedCloud && savedCloud.trim()) return savedCloud.trim().replace(/\/$/, '');
+    if ((import.meta as any).env?.VITE_API_CLOUD_URL) {
+      return ((import.meta as any).env.VITE_API_CLOUD_URL as string).replace(/\/$/, '');
+    }
+    return 'https://erpdev.manavkalola.xyz';
   }
 
   // 4. Vite Environment Variable Override
@@ -144,8 +149,9 @@ class HybridApiClient {
       if ((import.meta as any).env?.VITE_API_LAN_URL) {
         return ((import.meta as any).env.VITE_API_LAN_URL as string).trim().replace(/\/$/, '');
       }
+      return 'http://192.168.1.88:5000';
     }
-    return null;
+    return 'http://192.168.1.88:5000';
   }
 
   public getCloudUrl(): string | null {
@@ -155,8 +161,9 @@ class HybridApiClient {
       if ((import.meta as any).env?.VITE_API_CLOUD_URL) {
         return ((import.meta as any).env.VITE_API_CLOUD_URL as string).trim().replace(/\/$/, '');
       }
+      return 'https://erpdev.manavkalola.xyz';
     }
-    return null;
+    return 'https://erpdev.manavkalola.xyz';
   }
 
   public getLastHealth(): ServerHealthResponse | null {

@@ -829,7 +829,11 @@ export const Header: React.FC = () => {
                   ))}
                   <button
                     type="button"
-                    onClick={() => { setCustomLanInput(''); setCustomCloudInput(''); handleSaveAndTestServerConfig('', ''); }}
+                    onClick={() => { 
+                      setCustomLanInput('http://192.168.1.88:5000'); 
+                      setCustomCloudInput('https://erpdev.manavkalola.xyz'); 
+                      handleSaveAndTestServerConfig('http://192.168.1.88:5000', 'https://erpdev.manavkalola.xyz'); 
+                    }}
                     style={{
                       padding: '0.25rem 0.6rem',
                       borderRadius: '0.25rem',
@@ -840,7 +844,7 @@ export const Header: React.FC = () => {
                       cursor: 'pointer'
                     }}
                   >
-                    🔄 Clear & Auto-Detect
+                    🔄 Reset Defaults
                   </button>
                 </div>
               </div>

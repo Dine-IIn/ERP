@@ -9,7 +9,7 @@ import { Plus, Edit2, Trash2, Upload, Search, FileSpreadsheet, Settings, Filter,
 import { Item, ItemCategory, QCTrigger, MaterialProcessType, MaterialProcessSource, ItemMappedVendor, FIXED_ITEM_CLASSES } from '../../types/erp';
 import { parseItemsSheet } from '../../utils/csvParser';
 
-type ItemSortKey = 'itemCode' | 'partCode' | 'oldItemCode' | 'name' | 'category' | 'location' | 'processType' | 'leadTimeDays' | 'unit' | 'inHouseStock' | 'externalStock' | 'unitPrice';
+type ItemSortKey = 'itemCode' | 'partCode' | 'oldItemCode' | 'name' | 'category' | 'location' | 'processType' | 'leadTimeDays' | 'qcTrigger' | 'unit' | 'inHouseStock' | 'externalStock' | 'unitPrice';
 
 export const ItemMasterModule: React.FC = () => {
   const { 
@@ -753,6 +753,11 @@ export const ItemMasterModule: React.FC = () => {
                       Lead Time {sortColumn === 'leadTimeDays' ? (sortDirection === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
                     </div>
                   </th>
+                  <th onClick={() => handleSortColumnClick('qcTrigger')} style={{ cursor: 'pointer' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      QC Trigger {sortColumn === 'qcTrigger' ? (sortDirection === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
+                    </div>
+                  </th>
                   <th onClick={() => handleSortColumnClick('unit')} style={{ cursor: 'pointer' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                       UOM {sortColumn === 'unit' ? (sortDirection === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
@@ -882,6 +887,15 @@ export const ItemMasterModule: React.FC = () => {
                           </div>
                         </td>
                         <td style={{ fontSize: '0.82rem', fontWeight: 600 }}>{item.leadTimeDays || 10} Days</td>
+                        <td>
+                          <span className={`badge ${
+                            item.qcTrigger === 'ON_GRN' ? 'badge-warning' :
+                            item.qcTrigger === 'DURING_ASSEMBLY' ? 'badge-purple' :
+                            item.qcTrigger === 'NO_QC' ? 'badge-neutral' : 'badge-neutral'
+                          }`} style={{ fontSize: '0.7rem', padding: '0.15rem 0.4rem', fontWeight: 700 }}>
+                            {item.qcTrigger || 'NO_QC'}
+                          </span>
+                        </td>
                         <td>{item.unit}</td>
                         <td style={{ fontWeight: 800, color: isLow ? 'var(--danger)' : 'var(--success)' }}>
                           {item.inHouseStock} {item.unit}

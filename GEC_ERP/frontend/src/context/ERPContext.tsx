@@ -927,13 +927,16 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [currentUser]);
 
-  // Auth Methods - Dynamic Server-Backed Verification
+  // Auth Methods - Dynamic Server-Backed Verification (Strictly Server-Only, No Offline Bypass)
   const login = async (username: string, password: string): Promise<{ success: boolean; message: string }> => {
     const cleanUser = username.trim().toLowerCase();
     const deviceType = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? 'mobile' : 'desktop';
 
     try {
-      const response = await fetch('/api/auth/login', {
+      // Refresh server health to select best active route (LAN or Cloud)
+      await apiClient.checkHealth();
+
+      const response = await fetch(`${apiClient.getBaseUrl()}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: cleanUser, password, deviceType })
@@ -956,6 +959,40 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         } else {
           setActiveModule('dashboard');
         }
+
+        // Immediately trigger full sync to pull latest database state
+        try {
+          const syncRes = await apiClient.fetchFullSync();
+          if (syncRes.success && syncRes.data) {
+            const d = syncRes.data;
+            if (Array.isArray(d.items)) setItems(d.items);
+            if (Array.isArray(d.customers)) setCustomers(d.customers);
+            if (Array.isArray(d.vendors)) setVendors(d.vendors);
+            if (Array.isArray(d.boms)) setBOMs(d.boms);
+            if (Array.isArray(d.salesOrders)) setSalesOrders(d.salesOrders);
+            if (Array.isArray(d.workOrders)) setWorkOrders(d.workOrders);
+            if (Array.isArray(d.jobCards)) setJobCards(d.jobCards);
+            if (Array.isArray(d.purchaseOrders)) setPurchaseOrders(d.purchaseOrders);
+            if (Array.isArray(d.grns)) setGRNs(d.grns);
+            if (Array.isArray(d.jobworks)) setJobworks(d.jobworks);
+            if (Array.isArray(d.qcInspections)) setQCInspections(d.qcInspections);
+            if (Array.isArray(d.assemblies)) setAssemblies(d.assemblies);
+            if (Array.isArray(d.floorStations)) setFloorStations(d.floorStations);
+            if (Array.isArray(d.finishedGoods)) setFinishedGoods(d.finishedGoods);
+            if (Array.isArray(d.dispatchRecords)) setDispatchRecords(d.dispatchRecords);
+            if (Array.isArray(d.processDefinitions)) setProcessDefinitions(d.processDefinitions);
+            if (Array.isArray(d.itemProcessCards)) setItemProcessCards(d.itemProcessCards);
+            if (Array.isArray(d.vendorDebitChallans)) setVendorDebitChallans(d.vendorDebitChallans);
+            if (Array.isArray(d.intermediateProcessItems)) setIntermediateProcessItems(d.intermediateProcessItems);
+            if (Array.isArray(d.departments)) setDepartments(d.departments);
+            if (Array.isArray(d.customRoles)) setCustomRoles(d.customRoles);
+            if (Array.isArray(d.users)) setUsers(d.users);
+            setIsServerHydrated(true);
+          }
+        } catch (syncErr) {
+          console.warn('Initial sync after login failed:', syncErr);
+        }
+
         return { success: true, message: data.message || `Welcome back, ${userObj.fullName}!` };
       }
 
@@ -964,30 +1001,17 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         message: data.message || 'Invalid username or password. Passwords are case-sensitive.' 
       };
     } catch (err) {
-      console.warn('Backend login endpoint unavailable, attempting local fallback:', err);
-      const found = users.find(u => u.username.toLowerCase() === cleanUser);
-      if (found) {
-        const newSessionId = `sess-${Date.now()}-${Math.random()}`;
-        const updatedUser: User = {
-          ...found,
-          isSuperAdmin: found.isSuperAdmin === true || cleanUser === 'superadmin',
-          ...(deviceType === 'desktop' ? { desktopSessionId: newSessionId } : { mobileSessionId: newSessionId })
-        };
-        localStorage.setItem('gec_erp_lastActivityTime', Date.now().toString());
-        setCurrentUser(updatedUser);
-        setActiveModule(updatedUser.isSuperAdmin ? 'superadmin-analytics' : 'dashboard');
-        return { success: true, message: `Welcome back, ${updatedUser.fullName}!` };
-      }
+      console.error('Login error - server unreachable:', err);
       return { 
         success: false, 
-        message: 'Could not connect to authentication server. Please check your connection.' 
+        message: 'Authentication failed: Server is unreachable or offline. Please check your network connection and server status.' 
       };
     }
   };
 
   const resetUserPassword = async (usernameOrEmail: string, newPass: string): Promise<{ success: boolean; message: string }> => {
     try {
-      const response = await fetch('/api/auth/change-password', {
+      const response = await fetch(`${apiClient.getBaseUrl()}/api/auth/change-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: usernameOrEmail.trim(), newPassword: newPass })
@@ -998,7 +1022,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       return { success: false, message: data.message || 'Could not update password.' };
     } catch (err: any) {
-      return { success: false, message: err.message || 'Server communication error.' };
+      return { success: false, message: 'Server is unreachable. Password cannot be reset while offline.' };
     }
   };
 
@@ -1009,7 +1033,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const logout = () => {
     const sessionId = localStorage.getItem('gec_erp_sessionId');
     if (sessionId) {
-      fetch('/api/session/logout', {
+      fetch(`${apiClient.getBaseUrl()}/api/session/logout`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId })

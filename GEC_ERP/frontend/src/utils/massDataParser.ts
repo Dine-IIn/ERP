@@ -409,13 +409,13 @@ export function parseItemsCSV(rawText: string, existingItems: Item[], existingVe
     const minStockQty = getColValue(row, headerMap, 'minstockqty', 'min_stock', 'safety_stock', 'reorderlevel') !== '' ? Math.max(0, parseFloat(getColValue(row, headerMap, 'minstockqty', 'min_stock', 'safety_stock', 'reorderlevel')) || 5) : (existingMatch?.minStockQty ?? 5);
     const minOrderQty = getColValue(row, headerMap, 'minorderqty', 'moq', 'min_order') !== '' ? Math.max(0, parseFloat(getColValue(row, headerMap, 'minorderqty', 'moq', 'min_order')) || 1) : (existingMatch?.minOrderQty ?? 1);
     const unitPrice = getColValue(row, headerMap, 'unitprice', 'price', 'rate', 'cost') !== '' ? Math.max(0, parseFloat(getColValue(row, headerMap, 'unitprice', 'price', 'rate', 'cost')) || 0) : (existingMatch?.unitPrice ?? 0);
-    const leadTimeDays = getColValue(row, headerMap, 'leadtimeindays', 'leadtimedays', 'leadtime', 'lead_time_days', 'lead_time_in_days', 'lead time in days', 'lead time (days)', 'lead_time') !== '' ? Math.max(0, parseInt(getColValue(row, headerMap, 'leadtimeindays', 'leadtimedays', 'leadtime', 'lead_time_days', 'lead_time_in_days', 'lead time in days', 'lead time (days)', 'lead_time'), 10) || 0) : (existingMatch?.leadTimeDays ?? 0);
+    const leadTimeDays = getColValue(row, headerMap, 'leadtimeindays', 'leadtimedays', 'leadtime', 'lead_time_days', 'lead_time_in_days', 'lead time in days', 'lead time (days)', 'lead_time', 'lead time', 'supply lead time', 'supply lead time (days)') !== '' ? Math.max(0, parseInt(getColValue(row, headerMap, 'leadtimeindays', 'leadtimedays', 'leadtime', 'lead_time_days', 'lead_time_in_days', 'lead time in days', 'lead time (days)', 'lead_time', 'lead time', 'supply lead time', 'supply lead time (days)'), 10) || 0) : (existingMatch?.leadTimeDays ?? 0);
     const location = getColValue(row, headerMap, 'location', 'rack', 'bin') || existingMatch?.location || 'Central Store';
-    const qcTriggerStr = getColValue(row, headerMap, 'qctrigger', 'qc_trigger', 'qc trigger').toUpperCase().trim();
+    const qcTriggerStr = getColValue(row, headerMap, 'qctrigger', 'qc_trigger', 'qc trigger', 'qc quality inspection trigger', 'qc inspection trigger', 'quality trigger', 'quality inspection trigger', 'qc trigger *', 'qc quality inspection trigger *').toUpperCase().trim();
     const qcTrigger: QCTrigger = 
-      qcTriggerStr === 'NO_QC' ? 'NO_QC' :
-      qcTriggerStr === 'ON_GRN' ? 'ON_GRN' :
-      qcTriggerStr === 'DURING_ASSEMBLY' ? 'DURING_ASSEMBLY' :
+      qcTriggerStr === 'NO_QC' || qcTriggerStr.startsWith('NO_QC') ? 'NO_QC' :
+      qcTriggerStr === 'ON_GRN' || qcTriggerStr.startsWith('ON_GRN') ? 'ON_GRN' :
+      qcTriggerStr === 'DURING_ASSEMBLY' || qcTriggerStr.startsWith('DURING_ASSEMBLY') ? 'DURING_ASSEMBLY' :
       qcTriggerStr.includes('NO') || qcTriggerStr.includes('SKIP') ? 'NO_QC' : 
       qcTriggerStr.includes('ASSEMBLY') || qcTriggerStr.includes('DURING') ? 'DURING_ASSEMBLY' : 
       qcTriggerStr.includes('GRN') || qcTriggerStr.includes('INWARD') || qcTriggerStr.includes('MANDATORY') ? 'ON_GRN' : (existingMatch?.qcTrigger || 'NO_QC');
