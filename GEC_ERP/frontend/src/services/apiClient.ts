@@ -389,6 +389,64 @@ class HybridApiClient {
     }
   }
 
+  // Reset inventory stock levels on server
+  public async resetInventoryOnServer(user?: { id?: string; username?: string; role?: string }): Promise<{ success: boolean; message: string }> {
+    try {
+      const url = `${this.getBaseUrl()}/api/admin/reset-inventory`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-user-role': user?.role || 'Admin',
+          'x-username': user?.username || 'admin'
+        },
+        body: JSON.stringify({ userId: user?.id, username: user?.username, role: user?.role })
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, message: err?.message || 'Failed to connect to server' };
+    }
+  }
+
+  // Reset operational transactional records on server
+  public async resetOperationalOnServer(user?: { id?: string; username?: string; role?: string }): Promise<{ success: boolean; message: string }> {
+    try {
+      const url = `${this.getBaseUrl()}/api/admin/reset-operational`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-user-role': user?.role || 'Admin',
+          'x-username': user?.username || 'admin'
+        },
+        body: JSON.stringify({ userId: user?.id, username: user?.username, role: user?.role })
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, message: err?.message || 'Failed to connect to server' };
+    }
+  }
+
+  // Completely wipe server database and restore fresh baseline
+  public async wipeDatabaseOnServer(user?: { id?: string; username?: string; role?: string }): Promise<{ success: boolean; message: string; safetyBackup?: string }> {
+    try {
+      const url = `${this.getBaseUrl()}/api/admin/wipe-database`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-user-role': user?.role || 'Admin',
+          'x-username': user?.username || 'superadmin',
+          'x-is-superadmin': 'true'
+        },
+        body: JSON.stringify({ userId: user?.id, username: user?.username, role: user?.role, isSuperAdmin: true })
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, message: err?.message || 'Failed to connect to server' };
+    }
+  }
+
   private async processSyncQueue() {
     if (this.isSyncingQueue || this.syncQueue.length === 0) return;
     this.isSyncingQueue = true;

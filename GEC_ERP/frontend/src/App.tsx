@@ -28,10 +28,12 @@ import { DispatchModule } from './components/modules/DispatchModule';
 import { PlanningModule } from './components/modules/PlanningModule';
 import { SuperAdminAnalyticsModule } from './components/modules/SuperAdminAnalyticsModule';
 import { MaterialIssueModule } from './components/modules/MaterialIssueModule';
+import { QuotationModule } from './components/modules/QuotationModule';
 
 const MODULE_REGISTRY: Record<string, React.FC> = {
   'superadmin-analytics': SuperAdminAnalyticsModule,
   'dashboard': DashboardModule,
+  'quotations': QuotationModule,
   'planning': PlanningModule,
   'shortage': ShortageModule,
   'item-master': ItemMasterModule,

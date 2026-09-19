@@ -305,8 +305,9 @@ interface ERPContextType {
   downloadBackup: (id: string) => void;
   restoreBackup: (backupData: any) => { success: boolean; message: string };
   updateBackupSettings: (settings: BackupSettings) => void;
-  resetOperationalData: () => { success: boolean; message: string };
-  resetInventory: () => { success: boolean; message: string };
+  resetOperationalData: () => Promise<{ success: boolean; message: string }>;
+  resetInventory: () => Promise<{ success: boolean; message: string }>;
+  wipeFullDatabase: () => Promise<{ success: boolean; message: string }>;
 
   // Super Admin Mass Ingestion Methods
   massUpsertItems: (items: Item[], mode: 'APPEND' | 'OVERWRITE') => void;
@@ -534,13 +535,15 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Process Master, Process Cards & Debit Challans States
   const [processDefinitions, setProcessDefinitions] = useState<ProcessDefinition[]>(() => {
-    const loaded = getStored<ProcessDefinition[]>('processDefinitions', INITIAL_PROCESS_DEFINITIONS);
-    if (!loaded || loaded.length === 0) return INITIAL_PROCESS_DEFINITIONS;
-    return loaded;
+    const loaded = getStored<ProcessDefinition[]>('processDefinitions', []);
+    return Array.isArray(loaded) ? loaded : [];
   });
-  const [itemProcessCards, setItemProcessCards] = useState<ItemProcessCard[]>(() => getStored('itemProcessCards', INITIAL_ITEM_PROCESS_CARDS));
-  const [vendorDebitChallans, setVendorDebitChallans] = useState<VendorDebitChallan[]>(() => getStored('vendorDebitChallans', INITIAL_VENDOR_DEBIT_CHALLANS));
-  const [intermediateProcessItems, setIntermediateProcessItems] = useState<IntermediateProcessItem[]>(() => getStored('intermediateProcessItems', INITIAL_INTERMEDIATE_PROCESS_ITEMS));
+  const [itemProcessCards, setItemProcessCards] = useState<ItemProcessCard[]>(() => {
+    const loaded = getStored<ItemProcessCard[]>('itemProcessCards', []);
+    return Array.isArray(loaded) ? loaded : [];
+  });
+  const [vendorDebitChallans, setVendorDebitChallans] = useState<VendorDebitChallan[]>(() => getStored('vendorDebitChallans', []));
+  const [intermediateProcessItems, setIntermediateProcessItems] = useState<IntermediateProcessItem[]>(() => getStored('intermediateProcessItems', []));
 
   useEffect(() => syncEntityHelper('processDefinitions', processDefinitions), [processDefinitions, isServerHydrated]);
   useEffect(() => syncEntityHelper('itemProcessCards', itemProcessCards), [itemProcessCards, isServerHydrated]);
@@ -2209,9 +2212,9 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setBackupSettings(settings);
   };
 
-  const resetOperationalData = (): { success: boolean; message: string } => {
+  const resetOperationalData = async (): Promise<{ success: boolean; message: string }> => {
     try {
-      // 1. Reset all operational / transactional records
+      // 1. Reset all operational / transactional records locally
       setSalesOrders([]);
       setWorkOrders([]);
       setJobCards([]);
@@ -2223,6 +2226,8 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setAssemblies([]);
       setFinishedGoods([]);
       setDispatchRecords([]);
+      setVendorDebitChallans([]);
+      setJobCardMaterialReissues([]);
 
       // 2. Clear operational pending stock quantities on items (pendingQCStock, externalStock)
       const cleanedItems = items.map(it => ({
@@ -2255,19 +2260,28 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setStored('assemblies', []);
       setStored('finishedGoods', []);
       setStored('dispatchRecords', []);
+      setStored('vendorDebitChallans', []);
+      setStored('jobCardMaterialReissues', []);
       setStored('users', finalAdmins);
+      try {
+        localStorage.removeItem('gec_shortage_selected_item_ids');
+        localStorage.removeItem('gec_shortage_item_target_quantities');
+      } catch {}
+
+      // 5. Send command to backend server
+      const serverRes = await apiClient.resetOperationalOnServer(currentUser || { username: 'admin', role: 'Admin' });
 
       addAuditLog('SYSTEM_RESET', 'System Administration', 'Operational reset executed. Item Master, BOMs, Process Master, Customers, Vendors, Departments, and Admin user accounts preserved.');
       return { 
         success: true, 
-        message: 'System Reset Complete: All operational transactions (Orders, Job Cards, POs, Challans, GRNs, Assembly & QC) have been reset. Item Master, BOMs, Process Master, Customers, Vendors, and Admin accounts are intact.' 
+        message: serverRes?.message || 'System Reset Complete: All operational transactions (Orders, Job Cards, POs, Challans, GRNs, Assembly & QC) have been reset. Item Master, BOMs, Process Master, Customers, Vendors, and Admin accounts are intact.' 
       };
     } catch (err: any) {
       return { success: false, message: `System reset error: ${err?.message || 'Unknown error'}` };
     }
   };
 
-  const resetInventory = (): { success: boolean; message: string } => {
+  const resetInventory = async (): Promise<{ success: boolean; message: string }> => {
     try {
       const zeroedItems = items.map(it => ({
         ...it,
@@ -2277,13 +2291,38 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }));
       setItems(zeroedItems);
       setStored('items', zeroedItems);
+
+      // Send command to backend server
+      const serverRes = await apiClient.resetInventoryOnServer(currentUser || { username: 'admin', role: 'Admin' });
+
       addAuditLog('INVENTORY_RESET', 'System Administration', 'Inventory reset executed. All item in-house, external, and pending QC stocks zeroed.');
       return {
         success: true,
-        message: 'Inventory Reset Complete: All in-house stock, external stock, and pending QC quantities have been set to 0. Item definitions, BOMs, and Process Master data are preserved.'
+        message: serverRes?.message || 'Inventory Reset Complete: All in-house stock, external stock, and pending QC quantities have been set to 0. Item definitions, BOMs, and Process Master data are preserved.'
       };
     } catch (err: any) {
       return { success: false, message: `Inventory reset error: ${err?.message || 'Unknown error'}` };
+    }
+  };
+
+  const wipeFullDatabase = async (): Promise<{ success: boolean; message: string }> => {
+    try {
+      const serverRes = await apiClient.wipeDatabaseOnServer(currentUser || { username: 'superadmin', role: 'Admin' });
+
+      // Clear all local storage keys except server URL configuration
+      const preserveKeys = new Set(['gec_erp_server_url', 'gec_erp_cloud_url', 'gec_erp_lan_url']);
+      Object.keys(localStorage).forEach(key => {
+        if (!preserveKeys.has(key)) {
+          localStorage.removeItem(key);
+        }
+      });
+
+      return {
+        success: true,
+        message: serverRes?.message || 'Full database wipe executed successfully. Baseline restored.'
+      };
+    } catch (err: any) {
+      return { success: false, message: `Database wipe error: ${err?.message || 'Unknown error'}` };
     }
   };
 
@@ -3143,6 +3182,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updateBackupSettings,
       resetOperationalData,
       resetInventory,
+      wipeFullDatabase,
       massUpsertItems,
       massUpsertBOMs,
       massUpsertVendors,

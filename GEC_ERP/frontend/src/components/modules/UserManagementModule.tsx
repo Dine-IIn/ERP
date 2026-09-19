@@ -9,8 +9,10 @@ export const UserManagementModule: React.FC = () => {
   const { 
     users, currentUser, departments, customRoles, addUser, updateUser, deleteUser, updateUserRole,
     addDepartment, updateDepartment, deleteDepartment, addRole, updateRole, deleteRole,
-    auditLogs, addAuditLog, backups, createBackup, deleteBackup, downloadBackup, restoreBackup, resetOperationalData, resetInventory
+    auditLogs, addAuditLog, backups, createBackup, deleteBackup, downloadBackup, restoreBackup, resetOperationalData, resetInventory, wipeFullDatabase
   } = useERP();
+
+  const [isResetting, setIsResetting] = useState(false);
 
   const [activeTab, setActiveTab] = useState<'USERS' | 'DEPARTMENTS' | 'ROLES' | 'AUDIT_LOGS' | 'BACKUPS'>('USERS');
 
@@ -1656,7 +1658,7 @@ export const UserManagementModule: React.FC = () => {
                 Reset Inventory (Zero All Stock Levels)
               </h4>
               <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: '0.35rem 0 0 0', lineHeight: 1.45 }}>
-                Sets all <strong>In-House Store Stock, External Vendor Stock, and Quarantine QC Stock to zero (0)</strong> across all items in Item Master.<br />
+                Sets all <strong>In-House Store Stock, External Vendor Stock, and Quarantine QC Stock to zero (0)</strong> across all items in Item Master on both server and client.<br />
                 <strong style={{ color: 'var(--success)' }}>STRICTLY PRESERVED:</strong> All Item Master records, part codes, specifications, prices, multi-level BOMs, and Process Master cards remain 100% intact.
               </p>
             </div>
@@ -1664,7 +1666,8 @@ export const UserManagementModule: React.FC = () => {
             <button 
               className="btn btn-primary" 
               style={{ backgroundColor: '#2563eb', borderColor: '#2563eb', color: '#ffffff', fontWeight: 700, padding: '0.55rem 1.25rem' }}
-              onClick={() => {
+              disabled={isResetting}
+              onClick={async () => {
                 if (!currentUser || currentUser.role !== 'Admin') {
                   alert('Only System Administrators have authorization to perform inventory reset.');
                   return;
@@ -1679,13 +1682,18 @@ export const UserManagementModule: React.FC = () => {
                   'Click OK to proceed.'
                 );
                 if (confirmed) {
-                  const res = resetInventory();
-                  alert(res.message);
-                  setMessage({ text: res.message, type: 'success' });
+                  setIsResetting(true);
+                  try {
+                    const res = await resetInventory();
+                    alert(res.message);
+                    setMessage({ text: res.message, type: res.success ? 'success' : 'danger' });
+                  } finally {
+                    setIsResetting(false);
+                  }
                 }
               }}
             >
-              <RefreshCw size={15} /> Reset Inventory
+              <RefreshCw size={15} className={isResetting ? 'spin' : ''} /> {isResetting ? 'Resetting...' : 'Reset Inventory'}
             </button>
           </div>
 
@@ -1697,7 +1705,7 @@ export const UserManagementModule: React.FC = () => {
                 Reset Operational Data (Keep Item Master, BOM Master, Process Master, Vendors, Customers & Admin Accounts)
               </h4>
               <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: '0.35rem 0 0 0', lineHeight: 1.45 }}>
-                Clears all transactional operations (<strong>Sales Orders, Work Orders, Job Cards, Purchase Orders, Goods Receipt Notices, Jobwork Challans, QC Inspections, Machine Assembly Line, and Finished Goods/Dispatches</strong>).<br />
+                Clears all transactional operations (<strong>Sales Orders, Work Orders, Job Cards, Purchase Orders, Goods Receipt Notices, Jobwork Challans, QC Inspections, Machine Assembly Line, and Finished Goods/Dispatches</strong>) from both server and local storage.<br />
                 <strong style={{ color: 'var(--success)' }}>STRICTLY PRESERVED:</strong> Item Master, Multi-Level BOMs, Process Master (Manufacturing Processes & Steps), Customer Master, Vendor Master, and Admin user accounts are preserved.
               </p>
             </div>
@@ -1705,7 +1713,8 @@ export const UserManagementModule: React.FC = () => {
             <button 
               className="btn btn-primary" 
               style={{ backgroundColor: '#d97706', borderColor: '#d97706', color: '#ffffff', fontWeight: 700, padding: '0.55rem 1.25rem' }}
-              onClick={() => {
+              disabled={isResetting}
+              onClick={async () => {
                 if (!currentUser || currentUser.role !== 'Admin') {
                   alert('Only System Administrators have authorization to perform operational reset.');
                   return;
@@ -1718,13 +1727,18 @@ export const UserManagementModule: React.FC = () => {
                   'Click OK to proceed with the reset.'
                 );
                 if (confirmed) {
-                  const res = resetOperationalData();
-                  alert(res.message);
-                  setMessage({ text: res.message, type: 'success' });
+                  setIsResetting(true);
+                  try {
+                    const res = await resetOperationalData();
+                    alert(res.message);
+                    setMessage({ text: res.message, type: res.success ? 'success' : 'danger' });
+                  } finally {
+                    setIsResetting(false);
+                  }
                 }
               }}
             >
-              <RefreshCw size={15} /> Reset Operational Data
+              <RefreshCw size={15} className={isResetting ? 'spin' : ''} /> {isResetting ? 'Resetting...' : 'Reset Operational Data'}
             </button>
           </div>
 
@@ -1736,26 +1750,29 @@ export const UserManagementModule: React.FC = () => {
                 Full Database Wipe (Clean Start - Zero Records)
               </h4>
               <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0' }}>
-                Permanently wipes all records including items and BOMs, leaving only 1 default Admin user (<strong>admin</strong> / <strong>password</strong>).
+                Permanently wipes all records from the server and browser including items and BOMs, creating an emergency safety backup snapshot, and preserving default Admin accounts (<strong>superadmin</strong> & <strong>admin</strong>).
               </p>
             </div>
 
             <button 
               className="btn btn-outline" 
               style={{ color: 'var(--danger)', borderColor: 'var(--danger)', fontWeight: 700, padding: '0.45rem 1rem' }}
-              onClick={() => {
-                if (window.confirm('⚠️ Super Admin Warning: Are you sure you want to wipe all records and start completely fresh?')) {
-                  Object.keys(localStorage).forEach(key => {
-                    if (key.startsWith('gec_erp_')) {
-                      localStorage.removeItem(key);
-                    }
-                  });
-                  alert('✅ Database has been wiped clean! Reloading with 1 Admin user.');
-                  window.location.reload();
+              disabled={isResetting}
+              onClick={async () => {
+                if (window.confirm('⚠️ Super Admin Warning: Are you sure you want to completely wipe all records and start fresh?\n\nAn automated safety backup will be captured before wiping.')) {
+                  setIsResetting(true);
+                  try {
+                    const res = await wipeFullDatabase();
+                    alert(`✅ ${res.message}\n\nReloading application now...`);
+                    window.location.reload();
+                  } catch (err: any) {
+                    alert(`❌ Database wipe failed: ${err?.message || 'Unknown error'}`);
+                    setIsResetting(false);
+                  }
                 }
               }}
             >
-              Wipe Everything & Start Fresh
+              <Trash2 size={14} /> {isResetting ? 'Wiping Database...' : 'Wipe Everything & Start Fresh'}
             </button>
           </div>
         </div>

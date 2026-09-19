@@ -157,6 +157,8 @@ let centralStore = {
   jobCardMaterialReissues: [],
   intermediateProcessItems: [],
   auditLogs: [],
+  quotations: [],
+  quotationCounters: {},
   backups: [],
   backupSettings: {
     backupIntervalDays: 2,
@@ -183,22 +185,16 @@ function loadStateFromDisk() {
   if (Array.isArray(centralStore.users)) {
     let hasUpdated = false;
     centralStore.users = centralStore.users.map(u => {
-      if (u.username === 'superadmin' && !u.password_hash) {
+      let pwdHash = u.password_hash;
+      if (!pwdHash) {
         hasUpdated = true;
-        const { password, ...rest } = u;
-        return { ...rest, password_hash: hashPassword(password || 'GEC_SuperAdmin#2026!Secured$') };
+        if (u.password) pwdHash = hashPassword(u.password);
+        else if (u.username === 'superadmin') pwdHash = hashPassword('GEC_SuperAdmin#2026!Secured$');
+        else if (u.username === 'admin') pwdHash = hashPassword('admin');
+        else pwdHash = hashPassword('password');
       }
-      if (u.username === 'admin' && !u.password_hash) {
-        hasUpdated = true;
-        const { password, ...rest } = u;
-        return { ...rest, password_hash: hashPassword(password || 'admin') };
-      }
-      if (u.password && !u.password_hash) {
-        hasUpdated = true;
-        const { password, ...rest } = u;
-        return { ...rest, password_hash: hashPassword(password) };
-      }
-      return u;
+      const { password, ...rest } = u;
+      return { ...rest, password_hash: pwdHash };
     });
     if (hasUpdated) {
       persistStateToDiskDebounced();
@@ -354,7 +350,14 @@ app.post('/api/auth/login', (req, res) => {
     }
 
     // Verify against password_hash or fallback password
-    const storedHash = user.password_hash || user.password;
+    let storedHash = user.password_hash || user.password;
+    if (!storedHash) {
+      if (cleanUser === 'superadmin') storedHash = hashPassword('GEC_SuperAdmin#2026!Secured$');
+      else if (cleanUser === 'admin') storedHash = hashPassword('admin');
+      else storedHash = hashPassword('password');
+      user.password_hash = storedHash;
+      persistStateToDiskDebounced();
+    }
     const isValid = verifyPassword(password, storedHash);
 
     if (!isValid) {
@@ -499,7 +502,21 @@ app.post('/api/sync/save-all', strictLimiter, (req, res) => {
     const payload = req.body;
     if (payload && typeof payload === 'object') {
       Object.keys(payload).forEach(key => {
-        if (Array.isArray(payload[key]) || (payload[key] && typeof payload[key] === 'object')) {
+        if (key === 'users' && Array.isArray(payload.users)) {
+          const existingUsersMap = new Map((centralStore.users || []).map(u => [u.id || u.username, u]));
+          centralStore.users = payload.users.map(newUser => {
+            const existing = existingUsersMap.get(newUser.id) || existingUsersMap.get(newUser.username);
+            let pwdHash = newUser.password_hash || existing?.password_hash;
+            if (!pwdHash) {
+              if (newUser.password) pwdHash = hashPassword(newUser.password);
+              else if (newUser.username === 'superadmin') pwdHash = hashPassword('GEC_SuperAdmin#2026!Secured$');
+              else if (newUser.username === 'admin') pwdHash = hashPassword('admin');
+              else pwdHash = hashPassword('password');
+            }
+            const { password, ...rest } = newUser;
+            return { ...rest, password_hash: pwdHash };
+          });
+        } else if (Array.isArray(payload[key]) || (payload[key] && typeof payload[key] === 'object')) {
           centralStore[key] = payload[key];
         }
       });
@@ -519,7 +536,23 @@ app.post('/api/sync/entity', (req, res) => {
     if (!entity || !data) {
       return res.status(400).json({ success: false, message: 'Missing entity or data.' });
     }
-    centralStore[entity] = data;
+    if (entity === 'users' && Array.isArray(data)) {
+      const existingUsersMap = new Map((centralStore.users || []).map(u => [u.id || u.username, u]));
+      centralStore.users = data.map(newUser => {
+        const existing = existingUsersMap.get(newUser.id) || existingUsersMap.get(newUser.username);
+        let pwdHash = newUser.password_hash || existing?.password_hash;
+        if (!pwdHash) {
+          if (newUser.password) pwdHash = hashPassword(newUser.password);
+          else if (newUser.username === 'superadmin') pwdHash = hashPassword('GEC_SuperAdmin#2026!Secured$');
+          else if (newUser.username === 'admin') pwdHash = hashPassword('admin');
+          else pwdHash = hashPassword('password');
+        }
+        const { password, ...rest } = newUser;
+        return { ...rest, password_hash: pwdHash };
+      });
+    } else {
+      centralStore[entity] = data;
+    }
     persistStateToDiskDebounced();
     res.json({ success: true, entity, count: Array.isArray(data) ? data.length : 1 });
   } catch (err) {
@@ -548,17 +581,205 @@ app.post('/api/sync/mutate', (req, res) => {
     } else {
       // UPSERT
       if (item && targetId) {
+        let processedItem = item;
+        if (entity === 'users') {
+          const existing = (centralStore.users || []).find(x => x.id === targetId || x.username === item.username);
+          let pwdHash = item.password_hash || existing?.password_hash;
+          if (!pwdHash) {
+            if (item.password) pwdHash = hashPassword(item.password);
+            else if (item.username === 'superadmin') pwdHash = hashPassword('GEC_SuperAdmin#2026!Secured$');
+            else if (item.username === 'admin') pwdHash = hashPassword('admin');
+            else pwdHash = hashPassword('password');
+          }
+          const { password, ...rest } = item;
+          processedItem = { ...rest, password_hash: pwdHash };
+        }
         const idx = centralStore[entity].findIndex(x => x.id === targetId);
         if (idx >= 0) {
-          centralStore[entity][idx] = item;
+          centralStore[entity][idx] = processedItem;
         } else {
-          centralStore[entity].push(item);
+          centralStore[entity].push(processedItem);
         }
       }
     }
 
     persistStateToDiskDebounced();
     res.json({ success: true, entity, action, targetId });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ==========================================
+// 2.5 QUOTATION MODULE API (Central Sequence & Storage)
+// ==========================================
+// GET /api/quotations/next-number - Atomic Next Financial Year Quote Number
+app.get('/api/quotations/next-number', (req, res) => {
+  try {
+    const today = new Date();
+    const currentMonth = today.getMonth() + 1; // 1-12
+    const currentYear = today.getFullYear();
+    const startYear = currentMonth >= 4 ? currentYear : currentYear - 1;
+    const endYear = startYear + 1;
+    const fy = `${String(startYear).slice(-2)}-${String(endYear).slice(-2)}`;
+
+    if (!centralStore.quotationCounters) centralStore.quotationCounters = {};
+    if (!centralStore.quotationCounters[fy]) centralStore.quotationCounters[fy] = 1;
+
+    const currentCounter = centralStore.quotationCounters[fy];
+    const formattedCounter = String(currentCounter).padStart(4, '0');
+    const quoteNo = `${fy}/${formattedCounter}`;
+
+    res.json({
+      success: true,
+      financialYear: fy,
+      counter: currentCounter,
+      quoteNo: quoteNo
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// POST /api/quotations/save - Save or update quotation and increment sequence atomically
+app.post('/api/quotations/save', (req, res) => {
+  try {
+    const { quoteData, user } = req.body;
+    if (!quoteData || !quoteData.quoteNo) {
+      return res.status(400).json({ success: false, message: 'Invalid quotation data.' });
+    }
+
+    if (!Array.isArray(centralStore.quotations)) {
+      centralStore.quotations = [];
+    }
+
+    const today = new Date();
+    const currentMonth = today.getMonth() + 1;
+    const currentYear = today.getFullYear();
+    const startYear = currentMonth >= 4 ? currentYear : currentYear - 1;
+    const fy = `${String(startYear).slice(-2)}-${String(startYear + 1).slice(-2)}`;
+
+    // Check if updating existing or inserting new
+    const existingIndex = centralStore.quotations.findIndex(q => q.quoteNo === quoteData.quoteNo || (quoteData.id && q.id === quoteData.id));
+    const quotationRecord = {
+      id: existingIndex >= 0 ? centralStore.quotations[existingIndex].id : (quoteData.id || `quote-${Date.now()}`),
+      quoteNo: quoteData.quoteNo,
+      date: quoteData.date || new Date().toISOString().split('T')[0],
+      customerCompany: quoteData.customerCompany || '',
+      customerName: quoteData.customerName || '',
+      customerMobile: quoteData.customerMobile || '',
+      customerCity: quoteData.customerCity || '',
+      customerState: quoteData.customerState || '',
+      customerAddress: quoteData.customerAddress || '',
+      reference: quoteData.reference || '',
+      modelId: quoteData.model?.id || quoteData.modelId || '',
+      modelName: quoteData.model?.sheet_name || quoteData.modelName || '',
+      basePrice: Number(quoteData.basePrice) || 0,
+      discountPercent: Number(quoteData.discountPercent) || 0,
+      selectedOptions: quoteData.selectedOptions || [],
+      customDescription: quoteData.customDescription || null,
+      extraDemand: quoteData.extraDemand || '',
+      extraAmount: Number(quoteData.extraAmount) || 0,
+      totalAmount: Number(quoteData.totalAmount) || 0,
+      createdBy: user ? {
+        userId: user.id || user.userId,
+        username: user.username,
+        fullName: user.fullName || user.username,
+        role: user.role || 'Staff'
+      } : (quoteData.createdBy || { username: 'System', fullName: quoteData.executiveName || 'Admin', role: 'Staff' }),
+      createdAt: existingIndex >= 0 ? centralStore.quotations[existingIndex].createdAt : new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      status: quoteData.status || (existingIndex >= 0 ? centralStore.quotations[existingIndex].status : 'DRAFT'),
+      fullData: quoteData
+    };
+
+    if (existingIndex >= 0) {
+      centralStore.quotations[existingIndex] = quotationRecord;
+    } else {
+      centralStore.quotations.unshift(quotationRecord);
+      // Increment counter for this financial year if new
+      if (centralStore.quotationCounters) {
+        if (!centralStore.quotationCounters[fy]) centralStore.quotationCounters[fy] = 1;
+        centralStore.quotationCounters[fy] += 1;
+      }
+    }
+
+    persistStateToDiskDebounced();
+
+    // Log activity
+    logActivity(
+      user?.id || 'SYSTEM',
+      user?.username || 'System',
+      user?.role || 'Staff',
+      existingIndex >= 0 ? 'UPDATE_QUOTATION' : 'CREATE_QUOTATION',
+      'QUOTATION_MODULE',
+      `Quotation ${quotationRecord.quoteNo} for ${quotationRecord.customerCompany || 'Customer'} saved`,
+      req
+    );
+
+    return res.json({
+      success: true,
+      quotation: quotationRecord,
+      message: `Quotation ${quotationRecord.quoteNo} saved successfully!`
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET /api/quotations/list - List all saved quotations
+app.get('/api/quotations/list', (req, res) => {
+  try {
+    const list = centralStore.quotations || [];
+    res.json({
+      success: true,
+      count: list.length,
+      data: list
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET /api/quotations/:id - Get single quotation
+app.get('/api/quotations/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const q = (centralStore.quotations || []).find(item => item.id === id || item.quoteNo === id);
+    if (!q) {
+      return res.status(404).json({ success: false, message: 'Quotation not found.' });
+    }
+    res.json({ success: true, quotation: q });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// DELETE /api/quotations/:id - Delete quotation
+app.delete('/api/quotations/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!Array.isArray(centralStore.quotations)) {
+      return res.status(404).json({ success: false, message: 'Quotation not found.' });
+    }
+    const idx = centralStore.quotations.findIndex(item => item.id === id || item.quoteNo === id);
+    if (idx === -1) {
+      return res.status(404).json({ success: false, message: 'Quotation not found.' });
+    }
+    const deleted = centralStore.quotations.splice(idx, 1)[0];
+    persistStateToDiskDebounced();
+
+    logActivity(
+      req.headers['x-user-id'] || 'SYSTEM',
+      req.headers['x-username'] || 'System',
+      req.headers['x-user-role'] || 'Staff',
+      'DELETE_QUOTATION',
+      'QUOTATION_MODULE',
+      `Quotation ${deleted.quoteNo} deleted`,
+      req
+    );
+
+    res.json({ success: true, message: `Quotation ${deleted.quoteNo} deleted successfully.` });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -664,6 +885,166 @@ setInterval(async () => {
     }
   }
 }, 12 * 60 * 60 * 1000);
+
+// ==========================================
+// 4.5 SYSTEM RESET & DATABASE WIPE API
+// ==========================================
+function getFreshInitialStore() {
+  return {
+    users: [
+      {
+        id: 'usr-superadmin',
+        username: 'superadmin',
+        fullName: 'GEC System Super Admin',
+        role: 'Admin',
+        email: 'superadmin@gecmachines.com',
+        isSuperAdmin: true,
+        is_admin: true,
+        password_hash: hashPassword('GEC_SuperAdmin#2026!Secured$')
+      },
+      {
+        id: 'usr-admin',
+        username: 'admin',
+        fullName: 'System Administrator',
+        role: 'Admin',
+        email: 'admin@gecmachines.com',
+        isSuperAdmin: false,
+        is_admin: true,
+        password_hash: hashPassword('admin')
+      }
+    ],
+    departments: [
+      { id: 'dept-1', code: 'PROD', name: 'Production', headName: 'Rajesh Sharma', description: 'Assembly & Machining' },
+      { id: 'dept-2', code: 'STORE', name: 'Store & Inventory', headName: 'Manish Patel', description: 'Material Storage' },
+      { id: 'dept-3', code: 'QC', name: 'Quality Control', headName: 'Vikram Singh', description: 'Inspection & Compliance' }
+    ],
+    customRoles: [],
+    items: [],
+    itemCategories: [],
+    customers: [],
+    vendors: [],
+    vendorCategories: [],
+    boms: [],
+    salesOrders: [],
+    workOrders: [],
+    jobCards: [],
+    floorStations: [],
+    finishedGoods: [],
+    dispatchRecords: [],
+    jobworks: [],
+    purchaseOrders: [],
+    grns: [],
+    qcInspections: [],
+    assemblies: [],
+    processDefinitions: [],
+    itemProcessCards: [],
+    vendorDebitChallans: [],
+    jobCardMaterialReissues: [],
+    intermediateProcessItems: [],
+    auditLogs: [],
+    quotations: [],
+    quotationCounters: {},
+    backups: centralStore.backups || [],
+    backupSettings: centralStore.backupSettings || {
+      backupIntervalDays: 2,
+      lastBackupDate: null,
+      storageLocation: STORAGE_DIR,
+      backupLocation: BACKUP_DIR
+    }
+  };
+}
+
+// POST /api/admin/reset-inventory - Set all stock levels to 0
+app.post('/api/admin/reset-inventory', strictLimiter, requireAdmin, (req, res) => {
+  try {
+    if (Array.isArray(centralStore.items)) {
+      centralStore.items = centralStore.items.map(item => ({
+        ...item,
+        inHouseStock: 0,
+        externalStock: 0,
+        pendingQCStock: 0
+      }));
+    }
+    fs.writeFileSync(STATE_FILE, JSON.stringify(centralStore, null, 2), 'utf8');
+    logActivity(req.body?.userId, req.body?.username, req.body?.role || 'Admin', 'INVENTORY_RESET', 'System Administration', 'All inventory stock levels reset to 0', req);
+    res.json({
+      success: true,
+      message: 'Inventory Reset Complete: All in-house stock, external stock, and pending QC quantities have been set to 0. Item definitions, BOMs, and Process Master data are preserved.'
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Inventory reset failed: ' + err.message });
+  }
+});
+
+// POST /api/admin/reset-operational - Reset transactional data, keep master data
+app.post('/api/admin/reset-operational', strictLimiter, requireAdmin, (req, res) => {
+  try {
+    centralStore.salesOrders = [];
+    centralStore.workOrders = [];
+    centralStore.jobCards = [];
+    centralStore.floorStations = [];
+    centralStore.finishedGoods = [];
+    centralStore.dispatchRecords = [];
+    centralStore.jobworks = [];
+    centralStore.purchaseOrders = [];
+    centralStore.grns = [];
+    centralStore.qcInspections = [];
+    centralStore.assemblies = [];
+    centralStore.quotations = [];
+    centralStore.quotationCounters = {};
+    centralStore.vendorDebitChallans = [];
+    centralStore.jobCardMaterialReissues = [];
+
+    if (Array.isArray(centralStore.items)) {
+      centralStore.items = centralStore.items.map(item => ({
+        ...item,
+        pendingQCStock: 0,
+        externalStock: 0
+      }));
+    }
+
+    fs.writeFileSync(STATE_FILE, JSON.stringify(centralStore, null, 2), 'utf8');
+    logActivity(req.body?.userId, req.body?.username, req.body?.role || 'Admin', 'OPERATIONAL_RESET', 'System Administration', 'Operational transactions reset. Master data preserved.', req);
+    res.json({
+      success: true,
+      message: 'System Reset Complete: All operational transactions (Orders, Job Cards, POs, Challans, GRNs, Assembly & QC) have been reset. Item Master, BOMs, Process Master, Customers, Vendors, and Admin accounts are intact.'
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Operational reset failed: ' + err.message });
+  }
+});
+
+// POST /api/admin/wipe-database - Full wipe with emergency pre-wipe backup
+app.post('/api/admin/wipe-database', strictLimiter, requireAdmin, async (req, res) => {
+  try {
+    // 1. Create emergency pre-wipe backup snapshot
+    let safetyBackup = null;
+    try {
+      safetyBackup = await performBackup('PRE_WIPE_SAFETY');
+    } catch (bkErr) {
+      console.warn('⚠️ Safety backup before wipe encountered error:', bkErr.message);
+    }
+
+    // 2. Wipe centralStore and reset to pristine state
+    centralStore = getFreshInitialStore();
+    if (safetyBackup) {
+      centralStore.backups = [safetyBackup];
+    }
+
+    // 3. Immediately write to persistent storage
+    fs.writeFileSync(STATE_FILE, JSON.stringify(centralStore, null, 2), 'utf8');
+
+    logActivity(req.body?.userId, req.body?.username, req.body?.role || 'Admin', 'DATABASE_WIPE', 'System Administration', 'Full database wipe executed. Safety snapshot saved.', req);
+
+    res.json({
+      success: true,
+      message: 'Full database wipe executed successfully. Default Administrator accounts (superadmin / admin) preserved.',
+      safetyBackup: safetyBackup?.fileName || null
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Database wipe failed: ' + err.message });
+  }
+});
 
 // ==========================================
 // 5. STATIC FRONTEND SERVING FOR HYBRID ACCESS

@@ -39,6 +39,7 @@ export const Sidebar: React.FC = () => {
     { key: 'customer-master', label: 'Customer Master', icon: <Contact size={16} /> },
     { key: 'vendor-master', label: 'Vendor / Supplier', icon: <Users size={16} /> },
     { key: 'bom-master', label: 'BOM Master', icon: <FileText size={16} /> },
+    { key: 'quotations', label: 'Machine Quotations', icon: <FileText size={16} color="#0284c7" /> },
     { key: 'sales-orders', label: 'Sales Orders (SO)', icon: <ShoppingBag size={16} />, badge: activeSOCount > 0 ? activeSOCount : undefined },
     { key: 'work-orders', label: 'Work Orders (WO)', icon: <Wrench size={16} />, badge: activeWOCount > 0 ? activeWOCount : undefined },
     { key: 'job-cards', label: 'Job Cards (Assembly)', icon: <ClipboardList size={16} /> },
