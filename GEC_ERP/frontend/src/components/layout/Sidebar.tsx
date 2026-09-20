@@ -32,9 +32,9 @@ export const Sidebar: React.FC = () => {
   const navItems: NavItem[] = [
     ...(isSuperAdminUser ? [{ key: 'superadmin-analytics', label: 'SuperAdmin Analytics', icon: <ShieldAlert size={16} color="#7c3aed" /> }] : []),
     { key: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={16} /> },
-    { key: 'planning', label: 'Planning', icon: <FileSpreadsheet size={16} /> },
-    { key: 'shortage', label: 'Shortage Planning', icon: <AlertTriangle size={16} color="var(--warning)" /> },
+    { key: 'shortage', label: 'Shortage & Capacity Planning', icon: <AlertTriangle size={16} color="var(--warning)" /> },
     { key: 'item-master', label: 'Item Master', icon: <Package size={16} /> },
+    { key: 'drawings', label: 'Engineering Drawings & 3D CAD', icon: <FileText size={16} color="#8b5cf6" /> },
     { key: 'process-master', label: 'Process Master & Routing', icon: <Layers size={16} /> },
     { key: 'customer-master', label: 'Customer Master', icon: <Contact size={16} /> },
     { key: 'vendor-master', label: 'Vendor / Supplier', icon: <Users size={16} /> },

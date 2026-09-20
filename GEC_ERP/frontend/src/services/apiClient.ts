@@ -447,6 +447,163 @@ class HybridApiClient {
     }
   }
 
+  // Email & SMTP Methods
+  public async sendEmail(payload: any): Promise<{ success: boolean; message: string; messageId?: string; error?: string }> {
+    try {
+      const url = `${this.getBaseUrl()}/api/mail/send`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, message: err?.message || 'Network error sending email', error: err?.message };
+    }
+  }
+
+  public async getSMTPConfig(): Promise<{ success: boolean; config: any; configs?: any }> {
+    try {
+      const url = `${this.getBaseUrl()}/api/mail/config`;
+      const res = await fetch(url);
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, config: null };
+    }
+  }
+
+  public async saveSMTPConfig(config: any): Promise<{ success: boolean; message: string; error?: string }> {
+    try {
+      const url = `${this.getBaseUrl()}/api/mail/config`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config)
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, message: err?.message || 'Failed to save SMTP config', error: err?.message };
+    }
+  }
+
+  public async getEmailTemplates(): Promise<{ success: boolean; templates: any[] }> {
+    try {
+      const url = `${this.getBaseUrl()}/api/mail/templates`;
+      const res = await fetch(url);
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, templates: [] };
+    }
+  }
+
+  public async saveEmailTemplate(template: any): Promise<{ success: boolean; message: string; error?: string }> {
+    return this.saveEmailTemplates([template]);
+  }
+
+  public async saveEmailTemplates(templates: any[]): Promise<{ success: boolean; message: string; error?: string }> {
+    try {
+      const url = `${this.getBaseUrl()}/api/mail/templates`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templates })
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, message: err?.message || 'Failed to save templates', error: err?.message };
+    }
+  }
+
+  // Drawings & CAD Versioning Methods
+  public async getDrawings(): Promise<{ success: boolean; data: any[]; drawings: any[]; readReceipts: any[] }> {
+    return this.fetchDrawings();
+  }
+
+  public async fetchDrawings(): Promise<{ success: boolean; data: any[]; drawings: any[]; readReceipts: any[] }> {
+    try {
+      const url = `${this.getBaseUrl()}/api/drawings/list`;
+      const res = await fetch(url);
+      const json = await res.json();
+      const list = json.drawings || json.data || [];
+      return { success: json.success ?? true, data: list, drawings: list, readReceipts: json.readReceipts || [] };
+    } catch (err: any) {
+      return { success: false, data: [], drawings: [], readReceipts: [] };
+    }
+  }
+
+  public async saveDrawing(record: any): Promise<{ success: boolean; message: string; data?: any; drawing?: any; error?: string }> {
+    try {
+      const url = `${this.getBaseUrl()}/api/drawings/save`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(record)
+      });
+      const json = await res.json();
+      return { ...json, data: json.drawing || json.data || record };
+    } catch (err: any) {
+      return { success: false, message: err?.message || 'Failed to save drawing', error: err?.message };
+    }
+  }
+
+  public async acknowledgeDrawing(itemIdOrPayload: any, versionId?: string, username?: string): Promise<{ success: boolean; receipt?: any; error?: string }> {
+    try {
+      const url = `${this.getBaseUrl()}/api/drawings/acknowledge`;
+      const payload = typeof itemIdOrPayload === 'string'
+        ? { itemId: itemIdOrPayload, versionId, username }
+        : itemIdOrPayload;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, error: err?.message };
+    }
+  }
+
+  // Dynamic Item Classes Methods
+  public async fetchItemClasses(): Promise<{ success: boolean; itemClasses: any[]; data?: any[] }> {
+    try {
+      const url = `${this.getBaseUrl()}/api/item-classes`;
+      const res = await fetch(url);
+      const json = await res.json();
+      return { success: json.success ?? true, itemClasses: json.itemClasses || json.data || [], data: json.itemClasses || json.data || [] };
+    } catch (err: any) {
+      return { success: false, itemClasses: [], data: [] };
+    }
+  }
+
+  public async saveItemClass(cls: any): Promise<{ success: boolean; message: string; data?: any; itemClass?: any; error?: string }> {
+    try {
+      const url = `${this.getBaseUrl()}/api/item-classes/save`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cls)
+      });
+      const json = await res.json();
+      return { ...json, data: json.itemClass || json.data || cls };
+    } catch (err: any) {
+      return { success: false, message: err?.message || 'Failed to save Item Class', error: err?.message };
+    }
+  }
+
+  public async deleteItemClass(idOrCode: string): Promise<{ success: boolean; message: string; error?: string }> {
+    try {
+      const url = `${this.getBaseUrl()}/api/item-classes/delete`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: idOrCode, code: idOrCode })
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, message: err?.message || 'Failed to delete Item Class', error: err?.message };
+    }
+  }
+
   private async processSyncQueue() {
     if (this.isSyncingQueue || this.syncQueue.length === 0) return;
     this.isSyncingQueue = true;

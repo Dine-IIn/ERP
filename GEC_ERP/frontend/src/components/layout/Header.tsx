@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useERP } from '../../context/ERPContext';
-import { Search, Wifi, WifiOff, Server, AlertCircle, Globe, Menu, Settings, RefreshCw, CheckCircle2, Lock, X } from 'lucide-react';
+import { Search, Wifi, WifiOff, Server, AlertCircle, Globe, Menu, Settings, RefreshCw, CheckCircle2, Lock, X, Bell, Package, ShoppingCart, Layers, ClipboardList, CheckCheck, Check } from 'lucide-react';
 import { apiClient } from '../../services/apiClient';
 
 export const Header: React.FC = () => {
@@ -16,6 +16,59 @@ export const Header: React.FC = () => {
   const [customCloudInput, setCustomCloudInput] = useState(apiClient.getCloudUrl() || '');
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [serverModalMsg, setServerModalMsg] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const notificationRef = useRef<HTMLDivElement>(null);
+  
+  // Read notification tracking
+  const [readNotificationIds, setReadNotificationIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('gec_read_notifications');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const markSingleRead = (id: string) => {
+    setReadNotificationIds(prev => {
+      const updated = prev.includes(id) ? prev : [...prev, id];
+      try {
+        localStorage.setItem('gec_read_notifications', JSON.stringify(updated));
+      } catch (e) {
+        console.error(e);
+      }
+      return updated;
+    });
+  };
+
+  const markAllRead = () => {
+    const allIds = [
+      ...items.map(i => `low-stock-${i.id}`),
+      ...purchaseOrders.map(p => `po-${p.id}`)
+    ];
+    setReadNotificationIds(allIds);
+    try {
+      localStorage.setItem('gec_read_notifications', JSON.stringify(allIds));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  // Close notification popover when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
+        setIsNotificationsOpen(false);
+      }
+    };
+    if (isNotificationsOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isNotificationsOpen]);
 
   // User Internet / Network Connection State
   const [isUserOnline, setIsUserOnline] = useState<boolean>(navigator.onLine);
@@ -544,6 +597,292 @@ export const Header: React.FC = () => {
 
       {/* Right Separate Indicators for User & Server */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+        {/* Notification Bell Button & Popover (to the left of User status) */}
+        {(() => {
+          const unreadLowStockAlerts = items.filter(i => {
+            const minStock = i.minStockQty || i.reorderLevel || 0;
+            return minStock > 0 && (i.inHouseStock || 0) <= minStock && !readNotificationIds.includes(`low-stock-${i.id}`);
+          });
+          const unreadPendingPOs = purchaseOrders.filter(po => 
+            (po.status === 'WAITING_FOR_APPROVAL' || po.status === 'PENDING_APPROVAL' || po.status === 'DRAFT') &&
+            !readNotificationIds.includes(`po-${po.id}`)
+          );
+          const totalUnreadCount = unreadLowStockAlerts.length + unreadPendingPOs.length;
+
+          return (
+            <div ref={notificationRef} style={{ position: 'relative' }}>
+              <button
+                type="button"
+                onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  position: 'relative',
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '50%',
+                  backgroundColor: isNotificationsOpen ? 'rgba(59, 130, 246, 0.15)' : 'var(--bg-tertiary)',
+                  border: isNotificationsOpen ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                  color: isNotificationsOpen ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+                title={`Notifications (${totalUnreadCount} unread alerts)`}
+                aria-label="View notifications"
+              >
+                <Bell size={16} />
+                {totalUnreadCount > 0 && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: '-3px',
+                      right: '-3px',
+                      backgroundColor: '#ef4444',
+                      color: '#ffffff',
+                      fontSize: '0.65rem',
+                      fontWeight: 800,
+                      minWidth: '16px',
+                      height: '16px',
+                      borderRadius: '9999px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '0 3px',
+                      boxShadow: '0 0 4px rgba(239, 68, 68, 0.6)'
+                    }}
+                  >
+                    {totalUnreadCount > 99 ? '99+' : totalUnreadCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Notification Popover Dropdown */}
+              {isNotificationsOpen && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '40px',
+                    right: 0,
+                    width: '360px',
+                    maxHeight: '440px',
+                    backgroundColor: 'var(--bg-card)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '0.5rem',
+                    boxShadow: 'var(--shadow-lg)',
+                    zIndex: 1000,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    overflow: 'hidden'
+                  }}
+                >
+                  <div
+                    style={{
+                      padding: '0.65rem 0.85rem',
+                      borderBottom: '1px solid var(--border-color)',
+                      backgroundColor: 'var(--bg-tertiary)',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: '0.5rem'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <Bell size={14} style={{ color: 'var(--accent-primary)' }} />
+                      <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-primary)' }}>Notifications</span>
+                      {totalUnreadCount > 0 && (
+                        <span className="badge badge-primary" style={{ fontSize: '0.68rem', padding: '0.15rem 0.45rem' }}>
+                          {totalUnreadCount} New
+                        </span>
+                      )}
+                    </div>
+                    {totalUnreadCount > 0 && (
+                      <button
+                        type="button"
+                        className="btn btn-outline"
+                        style={{ padding: '0.2rem 0.5rem', fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+                        onClick={markAllRead}
+                        title="Mark all active notifications as read"
+                      >
+                        <CheckCheck size={13} color="var(--accent-primary)" /> Read All
+                      </button>
+                    )}
+                  </div>
+
+                  <div style={{ padding: '0.5rem', overflowY: 'auto', maxHeight: '340px', display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                    {totalUnreadCount === 0 ? (
+                      <div style={{ padding: '1.75rem 1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                        <CheckCircle2 size={26} style={{ color: 'var(--success)', margin: '0 auto 0.5rem', display: 'block' }} />
+                        <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.25rem' }}>All Caught Up!</div>
+                        No unread alerts or shortage warnings.
+                        {readNotificationIds.length > 0 && (
+                          <div style={{ marginTop: '0.75rem' }}>
+                            <button
+                              type="button"
+                              className="btn btn-outline"
+                              style={{ fontSize: '0.72rem', padding: '0.2rem 0.5rem' }}
+                              onClick={() => {
+                                setReadNotificationIds([]);
+                                localStorage.removeItem('gec_read_notifications');
+                              }}
+                            >
+                              Reset Read Status
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        {/* Low Stock Shortage Alerts */}
+                        {unreadLowStockAlerts.length > 0 && (
+                          <div>
+                            <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#f59e0b', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                              <Package size={12} /> LOW STOCK WARNINGS ({unreadLowStockAlerts.length})
+                            </div>
+                            {unreadLowStockAlerts.slice(0, 5).map(item => {
+                              const minStock = item.minStockQty || item.reorderLevel || 0;
+                              return (
+                                <div
+                                  key={item.id}
+                                  style={{
+                                    padding: '0.4rem 0.55rem',
+                                    borderRadius: '0.3rem',
+                                    backgroundColor: 'rgba(245, 158, 11, 0.08)',
+                                    border: '1px solid rgba(245, 158, 11, 0.25)',
+                                    marginBottom: '0.3rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    gap: '0.5rem'
+                                  }}
+                                >
+                                  <div 
+                                    style={{ flex: 1, cursor: 'pointer' }}
+                                    onClick={() => {
+                                      setActiveModule('inventory');
+                                      setIsNotificationsOpen(false);
+                                    }}
+                                  >
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: 700 }}>
+                                      <span>{item.name}</span>
+                                      <span style={{ color: '#ef4444' }}>{item.inHouseStock || 0} / {minStock} {item.unit}</span>
+                                    </div>
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                                      {item.itemCode}
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      markSingleRead(`low-stock-${item.id}`);
+                                    }}
+                                    style={{
+                                      background: 'none',
+                                      border: '1px solid var(--border-color)',
+                                      borderRadius: '4px',
+                                      padding: '0.25rem 0.35rem',
+                                      color: 'var(--text-muted)',
+                                      cursor: 'pointer',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '0.2rem',
+                                      fontSize: '0.68rem'
+                                    }}
+                                    title="Mark as read"
+                                  >
+                                    <Check size={12} color="var(--success)" /> Read
+                                  </button>
+                                </div>
+                              );
+                            })}
+                            {unreadLowStockAlerts.length > 5 && (
+                              <button
+                                type="button"
+                                className="btn btn-outline"
+                                style={{ width: '100%', fontSize: '0.72rem', padding: '0.25rem', marginTop: '0.2rem' }}
+                                onClick={() => {
+                                  setActiveModule('inventory');
+                                  setIsNotificationsOpen(false);
+                                }}
+                              >
+                                View all {unreadLowStockAlerts.length} stock alerts
+                              </button>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Pending Purchase Orders */}
+                        {unreadPendingPOs.length > 0 && (
+                          <div style={{ marginTop: '0.4rem' }}>
+                            <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#3b82f6', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                              <ShoppingCart size={12} /> PENDING PO APPROVALS ({unreadPendingPOs.length})
+                            </div>
+                            {unreadPendingPOs.slice(0, 4).map(po => (
+                              <div
+                                key={po.id}
+                                style={{
+                                  padding: '0.4rem 0.55rem',
+                                  borderRadius: '0.3rem',
+                                  backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                                  border: '1px solid rgba(59, 130, 246, 0.25)',
+                                  marginBottom: '0.3rem',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  gap: '0.5rem'
+                                }}
+                              >
+                                <div
+                                  style={{ flex: 1, cursor: 'pointer' }}
+                                  onClick={() => {
+                                    setActiveModule('purchase-orders');
+                                    setIsNotificationsOpen(false);
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: 700 }}>
+                                    <span style={{ fontFamily: 'monospace' }}>{po.poNumber}</span>
+                                    <span className="badge badge-warning" style={{ fontSize: '0.62rem' }}>{po.status}</span>
+                                  </div>
+                                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                                    {po.vendorName} • {po.items?.length || 0} item(s)
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    markSingleRead(`po-${po.id}`);
+                                  }}
+                                  style={{
+                                    background: 'none',
+                                    border: '1px solid var(--border-color)',
+                                    borderRadius: '4px',
+                                    padding: '0.25rem 0.35rem',
+                                    color: 'var(--text-muted)',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.2rem',
+                                    fontSize: '0.68rem'
+                                  }}
+                                  title="Mark as read"
+                                >
+                                  <Check size={12} color="var(--success)" /> Read
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {/* User Connection Status: Online | LAN | Offline */}
         {(() => {
           let userStatusText = 'Online';

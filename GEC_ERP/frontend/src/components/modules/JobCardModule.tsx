@@ -2,10 +2,11 @@ import React, { useState, useEffect, useMemo, useDeferredValue } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { Modal } from '../common/Modal';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
+import { ShareViaEmailModal } from '../common/ShareViaEmailModal';
 import { SingleJobCardPrintView, JobCardListPrintView } from '../printTemplates/JobCardPrintTemplates';
 import { TabularShortagePrintView } from '../printTemplates/ShortagePrintTemplates';
 import { 
-  ClipboardList, Plus, CheckCircle, Search, ArrowUp, ArrowDown, ArrowUpDown, Package, Printer, RefreshCw, AlertTriangle, Layers, X, CheckCircle2, Edit2, Trash2, RotateCcw
+  ClipboardList, Plus, CheckCircle, Search, ArrowUp, ArrowDown, ArrowUpDown, Package, Printer, RefreshCw, AlertTriangle, Layers, X, CheckCircle2, Edit2, Trash2, RotateCcw, Mail
 } from 'lucide-react';
 import { JobCard, Item, BOM } from '../../types/erp';
 import { compareItemPriority } from '../../utils/priorityUtils';
@@ -16,12 +17,13 @@ export const JobCardModule: React.FC = () => {
   const { 
     jobCards, items, workOrders, boms, addJobCard, updateJobCard, updateJobCardProgress, closeJobCard, reopenJobCard, deleteJobCard,
     jobCardMaterialReissues, addJobCardMaterialReissue, currentUser, finishedGoods,
-    searchTerm, setSearchTerm 
+    searchTerm, setSearchTerm, drawings
   } = useERP();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingJC, setEditingJC] = useState<JobCard | null>(null);
+  const [emailJC, setEmailJC] = useState<JobCard | null>(null);
   const [isShortageWizardOpen, setIsShortageWizardOpen] = useState(false);
   const [isExplodeShortage, setIsExplodeShortage] = useState(false);
   const [isShortagePrintOpen, setIsShortagePrintOpen] = useState(false);
@@ -979,6 +981,14 @@ export const JobCardModule: React.FC = () => {
                         >
                           <Printer size={13} />
                         </button>
+                        <button
+                          className="btn btn-outline"
+                          style={{ padding: '0.2rem 0.45rem', fontSize: '0.75rem' }}
+                          title="Share via Email"
+                          onClick={() => setEmailJC(jc)}
+                        >
+                          <Mail size={13} />
+                        </button>
                         
                         {jc.isDeleted ? null : isComplete ? (
                           <>
@@ -1291,6 +1301,38 @@ export const JobCardModule: React.FC = () => {
             </div>
           </form>
         </Modal>
+      )}
+
+      {/* SHARE VIA EMAIL MODAL */}
+      {emailJC && (
+        <ShareViaEmailModal
+          isOpen={true}
+          onClose={() => setEmailJC(null)}
+          documentType="JOB_CARD"
+          documentNumber={emailJC.jobCardNo}
+          recipientEmail=""
+          recipientName={emailJC.assignedOperator || 'Assembly Operator'}
+          partyName={emailJC.assignedOperator || 'Assembly Department'}
+          availableCadFiles={(() => {
+            const cadFiles: Array<{ name: string; version: string; type: string; data?: string; size?: number }> = [];
+            const itemMatch = items.find(i => i.id === emailJC.itemId || i.itemCode === emailJC.itemCode);
+            if (itemMatch) {
+              const dRec = drawings.find(d => d.itemId === itemMatch.id || d.itemCode === itemMatch.itemCode);
+              if (dRec && dRec.additionalFileVersions) {
+                dRec.additionalFileVersions.filter(v => v.isLatest).forEach(v => {
+                  cadFiles.push({
+                    name: v.fileName,
+                    version: v.versionNumber,
+                    type: v.fileType,
+                    data: v.fileData,
+                    size: v.fileSize
+                  });
+                });
+              }
+            }
+            return cadFiles;
+          })()}
+        />
       )}
     </div>
   );

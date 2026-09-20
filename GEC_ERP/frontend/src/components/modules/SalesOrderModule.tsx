@@ -2,8 +2,9 @@ import React, { useState, useEffect, useMemo, useDeferredValue } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { AutocompleteSelect, AutocompleteOption } from '../common/AutocompleteSelect';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
+import { ShareViaEmailModal } from '../common/ShareViaEmailModal';
 import { SingleSOPrintView, SOListPrintView } from '../printTemplates/SOPrintTemplates';
-import { ShoppingBag, Plus, ArrowRight, CheckCircle2, Search, Printer, FileSpreadsheet, ArrowLeft, X, Edit2, Trash2, RefreshCw } from 'lucide-react';
+import { ShoppingBag, Plus, ArrowRight, CheckCircle2, Search, Printer, FileSpreadsheet, ArrowLeft, X, Edit2, Trash2, RefreshCw, Mail } from 'lucide-react';
 import { SalesOrder, generateNextSalesOrderNumber } from '../../types/erp';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
 import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
@@ -14,13 +15,14 @@ type SortField = 'soNumber' | 'customerName' | 'machineModel' | 'quantity' | 'or
 export const SalesOrderModule: React.FC = () => {
   const { 
     salesOrders, customers, boms, items, workOrders, setActiveModule, openWOInEditor,
-    addSalesOrder, updateSalesOrder, deleteSalesOrder, generateWOFromSO, searchTerm, setSearchTerm 
+    addSalesOrder, updateSalesOrder, deleteSalesOrder, generateWOFromSO, searchTerm, setSearchTerm, drawings
   } = useERP();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-    const [printModalOpen, setPrintModalOpen] = useState(false);
+  const [printModalOpen, setPrintModalOpen] = useState(false);
   const [printDocType, setPrintDocType] = useState<'SINGLE_SO' | 'SO_LIST'>('SO_LIST');
   const [selectedPrintSO, setSelectedPrintSO] = useState<SalesOrder | null>(null);
+  const [emailSO, setEmailSO] = useState<SalesOrder | null>(null);
   
   // Single Column Sorting State - Default sort by Order Date (latest first)
   const [sortField, setSortField] = useState<SortField>('orderDate');
@@ -530,6 +532,14 @@ export const SalesOrderModule: React.FC = () => {
                         >
                           <Printer size={14} />
                         </button>
+                        <button 
+                          className="btn btn-outline" 
+                          style={{ padding: '0.3rem 0.5rem' }} 
+                          title="Share via Email" 
+                          onClick={() => setEmailSO(so)}
+                        >
+                          <Mail size={14} />
+                        </button>
                         {so.status === 'DRAFT' || so.status === 'CONFIRMED' ? (
                           <>
                             <button 
@@ -660,6 +670,38 @@ export const SalesOrderModule: React.FC = () => {
           <SOListPrintView salesOrders={filteredSOs} filterLabel={isHistorySearch ? 'All Active & Historical Sales Orders' : 'Active Sales Orders'} />
         )}
       </PrintManagerModal>
+
+      {/* SHARE VIA EMAIL MODAL */}
+      {emailSO && (
+        <ShareViaEmailModal
+          isOpen={true}
+          onClose={() => setEmailSO(null)}
+          documentType="SALES_ORDER"
+          documentNumber={emailSO.soNumber}
+          recipientEmail={customers.find(c => c.id === emailSO.customerId || c.name === emailSO.customerName)?.email || ''}
+          recipientName={emailSO.customerName}
+          partyName={emailSO.customerName}
+          availableCadFiles={(() => {
+            const cadFiles: Array<{ name: string; version: string; type: string; data?: string; size?: number }> = [];
+            const itemMatch = items.find(i => `${i.itemCode} - ${i.name}` === emailSO.machineModel || i.name === emailSO.machineModel || i.itemCode === emailSO.machineModel);
+            if (itemMatch) {
+              const dRec = drawings.find(d => d.itemId === itemMatch.id || d.itemCode === itemMatch.itemCode);
+              if (dRec && dRec.additionalFileVersions) {
+                dRec.additionalFileVersions.filter(v => v.isLatest).forEach(v => {
+                  cadFiles.push({
+                    name: v.fileName,
+                    version: v.versionNumber,
+                    type: v.fileType,
+                    data: v.fileData,
+                    size: v.fileSize
+                  });
+                });
+              }
+            }
+            return cadFiles;
+          })()}
+        />
+      )}
     </div>
   );
 };

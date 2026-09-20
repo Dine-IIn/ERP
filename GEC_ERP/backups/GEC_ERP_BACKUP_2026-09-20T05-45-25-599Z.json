@@ -45807,36 +45807,6 @@
   "jobworks": [],
   "purchaseOrders": [
     {
-      "poNumber": "POAJCG0002",
-      "vendorId": "ven-1789814014753-10-oo6tu",
-      "vendorName": "Kabra Extrusion & Machine Tools",
-      "orderDate": "2026-09-20",
-      "expectedDeliveryDate": "2026-10-05",
-      "deliveryDate": "2026-10-05",
-      "poCreateDateTime": "2026-09-20T05:52:13.876Z",
-      "preparedBy": "GEC System Super Admin",
-      "items": [
-        {
-          "itemId": "itm-1789814027960-257-6ebja",
-          "itemCode": "7340100200",
-          "itemName": "HYDRAULIC PIPE CLAMP - 25 MM",
-          "quantity": 79,
-          "orderedQty": 79,
-          "receivedQty": 0,
-          "unit": "NOS",
-          "unitPrice": 250,
-          "totalAmount": 19750,
-          "amount": 19750
-        }
-      ],
-      "notes": "Draft PO created for 7340100200 (79 NOS).",
-      "id": "po-1789883533876",
-      "status": "DRAFT",
-      "subtotal": 19750,
-      "taxAmount": 3555,
-      "totalAmount": 23305
-    },
-    {
       "poNumber": "POAJCG0001",
       "vendorId": "ven-1789814014753-10-oo6tu",
       "vendorName": "Kabra Extrusion & Machine Tools",
@@ -65509,7 +65479,7 @@
   "intermediateProcessItems": [],
   "auditLogs": [
     {
-      "id": "log-1789887837831-878",
+      "id": "log-1789833090885-687",
       "userId": "usr-superadmin",
       "username": "superadmin",
       "role": "Admin",
@@ -65517,7 +65487,7 @@
       "module": "AUTHENTICATION",
       "details": "User superadmin logged in successfully",
       "ipAddress": "127.0.0.1",
-      "timestamp": "2026-09-20T07:03:57.831Z"
+      "timestamp": "2026-09-19T15:51:30.885Z"
     },
     {
       "id": "log-1789823409932-kbrubg",

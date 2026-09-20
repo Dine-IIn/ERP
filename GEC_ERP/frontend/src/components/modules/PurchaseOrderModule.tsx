@@ -2,9 +2,10 @@ import React, { useState, useMemo } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { Modal } from '../common/Modal';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
+import { ShareViaEmailModal } from '../common/ShareViaEmailModal';
 import { SinglePOPrintView, POListPrintView } from '../printTemplates/POPrintTemplates';
 import { TabularShortagePrintView, TabularShortageRow } from '../printTemplates/ShortagePrintTemplates';
-import { ShoppingCart, Plus, Trash2, Edit2, Search, Printer, FileSpreadsheet, Send, AlertTriangle, CheckCircle2, XCircle, FileText, ArrowRight, ShieldCheck, ArrowUpDown, ArrowUp, ArrowDown, Percent, Hash, ArrowLeft, X, AlertCircle, RefreshCw, Layers } from 'lucide-react';
+import { ShoppingCart, Plus, Trash2, Edit2, Search, Printer, FileSpreadsheet, Send, AlertTriangle, CheckCircle2, XCircle, FileText, ArrowRight, ShieldCheck, ArrowUpDown, ArrowUp, ArrowDown, Percent, Hash, ArrowLeft, X, AlertCircle, RefreshCw, Layers, Mail } from 'lucide-react';
 import { POLineItem, PurchaseOrder, Item, POStatus, ItemMappedVendor, generateNextPONumber, BOM } from '../../types/erp';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
 import { compareItemPriority } from '../../utils/priorityUtils';
@@ -15,7 +16,8 @@ export const PurchaseOrderModule: React.FC = () => {
   const { 
     purchaseOrders, vendors, items, workOrders, boms, jobCards, jobworks, qcInspections, finishedGoods,
     addPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder, 
-    updatePOStatus, sendPODraftsForApproval, resubmitPOForApproval, currentUser, searchTerm, setSearchTerm 
+    updatePOStatus, sendPODraftsForApproval, resubmitPOForApproval, currentUser, searchTerm, setSearchTerm,
+    drawings, isDrawingAcknowledged
   } = useERP();
   
   const [isWizardOpen, setIsWizardOpen] = useState(false);
@@ -24,9 +26,10 @@ export const PurchaseOrderModule: React.FC = () => {
   const [isExplodeShortage, setIsExplodeShortage] = useState(false);
   const [isShortagePrintOpen, setIsShortagePrintOpen] = useState(false);
 
-    const [printModalOpen, setPrintModalOpen] = useState(false);
+  const [printModalOpen, setPrintModalOpen] = useState(false);
   const [printDocType, setPrintDocType] = useState<'SINGLE_PO' | 'PO_LIST'>('PO_LIST');
   const [selectedPrintPO, setSelectedPrintPO] = useState<PurchaseOrder | null>(null);
+  const [emailPO, setEmailPO] = useState<PurchaseOrder | null>(null);
 
   // Edit PO state
   const [editingPO, setEditingPO] = useState<PurchaseOrder | null>(null);
@@ -1151,6 +1154,14 @@ export const PurchaseOrderModule: React.FC = () => {
                           <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem' }} title="Print Vendor Purchase Order" onClick={() => handlePrintSinglePO(po)}>
                             <Printer size={14} />
                           </button>
+                          <button 
+                            className="btn btn-outline" 
+                            style={{ padding: '0.3rem 0.5rem', color: '#0284c7', borderColor: '#0284c7' }} 
+                            title="Share PO via Email to Vendor" 
+                            onClick={() => setEmailPO(po)}
+                          >
+                            <Mail size={14} />
+                          </button>
                           {!po.isDeleted && ['DRAFT', 'WAITING_FOR_APPROVAL', 'APPROVED', 'REJECTED'].includes(po.status) && (
                             <button 
                               className="btn btn-outline" 
@@ -1743,7 +1754,11 @@ export const PurchaseOrderModule: React.FC = () => {
         documentRefNumber={printDocType === 'SINGLE_PO' ? selectedPrintPO?.poNumber : 'PO-REPORT'}
       >
         {printDocType === 'SINGLE_PO' && selectedPrintPO ? (
-          <SinglePOPrintView po={selectedPrintPO} vendorDetails={vendors.find(v => v.id === selectedPrintPO.vendorId)} />
+          <SinglePOPrintView 
+            po={selectedPrintPO} 
+            vendorDetails={vendors.find(v => v.id === selectedPrintPO.vendorId)} 
+            itemsMasterList={items}
+          />
         ) : (
           <POListPrintView purchaseOrders={filteredPOs} filterLabel={isHistorySearch ? 'All Active & Historical Purchase Orders' : 'Active Purchase Orders'} />
         )}
@@ -1805,7 +1820,38 @@ export const PurchaseOrderModule: React.FC = () => {
         </Modal>
       )}
 
-      {/* Export Field Selector Modal */}
-          </div>
+      {/* SHARE VIA EMAIL MODAL */}
+      {emailPO && (
+        <ShareViaEmailModal
+          isOpen={true}
+          onClose={() => setEmailPO(null)}
+          documentType="PURCHASE_ORDER"
+          documentNumber={emailPO.poNumber}
+          recipientEmail={vendors.find(v => v.id === emailPO.vendorId)?.email || ''}
+          recipientName={emailPO.vendorName}
+          partyName={emailPO.vendorName}
+          documentAmount={emailPO.totalAmount || 0}
+          availableCadFiles={(() => {
+            const cadFiles: Array<{ name: string; version: string; type: string; data?: string; size?: number }> = [];
+            emailPO.items.forEach(pi => {
+              const dRec = drawings.find(d => d.itemId === pi.itemId || d.itemCode === pi.itemCode);
+              if (dRec && dRec.additionalFileVersions) {
+                dRec.additionalFileVersions.filter(v => v.isLatest).forEach(v => {
+                  cadFiles.push({
+                    name: v.fileName,
+                    version: v.versionNumber,
+                    type: v.fileType,
+                    data: v.fileData,
+                    size: v.fileSize
+                  });
+                });
+              }
+            });
+            return cadFiles;
+          })()}
+        />
+      )}
+
+    </div>
   );
 };

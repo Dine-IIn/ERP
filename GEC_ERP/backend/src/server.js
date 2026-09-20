@@ -10,6 +10,7 @@ import { sessionManager } from './sessionManager.js';
 import { autoUpdater } from './updater.js';
 import { hashPassword, verifyPassword } from './auth.js';
 import { tunnelManager } from './tunnelManager.js';
+import { sendSmtpEmail } from './mailService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -159,6 +160,11 @@ let centralStore = {
   auditLogs: [],
   quotations: [],
   quotationCounters: {},
+  drawings: [],
+  drawingReadReceipts: [],
+  itemClasses: [],
+  smtpConfig: null,
+  emailTemplates: [],
   backups: [],
   backupSettings: {
     backupIntervalDays: 2,
@@ -1043,6 +1049,190 @@ app.post('/api/admin/wipe-database', strictLimiter, requireAdmin, async (req, re
     });
   } catch (err) {
     res.status(500).json({ success: false, message: 'Database wipe failed: ' + err.message });
+  }
+});
+
+// ==========================================
+// 4.6 EMAIL & SMTP DISPATCH API
+// ==========================================
+app.get('/api/mail/config', (req, res) => {
+  const cfg = centralStore.smtpConfig || null;
+  res.json({ success: true, config: cfg });
+});
+
+app.post('/api/mail/config', requireAdmin, (req, res) => {
+  try {
+    const config = req.body;
+    centralStore.smtpConfig = config;
+    persistStateToDiskDebounced();
+    res.json({ success: true, message: 'SMTP Configuration saved successfully.' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.get('/api/mail/templates', (req, res) => {
+  res.json({ success: true, templates: centralStore.emailTemplates || [] });
+});
+
+app.post('/api/mail/templates', requireAdmin, (req, res) => {
+  try {
+    const templates = req.body.templates || [];
+    centralStore.emailTemplates = templates;
+    persistStateToDiskDebounced();
+    res.json({ success: true, message: 'Email Templates updated successfully.' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/mail/send', async (req, res) => {
+  try {
+    const { recipient, cc, bcc, subject, bodyHtml, docType, docNumber, attachmentPdfBase64, attachmentPdfFilename, additionalFileBase64, additionalFileFilename } = req.body;
+    const smtp = centralStore.smtpConfig;
+    if (!smtp || !smtp.host || !smtp.authUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'SMTP settings not configured. Please set up SMTP credentials in Security & RBAC.'
+      });
+    }
+
+    const attachments = [];
+    if (attachmentPdfBase64 && attachmentPdfFilename) {
+      attachments.push({
+        filename: attachmentPdfFilename,
+        content: attachmentPdfBase64,
+        contentType: 'application/pdf'
+      });
+    }
+    if (additionalFileBase64 && additionalFileFilename) {
+      attachments.push({
+        filename: additionalFileFilename,
+        content: additionalFileBase64,
+        contentType: 'application/octet-stream'
+      });
+    }
+
+    const result = await sendSmtpEmail({
+      host: smtp.host,
+      port: smtp.port,
+      secure: smtp.secure,
+      authUser: smtp.authUser,
+      authPass: smtp.authPass,
+      fromName: smtp.fromName,
+      fromEmail: smtp.fromEmail,
+      recipient,
+      cc,
+      bcc,
+      subject,
+      bodyHtml,
+      attachments
+    });
+
+    await logActivity(req.body.userId, req.body.username, req.body.role || 'Staff', 'SEND_EMAIL', docType || 'Email Dispatch', `Sent ${docType} ${docNumber || ''} via email to ${recipient}`, req);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to send email: ' + err.message });
+  }
+});
+
+// ==========================================
+// 4.7 ENGINEERING DRAWINGS & REVISION CONTROL API
+// ==========================================
+app.get('/api/drawings/list', (req, res) => {
+  res.json({
+    success: true,
+    drawings: centralStore.drawings || [],
+    readReceipts: centralStore.drawingReadReceipts || []
+  });
+});
+
+app.post('/api/drawings/save', (req, res) => {
+  try {
+    const record = req.body;
+    if (!Array.isArray(centralStore.drawings)) centralStore.drawings = [];
+    const idx = centralStore.drawings.findIndex(d => d.id === record.id || d.itemId === record.itemId);
+    if (idx >= 0) {
+      centralStore.drawings[idx] = record;
+    } else {
+      centralStore.drawings.unshift(record);
+    }
+    persistStateToDiskDebounced();
+    res.json({ success: true, message: 'Drawing updated successfully.', drawing: record });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/drawings/acknowledge', (req, res) => {
+  try {
+    const { drawingRecordId, itemId, itemCode, itemName, drawingVersionNo, userId, username, userRole } = req.body;
+    if (!Array.isArray(centralStore.drawingReadReceipts)) centralStore.drawingReadReceipts = [];
+    const receipt = {
+      id: `rcpt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      drawingRecordId,
+      itemId,
+      itemCode,
+      itemName,
+      drawingVersionNo,
+      userId,
+      username,
+      userRole,
+      acknowledgedAt: new Date().toISOString()
+    };
+    centralStore.drawingReadReceipts.unshift(receipt);
+    persistStateToDiskDebounced();
+    res.json({ success: true, receipt });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ==========================================
+// 4.8 DYNAMIC ITEM CLASSES API
+// ==========================================
+app.get('/api/item-classes', (req, res) => {
+  res.json({ success: true, itemClasses: centralStore.itemClasses || [] });
+});
+
+app.post('/api/item-classes/save', requireAdmin, (req, res) => {
+  try {
+    const cls = req.body;
+    if (!Array.isArray(centralStore.itemClasses)) centralStore.itemClasses = [];
+    const idx = centralStore.itemClasses.findIndex(c => c.id === cls.id || c.code.toUpperCase() === cls.code.toUpperCase());
+    if (idx >= 0) {
+      centralStore.itemClasses[idx] = { ...centralStore.itemClasses[idx], ...cls };
+    } else {
+      centralStore.itemClasses.push({
+        id: cls.id || `cls-${Date.now()}`,
+        code: cls.code.toUpperCase().trim(),
+        name: cls.name.trim(),
+        description: cls.description || '',
+        createdAt: new Date().toISOString()
+      });
+    }
+    persistStateToDiskDebounced();
+    res.json({ success: true, message: `Item Class "${cls.name}" saved.` });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/item-classes/delete', requireAdmin, (req, res) => {
+  try {
+    const { code } = req.body;
+    const isUsed = (centralStore.items || []).some(i => (i.category || '').toUpperCase() === (code || '').toUpperCase());
+    if (isUsed) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot delete Class "${code}". It is currently assigned to one or more items in the Item Master.`
+      });
+    }
+    centralStore.itemClasses = (centralStore.itemClasses || []).filter(c => c.code.toUpperCase() !== (code || '').toUpperCase());
+    persistStateToDiskDebounced();
+    res.json({ success: true, message: `Item Class "${code}" deleted successfully.` });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 

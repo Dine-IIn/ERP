@@ -4,7 +4,7 @@ export type Role = 'Admin' | 'Production Manager' | 'Store Manager' | 'QC Office
 
 export type PermissionLevel = 'FULL_ACCESS' | 'EDIT' | 'CREATE' | 'VIEW' | 'NO_ACCESS';
 
-export type PermissionAction = 'VIEW' | 'CREATE' | 'EDIT' | 'DELETE' | 'APPROVE';
+export type PermissionAction = 'VIEW' | 'CREATE' | 'EDIT' | 'DELETE' | 'APPROVE' | 'NOTIFY';
 
 export interface RBACFeatureDefinition {
   key: string;
@@ -30,6 +30,7 @@ export const RBAC_FEATURES: RBACFeatureDefinition[] = [
   { key: 'machine_assembly', name: 'Machine Assembly Tracking', category: 'Assembly', description: 'Sub-assembly progress & completion testing' },
   { key: 'dispatch', name: 'Dispatch & Gate Pass', category: 'Logistics', description: 'Finished goods dispatch, delivery challans & gate pass' },
   { key: 'shortage_planning', name: 'Shortage Planning Workbench', category: 'Planning', description: 'Item-wise & WO shortage analysis with max buildable qty' },
+  { key: 'notifications', name: 'System Notifications & Alerts', category: 'Administration', description: 'System alerts, shortage warnings, PO approvals & updates' },
   { key: 'user_management', name: 'User & Security Access Control', category: 'Administration', description: 'User accounts, custom roles & full RBAC matrix' },
   { key: 'backups', name: 'Database Backup & Restore', category: 'Administration', description: 'Auto-backup cycles, restore points & JSON dumps' }
 ];
@@ -75,20 +76,153 @@ export interface User {
 }
 
 export interface ItemClassDefinition {
+  id?: string;
   code: string;
   name: string;
   description: string;
+  isSystem?: boolean;
+  createdAt?: string;
+}
+
+export interface DrawingVersion {
+  versionId?: string;
+  versionNo?: number;
+  versionNumber?: string; // e.g. "DWG-1"
+  displayLabel?: string; // e.g. "DWG-1", "DWG-2", "DWG-3 (Latest)"
+  fileUrl?: string; // Data URL or File path
+  fileData?: string;
+  fileName: string;
+  fileType?: string;
+  fileSizeBytes?: number;
+  fileSize?: number;
+  uploadedBy?: string;
+  uploadedAt?: string;
+  notes?: string;
+  changeNotes?: string;
+  isLatest?: boolean;
+}
+
+export interface AdditionalFileVersion {
+  versionId?: string;
+  versionNo?: number;
+  versionNumber?: string; // e.g. "CAD-1"
+  displayLabel?: string; // e.g. "CAD-1", "CAD-2 (Latest)"
+  fileUrl?: string;
+  fileData?: string;
+  fileName: string;
+  fileType?: string;
+  fileExtension?: string; // e.g. "dwg", "dxf", "step"
+  fileSizeBytes?: number;
+  fileSize?: number;
+  uploadedBy?: string;
+  uploadedAt?: string;
+  notes?: string;
+  changeNotes?: string;
+  isLatest?: boolean;
+}
+
+export interface ItemDrawingRecord {
+  id: string;
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  partCode?: string;
+  category?: string;
+  drawingVersions: DrawingVersion[];
+  latestDrawingVersionNo?: number;
+  additionalFileVersions: AdditionalFileVersion[];
+  latestAdditionalFileVersionNo?: number;
+  readReceipts?: DrawingReadReceipt[];
+  lastUpdated: string;
+}
+
+export interface DrawingReadReceipt {
+  id?: string;
+  receiptId?: string;
+  drawingRecordId?: string;
+  itemId?: string;
+  itemCode?: string;
+  itemName?: string;
+  versionId?: string;
+  versionNumber?: string;
+  drawingVersionNo?: number;
+  userId?: string;
+  username?: string;
+  userName?: string;
+  userRole?: string;
+  readAt?: string;
+  acknowledgedAt?: string;
+}
+
+export interface SMTPConfig {
+  module?: string;
+  host: string;
+  port: number;
+  secure?: boolean;
+  user?: string;
+  pass?: string;
+  authUser?: string;
+  authPass?: string;
+  auth?: {
+    user: string;
+    pass: string;
+  };
+  fromName?: string;
+  fromEmail?: string;
+  from?: string;
+}
+
+export type EmailDocType = 'SO' | 'WO' | 'PO' | 'JOB_CARD' | 'JOB_WORK' | 'QUOTATION' | string;
+
+export interface EmailTemplate {
+  id?: string;
+  module?: string;
+  docType?: string;
+  name?: string;
+  subject?: string;
+  subjectTemplate?: string;
+  body?: string;
+  bodyTemplate?: string;
+  isDefault?: boolean;
+  lastUpdated?: string;
+}
+
+export interface EmailSendPayload {
+  to?: string;
+  recipient?: string;
+  cc?: string;
+  bcc?: string;
+  subject: string;
+  bodyHtml?: string;
+  body?: string;
+  documentType?: string;
+  docType?: string;
+  documentNumber?: string;
+  docNumber?: string;
+  attachments?: Array<{ filename: string; content?: string; path?: string }>;
+  attachmentPdfBase64?: string;
+  attachmentPdfFilename?: string;
+  additionalFileBase64?: string;
+  additionalFileFilename?: string;
+}
+
+export interface NotificationSubscriptions {
+  drawingUpdates?: boolean;
+  vendorOverdue?: boolean;
+  jobCardOverdue?: boolean;
+  poApprovals?: boolean;
+  systemAlerts?: boolean;
 }
 
 export const FIXED_ITEM_CLASSES: ItemClassDefinition[] = [
-  { code: 'FP', name: 'Final Product', description: 'Final Finished Machine / Product' },
-  { code: 'AS', name: 'Assembly', description: 'Assembly' },
-  { code: 'FAS', name: 'Fabrication Assembly', description: 'Fabrication Assembly' },
-  { code: 'LC', name: 'Laser Cut', description: 'Laser Cut' },
-  { code: 'MF', name: 'Manufacturing', description: 'Manufacturing' },
-  { code: 'RM', name: 'Raw Material', description: 'Raw Material' },
-  { code: 'BO', name: 'Bought Out', description: 'Bought Out' },
-  { code: 'CON', name: 'Consumable', description: 'Consumable' }
+  { code: 'FP', name: 'Final Product', description: 'Final Finished Machine / Product', isSystem: true },
+  { code: 'AS', name: 'Assembly', description: 'Assembly', isSystem: true },
+  { code: 'FAS', name: 'Fabrication Assembly', description: 'Fabrication Assembly', isSystem: true },
+  { code: 'LC', name: 'Laser Cut', description: 'Laser Cut', isSystem: true },
+  { code: 'MF', name: 'Manufacturing', description: 'Manufacturing', isSystem: true },
+  { code: 'RM', name: 'Raw Material', description: 'Raw Material', isSystem: true },
+  { code: 'BO', name: 'Bought Out', description: 'Bought Out', isSystem: true },
+  { code: 'CON', name: 'Consumable', description: 'Consumable', isSystem: true }
 ];
 
 export type ItemCategory = string;

@@ -3,9 +3,10 @@ import { useERP } from '../../context/ERPContext';
 import { GEC_PRODUCTS_DATA } from '../../data/quotationProductsData';
 import { GECQuotationPrintView, QuotationPrintData } from '../printTemplates/QuotationPrintTemplates';
 import { Modal } from '../common/Modal';
+import { ShareViaEmailModal } from '../common/ShareViaEmailModal';
 import { 
   FileText, Plus, Search, Printer, Edit2, Trash2, CheckCircle2, 
-  X, ShoppingBag 
+  X, ShoppingBag, Mail 
 } from 'lucide-react';
 
 export const QuotationModule: React.FC = () => {
@@ -16,6 +17,7 @@ export const QuotationModule: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [printModalQuote, setPrintModalQuote] = useState<QuotationPrintData | null>(null);
+  const [shareEmailQuote, setShareEmailQuote] = useState<any | null>(null);
 
   // Form State
   const [quoteNo, setQuoteNo] = useState('');
@@ -31,6 +33,8 @@ export const QuotationModule: React.FC = () => {
   // Selected Machine Model State
   const [selectedCategory, setSelectedCategory] = useState<string>('Standard');
   const [selectedModelId, setSelectedModelId] = useState<string>('');
+  const [modelSearchQuery, setModelSearchQuery] = useState<string>('');
+  const [isDescriptionEditable, setIsDescriptionEditable] = useState<boolean>(false);
   const [basePrice, setBasePrice] = useState<number>(0);
   const [discountPercent, setDiscountPercent] = useState<number>(10);
   const [selectedOptions, setSelectedOptions] = useState<Array<{ name: string; price: number }>>([]);
@@ -402,6 +406,14 @@ export const QuotationModule: React.FC = () => {
                         </button>
                         <button 
                           className="btn btn-outline" 
+                          style={{ padding: '0.25rem 0.5rem', color: '#0284c7', borderColor: '#0284c7' }} 
+                          title="Share Official Quotation via Email"
+                          onClick={() => setShareEmailQuote(q)}
+                        >
+                          <Mail size={14} /> Email
+                        </button>
+                        <button 
+                          className="btn btn-outline" 
                           style={{ padding: '0.25rem 0.5rem', color: '#16a34a', borderColor: '#16a34a' }} 
                           title="Convert directly to ERP Sales Order"
                           onClick={() => handleConvertToSalesOrder(q)}
@@ -533,12 +545,14 @@ export const QuotationModule: React.FC = () => {
 
               {/* Machine Model Selection */}
               <div style={{ border: '1px solid var(--border-color)', borderRadius: '6px', padding: '1rem' }}>
-                <h4 style={{ fontSize: '0.9rem', fontWeight: 700, margin: '0 0 0.75rem 0', color: 'var(--accent-primary)' }}>
-                  Machine Series & Model Selection
-                </h4>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                  <h4 style={{ fontSize: '0.9rem', fontWeight: 700, margin: 0, color: 'var(--accent-primary)' }}>
+                    Machine Series & Model Selection
+                  </h4>
+                </div>
                 
                 {/* Series Tabs */}
-                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
                   {categories.map((cat: any) => (
                     <button
                       key={cat.id}
@@ -547,6 +561,7 @@ export const QuotationModule: React.FC = () => {
                       style={{ padding: '0.35rem 0.75rem', fontSize: '0.82rem' }}
                       onClick={() => {
                         setSelectedCategory(cat.id);
+                        setModelSearchQuery('');
                         const firstM = models.find((m: any) => m.category === cat.id);
                         if (firstM) handleModelChange(firstM.id);
                       }}
@@ -554,6 +569,19 @@ export const QuotationModule: React.FC = () => {
                       {cat.name}
                     </button>
                   ))}
+                </div>
+
+                {/* Model Search Input */}
+                <div style={{ position: 'relative', marginBottom: '0.75rem' }}>
+                  <Search size={14} style={{ position: 'absolute', left: '0.65rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                  <input
+                    type="text"
+                    className="input-field"
+                    placeholder="Search Machine Model (e.g. 90 TON, NEO PRIME 150, 200 TON)..."
+                    style={{ paddingLeft: '2rem', fontSize: '0.82rem' }}
+                    value={modelSearchQuery}
+                    onChange={(e) => setModelSearchQuery(e.target.value)}
+                  />
                 </div>
 
                 <div className="form-grid-3">
@@ -565,11 +593,22 @@ export const QuotationModule: React.FC = () => {
                       value={selectedModelId} 
                       onChange={(e) => handleModelChange(e.target.value)}
                     >
-                      {filteredModels.map((m: any) => (
-                        <option key={m.id} value={m.id}>
-                          {m.sheet_name} ({m.display_name || m.sheet_name}) - ₹{Math.round(m.base_price || 0).toLocaleString()}
-                        </option>
-                      ))}
+                      {models
+                        .filter((m: any) => {
+                          if (modelSearchQuery.trim()) {
+                            const q = modelSearchQuery.toLowerCase().trim();
+                            return (m.sheet_name && m.sheet_name.toLowerCase().includes(q)) ||
+                                   (m.display_name && m.display_name.toLowerCase().includes(q)) ||
+                                   (m.category && m.category.toLowerCase().includes(q));
+                          }
+                          return m.category === selectedCategory;
+                        })
+                        .map((m: any) => (
+                          <option key={m.id} value={m.id}>
+                            {m.sheet_name} ({m.display_name || m.sheet_name}) - ₹{Math.round(m.base_price || 0).toLocaleString()}
+                          </option>
+                        ))
+                      }
                     </select>
                   </div>
                   <div>
@@ -596,9 +635,40 @@ export const QuotationModule: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Machine Technical Description & Edit Toggle */}
                 {selectedModelObj && (
-                  <div style={{ marginTop: '0.75rem', padding: '0.75rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: '4px', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                    <strong>Standard Machine Specifications:</strong> {selectedModelObj.description}
+                  <div style={{ marginTop: '0.75rem', padding: '0.75rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: '4px', fontSize: '0.82rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                      <strong style={{ color: 'var(--text-primary)' }}>Standard Machine Specifications & Description:</strong>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 700, color: 'var(--accent-primary)' }}>
+                        <input 
+                          type="checkbox" 
+                          checked={isDescriptionEditable} 
+                          onChange={(e) => {
+                            setIsDescriptionEditable(e.target.checked);
+                            if (e.target.checked && !customDescription && selectedModelObj) {
+                              setCustomDescription(selectedModelObj.description || '');
+                            }
+                          }} 
+                        />
+                        <span>Enable Description Editing</span>
+                      </label>
+                    </div>
+
+                    {isDescriptionEditable ? (
+                      <textarea
+                        rows={3}
+                        className="input-field"
+                        style={{ width: '100%', fontSize: '0.8rem', lineHeight: 1.4 }}
+                        value={customDescription || selectedModelObj.description || ''}
+                        onChange={(e) => setCustomDescription(e.target.value)}
+                        placeholder="Customize technical specifications for quotation..."
+                      />
+                    ) : (
+                      <div style={{ color: 'var(--text-secondary)' }}>
+                        {customDescription || selectedModelObj.description}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -710,6 +780,20 @@ export const QuotationModule: React.FC = () => {
             <GECQuotationPrintView quotation={printModalQuote} />
           </div>
         </Modal>
+      )}
+
+      {/* SHARE VIA EMAIL MODAL */}
+      {shareEmailQuote && (
+        <ShareViaEmailModal
+          isOpen={true}
+          onClose={() => setShareEmailQuote(null)}
+          documentType="QUOTATION"
+          documentNumber={shareEmailQuote.quoteNo}
+          recipientEmail={shareEmailQuote.customerEmail || ''}
+          recipientName={shareEmailQuote.customerName || shareEmailQuote.customerCompany}
+          partyName={shareEmailQuote.customerCompany || shareEmailQuote.customerName}
+          documentAmount={shareEmailQuote.totalAmount || 0}
+        />
       )}
 
     </div>

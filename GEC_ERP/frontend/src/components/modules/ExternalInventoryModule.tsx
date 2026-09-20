@@ -3,9 +3,10 @@ import { useERP } from '../../context/ERPContext';
 import { Modal } from '../common/Modal';
 import { AutocompleteSelect, AutocompleteOption } from '../common/AutocompleteSelect';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
+import { ShareViaEmailModal } from '../common/ShareViaEmailModal';
 import { SingleJobworkPrintView, JobworkListPrintView } from '../printTemplates/JobworkPrintTemplates';
 import { TabularShortagePrintView } from '../printTemplates/ShortagePrintTemplates';
-import { Truck, Plus, ArrowRightLeft, CheckCircle, Search, Printer, FileSpreadsheet, ArrowUp, ArrowDown, ArrowUpDown, RefreshCw, AlertTriangle, Layers, X, CheckCircle2, ClipboardList, ShoppingCart } from 'lucide-react';
+import { Truck, Plus, ArrowRightLeft, CheckCircle, Search, Printer, FileSpreadsheet, ArrowUp, ArrowDown, ArrowUpDown, RefreshCw, AlertTriangle, Layers, X, CheckCircle2, ClipboardList, ShoppingCart, Mail, Eye } from 'lucide-react';
 import { JobworkChallan, Item, ItemProcessCard, VendorDebitChallan, generateNextJobworkNumber, BOM } from '../../types/erp';
 import { compareItemPriority } from '../../utils/priorityUtils';
 
@@ -14,7 +15,7 @@ type JWSortKey = 'challanNo' | 'vendorName' | 'itemName' | 'processRequired' | '
 export const ExternalInventoryModule: React.FC = () => {
   const { 
     jobworks, vendors, items, workOrders, boms, grns, addJobworkChallan, recordJobworkReturn, searchTerm, setSearchTerm,
-    itemProcessCards, setActiveModule, jobCards, finishedGoods 
+    itemProcessCards, setActiveModule, jobCards, finishedGoods, drawings, isDrawingAcknowledged
   } = useERP();
 
   const [activeMainTab, setActiveMainTab] = useState<'CHALLANS' | 'DEBIT_NOTES' | 'SHORTAGE'>('CHALLANS');
@@ -29,6 +30,7 @@ export const ExternalInventoryModule: React.FC = () => {
   const [printModalOpen, setPrintModalOpen] = useState(false);
   const [printDocType, setPrintDocType] = useState<'SINGLE_CHALLAN' | 'CHALLAN_LIST'>('CHALLAN_LIST');
   const [selectedPrintChallan, setSelectedPrintChallan] = useState<JobworkChallan | null>(null);
+  const [emailJW, setEmailJW] = useState<JobworkChallan | null>(null);
 
   const [sortField, setSortField] = useState<JWSortKey>('challanNo');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -1089,6 +1091,9 @@ export const ExternalInventoryModule: React.FC = () => {
                       <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem' }} title="Print Outward Challan Gatepass" onClick={() => handlePrintSingleChallan(j)}>
                         <Printer size={14} />
                       </button>
+                      <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem' }} title="Share via Email" onClick={() => setEmailJW(j)}>
+                        <Mail size={14} />
+                      </button>
                       {j.status === 'PENDING' ? (
                         <button className="btn btn-primary" style={{ padding: '0.3rem 0.5rem', fontSize: '0.75rem' }} onClick={() => handleOpenReturnModal(j)}>
                           <ArrowRightLeft size={14} /> Receive Return
@@ -1378,6 +1383,38 @@ export const ExternalInventoryModule: React.FC = () => {
           }))}
         />
       </PrintManagerModal>
+
+      {/* SHARE VIA EMAIL MODAL */}
+      {emailJW && (
+        <ShareViaEmailModal
+          isOpen={true}
+          onClose={() => setEmailJW(null)}
+          documentType="JOB_WORK"
+          documentNumber={emailJW.challanNo}
+          recipientEmail={vendors.find(v => v.id === emailJW.vendorId || v.name === emailJW.vendorName)?.email || ''}
+          recipientName={emailJW.vendorName}
+          partyName={emailJW.vendorName}
+          availableCadFiles={(() => {
+            const cadFiles: Array<{ name: string; version: string; type: string; data?: string; size?: number }> = [];
+            const itemIds = [emailJW.itemId, emailJW.producedItemId].filter(Boolean);
+            const itemCodes = [emailJW.itemCode, emailJW.producedItemCode].filter(Boolean);
+            drawings.forEach(d => {
+              if (itemIds.includes(d.itemId) || itemCodes.includes(d.itemCode)) {
+                (d.additionalFileVersions || []).filter(v => v.isLatest).forEach(v => {
+                  cadFiles.push({
+                    name: v.fileName,
+                    version: v.versionNumber,
+                    type: v.fileType,
+                    data: v.fileData,
+                    size: v.fileSize
+                  });
+                });
+              }
+            });
+            return cadFiles;
+          })()}
+        />
+      )}
 
     </div>
   );

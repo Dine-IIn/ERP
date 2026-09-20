@@ -560,53 +560,55 @@ export const ItemMasterModule: React.FC = () => {
             </div>
 
             {/* Dynamic Purchasing & Pricing Row */}
-            {(formData.processType === 'Bought out' || formData.processType === 'Job work + Bought out' || formData.processType === 'Job work') && (
+            {(formData.processType === 'Bought out' || formData.processType === 'Job work + Bought out' || formData.processType === 'Job work' || formData.materialProcessSources?.includes('Job work') || formData.materialProcessSources?.includes('Bought out')) && (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', padding: '0.875rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: '0.5rem', border: '1px solid var(--border-color)' }}>
-                {(formData.processType === 'Bought out' || formData.processType === 'Job work + Bought out' || formData.processType === 'Job work') && (
-                  <div>
-                    <label style={{ fontWeight: 700 }}>Min Purchase Order Qty (MOQ)</label>
-                    <input 
-                      type="number" 
-                      min="0"
-                      required 
-                      className="input-field" 
-                      placeholder="1"
-                      value={formData.minOrderQty ?? ''} 
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setFormData({ ...formData, minOrderQty: val === '' ? ('' as any) : Number(val) });
-                      }} 
-                      onBlur={(e) => {
-                        if (e.target.value === '' || isNaN(Number(e.target.value))) {
-                          setFormData({ ...formData, minOrderQty: 0 });
-                        }
-                      }}
-                    />
-                  </div>
-                )}
-                {(formData.processType === 'Bought out' || formData.processType === 'Job work + Bought out') && (
-                  <div>
-                    <label style={{ fontWeight: 700 }}>Unit Purchase Price (₹)</label>
-                    <input 
-                      type="number" 
-                      min="0"
-                      step="0.01"
-                      required 
-                      className="input-field" 
-                      placeholder="0.00"
-                      value={formData.unitPrice ?? ''} 
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setFormData({ ...formData, unitPrice: val === '' ? ('' as any) : Number(val) });
-                      }} 
-                      onBlur={(e) => {
-                        if (e.target.value === '' || isNaN(Number(e.target.value))) {
-                          setFormData({ ...formData, unitPrice: 0 });
-                        }
-                      }}
-                    />
-                  </div>
-                )}
+                <div>
+                  <label style={{ fontWeight: 700 }}>Min Order / Batch Qty (MOQ)</label>
+                  <input 
+                    type="number" 
+                    min="0"
+                    required 
+                    className="input-field" 
+                    placeholder="1"
+                    value={formData.minOrderQty ?? ''} 
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormData({ ...formData, minOrderQty: val === '' ? ('' as any) : Number(val) });
+                    }} 
+                    onBlur={(e) => {
+                      if (e.target.value === '' || isNaN(Number(e.target.value))) {
+                        setFormData({ ...formData, minOrderQty: 0 });
+                      }
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontWeight: 700 }}>
+                    {formData.materialProcessSources?.includes('Job work') && !formData.materialProcessSources?.includes('Bought out')
+                      ? 'Job Work Processing Rate / Unit Price (₹)'
+                      : formData.materialProcessSources?.includes('Job work') && formData.materialProcessSources?.includes('Bought out')
+                      ? 'Unit Purchase Price / Job Work Rate (₹)'
+                      : 'Unit Purchase Price (₹)'}
+                  </label>
+                  <input 
+                    type="number" 
+                    min="0"
+                    step="0.01"
+                    required 
+                    className="input-field" 
+                    placeholder="0.00"
+                    value={formData.unitPrice ?? ''} 
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormData({ ...formData, unitPrice: val === '' ? ('' as any) : Number(val) });
+                    }} 
+                    onBlur={(e) => {
+                      if (e.target.value === '' || isNaN(Number(e.target.value))) {
+                        setFormData({ ...formData, unitPrice: 0 });
+                      }
+                    }}
+                  />
+                </div>
               </div>
             )}
 

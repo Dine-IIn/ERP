@@ -468,24 +468,21 @@ export const PlanningModule: React.FC = () => {
       <div className="sticky-module-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <div style={{ 
-            width: '36px', 
-            height: '36px', 
-            borderRadius: '0.5rem', 
+            width: '32px', 
+            height: '32px', 
+            borderRadius: '0.4rem', 
             backgroundColor: 'var(--accent-primary)', 
             color: '#ffffff',
             display: 'flex', 
             alignItems: 'center', 
             justifyContent: 'center' 
           }}>
-            <FileSpreadsheet size={18} />
+            <FileSpreadsheet size={16} />
           </div>
           <div>
-            <h2 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)', lineHeight: 1.1 }}>
+            <h2 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)', lineHeight: 1.1 }}>
               Material & Production Planning Matrix
             </h2>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-              Live Cross-Module Material Demand, Open Orders & Capacity Planning ({filteredData.length} items)
-            </span>
           </div>
         </div>
 

@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useLayoutEffect, useRef, useDeferredValue, useCallback } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
+import { PlanningModule } from './PlanningModule';
 import { 
   ConsolidatedItemWiseShortagePrintReport,
   ItemWiseShortagePrintView, 
@@ -10,7 +11,7 @@ import {
 } from '../printTemplates/ShortagePrintTemplates';
 import { 
   AlertTriangle, Filter, Printer, ChevronRight, ChevronDown, 
-  Layers, Package, Truck, ClipboardList, ShoppingCart, Search, RefreshCw, CheckCircle, Split, ArrowUpDown, ArrowUp, ArrowDown, X, Plus, Sparkles, CheckSquare, Square 
+  Layers, Package, Truck, ClipboardList, ShoppingCart, Search, RefreshCw, CheckCircle, Split, ArrowUpDown, ArrowUp, ArrowDown, X, Plus, Sparkles, CheckSquare, Square, FileSpreadsheet 
 } from 'lucide-react';
 import { WorkOrder, BOM, Item, PurchaseOrder, JobworkChallan, JobCard, FIXED_ITEM_CLASSES, generateNextPONumber } from '../../types/erp';
 import { compareItemPriority } from '../../utils/priorityUtils';
@@ -22,7 +23,7 @@ export const ShortageModule: React.FC = () => {
   } = useERP();
 
   // Top Tabs
-  const [activeTab, setActiveTab] = useState<'ITEM_WISE_SHORTAGE' | 'WO_SHORTAGE' | 'PO_SHORTAGE' | 'JOBWORK_SHORTAGE' | 'JOBCARD_SHORTAGE'>('ITEM_WISE_SHORTAGE');
+  const [activeTab, setActiveTab] = useState<'PLANNING' | 'ITEM_WISE_SHORTAGE' | 'WO_SHORTAGE' | 'PO_SHORTAGE' | 'JOBWORK_SHORTAGE' | 'JOBCARD_SHORTAGE'>('PLANNING');
 
   // Selected WOs Filter
   const [selectedWOIds, setSelectedWOIds] = useState<string[]>([]);
@@ -39,6 +40,7 @@ export const ShortageModule: React.FC = () => {
 
   // Simulation Quantities (key: woId -> simulated qty)
   const [simulatedQuantities, setSimulatedQuantities] = useState<Record<string, number>>({});
+  const [woViewMode, setWoViewMode] = useState<'CONSOLIDATED' | 'INDIVIDUAL'>('CONSOLIDATED');
 
   // Dynamic Sticky Filter Bar Height for Tab 1
   const [card2Height, setCard2Height] = useState<number>(0);
@@ -1860,8 +1862,15 @@ export const ShortageModule: React.FC = () => {
           </div>
         </div>
 
-        {/* Top 5 Routing Tabs - Static & Fixed below title */}
+        {/* Top 6 Routing Tabs - Static & Fixed below title */}
         <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', flexShrink: 0, width: '100%', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.4rem' }}>
+          <button 
+            className={`btn ${activeTab === 'PLANNING' ? 'btn-primary' : 'btn-outline'}`}
+            style={{ padding: '0.38rem 0.85rem', fontSize: '0.82rem', border: 'none' }}
+            onClick={() => setActiveTab('PLANNING')}
+          >
+            <FileSpreadsheet size={14} /> Production Planning
+          </button>
           <button 
             className={`btn ${activeTab === 'ITEM_WISE_SHORTAGE' ? 'btn-primary' : 'btn-outline'}`}
             style={{ padding: '0.38rem 0.85rem', fontSize: '0.82rem', border: 'none' }}
@@ -1903,6 +1912,15 @@ export const ShortageModule: React.FC = () => {
       {/* MAIN SHORTAGE CONTENT AREA - Single Page Vertical Scroll */}
       <div className="shortage-single-scroll-container" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%' }}>
         
+        {/* ========================================================= */}
+        {/* TAB 0: PRODUCTION PLANNING                                */}
+        {/* ========================================================= */}
+        {activeTab === 'PLANNING' && (
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', width: '100%' }}>
+            <PlanningModule />
+          </div>
+        )}
+
         {/* ========================================================= */}
         {/* TAB 1: ITEM-WISE SHORTAGE & CONSOLIDATED CAPACITY ($X+Y$) */}
         {/* ========================================================= */}
@@ -2569,7 +2587,7 @@ export const ShortageModule: React.FC = () => {
       {/* ========================================================= */}
       {/* TAB 2-4: WORK ORDER SHORTAGE & COMBINED AGGREGATION       */}
       {/* ========================================================= */}
-      {activeTab !== 'ITEM_WISE_SHORTAGE' && activeTab !== 'JOBCARD_SHORTAGE' && (
+      {activeTab !== 'PLANNING' && activeTab !== 'ITEM_WISE_SHORTAGE' && activeTab !== 'JOBCARD_SHORTAGE' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%', flex: 1, minHeight: 0 }}>
           
           {/* WO Filter Bar with Search Bar */}
@@ -2640,184 +2658,377 @@ export const ShortageModule: React.FC = () => {
             </div>
           </div>
 
-          {/* Tab 2: Work Order Shortage Tree View */}
+          {/* Tab 2: Work Order Shortage Tree / Consolidated View */}
           {activeTab === 'WO_SHORTAGE' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%', flex: 1, minHeight: 0, overflowY: 'auto' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.35rem 0.5rem' }}>
-                <span style={{ fontSize: '0.82rem', fontWeight: 700 }}>
-                  Active Work Orders ({relevantWOs.length}):
-                </span>
-                <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                  Click a Work Order to expand its complete component BOM tree
-                </span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%', flex: 1, minHeight: 0, overflowY: 'auto' }}>
+              {/* Tab Header & View Switcher */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', padding: '0.25rem 0.25rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <button 
+                    type="button" 
+                    className={`btn ${woViewMode === 'CONSOLIDATED' ? 'btn-primary' : 'btn-outline'}`}
+                    style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', fontWeight: 700 }}
+                    onClick={() => setWoViewMode('CONSOLIDATED')}
+                  >
+                    📊 Consolidated Multi-WO Total ({relevantWOs.length} WOs)
+                  </button>
+                  <button 
+                    type="button" 
+                    className={`btn ${woViewMode === 'INDIVIDUAL' ? 'btn-primary' : 'btn-outline'}`}
+                    style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', fontWeight: 600 }}
+                    onClick={() => setWoViewMode('INDIVIDUAL')}
+                  >
+                    📁 Individual Work Order Trees
+                  </button>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                    {woViewMode === 'CONSOLIDATED' 
+                      ? 'Total aggregated requirements across all selected work orders' 
+                      : 'Expand specific Work Order to inspect individual BOM tree'}
+                  </span>
+                </div>
               </div>
 
-              {relevantWOs.length === 0 ? (
-                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                  No active Work Orders selected.
-                </div>
-              ) : (
-                relevantWOs.map(wo => {
-                  const isExpanded = expandedWOId === wo.id;
-                  const linkedBOM = boms.find(b => b.machineModel === wo.machineModel || b.id === wo.bomId);
-                  const components = wo.woComponents && wo.woComponents.length > 0
-                    ? wo.woComponents.map(c => ({
-                        itemId: c.itemId || '',
-                        itemCode: c.itemCode || '',
-                        itemName: c.itemName || '',
-                        qtyPerMachine: c.qtyRequired ? c.qtyRequired / (wo.quantity || 1) : 1,
-                        unit: c.unit || 'PCS',
-                        subAssemblyTag: c.subAssemblyTag || 'General Assembly'
-                      }))
-                    : (linkedBOM?.components || []);
-
-                  return (
-                    <div 
-                      key={wo.id} 
-                      className="card" 
-                      style={{ 
-                        padding: 0, 
-                        overflow: 'hidden',
-                        border: isExpanded ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
-                        borderRadius: '0.5rem'
-                      }}
-                    >
-                      {/* Accordion Header */}
-                      <div 
-                        onClick={() => setExpandedWOId(isExpanded ? null : wo.id)}
-                        style={{
-                          padding: '0.65rem 1rem',
-                          backgroundColor: isExpanded ? 'var(--bg-tertiary)' : 'var(--bg-card)',
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          cursor: 'pointer',
-                          userSelect: 'none',
-                          borderBottom: isExpanded ? '1px solid var(--border-color)' : 'none'
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                          <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '0.9rem', color: 'var(--accent-primary)' }}>
-                            {wo.workOrderNo || wo.woNumber}
-                          </span>
-                          <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>
-                            {wo.machineModel}
-                          </span>
-                          <span className="badge badge-neutral" style={{ fontSize: '0.7rem' }}>
-                            Qty: {wo.targetQuantity || wo.quantity || 1}
-                          </span>
-                          <span className={`badge ${wo.status === 'IN_PROGRESS' ? 'badge-warning' : 'badge-primary'}`} style={{ fontSize: '0.7rem' }}>
-                            {wo.status}
-                          </span>
-                        </div>
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                            {components.length} components
-                          </span>
-                          {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+              {/* CONSOLIDATED MULTI-WO SHORTAGE VIEW */}
+              {woViewMode === 'CONSOLIDATED' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {/* Summary Metric Cards */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem' }}>
+                    <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: 'var(--bg-card)' }}>
+                      <ClipboardList size={22} color="var(--accent-primary)" />
+                      <div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Selected Work Orders</div>
+                        <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>{relevantWOs.length}</div>
+                      </div>
+                    </div>
+                    <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: 'var(--bg-card)' }}>
+                      <Layers size={22} color="var(--accent-primary)" />
+                      <div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Total Planned Product Units</div>
+                        <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>
+                          {relevantWOs.reduce((sum, w) => sum + (w.targetQuantity || w.quantity || 1), 0)}
                         </div>
                       </div>
-
-                      {/* Accordion Body */}
-                      {isExpanded && (
-                        <div style={{ padding: '0.5rem', overflowX: 'auto' }}>
-                          <table style={{ width: '100%', fontSize: '0.78rem' }}>
-                            <thead>
-                              <tr style={{ backgroundColor: 'var(--bg-tertiary)' }}>
-                                <th style={{ padding: '0.35rem 0.5rem', textAlign: 'left', width: '30px' }}>#</th>
-                                <th style={{ padding: '0.35rem 0.5rem', textAlign: 'left' }}>Item Code</th>
-                                <th style={{ padding: '0.35rem 0.5rem', textAlign: 'left' }}>Description</th>
-                                <th style={{ padding: '0.35rem 0.5rem', textAlign: 'center' }}>Source</th>
-                                <th style={{ padding: '0.35rem 0.5rem', textAlign: 'right' }}>Qty/Unit</th>
-                                <th style={{ padding: '0.35rem 0.5rem', textAlign: 'right' }}>Total Req</th>
-                                <th style={{ padding: '0.35rem 0.5rem', textAlign: 'right' }}>In Stock</th>
-                                <th style={{ padding: '0.35rem 0.5rem', textAlign: 'right' }}>Shortage</th>
-                                <th style={{ padding: '0.35rem 0.5rem', textAlign: 'center' }}>Action</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {components
-                                .filter(comp => {
-                                  const itemObj = items.find(i => i.id === comp.itemId || i.itemCode === comp.itemCode);
-                                  const inStock = itemObj ? (itemObj.inHouseStock || 0) : 0;
-                                  const totalReq = (comp.qtyPerMachine || 1) * (wo.targetQuantity || wo.quantity || 1);
-                                  const shortage = Math.max(0, totalReq - inStock);
-                                  if (shortageFilterMode === 'SHORTAGE_ONLY') {
-                                    return shortage > 0;
-                                  }
-                                  return true;
-                                })
-                                .map((comp, cIdx) => {
-                                  const itemObj = items.find(i => i.id === comp.itemId || i.itemCode === comp.itemCode);
-                                  const inStock = itemObj ? (itemObj.inHouseStock || 0) : 0;
-                                  const totalReq = (comp.qtyPerMachine || 1) * (wo.targetQuantity || wo.quantity || 1);
-                                  const shortage = Math.max(0, totalReq - inStock);
-                                  const isShort = shortage > 0;
-
-                                  return (
-                                    <tr 
-                                      key={cIdx} 
-                                      style={{ 
-                                        backgroundColor: isShort ? 'rgba(239, 68, 68, 0.06)' : 'transparent',
-                                        borderBottom: '1px solid var(--border-color)'
-                                      }}
-                                    >
-                                      <td style={{ padding: '0.35rem 0.5rem' }}>{cIdx + 1}</td>
-                                      <td style={{ padding: '0.35rem 0.5rem', fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>
-                                        {comp.itemCode}
-                                      </td>
-                                      <td style={{ padding: '0.35rem 0.5rem', fontWeight: 600 }}>
-                                        {comp.itemName}
-                                      </td>
-                                      <td style={{ padding: '0.35rem 0.5rem', textAlign: 'center' }}>
-                                        <span className={`badge ${itemObj?.processType === 'Bought out' ? 'badge-primary' : itemObj?.processType === 'In-house' ? 'badge-success' : 'badge-outline'}`} style={{ fontSize: '0.68rem' }}>
-                                          {itemObj?.processType || 'In-house'}
-                                        </span>
-                                      </td>
-                                      <td style={{ padding: '0.35rem 0.5rem', textAlign: 'right' }}>
-                                        {comp.qtyPerMachine || 1} {comp.unit}
-                                      </td>
-                                      <td style={{ padding: '0.35rem 0.5rem', textAlign: 'right', fontWeight: 700 }}>
-                                        {totalReq} {comp.unit}
-                                      </td>
-                                      <td style={{ padding: '0.35rem 0.5rem', textAlign: 'right' }}>
-                                        {inStock} {comp.unit}
-                                      </td>
-                                      <td style={{ padding: '0.35rem 0.5rem', textAlign: 'right', fontWeight: 800, color: isShort ? 'var(--danger)' : 'var(--success)' }}>
-                                        {isShort ? `${shortage} ${comp.unit}` : 'OK'}
-                                      </td>
-                                      <td style={{ padding: '0.35rem 0.5rem', textAlign: 'center' }}>
-                                        {isShort && itemObj && (
-                                          <div style={{ display: 'flex', gap: '0.2rem', justifyContent: 'center' }}>
-                                            {isBoughtOutItem(itemObj) && (
-                                              <button type="button" className="btn btn-primary" style={{ padding: '0.15rem 0.35rem', fontSize: '0.68rem' }} onClick={() => handleRaisePO(itemObj, shortage)}>
-                                                +PO
-                                              </button>
-                                            )}
-                                            {isJobWorkItem(itemObj) && (
-                                              <button type="button" className="btn btn-outline" style={{ padding: '0.15rem 0.35rem', fontSize: '0.68rem', color: 'var(--accent-primary)' }} onClick={() => handleIssueJobwork(itemObj, shortage)}>
-                                                +JW
-                                              </button>
-                                            )}
-                                            {isInHouseItem(itemObj) && (
-                                              <button type="button" className="btn btn-outline" style={{ padding: '0.15rem 0.35rem', fontSize: '0.68rem', color: 'var(--success)' }} onClick={() => handleIssueJobCard(itemObj, shortage)}>
-                                                +JC
-                                              </button>
-                                            )}
-                                          </div>
-                                        )}
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
                     </div>
-                  );
-                })
+                    <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: 'var(--bg-card)' }}>
+                      <Package size={22} color="var(--success)" />
+                      <div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Consolidated Components</div>
+                        <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>{consolidatedShortageList.length}</div>
+                      </div>
+                    </div>
+                    <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: 'var(--bg-card)' }}>
+                      <AlertTriangle size={22} color={consolidatedShortageList.some(c => c.isShortage) ? 'var(--danger)' : 'var(--success)'} />
+                      <div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Shortage Components</div>
+                        <div style={{ fontSize: '1.25rem', fontWeight: 800, color: consolidatedShortageList.some(c => c.isShortage) ? 'var(--danger)' : 'var(--success)' }}>
+                          {consolidatedShortageList.filter(c => c.isShortage).length}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Consolidated Table */}
+                  <div className="card" style={{ padding: '0.75rem', backgroundColor: 'var(--bg-card)', overflow: 'hidden' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                        Aggregated Component Shortage Matrix ({consolidatedShortageList.filter(c => shortageFilterMode === 'SHORTAGE_ONLY' ? c.isShortage : true).length} items):
+                      </span>
+                      <input
+                        type="text"
+                        placeholder="Search consolidated components..."
+                        className="input-field"
+                        style={{ width: '260px', padding: '0.25rem 0.5rem', fontSize: '0.78rem' }}
+                        value={tableSearchTerm}
+                        onChange={(e) => setTableSearchTerm(e.target.value)}
+                      />
+                    </div>
+
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', fontSize: '0.78rem', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: 'var(--bg-tertiary)', borderBottom: '1px solid var(--border-color)' }}>
+                            <th style={{ padding: '0.45rem 0.5rem', textAlign: 'left', width: '35px' }}>#</th>
+                            <th style={{ padding: '0.45rem 0.5rem', textAlign: 'left' }}>Item Code</th>
+                            <th style={{ padding: '0.45rem 0.5rem', textAlign: 'left' }}>Description</th>
+                            <th style={{ padding: '0.45rem 0.5rem', textAlign: 'center' }}>Source</th>
+                            <th style={{ padding: '0.45rem 0.5rem', textAlign: 'left' }}>Demand from WOs</th>
+                            <th style={{ padding: '0.45rem 0.5rem', textAlign: 'right' }}>Total Req</th>
+                            <th style={{ padding: '0.45rem 0.5rem', textAlign: 'right' }}>In Stock</th>
+                            <th style={{ padding: '0.45rem 0.5rem', textAlign: 'right' }}>Pending PO</th>
+                            <th style={{ padding: '0.45rem 0.5rem', textAlign: 'right' }}>Pending JW</th>
+                            <th style={{ padding: '0.45rem 0.5rem', textAlign: 'right' }}>Shortage</th>
+                            <th style={{ padding: '0.45rem 0.5rem', textAlign: 'center' }}>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {consolidatedShortageList
+                            .filter(c => {
+                              if (shortageFilterMode === 'SHORTAGE_ONLY' && !c.isShortage) return false;
+                              if (!tableSearchTerm.trim()) return true;
+                              const t = tableSearchTerm.trim().toLowerCase();
+                              return (
+                                c.itemCode.toLowerCase().includes(t) ||
+                                c.itemName.toLowerCase().includes(t) ||
+                                (c.itemObj?.partCode && c.itemObj.partCode.toLowerCase().includes(t)) ||
+                                (c.category && c.category.toLowerCase().includes(t)) ||
+                                (c.processType && c.processType.toLowerCase().includes(t))
+                              );
+                            })
+                            .map((c, idx) => {
+                              const isShort = c.isShortage;
+                              const itemObj = c.itemObj || items.find(i => i.id === c.itemId || i.itemCode === c.itemCode);
+
+                              return (
+                                <tr 
+                                  key={idx}
+                                  style={{ 
+                                    backgroundColor: isShort ? 'rgba(239, 68, 68, 0.05)' : 'transparent',
+                                    borderBottom: '1px solid var(--border-color)'
+                                  }}
+                                >
+                                  <td style={{ padding: '0.4rem 0.5rem' }}>{idx + 1}</td>
+                                  <td style={{ padding: '0.4rem 0.5rem', fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>
+                                    {c.itemCode}
+                                  </td>
+                                  <td style={{ padding: '0.4rem 0.5rem' }}>
+                                    <div style={{ fontWeight: 600 }}>{c.itemName}</div>
+                                    {itemObj?.partCode && (
+                                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Part: {itemObj.partCode}</div>
+                                    )}
+                                  </td>
+                                  <td style={{ padding: '0.4rem 0.5rem', textAlign: 'center' }}>
+                                    <span className={`badge ${c.processType === 'Bought out' || c.category === 'BO' ? 'badge-primary' : c.processType === 'In-house' ? 'badge-success' : 'badge-outline'}`} style={{ fontSize: '0.68rem' }}>
+                                      {c.processType || 'In-house'}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '0.4rem 0.5rem', fontSize: '0.72rem' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxWidth: '240px' }}>
+                                      {(c.requiredByWOs || []).map((req, rIdx) => (
+                                        <span key={rIdx} style={{ color: 'var(--text-secondary)' }}>
+                                          <strong>{req.woNumber}</strong>: {req.requiredQty} {c.unit}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </td>
+                                  <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontWeight: 700 }}>
+                                    {c.totalRequired} {c.unit}
+                                  </td>
+                                  <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right' }}>
+                                    {c.inHouseStock} {c.unit}
+                                  </td>
+                                  <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: 'var(--text-secondary)' }}>
+                                    {c.openPO || 0}
+                                  </td>
+                                  <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: 'var(--text-secondary)' }}>
+                                    {c.pendingJW || 0}
+                                  </td>
+                                  <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontWeight: 800, color: isShort ? 'var(--danger)' : 'var(--success)' }}>
+                                    {isShort ? `${c.netShortage} ${c.unit}` : 'OK (0)'}
+                                  </td>
+                                  <td style={{ padding: '0.4rem 0.5rem', textAlign: 'center' }}>
+                                    {isShort && itemObj && (
+                                      <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'center' }}>
+                                        {isBoughtOutItem(itemObj) && (
+                                          <button type="button" className="btn btn-primary" style={{ padding: '0.2rem 0.45rem', fontSize: '0.7rem' }} onClick={() => handleRaisePO(itemObj, c.netShortage)}>
+                                            +PO
+                                          </button>
+                                        )}
+                                        {isJobWorkItem(itemObj) && (
+                                          <button type="button" className="btn btn-outline" style={{ padding: '0.2rem 0.45rem', fontSize: '0.7rem', color: 'var(--accent-primary)' }} onClick={() => handleIssueJobwork(itemObj, c.netShortage)}>
+                                            +JW
+                                          </button>
+                                        )}
+                                        {isInHouseItem(itemObj) && (
+                                          <button type="button" className="btn btn-outline" style={{ padding: '0.2rem 0.45rem', fontSize: '0.7rem', color: 'var(--success)' }} onClick={() => handleIssueJobCard(itemObj, c.netShortage)}>
+                                            +JC
+                                          </button>
+                                        )}
+                                      </div>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* INDIVIDUAL WORK ORDER TREES VIEW */}
+              {woViewMode === 'INDIVIDUAL' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {relevantWOs.length === 0 ? (
+                    <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                      No active Work Orders selected.
+                    </div>
+                  ) : (
+                    relevantWOs.map(wo => {
+                      const isExpanded = expandedWOId === wo.id;
+                      const linkedBOM = boms.find(b => b.machineModel === wo.machineModel || b.id === wo.bomId);
+                      const components = wo.woComponents && wo.woComponents.length > 0
+                        ? wo.woComponents.map(c => ({
+                            itemId: c.itemId || '',
+                            itemCode: c.itemCode || '',
+                            itemName: c.itemName || '',
+                            qtyPerMachine: c.qtyRequired ? c.qtyRequired / (wo.quantity || 1) : 1,
+                            unit: c.unit || 'PCS',
+                            subAssemblyTag: c.subAssemblyTag || 'General Assembly'
+                          }))
+                        : (linkedBOM?.components || []);
+
+                      return (
+                        <div 
+                          key={wo.id} 
+                          className="card" 
+                          style={{ 
+                            padding: 0, 
+                            overflow: 'hidden',
+                            border: isExpanded ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                            borderRadius: '0.5rem'
+                          }}
+                        >
+                          {/* Accordion Header */}
+                          <div 
+                            onClick={() => setExpandedWOId(isExpanded ? null : wo.id)}
+                            style={{
+                              padding: '0.65rem 1rem',
+                              backgroundColor: isExpanded ? 'var(--bg-tertiary)' : 'var(--bg-card)',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              cursor: 'pointer',
+                              userSelect: 'none',
+                              borderBottom: isExpanded ? '1px solid var(--border-color)' : 'none'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                              <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '0.9rem', color: 'var(--accent-primary)' }}>
+                                {wo.workOrderNo || wo.woNumber}
+                              </span>
+                              <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>
+                                {wo.machineModel}
+                              </span>
+                              <span className="badge badge-neutral" style={{ fontSize: '0.7rem' }}>
+                                Qty: {wo.targetQuantity || wo.quantity || 1}
+                              </span>
+                              <span className={`badge ${wo.status === 'IN_PROGRESS' ? 'badge-warning' : 'badge-primary'}`} style={{ fontSize: '0.7rem' }}>
+                                {wo.status}
+                              </span>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                {components.length} components
+                              </span>
+                              {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                            </div>
+                          </div>
+
+                          {/* Accordion Body */}
+                          {isExpanded && (
+                            <div style={{ padding: '0.5rem', overflowX: 'auto' }}>
+                              <table style={{ width: '100%', fontSize: '0.78rem' }}>
+                                <thead>
+                                  <tr style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                                    <th style={{ padding: '0.35rem 0.5rem', textAlign: 'left', width: '30px' }}>#</th>
+                                    <th style={{ padding: '0.35rem 0.5rem', textAlign: 'left' }}>Item Code</th>
+                                    <th style={{ padding: '0.35rem 0.5rem', textAlign: 'left' }}>Description</th>
+                                    <th style={{ padding: '0.35rem 0.5rem', textAlign: 'center' }}>Source</th>
+                                    <th style={{ padding: '0.35rem 0.5rem', textAlign: 'right' }}>Qty/Unit</th>
+                                    <th style={{ padding: '0.35rem 0.5rem', textAlign: 'right' }}>Total Req</th>
+                                    <th style={{ padding: '0.35rem 0.5rem', textAlign: 'right' }}>In Stock</th>
+                                    <th style={{ padding: '0.35rem 0.5rem', textAlign: 'right' }}>Shortage</th>
+                                    <th style={{ padding: '0.35rem 0.5rem', textAlign: 'center' }}>Action</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {components
+                                    .filter(comp => {
+                                      const itemObj = items.find(i => i.id === comp.itemId || i.itemCode === comp.itemCode);
+                                      const inStock = itemObj ? (itemObj.inHouseStock || 0) : 0;
+                                      const totalReq = (comp.qtyPerMachine || 1) * (wo.targetQuantity || wo.quantity || 1);
+                                      const shortage = Math.max(0, totalReq - inStock);
+                                      if (shortageFilterMode === 'SHORTAGE_ONLY') {
+                                        return shortage > 0;
+                                      }
+                                      return true;
+                                    })
+                                    .map((comp, cIdx) => {
+                                      const itemObj = items.find(i => i.id === comp.itemId || i.itemCode === comp.itemCode);
+                                      const inStock = itemObj ? (itemObj.inHouseStock || 0) : 0;
+                                      const totalReq = (comp.qtyPerMachine || 1) * (wo.targetQuantity || wo.quantity || 1);
+                                      const shortage = Math.max(0, totalReq - inStock);
+                                      const isShort = shortage > 0;
+
+                                      return (
+                                        <tr 
+                                          key={cIdx} 
+                                          style={{ 
+                                            backgroundColor: isShort ? 'rgba(239, 68, 68, 0.06)' : 'transparent',
+                                            borderBottom: '1px solid var(--border-color)'
+                                          }}
+                                        >
+                                          <td style={{ padding: '0.35rem 0.5rem' }}>{cIdx + 1}</td>
+                                          <td style={{ padding: '0.35rem 0.5rem', fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>
+                                            {comp.itemCode}
+                                          </td>
+                                          <td style={{ padding: '0.35rem 0.5rem', fontWeight: 600 }}>
+                                            {comp.itemName}
+                                          </td>
+                                          <td style={{ padding: '0.35rem 0.5rem', textAlign: 'center' }}>
+                                            <span className={`badge ${itemObj?.processType === 'Bought out' ? 'badge-primary' : itemObj?.processType === 'In-house' ? 'badge-success' : 'badge-outline'}`} style={{ fontSize: '0.68rem' }}>
+                                              {itemObj?.processType || 'In-house'}
+                                            </span>
+                                          </td>
+                                          <td style={{ padding: '0.35rem 0.5rem', textAlign: 'right' }}>
+                                            {comp.qtyPerMachine || 1} {comp.unit}
+                                          </td>
+                                          <td style={{ padding: '0.35rem 0.5rem', textAlign: 'right', fontWeight: 700 }}>
+                                            {totalReq} {comp.unit}
+                                          </td>
+                                          <td style={{ padding: '0.35rem 0.5rem', textAlign: 'right' }}>
+                                            {inStock} {comp.unit}
+                                          </td>
+                                          <td style={{ padding: '0.35rem 0.5rem', textAlign: 'right', fontWeight: 800, color: isShort ? 'var(--danger)' : 'var(--success)' }}>
+                                            {isShort ? `${shortage} ${comp.unit}` : 'OK'}
+                                          </td>
+                                          <td style={{ padding: '0.35rem 0.5rem', textAlign: 'center' }}>
+                                            {isShort && itemObj && (
+                                              <div style={{ display: 'flex', gap: '0.2rem', justifyContent: 'center' }}>
+                                                {isBoughtOutItem(itemObj) && (
+                                                  <button type="button" className="btn btn-primary" style={{ padding: '0.15rem 0.35rem', fontSize: '0.68rem' }} onClick={() => handleRaisePO(itemObj, shortage)}>
+                                                    +PO
+                                                  </button>
+                                                )}
+                                                {isJobWorkItem(itemObj) && (
+                                                  <button type="button" className="btn btn-outline" style={{ padding: '0.15rem 0.35rem', fontSize: '0.68rem', color: 'var(--accent-primary)' }} onClick={() => handleIssueJobwork(itemObj, shortage)}>
+                                                    +JW
+                                                  </button>
+                                                )}
+                                                {isInHouseItem(itemObj) && (
+                                                  <button type="button" className="btn btn-outline" style={{ padding: '0.15rem 0.35rem', fontSize: '0.68rem', color: 'var(--success)' }} onClick={() => handleIssueJobCard(itemObj, shortage)}>
+                                                    +JC
+                                                  </button>
+                                                )}
+                                              </div>
+                                            )}
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               )}
             </div>
           )}

@@ -7,11 +7,12 @@ import {
   JobCard, FloorStation, FinishedGoodUnit, DispatchRecord, UserActivityLog, BackupRecord, RBAC_FEATURES,
   JobCardMaterialReissue, MaterialIssueRecord, POItem, POStatus, SystemErrorLog,
   ProcessDefinition, ItemProcessCard, IntermediateProcessItem, VendorDebitChallan,
-  MaterialProcessSource,
+  MaterialProcessSource, ItemDrawingRecord, DrawingVersion, AdditionalFileVersion, DrawingReadReceipt,
+  ItemClassDefinition, FIXED_ITEM_CLASSES, SMTPConfig, EmailTemplate, EmailSendPayload,
   generateNextPONumber, generateNextJobworkNumber, generateNextQCNumber,
   generateNextJobCardNumber, generateNextWorkOrderNumber, generateNextSalesOrderNumber,
   generateNextGRNNumber, generateNextDispatchNumber, generateNextBOMNumber,
-  generateNextDebitChallanNumber
+  generateNextDebitChallanNumber, generateNextItemCode
 } from '../types/erp';
 import { 
   INITIAL_USERS, INITIAL_CUSTOMERS, INITIAL_VENDORS, INITIAL_ITEM_CATEGORIES, INITIAL_VENDOR_CATEGORIES, INITIAL_ITEMS, 
@@ -318,6 +319,25 @@ interface ERPContextType {
   massUpsertItemProcessCards: (cards: ItemProcessCard[], mode: 'APPEND' | 'OVERWRITE') => void;
   massUpdateInventory: (updates: { itemId?: string; itemCode: string; inHouseStock: number; externalStock: number; location?: string; unitPrice?: number; minStockQty?: number }[]) => void;
 
+  // Engineering Drawings & CAD Library
+  drawings: ItemDrawingRecord[];
+  saveDrawing: (record: ItemDrawingRecord) => Promise<{ success: boolean; drawing?: ItemDrawingRecord; error?: string }>;
+  acknowledgeDrawingVersion: (itemId: string, versionId: string) => Promise<{ success: boolean; error?: string }>;
+  isDrawingAcknowledged: (itemId: string, versionId?: string) => boolean;
+  fetchDrawings: () => Promise<void>;
+
+  // Dynamic Item Class Master
+  itemClasses: ItemClassDefinition[];
+  saveItemClass: (cls: ItemClassDefinition) => Promise<{ success: boolean; itemClass?: ItemClassDefinition; error?: string }>;
+  deleteItemClass: (id: string) => Promise<{ success: boolean; error?: string }>;
+
+  // Email Sharing & SMTP
+  smtpConfigs: Record<string, SMTPConfig>;
+  emailTemplates: Record<string, EmailTemplate>;
+  saveSMTPConfig: (config: SMTPConfig) => Promise<{ success: boolean; error?: string }>;
+  saveEmailTemplate: (template: EmailTemplate) => Promise<{ success: boolean; error?: string }>;
+  sendEmail: (payload: EmailSendPayload) => Promise<{ success: boolean; messageId?: string; error?: string }>;
+
   // Operational methods
   addJobworkChallan: (challan: Omit<JobworkChallan, 'id' | 'pendingBalance' | 'status'>) => void;
   updateJobworkChallan: (challan: JobworkChallan) => void;
@@ -545,10 +565,36 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [vendorDebitChallans, setVendorDebitChallans] = useState<VendorDebitChallan[]>(() => getStored('vendorDebitChallans', []));
   const [intermediateProcessItems, setIntermediateProcessItems] = useState<IntermediateProcessItem[]>(() => getStored('intermediateProcessItems', []));
 
+  // Engineering Drawings & Revision Control
+  const [drawings, setDrawings] = useState<ItemDrawingRecord[]>(() => getStored('drawings', []));
+
+  // Dynamic Item Classes
+  const [itemClasses, setItemClasses] = useState<ItemClassDefinition[]>(() => {
+    const loaded = getStored<ItemClassDefinition[]>('itemClasses', []);
+    if (!loaded || loaded.length === 0) {
+      return FIXED_ITEM_CLASSES.map(fc => ({
+        id: `ic-${fc.code.toLowerCase()}`,
+        code: fc.code,
+        name: fc.name,
+        description: `Standard system class: ${fc.name}`,
+        createdAt: new Date().toISOString()
+      }));
+    }
+    return loaded;
+  });
+
+  // Email Sharing & SMTP Configurations
+  const [smtpConfigs, setSmtpConfigs] = useState<Record<string, SMTPConfig>>(() => getStored('smtpConfigs', {}));
+  const [emailTemplates, setEmailTemplates] = useState<Record<string, EmailTemplate>>(() => getStored('emailTemplates', {}));
+
   useEffect(() => syncEntityHelper('processDefinitions', processDefinitions), [processDefinitions, isServerHydrated]);
   useEffect(() => syncEntityHelper('itemProcessCards', itemProcessCards), [itemProcessCards, isServerHydrated]);
   useEffect(() => syncEntityHelper('vendorDebitChallans', vendorDebitChallans), [vendorDebitChallans, isServerHydrated]);
   useEffect(() => syncEntityHelper('intermediateProcessItems', intermediateProcessItems), [intermediateProcessItems, isServerHydrated]);
+  useEffect(() => syncEntityHelper('drawings', drawings), [drawings, isServerHydrated]);
+  useEffect(() => syncEntityHelper('itemClasses', itemClasses), [itemClasses, isServerHydrated]);
+  useEffect(() => syncEntityHelper('smtpConfigs', smtpConfigs), [smtpConfigs, isServerHydrated]);
+  useEffect(() => syncEntityHelper('emailTemplates', emailTemplates), [emailTemplates, isServerHydrated]);
 
   // Computed All Inventory Items (Base items including 0 stock + Intermediate items ONLY when stock > 0)
   const allInventoryItems = React.useMemo<Item[]>(() => {
@@ -893,10 +939,16 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIsMobileNavOpen(false);
   };
 
-  // 15-min Persistent Inactivity Auto-Logout for Web & Desktop (Tauri)
+  // 15-min Persistent Inactivity Auto-Logout for Web & Desktop (Tauri) - Disabled on Mobile for Persistent Login
   useEffect(() => {
     if (!currentUser) {
       localStorage.removeItem('gec_erp_lastActivityTime');
+      return;
+    }
+
+    // Skip inactivity timeout on mobile devices for persistent mobile experience
+    const isMobileDevice = /Mobi|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    if (isMobileDevice) {
       return;
     }
 
@@ -1113,8 +1165,10 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Item Master methods & Dynamic Categories
   const addItem = (item: Omit<Item, 'id'>) => {
+    const finalCode = item.itemCode && item.itemCode.trim() ? item.itemCode.trim().toUpperCase() : generateNextItemCode(items);
     const newItem: Item = {
       ...item,
+      itemCode: finalCode,
       id: `itm-${Date.now()}`,
       leadTimeDays: item.leadTimeDays || 10
     };
@@ -1140,13 +1194,211 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const bulkAddItems = (itemsList: Omit<Item, 'id'>[]) => {
-    const newItems = itemsList.map(item => ({
-      ...item,
-      id: `itm-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      leadTimeDays: item.leadTimeDays || 10
-    }));
+    let currentMaxItems = [...items];
+    const newItems = itemsList.map(item => {
+      const finalCode = item.itemCode && item.itemCode.trim() ? item.itemCode.trim().toUpperCase() : generateNextItemCode(currentMaxItems);
+      const createdItem: Item = {
+        ...item,
+        itemCode: finalCode,
+        id: `itm-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        leadTimeDays: item.leadTimeDays || 10
+      };
+      currentMaxItems.push(createdItem);
+      return createdItem;
+    });
     setItems(prev => [...newItems, ...prev]);
     addAuditLog('BULK_CREATE_ITEMS', 'Item Master', `Bulk uploaded ${itemsList.length} items`);
+  };
+
+  // -------------------------------------------------------------
+  // DRAWINGS & CAD REVISION CONTROL
+  // -------------------------------------------------------------
+  const fetchDrawings = async () => {
+    try {
+      const res = await apiClient.getDrawings();
+      if (res.success && Array.isArray(res.data)) {
+        setDrawings(res.data);
+      }
+    } catch (e) {
+      console.warn('Could not fetch drawings from backend:', e);
+    }
+  };
+
+  const saveDrawing = async (record: ItemDrawingRecord) => {
+    try {
+      const res = await apiClient.saveDrawing(record);
+      if (res.success && res.data) {
+        setDrawings(prev => {
+          const idx = prev.findIndex(d => d.itemId === record.itemId || d.id === record.id);
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = res.data;
+            return next;
+          }
+          return [res.data, ...prev];
+        });
+        addAuditLog('SAVE_DRAWING', 'Drawings & CAD', `Saved drawing/CAD revisions for Item ${record.itemCode} (${record.itemName})`);
+        return { success: true, drawing: res.data };
+      }
+      return { success: false, error: res.error || 'Failed to save drawing' };
+    } catch (err: any) {
+      setDrawings(prev => {
+        const idx = prev.findIndex(d => d.itemId === record.itemId || d.id === record.id);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = record;
+          return next;
+        }
+        return [record, ...prev];
+      });
+      return { success: true, drawing: record };
+    }
+  };
+
+  const acknowledgeDrawingVersion = async (itemId: string, versionId: string) => {
+    try {
+      const res = await apiClient.acknowledgeDrawing(itemId, versionId, currentUser?.username || 'user');
+      if (res.success) {
+        setDrawings(prev => prev.map(d => {
+          if (d.itemId === itemId) {
+            const receipts = d.readReceipts || [];
+            const existing = receipts.find(r => r.versionId === versionId && r.userId === (currentUser?.id || currentUser?.username));
+            if (!existing) {
+              const newReceipt: DrawingReadReceipt = {
+                receiptId: `rcpt-${Date.now()}`,
+                versionId,
+                userId: currentUser?.id || currentUser?.username || 'user',
+                userName: currentUser?.fullName || currentUser?.username || 'User',
+                userRole: currentUser?.role || 'Staff',
+                acknowledgedAt: new Date().toISOString()
+              };
+              return { ...d, readReceipts: [...receipts, newReceipt] };
+            }
+          }
+          return d;
+        }));
+        return { success: true };
+      }
+      return { success: false, error: res.error };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  const isDrawingAcknowledged = (itemId: string, versionId?: string): boolean => {
+    const drawing = drawings.find(d => d.itemId === itemId);
+    if (!drawing) return true;
+    const latestVersion = drawing.drawingVersions?.find(v => v.isLatest) || drawing.drawingVersions?.[drawing.drawingVersions.length - 1];
+    if (!latestVersion) return true;
+    const targetVerId = versionId || latestVersion.versionId;
+    const receipts = drawing.readReceipts || [];
+    return receipts.some(r => r.versionId === targetVerId && (r.userId === currentUser?.id || r.userId === currentUser?.username || r.userRole === currentUser?.role));
+  };
+
+  // -------------------------------------------------------------
+  // DYNAMIC ITEM CLASS MASTER
+  // -------------------------------------------------------------
+  const saveItemClass = async (cls: ItemClassDefinition) => {
+    try {
+      const res = await apiClient.saveItemClass(cls);
+      if (res.success && res.data) {
+        setItemClasses(prev => {
+          const idx = prev.findIndex(c => c.id === cls.id || c.code.toUpperCase() === cls.code.toUpperCase());
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = res.data;
+            return next;
+          }
+          return [...prev, res.data];
+        });
+        addAuditLog('SAVE_ITEM_CLASS', 'Item Class Master', `Saved Item Class: ${cls.name} (${cls.code})`);
+        return { success: true, itemClass: res.data };
+      }
+      return { success: false, error: res.error || 'Failed to save item class' };
+    } catch (e: any) {
+      setItemClasses(prev => {
+        const idx = prev.findIndex(c => c.id === cls.id || c.code.toUpperCase() === cls.code.toUpperCase());
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = cls;
+          return next;
+        }
+        return [...prev, cls];
+      });
+      return { success: true, itemClass: cls };
+    }
+  };
+
+  const deleteItemClass = async (id: string) => {
+    const target = itemClasses.find(c => c.id === id);
+    if (!target) return { success: false, error: 'Item Class not found' };
+
+    const inUseItems = items.filter(it => it.category === target.code || it.category === target.name);
+    if (inUseItems.length > 0) {
+      return { 
+        success: false, 
+        error: `Cannot delete Item Class "${target.name} (${target.code})". It is currently in active use across ${inUseItems.length} items (e.g. ${inUseItems[0].itemCode} - ${inUseItems[0].name}).` 
+      };
+    }
+
+    try {
+      const res = await apiClient.deleteItemClass(id);
+      if (res.success) {
+        setItemClasses(prev => prev.filter(c => c.id !== id));
+        addAuditLog('DELETE_ITEM_CLASS', 'Item Class Master', `Deleted Item Class: ${target.name} (${target.code})`);
+        return { success: true };
+      }
+      return { success: false, error: res.error };
+    } catch (e: any) {
+      setItemClasses(prev => prev.filter(c => c.id !== id));
+      return { success: true };
+    }
+  };
+
+  // -------------------------------------------------------------
+  // EMAIL SHARING & SMTP SETTINGS
+  // -------------------------------------------------------------
+  const saveSMTPConfig = async (config: SMTPConfig) => {
+    try {
+      const res = await apiClient.saveSMTPConfig(config);
+      if (res.success) {
+        setSmtpConfigs(prev => ({ ...prev, [config.module]: config }));
+        addAuditLog('UPDATE_SMTP_CONFIG', 'Security & RBAC', `Updated SMTP Mail Configuration for Module: ${config.module}`);
+        return { success: true };
+      }
+      return { success: false, error: res.error };
+    } catch (e: any) {
+      setSmtpConfigs(prev => ({ ...prev, [config.module]: config }));
+      return { success: true };
+    }
+  };
+
+  const saveEmailTemplate = async (template: EmailTemplate) => {
+    try {
+      const res = await apiClient.saveEmailTemplate(template);
+      if (res.success) {
+        setEmailTemplates(prev => ({ ...prev, [template.module]: template }));
+        addAuditLog('UPDATE_EMAIL_TEMPLATE', 'Security & RBAC', `Updated Email Template for Module: ${template.module}`);
+        return { success: true };
+      }
+      return { success: false, error: res.error };
+    } catch (e: any) {
+      setEmailTemplates(prev => ({ ...prev, [template.module]: template }));
+      return { success: true };
+    }
+  };
+
+  const sendEmail = async (payload: EmailSendPayload) => {
+    try {
+      const res = await apiClient.sendEmail(payload);
+      if (res.success) {
+        addAuditLog('SEND_EMAIL', 'Email Engine', `Sent ${payload.documentType} (${payload.documentNumber}) via Email to ${payload.to}`);
+        return { success: true, messageId: res.messageId };
+      }
+      return { success: false, error: res.error || 'Failed to dispatch email' };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'SMTP Connection failed' };
+    }
   };
 
   const bulkDeleteItems = (ids: string[]) => {
@@ -3190,6 +3442,19 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       massUpsertProcesses,
       massUpsertItemProcessCards,
       massUpdateInventory,
+      drawings,
+      saveDrawing,
+      acknowledgeDrawingVersion,
+      isDrawingAcknowledged,
+      fetchDrawings,
+      itemClasses,
+      saveItemClass,
+      deleteItemClass,
+      smtpConfigs,
+      emailTemplates,
+      saveSMTPConfig,
+      saveEmailTemplate,
+      sendEmail,
       addJobworkChallan,
       updateJobworkChallan,
       recordJobworkReturn,

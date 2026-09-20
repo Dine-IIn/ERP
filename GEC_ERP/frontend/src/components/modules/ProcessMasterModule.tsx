@@ -363,32 +363,6 @@ export const ProcessMasterModule: React.FC = () => {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <label className="btn btn-outline" style={{ fontSize: '0.8rem', padding: '0.45rem 0.85rem', cursor: 'pointer', margin: 0 }}>
-              <Upload size={15} style={{ marginRight: '0.3rem', display: 'inline' }} />
-              <span>{isParsingBulk ? 'Reading File...' : 'Bulk Upload Process Routes'}</span>
-              <input
-                type="file"
-                accept=".xlsx,.xls,.csv,.tsv,.txt"
-                style={{ display: 'none' }}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    handleBulkProcessUpload(file);
-                    e.target.value = '';
-                  }
-                }}
-              />
-            </label>
-
-            <button 
-              className="btn btn-outline" 
-              style={{ fontSize: '0.8rem', padding: '0.45rem 0.85rem' }}
-              onClick={() => downloadCSVTemplate('PROCESS_MASTER')}
-              title="Download Process Routing Template"
-            >
-              <Download size={15} /> Template
-            </button>
-
             {activeTab === 'DEFINITIONS' ? (
               <button onClick={handleOpenAddProcess} className="btn btn-primary" style={{ fontSize: '0.8rem', padding: '0.45rem 0.9rem' }}>
                 <Plus size={15} /> Add Process Definition

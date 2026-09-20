@@ -1,7 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useERP } from '../../context/ERPContext';
-import { User, Role, Department, CustomRole, PermissionLevel, PermissionAction, UserActivityLog, BackupRecord, RBAC_FEATURES, RBACFeatureDefinition } from '../../types/erp';
-import { UserPlus, Shield, Trash2, Key, Lock, UserCheck, Building2, Plus, Edit2, Database, Activity, RefreshCw, Download, HardDrive, ShieldCheck, Search, CheckCircle2, XCircle, Eye, EyeOff, Printer } from 'lucide-react';
+import { 
+  User, Role, Department, CustomRole, PermissionLevel, PermissionAction, 
+  UserActivityLog, BackupRecord, RBAC_FEATURES, RBACFeatureDefinition,
+  ItemClassDefinition, SMTPConfig, EmailTemplate, FIXED_ITEM_CLASSES
+} from '../../types/erp';
+import { 
+  UserPlus, Shield, Trash2, Key, Lock, UserCheck, Building2, Plus, Edit2, 
+  Database, Activity, RefreshCw, Download, HardDrive, ShieldCheck, Search, 
+  CheckCircle2, XCircle, Eye, EyeOff, Printer, Mail, Tag, Send, Edit3, Settings, Save
+} from 'lucide-react';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { AuditLogListPrintView } from '../printTemplates/AuditPrintTemplates';
 
@@ -9,12 +17,13 @@ export const UserManagementModule: React.FC = () => {
   const { 
     users, currentUser, departments, customRoles, addUser, updateUser, deleteUser, updateUserRole,
     addDepartment, updateDepartment, deleteDepartment, addRole, updateRole, deleteRole,
-    auditLogs, addAuditLog, backups, createBackup, deleteBackup, downloadBackup, restoreBackup, resetOperationalData, resetInventory, wipeFullDatabase
+    auditLogs, addAuditLog, backups, createBackup, deleteBackup, downloadBackup, restoreBackup, resetOperationalData, resetInventory, wipeFullDatabase,
+    itemClasses, saveItemClass, deleteItemClass, smtpConfigs, saveSMTPConfig, emailTemplates, saveEmailTemplate, sendEmail
   } = useERP();
 
   const [isResetting, setIsResetting] = useState(false);
 
-  const [activeTab, setActiveTab] = useState<'USERS' | 'DEPARTMENTS' | 'ROLES' | 'AUDIT_LOGS' | 'BACKUPS'>('USERS');
+  const [activeTab, setActiveTab] = useState<'USERS' | 'DEPARTMENTS' | 'ROLES' | 'ITEM_CLASSES' | 'SMTP_CONFIG' | 'EMAIL_TEMPLATES' | 'AUDIT_LOGS' | 'BACKUPS'>('USERS');
 
   // User Form State
   const [username, setUsername] = useState('');
@@ -26,6 +35,29 @@ export const UserManagementModule: React.FC = () => {
   const [selectedDeptId, setSelectedDeptId] = useState<string>('');
   const [selectedRoleId, setSelectedRoleId] = useState<string>('');
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'danger' } | null>(null);
+
+  // Item Class Form State
+  const [classCode, setClassCode] = useState('');
+  const [className, setClassName] = useState('');
+  const [classDesc, setClassDesc] = useState('');
+  const [editingClassId, setEditingClassId] = useState<string | null>(null);
+
+  // SMTP Settings State
+  const [selectedSmtpModule, setSelectedSmtpModule] = useState<string>('PURCHASE_ORDER');
+  const [smtpHost, setSmtpHost] = useState('');
+  const [smtpPort, setSmtpPort] = useState(587);
+  const [smtpSecure, setSmtpSecure] = useState(false);
+  const [smtpUser, setSmtpUser] = useState('');
+  const [smtpPass, setSmtpPass] = useState('');
+  const [smtpFrom, setSmtpFrom] = useState('');
+  const [smtpFromName, setSmtpFromName] = useState('Gujarat Enterprise (GEC)');
+  const [testEmailTo, setTestEmailTo] = useState('');
+  const [isTestingSmtp, setIsTestingSmtp] = useState(false);
+
+  // Email Templates State
+  const [selectedTemplateModule, setSelectedTemplateModule] = useState<string>('PURCHASE_ORDER');
+  const [templateSubject, setTemplateSubject] = useState('');
+  const [templateBody, setTemplateBody] = useState('');
 
   // User Edit State
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -48,7 +80,7 @@ export const UserManagementModule: React.FC = () => {
   const [roleName, setRoleName] = useState('');
   const [roleDeptId, setRoleDeptId] = useState('');
 
-  const ALL_ACTIONS: PermissionAction[] = ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'APPROVE'];
+  const ALL_ACTIONS: PermissionAction[] = ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'APPROVE', 'NOTIFY'];
 
   const normalizePermsToActions = (raw: any): PermissionAction[] => {
     if (!raw) return [];
@@ -102,6 +134,7 @@ export const UserManagementModule: React.FC = () => {
     { key: 'bom_master', label: 'BOM Master (Multi-Level BOMs)' },
     { key: 'customer_master', label: 'Customer Master Catalog' },
     { key: 'vendor_master', label: 'Vendor / Supplier Directory' },
+    { key: 'notifications', label: 'System Notifications & Alerts' },
     { key: 'user_management', label: 'User & Security Access Administration' },
     { key: 'backups', label: 'Database Backup & Recovery Control' }
   ];
@@ -421,38 +454,59 @@ export const UserManagementModule: React.FC = () => {
         <div style={{ display: 'flex', gap: '0.25rem', backgroundColor: 'var(--bg-tertiary)', padding: '0.25rem', borderRadius: '0.5rem', flexWrap: 'wrap' }}>
           <button 
             className={`btn ${activeTab === 'USERS' ? 'btn-primary' : 'btn-outline'}`}
-            style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', border: 'none' }}
+            style={{ padding: '0.35rem 0.65rem', fontSize: '0.78rem', border: 'none' }}
             onClick={() => { setActiveTab('USERS'); setMessage(null); }}
           >
-            <UserCheck size={14} /> Users ({users.length})
+            <UserCheck size={13} /> Users ({users.length})
           </button>
           <button 
             className={`btn ${activeTab === 'ROLES' ? 'btn-primary' : 'btn-outline'}`}
-            style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', border: 'none' }}
+            style={{ padding: '0.35rem 0.65rem', fontSize: '0.78rem', border: 'none' }}
             onClick={() => { setActiveTab('ROLES'); setMessage(null); }}
           >
-            <Key size={14} /> RBAC Matrix ({customRoles.length})
+            <Key size={13} /> RBAC Matrix ({customRoles.length})
           </button>
           <button 
             className={`btn ${activeTab === 'DEPARTMENTS' ? 'btn-primary' : 'btn-outline'}`}
-            style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', border: 'none' }}
+            style={{ padding: '0.35rem 0.65rem', fontSize: '0.78rem', border: 'none' }}
             onClick={() => { setActiveTab('DEPARTMENTS'); setMessage(null); }}
           >
-            <Building2 size={14} /> Departments ({departments.length})
+            <Building2 size={13} /> Departments ({departments.length})
+          </button>
+          <button 
+            className={`btn ${activeTab === 'ITEM_CLASSES' ? 'btn-primary' : 'btn-outline'}`}
+            style={{ padding: '0.35rem 0.65rem', fontSize: '0.78rem', border: 'none' }}
+            onClick={() => { setActiveTab('ITEM_CLASSES'); setMessage(null); }}
+          >
+            <Tag size={13} /> Item Classes ({itemClasses.length})
+          </button>
+          <button 
+            className={`btn ${activeTab === 'SMTP_CONFIG' ? 'btn-primary' : 'btn-outline'}`}
+            style={{ padding: '0.35rem 0.65rem', fontSize: '0.78rem', border: 'none' }}
+            onClick={() => { setActiveTab('SMTP_CONFIG'); setMessage(null); }}
+          >
+            <Mail size={13} /> Email &amp; SMTP
+          </button>
+          <button 
+            className={`btn ${activeTab === 'EMAIL_TEMPLATES' ? 'btn-primary' : 'btn-outline'}`}
+            style={{ padding: '0.35rem 0.65rem', fontSize: '0.78rem', border: 'none' }}
+            onClick={() => { setActiveTab('EMAIL_TEMPLATES'); setMessage(null); }}
+          >
+            <Edit3 size={13} /> Mail Templates
           </button>
           <button 
             className={`btn ${activeTab === 'AUDIT_LOGS' ? 'btn-primary' : 'btn-outline'}`}
-            style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', border: 'none' }}
+            style={{ padding: '0.35rem 0.65rem', fontSize: '0.78rem', border: 'none' }}
             onClick={() => { setActiveTab('AUDIT_LOGS'); setMessage(null); }}
           >
-            <Activity size={14} /> Security Audit Logs
+            <Activity size={13} /> Audit Logs
           </button>
           <button 
             className={`btn ${activeTab === 'BACKUPS' ? 'btn-primary' : 'btn-outline'}`}
-            style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', border: 'none' }}
+            style={{ padding: '0.35rem 0.65rem', fontSize: '0.78rem', border: 'none' }}
             onClick={() => { setActiveTab('BACKUPS'); setMessage(null); }}
           >
-            <Database size={14} /> Backups & Auto-Sync
+            <Database size={13} /> Backups &amp; Sync
           </button>
         </div>
       </div>
@@ -978,6 +1032,10 @@ export const UserManagementModule: React.FC = () => {
                       🟠 Approve
                       <div style={{ fontSize: '0.65rem', fontWeight: 500, color: 'var(--text-muted)' }}>Authorize</div>
                     </th>
+                    <th style={{ width: '105px', textAlign: 'center', color: '#0284c7' }}>
+                      🔔 Notifications
+                      <div style={{ fontSize: '0.65rem', fontWeight: 500, color: 'var(--text-muted)' }}>Alerts & Push</div>
+                    </th>
                     <th style={{ width: '95px', textAlign: 'center', color: 'var(--text-muted)' }}>
                       ⚪ No Access
                       <div style={{ fontSize: '0.65rem', fontWeight: 500, color: 'var(--text-muted)' }}>Blocked</div>
@@ -1074,6 +1132,18 @@ export const UserManagementModule: React.FC = () => {
                           </label>
                         </td>
 
+                        {/* Notifications */}
+                        <td style={{ textAlign: 'center' }}>
+                          <label style={{ display: 'flex', justifyContent: 'center', cursor: 'pointer', margin: 0, padding: '0.35rem' }}>
+                            <input
+                              type="checkbox"
+                              checked={activeActions.includes('NOTIFY')}
+                              onChange={() => handleToggleAction(feature.key, 'NOTIFY')}
+                              style={{ width: '17px', height: '17px', cursor: 'pointer', accentColor: '#0284c7' }}
+                            />
+                          </label>
+                        </td>
+
                         {/* No Access */}
                         <td style={{ textAlign: 'center' }}>
                           <label style={{ display: 'flex', justifyContent: 'center', cursor: 'pointer', margin: 0, padding: '0.35rem' }}>
@@ -1107,58 +1177,71 @@ export const UserManagementModule: React.FC = () => {
                   Cancel Edit
                 </button>
               )}
-              <button type="submit" className="btn btn-primary">
-                {editingRole ? 'Update Role Matrix' : 'Save Role Matrix'}
+              <button 
+                type="submit" 
+                className="btn btn-primary"
+                style={{ padding: '0.5rem 1.25rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+              >
+                <Save size={16} />
+                {editingRole ? 'Update Role Matrix' : 'Create Role & Save Permissions'}
               </button>
             </div>
           </form>
 
-          {/* Configured Roles List Table */}
-          <div className="table-container">
-            <table>
-              <thead>
-                <tr>
-                  <th>Role Name</th>
-                  <th>Department Scope</th>
-                  <th>Configured Permissions</th>
-                  <th style={{ textAlign: 'center' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {customRoles.map(r => {
-                  const deptObj = departments.find(d => d.id === r.departmentId);
-                  const perms = r.permissions || {};
-                  let fullCount = 0;
-                  let viewCount = 0;
-                  let createCount = 0;
-                  let editCount = 0;
-                  let deleteCount = 0;
-                  let approveCount = 0;
+          {/* Configured Roles Table */}
+          <div className="card" style={{ padding: '1.25rem', backgroundColor: 'var(--bg-card)' }}>
+            <h3 style={{ fontSize: '0.95rem', fontWeight: 800, margin: '0 0 0.875rem 0', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <ShieldCheck size={16} /> System Configured Roles & Feature Matrices ({customRoles.length})
+            </h3>
 
-                  Object.values(perms).forEach(p => {
-                    const acts = normalizePermsToActions(p);
-                    if (ALL_ACTIONS.every(a => acts.includes(a))) fullCount++;
-                    if (acts.includes('VIEW')) viewCount++;
-                    if (acts.includes('CREATE')) createCount++;
-                    if (acts.includes('EDIT')) editCount++;
-                    if (acts.includes('DELETE')) deleteCount++;
-                    if (acts.includes('APPROVE')) approveCount++;
-                  });
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Role Name</th>
+                    <th>Department Scope</th>
+                    <th>Configured Permissions</th>
+                    <th style={{ textAlign: 'center' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {customRoles.map(r => {
+                    const deptObj = departments.find(d => d.id === r.departmentId);
+                    const perms = r.permissions || {};
+                    let fullCount = 0;
+                    let viewCount = 0;
+                    let createCount = 0;
+                    let editCount = 0;
+                    let deleteCount = 0;
+                    let approveCount = 0;
+                    let notifyCount = 0;
 
-                  return (
-                    <tr key={r.id}>
-                      <td style={{ fontWeight: 700 }}>{r.name || r.roleName}</td>
-                      <td style={{ fontSize: '0.85rem' }}>{deptObj ? `${deptObj.name} (${deptObj.code})` : 'Global'}</td>
-                      <td>
-                        <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
-                          {fullCount > 0 && <span className="badge badge-success" style={{ fontSize: '0.72rem' }}>{fullCount} Full Access</span>}
-                          {viewCount > 0 && <span className="badge badge-neutral" style={{ fontSize: '0.72rem' }}>{viewCount} View</span>}
-                          {createCount > 0 && <span className="badge badge-info" style={{ fontSize: '0.72rem' }}>{createCount} Create</span>}
-                          {editCount > 0 && <span className="badge badge-warning" style={{ fontSize: '0.72rem' }}>{editCount} Edit</span>}
-                          {deleteCount > 0 && <span className="badge badge-danger" style={{ fontSize: '0.72rem' }}>{deleteCount} Delete</span>}
-                          {approveCount > 0 && <span className="badge" style={{ backgroundColor: '#ffedd5', color: '#c2410c', fontSize: '0.72rem' }}>{approveCount} Approve</span>}
-                        </div>
-                      </td>
+                    Object.values(perms).forEach(p => {
+                      const acts = normalizePermsToActions(p);
+                      if (ALL_ACTIONS.every(a => acts.includes(a))) fullCount++;
+                      if (acts.includes('VIEW')) viewCount++;
+                      if (acts.includes('CREATE')) createCount++;
+                      if (acts.includes('EDIT')) editCount++;
+                      if (acts.includes('DELETE')) deleteCount++;
+                      if (acts.includes('APPROVE')) approveCount++;
+                      if (acts.includes('NOTIFY')) notifyCount++;
+                    });
+
+                    return (
+                      <tr key={r.id}>
+                        <td style={{ fontWeight: 700 }}>{r.name || r.roleName}</td>
+                        <td style={{ fontSize: '0.85rem' }}>{deptObj ? `${deptObj.name} (${deptObj.code})` : 'Global'}</td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                            {fullCount > 0 && <span className="badge badge-success" style={{ fontSize: '0.72rem' }}>{fullCount} Full Access</span>}
+                            {viewCount > 0 && <span className="badge badge-neutral" style={{ fontSize: '0.72rem' }}>{viewCount} View</span>}
+                            {createCount > 0 && <span className="badge badge-info" style={{ fontSize: '0.72rem' }}>{createCount} Create</span>}
+                            {editCount > 0 && <span className="badge badge-warning" style={{ fontSize: '0.72rem' }}>{editCount} Edit</span>}
+                            {deleteCount > 0 && <span className="badge badge-danger" style={{ fontSize: '0.72rem' }}>{deleteCount} Delete</span>}
+                            {approveCount > 0 && <span className="badge" style={{ backgroundColor: '#ffedd5', color: '#c2410c', fontSize: '0.72rem' }}>{approveCount} Approve</span>}
+                            {notifyCount > 0 && <span className="badge" style={{ backgroundColor: '#e0f2fe', color: '#0369a1', fontSize: '0.72rem' }}>{notifyCount} Notifications</span>}
+                          </div>
+                        </td>
                       <td style={{ textAlign: 'center' }}>
                         <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>
                           <button 
@@ -1192,6 +1275,7 @@ export const UserManagementModule: React.FC = () => {
               </tbody>
             </table>
           </div>
+        </div>
         </div>
       )}
 
@@ -1775,6 +1859,517 @@ export const UserManagementModule: React.FC = () => {
               <Trash2 size={14} /> {isResetting ? 'Wiping Database...' : 'Wipe Everything & Start Fresh'}
             </button>
           </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* TAB: DYNAMIC ITEM CLASS MASTER                            */}
+      {/* ========================================================= */}
+      {activeTab === 'ITEM_CLASSES' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {/* Create/Edit Item Class Form */}
+          <form 
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (!classCode.trim() || !className.trim()) {
+                setMessage({ text: 'Class Code and Class Name are required.', type: 'danger' });
+                return;
+              }
+              const targetCls: ItemClassDefinition = {
+                id: editingClassId || `ic-${classCode.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
+                code: classCode.trim().toUpperCase(),
+                name: className.trim(),
+                description: classDesc.trim() || `Material class for ${className.trim()}`,
+                createdAt: new Date().toISOString()
+              };
+              const res = await saveItemClass(targetCls);
+              if (res.success) {
+                setMessage({ text: `✓ Item Class "${targetCls.name}" (${targetCls.code}) saved successfully!`, type: 'success' });
+                setClassCode('');
+                setClassName('');
+                setClassDesc('');
+                setEditingClassId(null);
+              } else {
+                setMessage({ text: `Failed to save class: ${res.error}`, type: 'danger' });
+              }
+            }}
+            className="card" 
+            style={{ padding: '1.25rem', backgroundColor: 'var(--bg-card)' }}
+          >
+            <h3 style={{ fontSize: '1rem', fontWeight: 800, margin: '0 0 0.85rem 0', color: 'var(--text-primary)' }}>
+              {editingClassId ? 'Edit Item Class' : 'Register New Item Class (Category)'}
+            </h3>
+
+            <div className="form-grid-3">
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700 }}>Class Code * (e.g. RAW_MATERIALS)</label>
+                <input 
+                  type="text" 
+                  required 
+                  className="input-field" 
+                  placeholder="e.g. CNC_PARTS" 
+                  style={{ textTransform: 'uppercase', fontWeight: 700 }}
+                  value={classCode} 
+                  onChange={(e) => setClassCode(e.target.value)} 
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700 }}>Display Name *</label>
+                <input 
+                  type="text" 
+                  required 
+                  className="input-field" 
+                  placeholder="e.g. Precision CNC Turned Parts" 
+                  value={className} 
+                  onChange={(e) => setClassName(e.target.value)} 
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700 }}>Description</label>
+                <input 
+                  type="text" 
+                  className="input-field" 
+                  placeholder="e.g. In-house turned and bored pins, bushes, sleeves" 
+                  value={classDesc} 
+                  onChange={(e) => setClassDesc(e.target.value)} 
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.85rem' }}>
+              {editingClassId && (
+                <button type="button" className="btn btn-secondary" onClick={() => { setEditingClassId(null); setClassCode(''); setClassName(''); setClassDesc(''); }}>
+                  Cancel
+                </button>
+              )}
+              <button type="submit" className="btn btn-primary" style={{ gap: '0.4rem', fontWeight: 700 }}>
+                <Plus size={15} /> {editingClassId ? 'Update Item Class' : 'Add Item Class'}
+              </button>
+            </div>
+          </form>
+
+          {/* Item Classes Table */}
+          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            <div style={{ padding: '0.85rem 1.25rem', backgroundColor: 'var(--bg-tertiary)', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <strong style={{ fontSize: '0.9rem' }}>System Item Classes ({itemClasses.length})</strong>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Safe-deletion protection blocks deletion if any items are assigned</span>
+            </div>
+            <table className="table" style={{ width: '100%', margin: 0 }}>
+              <thead>
+                <tr style={{ backgroundColor: 'var(--bg-secondary)' }}>
+                  <th style={{ width: '160px' }}>Class Code</th>
+                  <th>Display Name</th>
+                  <th>Description</th>
+                  <th style={{ textAlign: 'center', width: '120px' }}>Items Count</th>
+                  <th style={{ textAlign: 'right', width: '130px' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {itemClasses.map(cls => {
+                  const usedCount = (useERP().items || []).filter(it => it.category === cls.code || it.category === cls.name).length;
+                  return (
+                    <tr key={cls.id}>
+                      <td style={{ fontFamily: 'monospace', fontWeight: 800, color: 'var(--accent-primary)' }}>
+                        {cls.code}
+                      </td>
+                      <td style={{ fontWeight: 600 }}>{cls.name}</td>
+                      <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{cls.description}</td>
+                      <td style={{ textAlign: 'center' }}>
+                        <span className={`badge ${usedCount > 0 ? 'badge-primary' : 'badge-neutral'}`} style={{ fontSize: '0.75rem' }}>
+                          {usedCount} items
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'inline-flex', gap: '0.35rem' }}>
+                          <button 
+                            className="btn btn-outline" 
+                            style={{ padding: '0.25rem 0.45rem' }}
+                            title="Edit Item Class"
+                            onClick={() => {
+                              setEditingClassId(cls.id);
+                              setClassCode(cls.code);
+                              setClassName(cls.name);
+                              setClassDesc(cls.description || '');
+                            }}
+                          >
+                            <Edit2 size={13} />
+                          </button>
+                          <button 
+                            className="btn btn-outline" 
+                            style={{ padding: '0.25rem 0.45rem', color: 'var(--danger)' }}
+                            title="Delete Item Class"
+                            onClick={async () => {
+                              if (window.confirm(`Are you sure you want to delete Item Class "${cls.name}" (${cls.code})?`)) {
+                                const res = await deleteItemClass(cls.id);
+                                if (res.success) {
+                                  setMessage({ text: `✓ Item Class ${cls.code} deleted successfully.`, type: 'success' });
+                                } else {
+                                  alert(`❌ ${res.error}`);
+                                }
+                              }
+                            }}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* TAB: EMAIL & SMTP SETTINGS                                */}
+      {/* ========================================================= */}
+      {activeTab === 'SMTP_CONFIG' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          
+          {/* Module Selector */}
+          <div className="card" style={{ padding: '1rem' }}>
+            <label style={{ fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.5rem', display: 'block' }}>
+              Select Document Module to Configure SMTP Credentials:
+            </label>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              {[
+                { key: 'PURCHASE_ORDER', label: 'Purchase Orders (PO)' },
+                { key: 'JOB_WORK', label: 'Job Work (JW)' },
+                { key: 'QUOTATION', label: 'Machine Quotation' },
+                { key: 'SALES_ORDER', label: 'Sales Orders (SO)' },
+                { key: 'WORK_ORDER', label: 'Work Orders (WO)' },
+                { key: 'JOB_CARD', label: 'Job Cards (JC)' }
+              ].map(m => {
+                const isSelected = selectedSmtpModule === m.key;
+                const hasConfig = !!smtpConfigs[m.key]?.auth?.user;
+                return (
+                  <button
+                    key={m.key}
+                    type="button"
+                    className={`btn ${isSelected ? 'btn-primary' : 'btn-outline'}`}
+                    style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem' }}
+                    onClick={() => {
+                      setSelectedSmtpModule(m.key);
+                      const cfg = smtpConfigs[m.key];
+                      if (cfg) {
+                        setSmtpHost(cfg.host || '');
+                        setSmtpPort(cfg.port || 587);
+                        setSmtpSecure(!!cfg.secure);
+                        setSmtpUser(cfg.auth?.user || '');
+                        setSmtpPass(cfg.auth?.pass || '');
+                        setSmtpFrom(cfg.fromEmail || '');
+                        setSmtpFromName(cfg.fromName || 'Gujarat Enterprise');
+                      } else {
+                        setSmtpHost('');
+                        setSmtpPort(587);
+                        setSmtpSecure(false);
+                        setSmtpUser('');
+                        setSmtpPass('');
+                        setSmtpFrom('');
+                        setSmtpFromName('Gujarat Enterprise');
+                      }
+                    }}
+                  >
+                    <Mail size={13} /> {m.label} {hasConfig && '✓'}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* SMTP Credentials Form */}
+          <form 
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const cfg: SMTPConfig = {
+                module: selectedSmtpModule as any,
+                host: smtpHost.trim(),
+                port: Number(smtpPort) || 587,
+                secure: smtpSecure,
+                auth: {
+                  user: smtpUser.trim(),
+                  pass: smtpPass.trim()
+                },
+                fromEmail: smtpFrom.trim() || smtpUser.trim(),
+                fromName: smtpFromName.trim() || 'Gujarat Enterprise (GEC)'
+              };
+              const res = await saveSMTPConfig(cfg);
+              if (res.success) {
+                setMessage({ text: `✓ SMTP Mail configuration saved for ${selectedSmtpModule}!`, type: 'success' });
+              } else {
+                setMessage({ text: `Failed to save SMTP: ${res.error}`, type: 'danger' });
+              }
+            }}
+            className="card" 
+            style={{ padding: '1.25rem', backgroundColor: 'var(--bg-card)' }}
+          >
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: '0 0 1rem 0', color: 'var(--text-primary)' }}>
+              SMTP Server Settings for {selectedSmtpModule}
+            </h3>
+
+            <div className="form-grid-3">
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700 }}>SMTP Server Host *</label>
+                <input 
+                  type="text" 
+                  required 
+                  className="input-field" 
+                  placeholder="smtp.gmail.com or smtp.office365.com" 
+                  value={smtpHost} 
+                  onChange={(e) => setSmtpHost(e.target.value)} 
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700 }}>Port Number *</label>
+                <input 
+                  type="number" 
+                  required 
+                  className="input-field" 
+                  placeholder="587 (TLS) or 465 (SSL)" 
+                  value={smtpPort} 
+                  onChange={(e) => setSmtpPort(Number(e.target.value) || 587)} 
+                />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', paddingTop: '1.5rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 700 }}>
+                  <input 
+                    type="checkbox" 
+                    checked={smtpSecure} 
+                    onChange={(e) => setSmtpSecure(e.target.checked)} 
+                  />
+                  <span>Direct SSL/TLS (Check for Port 465)</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="form-grid-2" style={{ marginTop: '0.85rem' }}>
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700 }}>Account / Login Email *</label>
+                <input 
+                  type="email" 
+                  required 
+                  className="input-field" 
+                  placeholder="purchase@gecmachines.com" 
+                  value={smtpUser} 
+                  onChange={(e) => setSmtpUser(e.target.value)} 
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700 }}>Account Password or App Password *</label>
+                <input 
+                  type="password" 
+                  required 
+                  className="input-field" 
+                  placeholder="••••••••••••••••" 
+                  value={smtpPass} 
+                  onChange={(e) => setSmtpPass(e.target.value)} 
+                />
+              </div>
+            </div>
+
+            <div className="form-grid-2" style={{ marginTop: '0.85rem' }}>
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700 }}>Sender From Email</label>
+                <input 
+                  type="email" 
+                  className="input-field" 
+                  placeholder="Defaults to login email" 
+                  value={smtpFrom} 
+                  onChange={(e) => setSmtpFrom(e.target.value)} 
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700 }}>Sender Display Name</label>
+                <input 
+                  type="text" 
+                  className="input-field" 
+                  placeholder="e.g. Gujarat Enterprise Purchase Dept" 
+                  value={smtpFromName} 
+                  onChange={(e) => setSmtpFromName(e.target.value)} 
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.25rem' }}>
+              <button type="submit" className="btn btn-primary" style={{ fontWeight: 700, padding: '0.5rem 1.25rem' }}>
+                Save SMTP Credentials
+              </button>
+            </div>
+          </form>
+
+          {/* Test Email Dispatch Card */}
+          <div className="card" style={{ padding: '1.25rem', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-color)' }}>
+            <h4 style={{ fontSize: '0.92rem', fontWeight: 800, margin: '0 0 0.5rem 0', color: 'var(--text-primary)' }}>
+              Test SMTP Connection &amp; Dispatch
+            </h4>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', maxWidth: '500px' }}>
+              <input 
+                type="email" 
+                className="input-field" 
+                placeholder="Enter email to receive test message..."
+                value={testEmailTo}
+                onChange={(e) => setTestEmailTo(e.target.value)}
+              />
+              <button 
+                type="button" 
+                className="btn btn-outline" 
+                style={{ whiteSpace: 'nowrap', fontWeight: 700 }}
+                disabled={isTestingSmtp || !testEmailTo.trim()}
+                onClick={async () => {
+                  setIsTestingSmtp(true);
+                  try {
+                    const res = await sendEmail({
+                      documentType: selectedSmtpModule as any,
+                      documentNumber: 'TEST-001',
+                      to: testEmailTo.trim(),
+                      subject: `[GEC ERP] SMTP Test Verification Message for ${selectedSmtpModule}`,
+                      body: `This is an automated test email confirming that SMTP outbound delivery is functioning correctly for ${selectedSmtpModule}.\n\nTime: ${new Date().toISOString()}`
+                    });
+                    if (res.success) {
+                      alert(`✅ Test Email successfully delivered! Message ID: ${res.messageId}`);
+                    } else {
+                      alert(`❌ Test failed: ${res.error}`);
+                    }
+                  } finally {
+                    setIsTestingSmtp(false);
+                  }
+                }}
+              >
+                {isTestingSmtp ? 'Sending...' : 'Send Test Mail'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* TAB: EMAIL TEMPLATES CUSTOMIZER                          */}
+      {/* ========================================================= */}
+      {activeTab === 'EMAIL_TEMPLATES' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          
+          {/* Module Selector */}
+          <div className="card" style={{ padding: '1rem' }}>
+            <label style={{ fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.5rem', display: 'block' }}>
+              Select Document Module to Customize Email Template:
+            </label>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              {[
+                { key: 'PURCHASE_ORDER', label: 'Purchase Orders (PO)' },
+                { key: 'JOB_WORK', label: 'Job Work (JW)' },
+                { key: 'QUOTATION', label: 'Machine Quotation' },
+                { key: 'SALES_ORDER', label: 'Sales Orders (SO)' },
+                { key: 'WORK_ORDER', label: 'Work Orders (WO)' },
+                { key: 'JOB_CARD', label: 'Job Cards (JC)' }
+              ].map(m => {
+                const isSelected = selectedTemplateModule === m.key;
+                return (
+                  <button
+                    key={m.key}
+                    type="button"
+                    className={`btn ${isSelected ? 'btn-primary' : 'btn-outline'}`}
+                    style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem' }}
+                    onClick={() => {
+                      setSelectedTemplateModule(m.key);
+                      const tmpl = emailTemplates[m.key];
+                      if (tmpl) {
+                        setTemplateSubject(tmpl.subject || '');
+                        setTemplateBody(tmpl.body || '');
+                      } else {
+                        setTemplateSubject(`[GEC ERP] Official ${m.label}: {docNumber} - {partyName}`);
+                        setTemplateBody(`Dear {recipientName},\n\nPlease find attached official document #{docNumber} issued on {date}.\n\nBest Regards,\n{senderName}\nGujarat Enterprise (GEC)`);
+                      }
+                    }}
+                  >
+                    <Edit3 size={13} /> {m.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Template Editor Form */}
+          <form 
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const tmpl: EmailTemplate = {
+                id: `tmpl-${selectedTemplateModule.toLowerCase()}`,
+                module: selectedTemplateModule as any,
+                subject: templateSubject.trim(),
+                body: templateBody,
+                isDefault: true,
+                lastUpdated: new Date().toISOString()
+              };
+              const res = await saveEmailTemplate(tmpl);
+              if (res.success) {
+                setMessage({ text: `✓ Email template for ${selectedTemplateModule} saved successfully!`, type: 'success' });
+              } else {
+                setMessage({ text: `Failed to save template: ${res.error}`, type: 'danger' });
+              }
+            }}
+            className="card" 
+            style={{ padding: '1.25rem', backgroundColor: 'var(--bg-card)' }}
+          >
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: '0 0 1rem 0', color: 'var(--text-primary)' }}>
+              Email Subject &amp; Body Template for {selectedTemplateModule}
+            </h3>
+
+            {/* Placeholders helper badges */}
+            <div style={{ padding: '0.65rem 0.85rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: '6px', marginBottom: '1rem', border: '1px solid var(--border-color)' }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
+                Click to Insert Dynamic Placeholders:
+              </div>
+              <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                {['{docNumber}', '{partyName}', '{recipientName}', '{date}', '{amount}', '{senderName}', '{companyName}'].map(tag => (
+                  <button
+                    key={tag}
+                    type="button"
+                    className="badge badge-primary"
+                    style={{ cursor: 'pointer', padding: '0.2rem 0.45rem', fontSize: '0.72rem' }}
+                    onClick={() => {
+                      setTemplateBody(prev => prev + ' ' + tag);
+                    }}
+                  >
+                    + {tag}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700 }}>Subject Template *</label>
+                <input 
+                  type="text" 
+                  required 
+                  className="input-field" 
+                  style={{ fontWeight: 600 }}
+                  value={templateSubject} 
+                  onChange={(e) => setTemplateSubject(e.target.value)} 
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700 }}>Email Body Template (Plain Text / HTML) *</label>
+                <textarea 
+                  rows={8} 
+                  required 
+                  className="input-field" 
+                  style={{ fontSize: '0.82rem', fontFamily: 'monospace', lineHeight: 1.5 }}
+                  value={templateBody} 
+                  onChange={(e) => setTemplateBody(e.target.value)} 
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.25rem' }}>
+              <button type="submit" className="btn btn-primary" style={{ fontWeight: 700, padding: '0.5rem 1.25rem' }}>
+                Save Template
+              </button>
+            </div>
+          </form>
         </div>
       )}
 
