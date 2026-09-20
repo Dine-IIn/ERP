@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GEC ERP - Print Architecture Live Test & Sandbox</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: #0f172a;
+      color: #e2e8f0;
+      padding: 20px;
+    }
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 15px 20px;
+      background: #1e293b;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      border: 1px solid #334155;
+    }
+    .header-bar h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #f8fafc;
+    }
+    .controls-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+      background: #1e293b;
+      padding: 15px;
+      border-radius: 8px;
+      border: 1px solid #334155;
+    }
+    .control-item label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #94a3b8;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+    }
+    .control-item input, .control-item select {
+      width: 100%;
+      padding: 6px 10px;
+      background: #0f172a;
+      border: 1px solid #475569;
+      color: #fff;
+      border-radius: 4px;
+      font-size: 0.85rem;
+    }
+    .btn {
+      padding: 8px 16px;
+      background: #3b82f6;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+    .btn:hover {
+      background: #2563eb;
+    }
+    .btn-secondary {
+      background: #475569;
+    }
+    .btn-secondary:hover {
+      background: #334155;
+    }
+
+    /* A4 Simulation Sheet */
+    .sheet-wrapper {
+      background: #ffffff;
+      color: #000000;
+      width: 210mm;
+      min-height: 297mm;
+      margin: 0 auto;
+      padding: 12mm 15mm;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      border-radius: 2px;
+      font-family: Arial, Helvetica, sans-serif;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    /* Header CSS (Same as React Component) */
+    .company-header {
+      width: 100%;
+      margin-bottom: 10px;
+      color: #000000;
+    }
+    .company-header-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid #000000;
+      padding-bottom: 6px;
+      margin-bottom: 6px;
+    }
+    .company-title {
+      font-size: 15pt;
+      font-weight: 900;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      line-height: 1.1;
+    }
+    .company-tagline {
+      display: inline-block;
+      margin-top: 3px;
+      padding: 1px 8px;
+      border: 1px solid #000000;
+      border-radius: 3px;
+      font-size: 7.5pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    .company-header-right {
+      text-align: right;
+      font-size: 8pt;
+      line-height: 1.35;
+    }
+    .doc-badge {
+      display: inline-block;
+      background-color: #000000;
+      color: #ffffff;
+      font-weight: 900;
+      font-size: 11pt;
+      padding: 3px 20px;
+      border-radius: 3px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    /* Sample Body Table */
+    .sample-body {
+      flex: 1;
+      margin: 15px 0;
+    }
+    .sample-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 8.5pt;
+      margin-top: 10px;
+    }
+    .sample-table th, .sample-table td {
+      border: 1px solid #000000;
+      padding: 5px 6px;
+      text-align: left;
+    }
+    .sample-table th {
+      background-color: #f1f5f9;
+      font-weight: 700;
+    }
+
+    /* Footer CSS (Same as React Component) */
+    .company-footer {
+      width: 100%;
+      margin-top: 15px;
+      page-break-inside: avoid;
+    }
+    .footer-strip-container {
+      border: 1px solid #1b2762;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .footer-contact-strip {
+      text-align: center;
+      padding: 3px 8px;
+      font-size: 7.5pt;
+      font-weight: 700;
+      color: #1b2762;
+      background-color: #f1f5f9;
+      border-bottom: 1px solid #1b2762;
+    }
+    .footer-address-strip {
+      background-color: #1b2762;
+      color: #ffffff;
+      text-align: center;
+      padding: 3px 8px;
+      font-size: 7pt;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+    }
+
+    @media print {
+      body {
+        background: #ffffff;
+        padding: 0;
+      }
+      .no-print {
+        display: none !important;
+      }
+      .sheet-wrapper {
+        box-shadow: none;
+        padding: 0;
+        margin: 0;
+        width: 100%;
+        min-height: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    
+    <!-- Controls Toolbar (Hidden on Print) -->
+    <div class="header-bar no-print">
+      <div>
+        <h1>🖨️ GEC ERP Print Architecture Direct Sandbox</h1>
+        <p style="font-size: 0.8rem; color: #94a3b8; margin-top: 2px;">
+          Test Header & Footer rendering live without compiling, logging in, or generating documents.
+        </p>
+      </div>
+      <div style="display: flex; gap: 10px;">
+        <button class="btn btn-secondary" onclick="resetDefaults()">Reset Defaults</button>
+        <button class="btn" onclick="window.print()">Print / PDF Preview</button>
+      </div>
+    </div>
+
+    <!-- Live Parameters Form (Hidden on Print) -->
+    <div class="controls-grid no-print">
+      <div class="control-item">
+        <label>Document Title</label>
+        <input type="text" id="inputDocTitle" value="PURCHASE ORDER" oninput="updateView()">
+      </div>
+      <div class="control-item">
+        <label>Company Name</label>
+        <input type="text" id="inputCompanyName" value="GHANSHYAM ENGINEERING CO." oninput="updateView()">
+      </div>
+      <div class="control-item">
+        <label>Tagline</label>
+        <input type="text" id="inputTagline" value="Mfg : Plastic Injection Molding Machine" oninput="updateView()">
+      </div>
+      <div class="control-item">
+        <label>GSTIN</label>
+        <input type="text" id="inputGstin" value="24AAEFG4976H1Z9" oninput="updateView()">
+      </div>
+      <div class="control-item">
+        <label>Email</label>
+        <input type="text" id="inputEmail" value="info@ghanshyameng.com" oninput="updateView()">
+      </div>
+      <div class="control-item">
+        <label>Phone Numbers</label>
+        <input type="text" id="inputPhone" value="+91 90339 80809 | +91 98252 93732 | +91 96018 23402" oninput="updateView()">
+      </div>
+    </div>
+
+    <!-- Live A4 Sheet Preview -->
+    <div class="sheet-wrapper" id="sheet">
+      
+      <!-- ==================== MODULAR HEADER ==================== -->
+      <div class="company-header" id="headerContainer">
+        <div class="company-header-top">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <img src="assets/images/gec_logo.png" alt="Logo" style="height: 48px; width: auto;" onerror="this.src='assets/images/gec_header.png';">
+            <div>
+              <div class="company-title" id="displayCompanyName">GHANSHYAM ENGINEERING CO.</div>
+              <div class="company-tagline" id="displayTagline">Mfg : Plastic Injection Molding Machine</div>
+            </div>
+          </div>
+          <div class="company-header-right">
+            <div style="font-weight: 800; font-size: 8.5pt;">
+              GST NO. : <span id="displayGstin" style="font-family: monospace; font-weight: 900;">24AAEFG4976H1Z9</span>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-top: 1px;">
+              <span id="displayEmail">info@ghanshyameng.com</span> ✉️
+            </div>
+            <div style="display: flex; align-items: center; justify-content: flex-end; gap: 4px;">
+              <span style="font-weight: 600;">ghanshyameng.com</span> 🌐
+            </div>
+          </div>
+        </div>
+
+        <div style="text-align: center; margin: 4px 0 6px 0;">
+          <span class="doc-badge" id="displayDocTitle">PURCHASE ORDER</span>
+        </div>
+      </div>
+
+      <!-- ==================== SAMPLE DOCUMENT BODY ==================== -->
+      <div class="sample-body">
+        <div style="display: flex; justify-content: space-between; font-size: 8.5pt; margin-bottom: 12px; line-height: 1.5;">
+          <div>
+            <div><strong>Vendor Code:</strong> V-0012</div>
+            <div><strong>Vendor Name:</strong> Apex Hydraulic Solutions Pvt Ltd</div>
+            <div><strong>GSTIN:</strong> 24ABCDE1234F1Z5</div>
+            <div><strong>Address:</strong> Phase 2, GIDC Industrial Estate, Rajkot</div>
+          </div>
+          <div style="text-align: right;">
+            <div><strong>PO Number:</strong> PO/26-27/0142</div>
+            <div><strong>PO Date:</strong> 20/09/2026</div>
+            <div><strong>Qtn No:</strong> Q-8841</div>
+            <div><strong>Delivery Target:</strong> 30/09/2026</div>
+          </div>
+        </div>
+
+        <table class="sample-table">
+          <thead>
+            <tr>
+              <th style="width: 35px; text-align: center;">#</th>
+              <th style="width: 110px;">Part Code</th>
+              <th>Item Description</th>
+              <th style="width: 55px; text-align: center;">UOM</th>
+              <th style="width: 65px; text-align: right;">Qty</th>
+              <th style="width: 85px; text-align: right;">Rate (₹)</th>
+              <th style="width: 95px; text-align: right;">Amount (₹)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="text-align: center;">1</td>
+              <td>HYD-VALVE-01</td>
+              <td>Directional Control Valve 24V DC Double Solenoid</td>
+              <td style="text-align: center;">NOS</td>
+              <td style="text-align: right;">4.00</td>
+              <td style="text-align: right;">8,500.00</td>
+              <td style="text-align: right;">34,000.00</td>
+            </tr>
+            <tr>
+              <td style="text-align: center;">2</td>
+              <td>HYD-HOSE-08</td>
+              <td>High Pressure Hydraulic Hose 1/2" 2-Wire R2 1.5M</td>
+              <td style="text-align: center;">NOS</td>
+              <td style="text-align: right;">12.00</td>
+              <td style="text-align: right;">1,250.00</td>
+              <td style="text-align: right;">15,000.00</td>
+            </tr>
+            <tr>
+              <td style="text-align: center;">3</td>
+              <td>PLG-CYL-160</td>
+              <td>Hydraulic Clamping Cylinder Seal Kit 160mm</td>
+              <td style="text-align: center;">SET</td>
+              <td style="text-align: right;">2.00</td>
+              <td style="text-align: right;">4,200.00</td>
+              <td style="text-align: right;">8,400.00</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="5" style="border: none;"></td>
+              <td style="font-weight: 700; text-align: right;">Subtotal:</td>
+              <td style="font-weight: 700; text-align: right;">57,400.00</td>
+            </tr>
+            <tr>
+              <td colspan="5" style="border: none;"></td>
+              <td style="font-weight: 700; text-align: right;">GST (18%):</td>
+              <td style="font-weight: 700; text-align: right;">10,332.00</td>
+            </tr>
+            <tr>
+              <td colspan="5" style="border: none;"></td>
+              <td style="font-weight: 800; text-align: right; background: #f1f5f9;">Grand Total:</td>
+              <td style="font-weight: 800; text-align: right; background: #f1f5f9;">67,732.00</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <!-- ==================== MODULAR FOOTER ==================== -->
+      <div class="company-footer" id="footerContainer">
+        <div class="footer-strip-container">
+          <div class="footer-contact-strip" id="displayPhone">
+            📞 +91 90339 80809 | +91 98252 93732 | +91 96018 23402 &nbsp;|&nbsp; ✉️ <span id="displayFooterEmail">info@ghanshyameng.com</span>
+          </div>
+          <div class="footer-address-strip">
+            📍 Plot–3, R.S. : 792–793–795, Nr. Anjney Ind Zone–1, Shapar, Vill.: Shapar, Taluka : Kotda Sangani, Dist.: Rajkot - 360024, Gujarat, India
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    function updateView() {
+      document.getElementById('displayDocTitle').innerText = document.getElementById('inputDocTitle').value;
+      document.getElementById('displayCompanyName').innerText = document.getElementById('inputCompanyName').value;
+      document.getElementById('displayTagline').innerText = document.getElementById('inputTagline').value;
+      document.getElementById('displayGstin').innerText = document.getElementById('inputGstin').value;
+      document.getElementById('displayEmail').innerText = document.getElementById('inputEmail').value;
+      document.getElementById('displayFooterEmail').innerText = document.getElementById('inputEmail').value;
+      document.getElementById('displayPhone').innerHTML = `📞 ${document.getElementById('inputPhone').value} &nbsp;|&nbsp; ✉️ <span>${document.getElementById('inputEmail').value}</span>`;
+    }
+
+    function resetDefaults() {
+      document.getElementById('inputDocTitle').value = "PURCHASE ORDER";
+      document.getElementById('inputCompanyName').value = "GHANSHYAM ENGINEERING CO.";
+      document.getElementById('inputTagline').value = "Mfg : Plastic Injection Molding Machine";
+      document.getElementById('inputGstin').value = "24AAEFG4976H1Z9";
+      document.getElementById('inputEmail').value = "info@ghanshyameng.com";
+      document.getElementById('inputPhone').value = "+91 90339 80809 | +91 98252 93732 | +91 96018 23402";
+      updateView();
+    }
+  </script>
+</body>
+</html>

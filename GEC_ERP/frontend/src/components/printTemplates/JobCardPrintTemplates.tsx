@@ -1,6 +1,7 @@
 import React from 'react';
 import { JobCard, DispatchRecord } from '../../types/erp';
 import { GECPrintHeader, GECPrintSignatory } from './WOPrintTemplates';
+import { CompanyPrintFooter } from './CompanyPrintFooter';
 
 // 1. Single Job Card / Station Routing Ticket
 export const SingleJobCardPrintView: React.FC<{ jobCard: JobCard }> = ({ jobCard }) => (
@@ -44,6 +45,7 @@ export const SingleJobCardPrintView: React.FC<{ jobCard: JobCard }> = ({ jobCard
     </table>
 
     <GECPrintSignatory preparedBy="Station Incharge" checkedBy="Assembly Lead" authorizedBy="Production Manager" />
+    <CompanyPrintFooter />
   </div>
 );
 
@@ -90,6 +92,7 @@ export const JobCardListPrintView: React.FC<{ jobCards: JobCard[]; filterLabel?:
     </table>
 
     <GECPrintSignatory />
+    <CompanyPrintFooter />
   </div>
 );
 
@@ -138,6 +141,7 @@ export const SingleDispatchPrintView: React.FC<{ dispatch: DispatchRecord }> = (
       <div className="print-signatory-box">Gate Security Checked & Passed</div>
       <div className="print-signatory-box">Receiver Sign & Rubber Stamp</div>
     </div>
+    <CompanyPrintFooter />
   </div>
 );
 
@@ -184,5 +188,6 @@ export const DispatchListPrintView: React.FC<{ records: DispatchRecord[]; filter
     </table>
 
     <GECPrintSignatory />
+    <CompanyPrintFooter />
   </div>
 );

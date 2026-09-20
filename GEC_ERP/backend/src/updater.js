@@ -7,8 +7,14 @@ import { fileURLToPath } from 'url';
 import { exec, execSync } from 'child_process';
 import { sessionManager } from './sessionManager.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const getDirname = () => {
+  if (typeof __dirname !== 'undefined' && __dirname) return __dirname;
+  try {
+    if (typeof import.meta !== 'undefined' && import.meta.url) return path.dirname(fileURLToPath(import.meta.url));
+  } catch (e) {}
+  return process.cwd();
+};
+const __dirname = getDirname();
 const ROOT_DIR = path.resolve(__dirname, '../../');
 const BACKEND_PKG_FILE = path.join(__dirname, '../package.json');
 const FRONTEND_PKG_FILE = path.join(__dirname, '../../frontend/package.json');
@@ -49,7 +55,7 @@ class AutoUpdater {
   async checkForUpdates() {
     this.lastCheckTime = new Date().toISOString();
     const token = process.env.GITHUB_TOKEN || process.env.GITHUB_ACCESS_TOKEN || '';
-    const repo = process.env.GITHUB_REPO || 'manavkalola/GEC_ERP'; // default or custom repo
+    const repo = process.env.GITHUB_REPO || 'Dine-IIn/ERP'; // default or custom repo
 
     try {
       const headers = {

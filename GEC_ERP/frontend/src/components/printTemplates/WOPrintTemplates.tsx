@@ -1,26 +1,15 @@
 import React from 'react';
 import { WorkOrder } from '../../types/erp';
+import { CompanyPrintHeader } from './CompanyPrintHeader';
+import { CompanyPrintFooter } from './CompanyPrintFooter';
 
-// Header section for GEC Moulding Machines
+// Header section for GEC Moulding Machines (Pure Code)
 export const GECPrintHeader: React.FC<{ docTitle: string; refNo?: string; date?: string }> = ({
   docTitle,
   refNo,
   date
 }) => (
-  <div className="print-header">
-    <div>
-      <h2 className="print-company-title">GEC MOULDING MACHINES</h2>
-      <div className="print-company-subtitle">GIDC Industrial Estate, Odhav, Ahmedabad - 382415, Gujarat, India</div>
-      <div className="print-company-subtitle">GSTIN: 24AAACG1234F1Z9 | Phone: +91 98250 00000 | info@gecmachines.com</div>
-    </div>
-    <div style={{ textAlign: 'right' }}>
-      <h3 className="print-doc-badge">{docTitle}</h3>
-      {refNo && <div style={{ fontSize: '0.85rem', fontWeight: 700, fontFamily: 'monospace', marginTop: '2px' }}>Ref: {refNo}</div>}
-      <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '2px' }}>
-        Date: {date || new Date().toISOString().split('T')[0]}
-      </div>
-    </div>
-  </div>
+  <CompanyPrintHeader docTitle={docTitle} docNumber={refNo} docDate={date} />
 );
 
 // Signatory block
@@ -116,6 +105,7 @@ export const SingleWOPrintView: React.FC<{ wo: WorkOrder }> = ({ wo }) => {
       )}
 
       <GECPrintSignatory />
+      <CompanyPrintFooter />
     </div>
   );
 };
@@ -169,5 +159,6 @@ export const WOListPrintView: React.FC<{ workOrders: WorkOrder[]; filterLabel?: 
     </div>
 
     <GECPrintSignatory />
+    <CompanyPrintFooter />
   </div>
 );

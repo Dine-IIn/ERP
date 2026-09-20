@@ -1,16 +1,22 @@
-﻿import { spawn } from 'child_process';
+import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const getDirname = () => {
+  if (typeof __dirname !== 'undefined' && __dirname) return __dirname;
+  try {
+    if (typeof import.meta !== 'undefined' && import.meta.url) return path.dirname(fileURLToPath(import.meta.url));
+  } catch (e) {}
+  return process.cwd();
+};
+const __dirname = getDirname();
 
 class TunnelManager {
   constructor() {
     this.process = null;
     this.status = 'STOPPED'; // 'STOPPED' | 'STARTING' | 'ONLINE' | 'RECONNECTING' | 'ERROR'
-    this.publicUrl = 'https://erpdev.manavkalola.xyz';
+    this.publicUrl = process.env.VITE_API_CLOUD_URL || process.env.PUBLIC_URL || 'https://erp.manavkalola.xyz';
     this.edgeConnections = [];
     this.lastError = null;
     this.restartAttempts = 0;
@@ -48,7 +54,9 @@ class TunnelManager {
     this.shouldAutoRestart = true;
 
     try {
-      this.process = spawn(binPath, ['--edge-ip-version', '4', 'tunnel', 'run'], {
+      const token = process.env.CLOUDFLARE_TUNNEL_TOKEN || 'eyJhIjogIjM3NzczM2VjZTE3Yjc1OWM0ZDE4MmQyZDk3N2MwM2NmIiwgInQiOiAiNzE4OWMwMzItYTQyNi00N2Q1LTllMmQtZmQ2NjAwYzgxNWQ4IiwgInMiOiAialorZXovRWRoYW5pcE1ZL1M4TGpGRnlKR3E3cnhCbTBIb01uZThMc2QwQT0ifQ==';
+      const spawnArgs = token ? ['--edge-ip-version', '4', 'tunnel', 'run', '--token', token] : ['--edge-ip-version', '4', 'tunnel', 'run'];
+      this.process = spawn(binPath, spawnArgs, {
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true
       });

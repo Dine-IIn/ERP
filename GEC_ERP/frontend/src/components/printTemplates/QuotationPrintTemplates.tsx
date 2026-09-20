@@ -1,5 +1,7 @@
-﻿import React from 'react';
+import React from 'react';
 import { GEC_PRODUCTS_DATA } from '../../data/quotationProductsData';
+import { CompanyPrintHeader } from './CompanyPrintHeader';
+import { CompanyPrintFooter } from './CompanyPrintFooter';
 
 export interface QuotationPrintData {
   id?: string;
@@ -77,27 +79,11 @@ export const GECQuotationPrintView: React.FC<{ quotation: QuotationPrintData }> 
   const totalAmount = customRound(discountedMachinePrice + optionsTotal + extraAmount);
 
   const headerImg = (
-    <div style={{ width: '100%', margin: '0 0 8px 0', padding: 0 }}>
-      <img 
-        src="assets/images/gec_header.png" 
-        alt="Ghanshyam Engineering Co." 
-        style={{ width: '100%', height: 'auto', display: 'block', borderRadius: '4px' }}
-        onError={(e: any) => { e.currentTarget.style.display = 'none'; }}
-      />
-    </div>
+    <CompanyPrintHeader docTitle="OFFICIAL COMMERCIAL QUOTATION" />
   );
 
   const footerBanner = (
-    <div style={{ marginTop: '12px', fontFamily: 'Arial, sans-serif', pageBreakInside: 'avoid' }}>
-      <div style={{ border: '1px solid #cbd5e1', borderRadius: '6px', overflow: 'hidden', backgroundColor: '#e2e8f0' }}>
-        <div style={{ textAlign: 'center', padding: '4px 8px', fontSize: '8pt', fontWeight: 'bold', color: '#1b2762' }}>
-          📞 +91 90339 80809 &nbsp;|&nbsp; +91 98252 93732 &nbsp;|&nbsp; +91 96018 23402
-        </div>
-        <div style={{ backgroundColor: '#1b2762', color: '#ffffff', textAlign: 'center', padding: '4px 8px', fontSize: '7pt', fontWeight: 'bold' }}>
-          📍 Plot–3, R.S. : 792–793–795, Nr.Anjney Ind Zone–1, Shapar, Vill.: Shapar, Taluka : Kotda Sangani, Dist.: Rajkot.
-        </div>
-      </div>
-    </div>
+    <CompanyPrintFooter />
   );
 
   return (
@@ -106,14 +92,6 @@ export const GECQuotationPrintView: React.FC<{ quotation: QuotationPrintData }> 
       {/* PAGE 1: COMMERCIAL QUOTATION SUMMARY */}
       <div className="quotation-page" style={{ pageBreakAfter: 'always', marginBottom: '2rem' }}>
         {headerImg}
-        
-        <div style={{ fontSize: '10pt', fontWeight: 'bold', marginBottom: '4px' }}>
-          GST Number: {company.gstin || '24AAEFG4976H1Z9'}
-        </div>
-
-        <div style={{ textAlign: 'center', fontSize: '15pt', fontWeight: 'bold', textDecoration: 'underline', margin: '4px 0 10px 0', letterSpacing: '0.5px', color: '#1e3a8a' }}>
-          OFFICIAL COMMERCIAL QUOTATION
-        </div>
 
         {/* Customer & Quote Meta Grid */}
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9.5pt', marginBottom: '10px' }}>

@@ -75,54 +75,17 @@ export const Header: React.FC = () => {
 
   // Central Host PC Server Connection State
   const [isServerOnline, setIsServerOnline] = useState<boolean>(false);
-  const [serverNetworkMode, setServerNetworkMode] = useState<'LAN' | 'CLOUD' | 'LOCALHOST' | 'OFFLINE'>('LAN');
+  const [serverNetworkMode, setServerNetworkMode] = useState<'LAN' | 'CLOUD' | 'LOCALHOST' | 'OFFLINE' | 'CHECKING'>('CHECKING');
   const [serverDbStatus, setServerDbStatus] = useState<string>('Checking...');
   const [detectedServerIps, setDetectedServerIps] = useState<string[]>([]);
-
-  // Probe real internet reachability (even when hotspot is on without data)
-  useEffect(() => {
-    const checkInternetConnectivity = async () => {
-      if (!navigator.onLine) {
-        setIsUserOnline(false);
-        return;
-      }
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3500);
-        // Probe internet with cache-busting
-        await fetch(`https://www.google.com/favicon.ico?_=${Date.now()}`, {
-          method: 'HEAD',
-          mode: 'no-cors',
-          cache: 'no-store',
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-        setIsUserOnline(true);
-      } catch {
-        // Hotspot is active but mobile data is turned off / no real internet
-        setIsUserOnline(false);
-      }
-    };
-
-    const handleOnline = () => checkInternetConnectivity();
-    const handleOffline = () => setIsUserOnline(false);
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    checkInternetConnectivity();
-    const netInterval = setInterval(checkInternetConnectivity, 10000);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-      clearInterval(netInterval);
-    };
-  }, []);
+  const [isLanReachable, setIsLanReachable] = useState<boolean>(false);
 
   const checkServerHealth = async () => {
     try {
       const result = await apiClient.checkHealth();
+      setIsUserOnline(result.isInternetReachable);
+      setIsLanReachable(result.isLanReachable);
+
       if (result.online) {
         setIsServerOnline(true);
         setServerNetworkMode(result.mode);
@@ -136,17 +99,33 @@ export const Header: React.FC = () => {
         setServerDbStatus('Offline');
       }
     } catch {
+      setIsUserOnline(false);
+      setIsLanReachable(false);
       setIsServerOnline(false);
       setServerNetworkMode('OFFLINE');
       setServerDbStatus('Offline');
     }
   };
 
-  // Dynamic server health & hybrid network mode check
+  // Dynamic server health & user network status checks
   useEffect(() => {
+    const handleOnline = () => checkServerHealth();
+    const handleOffline = () => {
+      setIsUserOnline(false);
+      checkServerHealth();
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
     checkServerHealth();
     const interval = setInterval(checkServerHealth, 5000);
-    return () => clearInterval(interval);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      clearInterval(interval);
+    };
   }, []);
 
   const handleSaveAndTestServerConfig = async (lanOverride?: string, cloudOverride?: string) => {
@@ -883,26 +862,36 @@ export const Header: React.FC = () => {
           );
         })()}
 
-        {/* User Connection Status: Online | LAN | Offline */}
+        {/* User Connection Status: Online | LAN Only | Offline */}
         {(() => {
           let userStatusText = 'Online';
           let userBg = 'rgba(16, 185, 129, 0.12)';
           let userBorder = 'var(--success)';
           let userColor = 'var(--success)';
           let userIcon = <Wifi size={13} />;
+          let userTitle = 'Active Internet Connection';
 
-          if (!navigator.onLine) {
+          if (isUserOnline) {
+            userStatusText = 'Online';
+            userBg = 'rgba(16, 185, 129, 0.12)';
+            userBorder = 'var(--success)';
+            userColor = 'var(--success)';
+            userIcon = <Wifi size={13} />;
+            userTitle = 'Active Internet Connection (Cloud & Web services accessible)';
+          } else if (isLanReachable) {
+            userStatusText = 'LAN Only';
+            userBg = 'rgba(245, 158, 11, 0.12)';
+            userBorder = '#f59e0b';
+            userColor = '#f59e0b';
+            userIcon = <Wifi size={13} />;
+            userTitle = 'Connected to Local Office/Factory Wi-Fi (No external internet)';
+          } else {
             userStatusText = 'Offline';
             userBg = 'rgba(239, 68, 68, 0.12)';
             userBorder = 'var(--danger)';
             userColor = 'var(--danger)';
             userIcon = <WifiOff size={13} />;
-          } else if (!isUserOnline) {
-            userStatusText = 'LAN';
-            userBg = 'rgba(245, 158, 11, 0.12)';
-            userBorder = '#f59e0b';
-            userColor = '#f59e0b';
-            userIcon = <Wifi size={13} />;
+            userTitle = 'No Network or Internet Connection';
           }
 
           return (
@@ -919,7 +908,7 @@ export const Header: React.FC = () => {
                 fontSize: '0.73rem',
                 fontWeight: 700
               }} 
-              title={`User Network: ${userStatusText} (${userStatusText === 'LAN' ? 'Local Network without external internet' : (userStatusText === 'Online' ? 'Active Internet Connection' : 'No Network Connection')})`}
+              title={`User Network: ${userStatusText} (${userTitle})`}
             >
               {userIcon}
               <span>User: {userStatusText}</span>
@@ -927,26 +916,43 @@ export const Header: React.FC = () => {
           );
         })()}
 
-        {/* Server Connection Status: Online | LAN | Offline (Clickable to change Server URL) */}
+        {/* Server Connection Status: LAN | Cloud | Offline (Clickable to configure for SuperAdmin) */}
         {(() => {
           let serverStatusText = 'Online';
           let serverBg = 'rgba(16, 185, 129, 0.12)';
           let serverBorder = 'var(--success)';
           let serverColor = 'var(--success)';
           let serverIcon = <Server size={13} />;
+          let serverTitle = '';
 
-          if (!isServerOnline) {
+          if (serverNetworkMode === 'CHECKING') {
+            serverStatusText = 'Checking...';
+            serverBg = 'rgba(148, 163, 184, 0.12)';
+            serverBorder = '#94a3b8';
+            serverColor = '#94a3b8';
+            serverIcon = <Server size={13} />;
+            serverTitle = 'Probing server routes...';
+          } else if (!isServerOnline) {
             serverStatusText = 'Offline';
             serverBg = 'rgba(239, 68, 68, 0.12)';
             serverBorder = 'var(--danger)';
             serverColor = 'var(--danger)';
             serverIcon = <AlertCircle size={13} />;
+            serverTitle = 'Central ERP Server is unreachable via LAN or Cloud';
           } else if (serverNetworkMode === 'LAN' || serverNetworkMode === 'LOCALHOST') {
             serverStatusText = 'LAN';
             serverBg = 'rgba(59, 130, 246, 0.12)';
             serverBorder = 'var(--accent-primary)';
             serverColor = 'var(--accent-primary)';
             serverIcon = <Server size={13} />;
+            serverTitle = `Direct High-Speed Local Network (${apiClient.getBaseUrl()}) - ${serverDbStatus}`;
+          } else if (serverNetworkMode === 'CLOUD') {
+            serverStatusText = 'Cloud';
+            serverBg = 'rgba(147, 51, 234, 0.12)';
+            serverBorder = '#9333ea';
+            serverColor = '#9333ea';
+            serverIcon = <Globe size={13} />;
+            serverTitle = `Remote Cloudflare Tunnel (${apiClient.getBaseUrl()}) - ${serverDbStatus}`;
           }
 
           const isSuperAdminUser = currentUser?.isSuperAdmin === true || currentUser?.username?.toLowerCase() === 'superadmin';
@@ -975,7 +981,7 @@ export const Header: React.FC = () => {
                   cursor: 'pointer',
                   transition: 'all 0.15s ease'
                 }} 
-                title={isServerOnline ? `Central Server is LIVE in ${serverStatusText} Mode (${serverDbStatus}). Click to configure Server Network Address (SuperAdmin).` : 'Server: Offline (Click to configure Server Address - SuperAdmin)'}
+                title={isServerOnline ? `Central Server is LIVE in ${serverStatusText} Mode (${serverTitle}). Click to configure Server Network Address (SuperAdmin).` : 'Server: Offline (Click to configure Server Address - SuperAdmin)'}
               >
                 {serverIcon}
                 <span>Server: {serverStatusText}</span>
@@ -999,7 +1005,7 @@ export const Header: React.FC = () => {
                 fontSize: '0.73rem',
                 fontWeight: 700
               }} 
-              title={isServerOnline ? `Central Server is LIVE in ${serverStatusText} Mode (${serverDbStatus})` : 'Server: Offline (Read-Only cached data access)'}
+              title={isServerOnline ? `Central Server is LIVE in ${serverStatusText} Mode (${serverTitle})` : 'Server: Offline (Read-Only cached data access)'}
             >
               {serverIcon}
               <span>Server: {serverStatusText}</span>
@@ -1170,8 +1176,8 @@ export const Header: React.FC = () => {
                     type="button"
                     onClick={() => { 
                       setCustomLanInput('http://192.168.1.88:5000'); 
-                      setCustomCloudInput('https://erpdev.manavkalola.xyz'); 
-                      handleSaveAndTestServerConfig('http://192.168.1.88:5000', 'https://erpdev.manavkalola.xyz'); 
+                      setCustomCloudInput('https://erp.manavkalola.xyz'); 
+                      handleSaveAndTestServerConfig('http://192.168.1.88:5000', 'https://erp.manavkalola.xyz'); 
                     }}
                     style={{
                       padding: '0.25rem 0.6rem',

@@ -6,8 +6,14 @@ import { fileURLToPath } from 'url';
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const getDirname = () => {
+  if (typeof __dirname !== 'undefined' && __dirname) return __dirname;
+  try {
+    if (typeof import.meta !== 'undefined' && import.meta.url) return path.dirname(fileURLToPath(import.meta.url));
+  } catch (e) {}
+  return process.cwd();
+};
+const __dirname = getDirname();
 
 const { Pool } = pg;
 

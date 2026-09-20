@@ -33,7 +33,7 @@ def get_network_ip():
 
 def main():
     root_dir = Path(__file__).resolve().parent
-    server_dir = root_dir / "server"
+    server_dir = root_dir / "backend"
     os.chdir(root_dir)
 
     print("\n" + "=" * 65)
@@ -83,28 +83,7 @@ JWT_SECRET=GEC_ERP_SuperSecretJwtKey_2026_Secure$
 
     # 3. Create Windows Auto-Start with Auto-Recovery Batch File
     print(f"\n⚙️ [4/4] Setting up Windows Auto-Start & Crash-Recovery Loop...")
-    auto_start_bat = root_dir / "start-gec-server.bat"
-    
-    bat_content = f"""@echo off
-title GEC ERP Enterprise Backend Server
-color 0A
-
-echo ================================================================
-echo 🚀 Starting GEC ERP Central Server with Auto-Recovery...
-echo ================================================================
-
-cd /d "{server_dir.resolve()}"
-
-:SERVER_LOOP
-echo [%date% %time%] Launching server process...
-node src/server.js
-
-echo.
-echo ⚠️ Server process stopped or network refreshed. Auto-recovering in 3 seconds...
-timeout /t 3 /nobreak >nul
-goto SERVER_LOOP
-"""
-    auto_start_bat.write_text(bat_content, encoding="utf-8")
+    auto_start_bat = root_dir / "start_hybrid_server.bat"
 
     # Add to Windows Startup Folder if user desires
     if os.name == 'nt':

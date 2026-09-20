@@ -4,14 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "cd frontend && corepack pnpm dev",
-    "build": "cd frontend && corepack pnpm build",
-    "server": "cd backend && corepack pnpm dev",
-    "server:manage": "cd backend && node src/serverManager.js",
-    "tauri:dev": "cd frontend && corepack pnpm tauri:dev",
-    "tauri:build": "cd frontend && corepack pnpm tauri:build",
-    "cap:android": "cd frontend && corepack pnpm cap:android",
-    "cap:sync": "cd frontend && corepack pnpm cap:sync",
-    "cap:open": "cd frontend && corepack pnpm cap:open"
+    "dev": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "server": "node backend/src/server.js",
+    "server:manage": "node backend/src/serverManager.js",
+    "tauri:dev": "npm --prefix frontend run tauri:dev",
+    "tauri:build": "npm --prefix frontend run tauri:build",
+    "cap:android": "npm --prefix frontend run cap:android",
+    "cap:sync": "npm --prefix frontend run cap:sync",
+    "cap:open": "npm --prefix frontend run cap:open"
   }
 }

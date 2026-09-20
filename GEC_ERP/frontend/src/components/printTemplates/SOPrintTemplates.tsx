@@ -1,6 +1,7 @@
 import React from 'react';
 import { SalesOrder } from '../../types/erp';
 import { GECPrintHeader, GECPrintSignatory } from './WOPrintTemplates';
+import { CompanyPrintFooter } from './CompanyPrintFooter';
 
 // 1. Single Sales Order Commercial Confirmation
 export const SingleSOPrintView: React.FC<{ so: SalesOrder; customerDetails?: any }> = ({
@@ -73,6 +74,7 @@ export const SingleSOPrintView: React.FC<{ so: SalesOrder; customerDetails?: any
     </div>
 
     <GECPrintSignatory preparedBy="Sales Engineer" checkedBy="Commercial Head" authorizedBy="Director" />
+    <CompanyPrintFooter />
   </div>
 );
 
@@ -123,5 +125,6 @@ export const SOListPrintView: React.FC<{ salesOrders: SalesOrder[]; filterLabel?
     </div>
 
     <GECPrintSignatory />
+    <CompanyPrintFooter />
   </div>
 );

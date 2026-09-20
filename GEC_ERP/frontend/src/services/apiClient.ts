@@ -56,7 +56,7 @@ export function getApiBaseUrl(): string {
     if ((import.meta as any).env?.VITE_API_CLOUD_URL) {
       return ((import.meta as any).env.VITE_API_CLOUD_URL as string).replace(/\/$/, '');
     }
-    return 'https://erpdev.manavkalola.xyz';
+    return 'https://erp.manavkalola.xyz';
   }
 
   // 4. Vite Environment Variable Override
@@ -161,9 +161,9 @@ class HybridApiClient {
       if ((import.meta as any).env?.VITE_API_CLOUD_URL) {
         return ((import.meta as any).env.VITE_API_CLOUD_URL as string).trim().replace(/\/$/, '');
       }
-      return 'https://erpdev.manavkalola.xyz';
+      return 'https://erp.manavkalola.xyz';
     }
-    return 'https://erpdev.manavkalola.xyz';
+    return 'https://erp.manavkalola.xyz';
   }
 
   public getLastHealth(): ServerHealthResponse | null {
@@ -189,11 +189,54 @@ class HybridApiClient {
     return { online: false };
   }
 
-  // Check health with smart LAN-First priority
-  public async checkHealth(): Promise<{ online: boolean; mode: 'LAN' | 'CLOUD' | 'LOCALHOST' | 'OFFLINE'; data?: ServerHealthResponse }> {
+  // Check internet reachability independently of local networks
+  public async checkInternetReachability(): Promise<boolean> {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return false;
+    }
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2200);
+      await fetch(`https://1.1.1.1/cdn-cgi/trace?_=${Date.now()}`, {
+        method: 'GET',
+        mode: 'no-cors',
+        cache: 'no-store',
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      return true;
+    } catch {
+      try {
+        const controller2 = new AbortController();
+        const timeoutId2 = setTimeout(() => controller2.abort(), 2000);
+        await fetch(`https://www.google.com/favicon.ico?_=${Date.now()}`, {
+          method: 'HEAD',
+          mode: 'no-cors',
+          cache: 'no-store',
+          signal: controller2.signal
+        });
+        clearTimeout(timeoutId2);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  }
+
+  // Check health with smart LAN-First priority and accurate telemetry
+  public async checkHealth(): Promise<{ 
+    online: boolean; 
+    mode: 'LAN' | 'CLOUD' | 'LOCALHOST' | 'OFFLINE'; 
+    isInternetReachable: boolean;
+    isLanReachable: boolean;
+    data?: ServerHealthResponse 
+  }> {
     const customUrl = this.getCustomServerUrl();
     const lanUrl = this.getLanUrl();
     const cloudUrl = this.getCloudUrl();
+
+    let isInternetReachable = false;
+    let isLanReachable = false;
 
     // 1. If explicit custom URL is provided, test it first
     if (customUrl) {
@@ -205,32 +248,39 @@ class HybridApiClient {
         let mode: 'LAN' | 'CLOUD' | 'LOCALHOST' | 'OFFLINE' = 'LAN';
         try {
           const host = new URL(customUrl).hostname;
-          if (host === 'localhost' || host === '127.0.0.1') mode = 'LOCALHOST';
-          else if (/^(\d{1,3}\.){3}\d{1,3}$/.test(host)) mode = 'LAN';
-          else mode = 'CLOUD';
+          if (host === 'localhost' || host === '127.0.0.1') {
+            mode = 'LOCALHOST';
+            isLanReachable = true;
+          } else if (/^(\d{1,3}\.){3}\d{1,3}$/.test(host)) {
+            mode = 'LAN';
+            isLanReachable = true;
+          } else {
+            mode = 'CLOUD';
+            isInternetReachable = true;
+          }
         } catch {
           mode = 'LAN';
         }
-        return { online: true, mode, data: result.data };
+        if (!isInternetReachable) {
+          isInternetReachable = await this.checkInternetReachability();
+        }
+        return { online: true, mode, isInternetReachable, isLanReachable, data: result.data };
       }
     }
 
-    // 2. Candidate candidate endpoints: LAN First, then Cloud
+    // 2. Candidate LAN endpoints: Prioritize direct LAN connection
     const lanCandidates: string[] = [];
     if (lanUrl) lanCandidates.push(lanUrl);
 
-    // Auto-detect localhost / current host
     const defaultUrl = getApiBaseUrl();
-    if (!lanCandidates.includes(defaultUrl)) {
+    if (!lanCandidates.includes(defaultUrl) && !defaultUrl.startsWith('https://')) {
       lanCandidates.push(defaultUrl);
     }
 
-    // Also include localhost:5000 if not already present
     if (!lanCandidates.includes('http://localhost:5000')) {
       lanCandidates.push('http://localhost:5000');
     }
 
-    // If server previously announced its IPs, include them as LAN candidates
     if (this.lastHealth?.serverIps) {
       for (const ip of this.lastHealth.serverIps) {
         const candidate = `http://${ip}:${this.lastHealth.serverPort || 5000}`;
@@ -240,11 +290,12 @@ class HybridApiClient {
 
     // Probe LAN Candidates first (High priority, fast timeout)
     for (const lanCandidate of lanCandidates) {
-      const lanResult = await this.probeEndpoint(lanCandidate, 1800);
+      const lanResult = await this.probeEndpoint(lanCandidate, 1500);
       if (lanResult.online) {
         this.activeBaseUrl = lanCandidate;
         this.lastHealth = lanResult.data || null;
         this.isOnline = true;
+        isLanReachable = true;
         let mode: 'LAN' | 'CLOUD' | 'LOCALHOST' | 'OFFLINE' = 'LAN';
         try {
           const host = new URL(lanCandidate).hostname;
@@ -252,24 +303,27 @@ class HybridApiClient {
         } catch {
           mode = 'LAN';
         }
-        return { online: true, mode, data: lanResult.data };
+        isInternetReachable = await this.checkInternetReachability();
+        return { online: true, mode, isInternetReachable, isLanReachable, data: lanResult.data };
       }
     }
 
     // 3. If LAN not reachable, probe Cloud / Domain URL fallback
     if (cloudUrl) {
-      const cloudResult = await this.probeEndpoint(cloudUrl, 3500);
+      const cloudResult = await this.probeEndpoint(cloudUrl, 3000);
       if (cloudResult.online) {
         this.activeBaseUrl = cloudUrl;
         this.lastHealth = cloudResult.data || null;
         this.isOnline = true;
-        return { online: true, mode: 'CLOUD', data: cloudResult.data };
+        isInternetReachable = true;
+        return { online: true, mode: 'CLOUD', isInternetReachable, isLanReachable: false, data: cloudResult.data };
       }
     }
 
-    // 4. Everything unreachable -> Switch to Offline Read-Only mode
+    // 4. Server unreachable via both LAN and Cloud
+    isInternetReachable = await this.checkInternetReachability();
     this.isOnline = false;
-    return { online: false, mode: 'OFFLINE' };
+    return { online: false, mode: 'OFFLINE', isInternetReachable, isLanReachable: false };
   }
 
   // Full bootstrap state fetch

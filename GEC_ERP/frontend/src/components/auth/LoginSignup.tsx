@@ -484,7 +484,7 @@ export const LoginSignup: React.FC = () => {
             </label>
             <input
               type="text"
-              placeholder="e.g. https://erpdev.manavkalola.xyz"
+              placeholder="e.g. https://erp.manavkalola.xyz"
               className="input-field"
               value={cloudInput}
               onChange={(e) => setCloudInput(e.target.value)}
@@ -543,8 +543,8 @@ export const LoginSignup: React.FC = () => {
               style={{ fontSize: '0.78rem' }}
               onClick={() => {
                 setLanInput('http://192.168.1.88:5000');
-                setCloudInput('https://erpdev.manavkalola.xyz');
-                handleSaveAndTestConfig('http://192.168.1.88:5000', 'https://erpdev.manavkalola.xyz');
+                setCloudInput('https://erp.manavkalola.xyz');
+                handleSaveAndTestConfig('http://192.168.1.88:5000', 'https://erp.manavkalola.xyz');
               }}
             >
               🔄 Reset to Defaults

@@ -84,17 +84,17 @@ def kill_running_instances(root_dir):
                         subprocess.run(ps_killer, capture_output=True, shell=True)
                         time.sleep(1)
 
-def run_build_with_retry(pnpm_cmd, frontend_dir, root_dir, max_retries=3):
+def run_build_with_retry(build_cmd, frontend_dir, root_dir, max_retries=3):
     for attempt in range(1, max_retries + 1):
-        print(f"  [EXEC] {pnpm_cmd} (Attempt {attempt}/{max_retries})")
-        res = subprocess.run(pnpm_cmd, shell=True, cwd=str(frontend_dir))
+        print(f"  [EXEC] {build_cmd} (Attempt {attempt}/{max_retries})")
+        res = subprocess.run(build_cmd, shell=True, cwd=str(frontend_dir))
         if res.returncode == 0:
             return True
         print(f"\n[WARN] Build attempt {attempt} encountered lock or exit code {res.returncode}. Terminating running processes, cleaning temporary artifacts and retrying...")
         kill_running_instances(root_dir)
         time.sleep(4)
     
-    print(f"\n[ERROR] Build failed after {max_retries} attempts: {pnpm_cmd}")
+    print(f"\n[ERROR] Build failed after {max_retries} attempts: {build_cmd}")
     sys.exit(1)
 
 def main():
@@ -112,8 +112,9 @@ def main():
     # 2. Build Tauri Desktop App
     log("Step 2/3: Building Web Assets & Tauri Native Binaries...", "[2/3]")
     frontend_dir = root_dir / "frontend"
-    pnpm_cmd = "corepack pnpm tauri build" if shutil.which("corepack") else "pnpm tauri build"
-    run_build_with_retry(pnpm_cmd, frontend_dir, root_dir)
+    local_tauri = frontend_dir / "node_modules" / ".bin" / ("tauri.cmd" if os.name == "nt" else "tauri")
+    build_cmd = f'"{local_tauri}" build' if local_tauri.exists() else "npm run tauri:build"
+    run_build_with_retry(build_cmd, frontend_dir, root_dir)
 
     # 3. Output results
     log("Step 3/3: Verifying Generated Installers & Executables...", "[3/3]")
