@@ -154,18 +154,24 @@
     }
     .sample-table {
       width: 100%;
+      table-layout: fixed;
       border-collapse: collapse;
+      border-spacing: 0;
       font-size: 8.5pt;
       margin-top: 10px;
+      border: 1px solid #000000;
     }
     .sample-table th, .sample-table td {
       border: 1px solid #000000;
+      box-sizing: border-box;
       padding: 5px 6px;
       text-align: left;
     }
     .sample-table th {
-      background-color: #f1f5f9;
+      background-color: #000000;
+      color: #ffffff;
       font-weight: 700;
+      position: static;
     }
 
     /* Footer CSS (Same as React Component) */
@@ -313,13 +319,14 @@
         <table class="sample-table">
           <thead>
             <tr>
-              <th style="width: 35px; text-align: center;">#</th>
-              <th style="width: 110px;">Part Code</th>
-              <th>Item Description</th>
-              <th style="width: 55px; text-align: center;">UOM</th>
-              <th style="width: 65px; text-align: right;">Qty</th>
-              <th style="width: 85px; text-align: right;">Rate (₹)</th>
-              <th style="width: 95px; text-align: right;">Amount (₹)</th>
+              <th style="width: 26px; text-align: center; font-size: 8pt;">#</th>
+              <th style="width: 100px; font-size: 8pt;">Part Code</th>
+              <th style="font-size: 8pt;">Item Description</th>
+              <th style="width: 75px; font-size: 8pt;">Old Code</th>
+              <th style="width: 38px; text-align: center; font-size: 8pt;">UOM</th>
+              <th style="width: 65px; text-align: right; font-size: 8pt;">Quantity</th>
+              <th style="width: 80px; text-align: right; font-size: 8pt;">Rate (₹)</th>
+              <th style="width: 95px; text-align: right; font-size: 8pt;">Amount (₹)</th>
             </tr>
           </thead>
           <tbody>
@@ -327,6 +334,7 @@
               <td style="text-align: center;">1</td>
               <td>HYD-VALVE-01</td>
               <td>Directional Control Valve 24V DC Double Solenoid</td>
+              <td>-</td>
               <td style="text-align: center;">NOS</td>
               <td style="text-align: right;">4.00</td>
               <td style="text-align: right;">8,500.00</td>
@@ -336,6 +344,7 @@
               <td style="text-align: center;">2</td>
               <td>HYD-HOSE-08</td>
               <td>High Pressure Hydraulic Hose 1/2" 2-Wire R2 1.5M</td>
+              <td>-</td>
               <td style="text-align: center;">NOS</td>
               <td style="text-align: right;">12.00</td>
               <td style="text-align: right;">1,250.00</td>
@@ -345,6 +354,7 @@
               <td style="text-align: center;">3</td>
               <td>PLG-CYL-160</td>
               <td>Hydraulic Clamping Cylinder Seal Kit 160mm</td>
+              <td>-</td>
               <td style="text-align: center;">SET</td>
               <td style="text-align: right;">2.00</td>
               <td style="text-align: right;">4,200.00</td>
@@ -353,19 +363,20 @@
           </tbody>
           <tfoot>
             <tr>
-              <td colspan="5" style="border: none;"></td>
-              <td style="font-weight: 700; text-align: right;">Subtotal:</td>
-              <td style="font-weight: 700; text-align: right;">57,400.00</td>
+              <td colspan="5" style="text-align: right; border: 1px solid #000;">Total Quantity:</td>
+              <td style="text-align: right; border: 1px solid #000;">18.00</td>
+              <td style="text-align: right; border: 1px solid #000;">Subtotal:</td>
+              <td style="text-align: right; border: 1px solid #000;">57,400.00</td>
             </tr>
             <tr>
-              <td colspan="5" style="border: none;"></td>
-              <td style="font-weight: 700; text-align: right;">GST (18%):</td>
-              <td style="font-weight: 700; text-align: right;">10,332.00</td>
+              <td colspan="6" style="border: 1px solid #000;"></td>
+              <td style="text-align: right; border: 1px solid #000;">GST (18%):</td>
+              <td style="text-align: right; border: 1px solid #000;">10,332.00</td>
             </tr>
             <tr>
-              <td colspan="5" style="border: none;"></td>
-              <td style="font-weight: 800; text-align: right; background: #f1f5f9;">Grand Total:</td>
-              <td style="font-weight: 800; text-align: right; background: #f1f5f9;">67,732.00</td>
+              <td colspan="5" style="text-align: left; border: 1px solid #000;"><strong style="font-weight: 800;">Amount in Words:</strong> <span style="font-weight: 400;">INR Sixty Seven Thousand Seven Hundred and Thirty Two Only</span></td>
+              <td colspan="2" style="font-weight: 800; text-align: right; border: 1px solid #000;">Grand Total:</td>
+              <td style="font-weight: 800; text-align: right; border: 1px solid #000;">67,732.00</td>
             </tr>
           </tfoot>
         </table>

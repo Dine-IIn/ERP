@@ -6,6 +6,7 @@ import {
   DEFAULT_COMPANY_INFO, 
   formatAmountInWords 
 } from './StandardCompanyHeaderFooter';
+import './printStyles.css';
 
 // 1. Single Vendor Purchase Order Document
 export const SinglePOPrintView: React.FC<{ 
@@ -127,43 +128,55 @@ export const SinglePOPrintView: React.FC<{
         </div>
       </div>
 
-      {/* 3. Main PO Line Items Table (Uniform 1px Black Border, Crisp Typography) */}
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '8.5pt', marginBottom: '0.5rem', border: '1px solid #000000', color: '#000000' }}>
+      {/* 3. Main PO Line Items Table (Uniform 1px Black Border, Crisp Typography, Deterministic Layout) */}
+      <table 
+        className="po-print-table"
+        style={{ 
+          width: '100%', 
+          tableLayout: 'fixed',
+          borderCollapse: 'collapse', 
+          borderSpacing: 0,
+          fontSize: '8.5pt', 
+          marginBottom: '0.5rem', 
+          border: '1px solid #000000', 
+          color: '#000000' 
+        }}
+      >
         <thead>
-          <tr style={{ backgroundColor: '#000000', color: '#ffffff', textAlign: 'center', fontWeight: 800 }}>
-            <th style={{ padding: '5px 4px', border: '1px solid #000000', width: '30px' }}>#</th>
-            <th style={{ padding: '5px 6px', border: '1px solid #000000', width: '110px', textAlign: 'left' }}>Part Code</th>
-            <th style={{ padding: '5px 6px', border: '1px solid #000000', textAlign: 'left' }}>Item Description</th>
-            <th style={{ padding: '5px 6px', border: '1px solid #000000', width: '90px', textAlign: 'left' }}>Old Code</th>
-            <th style={{ padding: '5px 4px', border: '1px solid #000000', width: '45px' }}>UOM</th>
-            <th style={{ padding: '5px 6px', border: '1px solid #000000', width: '55px', textAlign: 'right' }}>Quantity</th>
-            <th style={{ padding: '5px 6px', border: '1px solid #000000', width: '95px', textAlign: 'right' }}>Rate (₹)</th>
-            <th style={{ padding: '5px 6px', border: '1px solid #000000', width: '105px', textAlign: 'right' }}>Amount (₹)</th>
+          <tr style={{ backgroundColor: '#ffffff', color: '#000000', fontSize: '8pt', textAlign: 'center', fontWeight: 800 }}>
+            <th style={{ width: '26px', padding: '5px 2px', border: '1px solid #000000', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800, fontSize: '8pt' }}>#</th>
+            <th style={{ width: '100px', padding: '5px 4px', border: '1px solid #000000', textAlign: 'left', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800, fontSize: '8pt' }}>Part Code</th>
+            <th style={{ padding: '5px 6px', border: '1px solid #000000', textAlign: 'left', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800, fontSize: '8pt' }}>Item Description</th>
+            <th style={{ width: '75px', padding: '5px 4px', border: '1px solid #000000', textAlign: 'left', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800, fontSize: '8pt' }}>Old Code</th>
+            <th style={{ width: '38px', padding: '5px 2px', border: '1px solid #000000', textAlign: 'center', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800, fontSize: '8pt' }}>UOM</th>
+            <th style={{ width: '65px', padding: '5px 4px', border: '1px solid #000000', textAlign: 'right', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800, fontSize: '8pt' }}>Quantity</th>
+            <th style={{ width: '80px', padding: '5px 4px', border: '1px solid #000000', textAlign: 'right', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800, fontSize: '8pt' }}>Rate (₹)</th>
+            <th style={{ width: '95px', padding: '5px 6px', border: '1px solid #000000', textAlign: 'right', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800, fontSize: '8pt' }}>Amount (₹)</th>
           </tr>
         </thead>
         <tbody>
           {lines.map((row, idx) => (
-            <tr key={idx} style={{ color: '#000000' }}>
-              <td style={{ padding: '5px 4px', border: '1px solid #000000', textAlign: 'center' }}>{row.srNo}</td>
-              <td style={{ padding: '5px 6px', border: '1px solid #000000', fontFamily: 'monospace' }}>
+            <tr key={idx} style={{ color: '#000000', fontSize: '8.5pt' }}>
+              <td style={{ padding: '5px 2px', border: '1px solid #000000', textAlign: 'center', boxSizing: 'border-box' }}>{row.srNo}</td>
+              <td style={{ padding: '5px 4px', border: '1px solid #000000', fontFamily: 'monospace', boxSizing: 'border-box', overflowWrap: 'break-word', wordBreak: 'break-word' }}>
                 {row.partCode !== '-' ? row.partCode : row.itemCode}
               </td>
-              <td style={{ padding: '5px 6px', border: '1px solid #000000' }}>
+              <td style={{ padding: '5px 6px', border: '1px solid #000000', boxSizing: 'border-box', overflowWrap: 'break-word', wordBreak: 'break-word' }}>
                 <div>{row.itemName}</div>
               </td>
-              <td style={{ padding: '5px 6px', border: '1px solid #000000', fontFamily: 'monospace' }}>
+              <td style={{ padding: '5px 4px', border: '1px solid #000000', fontFamily: 'monospace', boxSizing: 'border-box', overflowWrap: 'break-word', wordBreak: 'break-word' }}>
                 {row.oldCode}
               </td>
-              <td style={{ padding: '5px 4px', border: '1px solid #000000', textAlign: 'center' }}>
+              <td style={{ padding: '5px 2px', border: '1px solid #000000', textAlign: 'center', boxSizing: 'border-box' }}>
                 {row.uom}
               </td>
-              <td style={{ padding: '5px 6px', border: '1px solid #000000', textAlign: 'right' }}>
+              <td style={{ padding: '5px 4px', border: '1px solid #000000', textAlign: 'right', boxSizing: 'border-box' }}>
                 {row.qty}
               </td>
-              <td style={{ padding: '5px 6px', border: '1px solid #000000', textAlign: 'right' }}>
+              <td style={{ padding: '5px 4px', border: '1px solid #000000', textAlign: 'right', boxSizing: 'border-box' }}>
                 {row.rate.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </td>
-              <td style={{ padding: '5px 6px', border: '1px solid #000000', textAlign: 'right' }}>
+              <td style={{ padding: '5px 6px', border: '1px solid #000000', textAlign: 'right', boxSizing: 'border-box' }}>
                 {row.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </td>
             </tr>
@@ -172,63 +185,63 @@ export const SinglePOPrintView: React.FC<{
         
         {/* 4. Table Summary Footer */}
         <tfoot>
-          <tr style={{ fontWeight: 700, borderTop: '1px solid #000000' }}>
-            <td colSpan={5} style={{ padding: '5px 6px', border: '1px solid #000000', textAlign: 'right' }}>
+          <tr style={{ fontSize: '8.5pt', color: '#000000' }}>
+            <td colSpan={5} style={{ padding: '5px 6px', border: '1px solid #000000', textAlign: 'right', boxSizing: 'border-box', fontWeight: 400 }}>
               Total Quantity:
             </td>
-            <td style={{ padding: '5px 6px', border: '1px solid #000000', textAlign: 'right', fontWeight: 800 }}>
+            <td style={{ padding: '5px 4px', border: '1px solid #000000', textAlign: 'right', boxSizing: 'border-box', fontWeight: 400 }}>
               {totalQty}
             </td>
-            <td style={{ padding: '5px 6px', border: '1px solid #000000', textAlign: 'right' }}>
+            <td style={{ padding: '5px 4px', border: '1px solid #000000', textAlign: 'right', boxSizing: 'border-box', fontWeight: 400 }}>
               Subtotal:
             </td>
-            <td style={{ padding: '5px 6px', border: '1px solid #000000', textAlign: 'right', fontWeight: 800 }}>
+            <td style={{ padding: '5px 6px', border: '1px solid #000000', textAlign: 'right', boxSizing: 'border-box', fontWeight: 400 }}>
               {subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </td>
           </tr>
 
           {isInterstate ? (
-            <tr style={{ fontSize: '8pt' }}>
-              <td colSpan={6} style={{ border: '1px solid #000000' }}></td>
-              <td style={{ padding: '4px 6px', border: '1px solid #000000', textAlign: 'right' }}>
+            <tr style={{ fontSize: '8.5pt', color: '#000000' }}>
+              <td colSpan={6} style={{ border: '1px solid #000000', boxSizing: 'border-box' }}></td>
+              <td style={{ padding: '4px 4px', border: '1px solid #000000', textAlign: 'right', boxSizing: 'border-box', fontWeight: 400 }}>
                 IGST ({igstRate}%):
               </td>
-              <td style={{ padding: '4px 6px', border: '1px solid #000000', textAlign: 'right' }}>
+              <td style={{ padding: '4px 6px', border: '1px solid #000000', textAlign: 'right', boxSizing: 'border-box', fontWeight: 400 }}>
                 {igstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </td>
             </tr>
           ) : (
             <>
-              <tr style={{ fontSize: '8pt' }}>
-                <td colSpan={6} style={{ border: '1px solid #000000' }}></td>
-                <td style={{ padding: '4px 6px', border: '1px solid #000000', textAlign: 'right' }}>
+              <tr style={{ fontSize: '8.5pt', color: '#000000' }}>
+                <td colSpan={6} style={{ border: '1px solid #000000', boxSizing: 'border-box' }}></td>
+                <td style={{ padding: '4px 4px', border: '1px solid #000000', textAlign: 'right', boxSizing: 'border-box', fontWeight: 400 }}>
                   CGST ({cgstRate}%):
                 </td>
-                <td style={{ padding: '4px 6px', border: '1px solid #000000', textAlign: 'right' }}>
+                <td style={{ padding: '4px 6px', border: '1px solid #000000', textAlign: 'right', boxSizing: 'border-box', fontWeight: 400 }}>
                   {cgstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </td>
               </tr>
-              <tr style={{ fontSize: '8pt' }}>
-                <td colSpan={6} style={{ border: '1px solid #000000' }}></td>
-                <td style={{ padding: '4px 6px', border: '1px solid #000000', textAlign: 'right' }}>
+              <tr style={{ fontSize: '8.5pt', color: '#000000' }}>
+                <td colSpan={6} style={{ border: '1px solid #000000', boxSizing: 'border-box' }}></td>
+                <td style={{ padding: '4px 4px', border: '1px solid #000000', textAlign: 'right', boxSizing: 'border-box', fontWeight: 400 }}>
                   SGST ({sgstRate}%):
                 </td>
-                <td style={{ padding: '4px 6px', border: '1px solid #000000', textAlign: 'right' }}>
+                <td style={{ padding: '4px 6px', border: '1px solid #000000', textAlign: 'right', boxSizing: 'border-box', fontWeight: 400 }}>
                   {sgstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </td>
               </tr>
             </>
           )}
 
-          {/* Grand Total Row - Strictly Single Line */}
-          <tr style={{ backgroundColor: '#000000', color: '#ffffff', fontWeight: 800, fontSize: '9pt' }}>
-            <td colSpan={5} style={{ padding: '6px 8px', textAlign: 'left', border: '1px solid #000000', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              Amount in Words: <span style={{ fontWeight: 600 }}>{formatAmountInWords(grandTotal)}</span>
+          {/* Grand Total Row - Bold Title for Amount in Words, Regular text for words, Bold Grand Total */}
+          <tr style={{ backgroundColor: '#ffffff', color: '#000000', fontSize: '8.5pt' }}>
+            <td colSpan={5} style={{ padding: '6px 8px', textAlign: 'left', border: '1px solid #000000', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', boxSizing: 'border-box', color: '#000000', backgroundColor: '#ffffff' }}>
+              <strong style={{ fontWeight: 800 }}>Amount in Words:</strong> <span style={{ fontWeight: 400, color: '#000000' }}>{formatAmountInWords(grandTotal)}</span>
             </td>
-            <td colSpan={2} style={{ padding: '6px 6px', textAlign: 'right', border: '1px solid #000000', whiteSpace: 'nowrap' }}>
+            <td colSpan={2} style={{ padding: '6px 4px', textAlign: 'right', border: '1px solid #000000', whiteSpace: 'nowrap', boxSizing: 'border-box', fontWeight: 800, color: '#000000', backgroundColor: '#ffffff' }}>
               Grand Total:
             </td>
-            <td style={{ padding: '6px 6px', textAlign: 'right', border: '1px solid #000000', whiteSpace: 'nowrap' }}>
+            <td style={{ padding: '6px 6px', textAlign: 'right', border: '1px solid #000000', whiteSpace: 'nowrap', boxSizing: 'border-box', fontWeight: 800, fontSize: '8.5pt', color: '#000000', backgroundColor: '#ffffff' }}>
               {grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </td>
           </tr>
@@ -311,34 +324,46 @@ export const POListPrintView: React.FC<{
       companyInfo={DEFAULT_COMPANY_INFO}
     />
 
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '8.5pt', margin: '0.5rem 0', border: '1px solid #000000', color: '#000000' }}>
+    <table 
+      className="po-print-table"
+      style={{ 
+        width: '100%', 
+        tableLayout: 'fixed',
+        borderCollapse: 'collapse', 
+        borderSpacing: 0,
+        fontSize: '8.5pt', 
+        margin: '0.5rem 0', 
+        border: '1px solid #000000', 
+        color: '#000000' 
+      }}
+    >
       <thead>
-        <tr style={{ backgroundColor: '#000000', color: '#ffffff', fontWeight: 800 }}>
-          <th style={{ width: '30px', padding: '5px 4px', border: '1px solid #000000' }}>#</th>
-          <th style={{ padding: '5px 6px', border: '1px solid #000000', textAlign: 'left' }}>PO Number</th>
-          <th style={{ padding: '5px 6px', border: '1px solid #000000', textAlign: 'left' }}>Vendor Name</th>
-          <th style={{ padding: '5px 6px', border: '1px solid #000000', textAlign: 'center' }}>PO Date</th>
-          <th style={{ padding: '5px 6px', border: '1px solid #000000', textAlign: 'center' }}>Delivery Date</th>
-          <th style={{ width: '50px', padding: '5px 6px', border: '1px solid #000000', textAlign: 'center' }}>Items</th>
-          <th style={{ padding: '5px 6px', border: '1px solid #000000', textAlign: 'right' }}>Total Value (₹)</th>
-          <th style={{ padding: '5px 6px', border: '1px solid #000000', textAlign: 'center' }}>Status</th>
+        <tr style={{ backgroundColor: '#ffffff', color: '#000000', fontWeight: 800 }}>
+          <th style={{ width: '30px', padding: '5px 4px', border: '1px solid #000000', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800 }}>#</th>
+          <th style={{ width: '100px', padding: '5px 6px', border: '1px solid #000000', textAlign: 'left', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800 }}>PO Number</th>
+          <th style={{ padding: '5px 6px', border: '1px solid #000000', textAlign: 'left', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800 }}>Vendor Name</th>
+          <th style={{ width: '80px', padding: '5px 6px', border: '1px solid #000000', textAlign: 'center', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800 }}>PO Date</th>
+          <th style={{ width: '80px', padding: '5px 6px', border: '1px solid #000000', textAlign: 'center', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800 }}>Delivery Date</th>
+          <th style={{ width: '50px', padding: '5px 6px', border: '1px solid #000000', textAlign: 'center', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800 }}>Items</th>
+          <th style={{ width: '100px', padding: '5px 6px', border: '1px solid #000000', textAlign: 'right', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800 }}>Total Value (₹)</th>
+          <th style={{ width: '75px', padding: '5px 6px', border: '1px solid #000000', textAlign: 'center', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800 }}>Status</th>
         </tr>
       </thead>
       <tbody>
         {purchaseOrders.map((po, i) => (
           <tr key={i} style={{ color: '#000000' }}>
-            <td style={{ textAlign: 'center', padding: '5px 4px', border: '1px solid #000000' }}>{i + 1}</td>
-            <td style={{ fontFamily: 'monospace', fontWeight: 700, padding: '5px 6px', border: '1px solid #000000' }}>
+            <td style={{ textAlign: 'center', padding: '5px 4px', border: '1px solid #000000', boxSizing: 'border-box' }}>{i + 1}</td>
+            <td style={{ fontFamily: 'monospace', fontWeight: 700, padding: '5px 6px', border: '1px solid #000000', boxSizing: 'border-box' }}>
               {po.poNumber}
             </td>
-            <td style={{ fontWeight: 700, padding: '5px 6px', border: '1px solid #000000' }}>{po.vendorName}</td>
-            <td style={{ textAlign: 'center', padding: '5px 6px', border: '1px solid #000000' }}>{po.orderDate}</td>
-            <td style={{ textAlign: 'center', padding: '5px 6px', border: '1px solid #000000' }}>{po.expectedDeliveryDate || po.deliveryDate || '-'}</td>
-            <td style={{ textAlign: 'center', padding: '5px 6px', border: '1px solid #000000' }}>{po.items?.length || 0}</td>
-            <td style={{ textAlign: 'right', fontWeight: 700, padding: '5px 6px', border: '1px solid #000000' }}>
+            <td style={{ fontWeight: 700, padding: '5px 6px', border: '1px solid #000000', boxSizing: 'border-box', overflowWrap: 'break-word' }}>{po.vendorName}</td>
+            <td style={{ textAlign: 'center', padding: '5px 6px', border: '1px solid #000000', boxSizing: 'border-box' }}>{po.orderDate}</td>
+            <td style={{ textAlign: 'center', padding: '5px 6px', border: '1px solid #000000', boxSizing: 'border-box' }}>{po.expectedDeliveryDate || po.deliveryDate || '-'}</td>
+            <td style={{ textAlign: 'center', padding: '5px 6px', border: '1px solid #000000', boxSizing: 'border-box' }}>{po.items?.length || 0}</td>
+            <td style={{ textAlign: 'right', fontWeight: 700, padding: '5px 6px', border: '1px solid #000000', boxSizing: 'border-box' }}>
               {(po.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </td>
-            <td style={{ textAlign: 'center', padding: '5px 6px', border: '1px solid #000000' }}>
+            <td style={{ textAlign: 'center', padding: '5px 6px', border: '1px solid #000000', boxSizing: 'border-box' }}>
               <span style={{ fontWeight: 700, fontSize: '7.5pt' }}>
                 {po.status}
               </span>
@@ -347,14 +372,14 @@ export const POListPrintView: React.FC<{
         ))}
       </tbody>
       <tfoot>
-        <tr style={{ fontWeight: 800, borderTop: '1px solid #000000' }}>
-          <td colSpan={6} style={{ padding: '6px 8px', textAlign: 'right', border: '1px solid #000000' }}>
+        <tr style={{ fontWeight: 800 }}>
+          <td colSpan={6} style={{ padding: '6px 8px', textAlign: 'right', border: '1px solid #000000', boxSizing: 'border-box' }}>
             Total Procurement Portfolio:
           </td>
-          <td style={{ padding: '6px 8px', textAlign: 'right', border: '1px solid #000000', fontSize: '9pt' }}>
+          <td style={{ padding: '6px 8px', textAlign: 'right', border: '1px solid #000000', fontSize: '9pt', boxSizing: 'border-box' }}>
             {purchaseOrders.reduce((sum, p) => sum + (p.totalAmount || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </td>
-          <td style={{ border: '1px solid #000000' }}></td>
+          <td style={{ border: '1px solid #000000', boxSizing: 'border-box' }}></td>
         </tr>
       </tfoot>
     </table>

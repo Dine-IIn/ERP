@@ -59,6 +59,75 @@
   .no-print {
     display: none !important;
   }
+
+  /* Crisp, deterministic border rendering for PO and all print tables */
+  .po-print-document table,
+  .po-print-table,
+  #printable-area table,
+  #direct-print-area table {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+    border-spacing: 0 !important;
+    border: 1px solid #000000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .po-print-document th,
+  .po-print-document td,
+  .po-print-table th,
+  .po-print-table td,
+  #printable-area table th,
+  #printable-area table td,
+  #direct-print-area table th,
+  #direct-print-area table td {
+    position: static !important;
+    box-sizing: border-box !important;
+    border: 1px solid #000000 !important;
+    transform: none !important;
+    opacity: 1 !important;
+    filter: none !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .po-print-document thead tr,
+  .po-print-table thead tr {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .po-print-document thead th,
+  .po-print-table thead th {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    border: 1px solid #000000 !important;
+    font-weight: 800 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+
+/* Base styles for PO print table on screen & export */
+.po-print-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  border-spacing: 0;
+  border: 1px solid #000000;
+  color: #000000;
+  font-size: 8.5pt;
+}
+
+.po-print-table th,
+.po-print-table td {
+  border: 1px solid #000000;
+  box-sizing: border-box;
 }
 
 .print-table {

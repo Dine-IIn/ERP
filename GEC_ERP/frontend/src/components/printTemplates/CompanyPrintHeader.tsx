@@ -1,4 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
+
+// ─────────────────────────────────────────────────────────────
+// Types & Defaults
+// ─────────────────────────────────────────────────────────────
 
 export interface CompanyInfo {
   name?: string;
@@ -19,11 +23,12 @@ export const DEFAULT_COMPANY_INFO: CompanyInfo = {
   tagline: 'Mfg : Plastic Injection Molding Machine',
   gstin: '24AAEFG4976H1Z9',
   pan: 'AAEFG4976H',
-  address: 'Plot–3, R.S. : 792–793–795, Nr. Anjney Ind Zone–1, Shapar, Vill.: Shapar, Taluka : Kotda Sangani, Dist.: Rajkot - 360024, Gujarat, India',
+  address:
+    'Plot–3, R.S. : 792–793–795, Nr. Anjney Ind Zone–1, Shapar, Vill.: Shapar, Taluka : Kotda Sangani, Dist.: Rajkot - 360024, Gujarat, India',
   phone: '+91 90339 80809 | +91 98252 93732 | +91 96018 23402',
   email: 'info@ghanshyameng.com',
   website: 'ghanshyameng.com',
-  logoUrl: 'assets/images/gec_logo.png'
+  logoUrl: 'assets/images/gec_logo.png',
 };
 
 export interface CompanyPrintHeaderProps {
@@ -35,10 +40,124 @@ export interface CompanyPrintHeaderProps {
   showLogo?: boolean;
 }
 
+// ─────────────────────────────────────────────────────────────
+// Brand colour constant
+// ─────────────────────────────────────────────────────────────
+
+const NAVY = '#2e2d6b';
+
+// Shorthand for the print-color-adjust declarations we repeat
+// on every element that carries a background colour.
+const printColorFix: React.CSSProperties = {
+  WebkitPrintColorAdjust: 'exact',
+  printColorAdjust: 'exact',
+};
+
+// ─────────────────────────────────────────────────────────────
+// Inline SVG micro-icons  (no emoji — crisp at any DPI)
+// ─────────────────────────────────────────────────────────────
+
+/** Envelope icon inside a navy-bordered circle */
+const EnvelopeIcon: React.FC<{ size?: number }> = ({ size = 16 }) => (
+  <span
+    style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: size,
+      height: size,
+      borderRadius: '50%',
+      border: `1.5px solid ${NAVY}`,
+      flexShrink: 0,
+    }}
+  >
+    <svg
+      viewBox="0 0 20 20"
+      width={size * 0.55}
+      height={size * 0.55}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <rect x="2" y="4" width="16" height="12" rx="1.5" stroke={NAVY} strokeWidth="1.6" fill="none" />
+      <path d="M2 5.5L10 11L18 5.5" stroke={NAVY} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    </svg>
+  </span>
+);
+
+/** Globe icon inside a navy-bordered circle */
+const GlobeIcon: React.FC<{ size?: number }> = ({ size = 16 }) => (
+  <span
+    style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: size,
+      height: size,
+      borderRadius: '50%',
+      border: `1.5px solid ${NAVY}`,
+      flexShrink: 0,
+    }}
+  >
+    <svg
+      viewBox="0 0 20 20"
+      width={size * 0.6}
+      height={size * 0.6}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <circle cx="10" cy="10" r="7.5" stroke={NAVY} strokeWidth="1.4" />
+      <ellipse cx="10" cy="10" rx="3.2" ry="7.5" stroke={NAVY} strokeWidth="1.2" />
+      <line x1="2.5" y1="10" x2="17.5" y2="10" stroke={NAVY} strokeWidth="1.2" />
+      <line x1="4" y1="5.5" x2="16" y2="5.5" stroke={NAVY} strokeWidth="0.8" />
+      <line x1="4" y1="14.5" x2="16" y2="14.5" stroke={NAVY} strokeWidth="0.8" />
+    </svg>
+  </span>
+);
+
+// ─────────────────────────────────────────────────────────────
+// GEC Logo — SVG fallback (used when gec_logo.png is missing)
+//
+// The real logo is a 3D geometric cube/shield mark.  This SVG
+// is a close approximation; drop the actual PNG at
+//   public/assets/images/gec_logo.png
+// for pixel-perfect rendering.
+// ─────────────────────────────────────────────────────────────
+
+const GECLogoFallback: React.FC<{ size?: number }> = ({ size = 54 }) => (
+  <svg
+    viewBox="0 0 56 56"
+    width={size}
+    height={size}
+    xmlns="http://www.w3.org/2000/svg"
+    aria-label="GEC Logo"
+  >
+    {/* Outer rounded frame */}
+    <rect x="1" y="1" width="54" height="54" rx="8" ry="8" fill="#4a4867" />
+    {/* 3-D isometric cube — top face */}
+    <polygon points="28,12 44,21 28,30 12,21" fill="#6e6c8e" />
+    {/* Left face */}
+    <polygon points="12,21 28,30 28,44 12,35" fill="#35355a" />
+    {/* Right face */}
+    <polygon points="28,30 44,21 44,35 28,44" fill="#55557a" />
+    {/* Highlight accent */}
+    <polygon points="28,16 37,22 28,28 19,22" fill="#8886a6" opacity="0.4" />
+  </svg>
+);
+
+// ─────────────────────────────────────────────────────────────
+// Main Component
+// ─────────────────────────────────────────────────────────────
+
 /**
- * Pure Code / Vector Company Print Header
- * Location: frontend/src/components/printTemplates/CompanyPrintHeader.tsx
- * Reusable across PO, WO, Job Card, SO, Challan, Quotation, Assembly, GRN, QC
+ * Pixel-accurate, fully-vectorised Company Print Header.
+ *
+ * Every visual element is a discrete DOM node so that:
+ *   • Text remains selectable / searchable in PDFs
+ *   • Colours honour `-webkit-print-color-adjust: exact`
+ *   • The header scales cleanly at any DPI / zoom level
+ *
+ * Reusable across PO, WO, Job Card, SO, Challan, Quotation,
+ * Assembly, GRN, QC — pass docTitle to customise.
  */
 export const CompanyPrintHeader: React.FC<CompanyPrintHeaderProps> = ({
   docTitle,
@@ -46,136 +165,255 @@ export const CompanyPrintHeader: React.FC<CompanyPrintHeaderProps> = ({
   docDate,
   extraSubtitle,
   companyInfo = DEFAULT_COMPANY_INFO,
-  showLogo = true
+  showLogo = true,
 }) => {
   const info = { ...DEFAULT_COMPANY_INFO, ...companyInfo };
+  const [logoErr, setLogoErr] = useState(false);
 
   return (
-    <div 
-      className="standard-print-header company-print-header" 
-      style={{ 
-        width: '100%', 
-        marginBottom: '0.65rem', 
-        fontFamily: 'Arial, Helvetica, sans-serif', 
+    <div
+      className="standard-print-header company-print-header"
+      style={{
+        width: '100%',
+        marginBottom: '0.35rem',
+        fontFamily: 'Arial, Helvetica, sans-serif',
         color: '#000000',
-        pageBreakInside: 'avoid'
+        pageBreakInside: 'avoid',
+        ...printColorFix,
       }}
     >
-      {/* Reconstructed Pure Code Branding Header Layout */}
-      <div 
-        style={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center', 
-          borderBottom: '2px solid #000000', 
-          paddingBottom: '6px', 
-          marginBottom: '6px' 
+      {/* ═══════════════════════════════════════════════════════
+          ROW 1 — Top section
+          Left : Logo icon  +  GEC™ brand  +  tagline
+          Right: Company pill  +  GST  +  email  +  website
+          ═══════════════════════════════════════════════════════ */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          paddingBottom: '4px',
         }}
       >
-        {/* Left: Pure Code Logo Emblem & Company Title */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        {/* ── LEFT: Logo + Brand ─────────────────────────── */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+          {/* Logo icon (img → SVG fallback) */}
           {showLogo && (
-            <div style={{ display: 'flex', alignItems: 'center' }}>
-              <img 
-                src={info.logoUrl || 'assets/images/gec_logo.png'} 
-                alt="GEC Logo" 
-                style={{ height: '46px', width: 'auto', objectFit: 'contain', display: 'block' }}
-                onError={(e: any) => {
-                  // If image is missing, replace with Pure Code SVG GEC Emblem
-                  e.currentTarget.style.display = 'none';
-                  const fallback = e.currentTarget.nextElementSibling;
-                  if (fallback) fallback.style.display = 'flex';
-                }}
-              />
-              {/* Pure Code Vector Emblem Fallback */}
-              <div 
-                style={{ 
-                  display: 'none', 
-                  width: '46px', 
-                  height: '46px', 
-                  border: '2px solid #000000', 
-                  borderRadius: '6px', 
-                  alignItems: 'center', 
-                  justifyContent: 'center',
-                  flexDirection: 'column',
-                  backgroundColor: '#000000',
-                  color: '#ffffff',
-                  fontWeight: 900,
-                  fontSize: '11pt',
-                  lineHeight: 1
-                }}
-              >
-                <span>GEC</span>
-              </div>
+            <div style={{ flexShrink: 0, paddingTop: '2px' }}>
+              {!logoErr ? (
+                <img
+                  src={info.logoUrl || 'assets/images/gec_logo.png'}
+                  alt="GEC"
+                  style={{
+                    height: '54px',
+                    width: 'auto',
+                    objectFit: 'contain',
+                    display: 'block',
+                  }}
+                  onError={() => setLogoErr(true)}
+                />
+              ) : (
+                <GECLogoFallback size={54} />
+              )}
             </div>
           )}
-          <div>
-            <div 
-              style={{ 
-                fontSize: '15pt', 
-                fontWeight: 900, 
-                color: '#000000', 
-                letterSpacing: '0.5px', 
-                textTransform: 'uppercase', 
-                lineHeight: 1.1 
+
+          {/* GEC™  +  Excellence assured. */}
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {/* GEC™ */}
+            <div
+              style={{
+                fontFamily: "'Arial Black', 'Impact', Arial, sans-serif",
+                fontSize: '28pt',
+                fontWeight: 900,
+                color: NAVY,
+                letterSpacing: '-0.3px',
+                lineHeight: 1,
               }}
             >
-              {info.name}
+              GEC
+              <sup
+                style={{
+                  fontSize: '9pt',
+                  fontWeight: 700,
+                  verticalAlign: 'super',
+                  marginLeft: '1px',
+                }}
+              >
+                ™
+              </sup>
             </div>
-            <div 
-              style={{ 
-                display: 'inline-block', 
-                marginTop: '3px', 
-                padding: '1px 8px', 
-                border: '1px solid #000000', 
-                borderRadius: '3px', 
-                fontSize: '7.5pt', 
-                fontWeight: 700, 
-                color: '#000000', 
-                textTransform: 'uppercase', 
-                letterSpacing: '0.4px' 
+
+            {/* Excellence assured. */}
+            <div
+              style={{
+                fontSize: '9pt',
+                fontWeight: 700,
+                fontStyle: 'italic',
+                color: NAVY,
+                marginTop: '1px',
+                letterSpacing: '0.15px',
               }}
             >
-              {info.tagline}
+              Excellence assured.
             </div>
           </div>
         </div>
 
-        {/* Right: Pure Code GSTIN, Email, Website */}
-        <div style={{ textAlign: 'right', fontSize: '8pt', lineHeight: 1.35, color: '#000000' }}>
-          <div style={{ fontWeight: 800, fontSize: '8.5pt' }}>
-            GST NO. : <span style={{ fontFamily: 'monospace', fontWeight: 900 }}>{info.gstin}</span>
+        {/* ── RIGHT: Company info block ──────────────────── */}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-end',
+            gap: '2px',
+          }}
+        >
+          {/* Company name pill — rounded LEFT side only */}
+          <div
+            style={{
+              backgroundColor: NAVY,
+              color: '#ffffff',
+              fontSize: '10.5pt',
+              fontWeight: 700,
+              fontStyle: 'italic',
+              padding: '3px 16px 3px 20px',
+              borderRadius: '14px 0 0 14px',
+              letterSpacing: '0.15px',
+              lineHeight: 1.3,
+              whiteSpace: 'nowrap',
+              ...printColorFix,
+            }}
+          >
+            Ghanshyam Engineering Co.
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px', marginTop: '1px' }}>
-            <span>{info.email}</span>
-            <span style={{ fontSize: '9pt' }}>✉️</span>
+
+          {/* GST NO. — bold, NOT italic */}
+          <div
+            style={{
+              fontSize: '10pt',
+              fontWeight: 800,
+              color: NAVY,
+              letterSpacing: '0.15px',
+              marginTop: '2px',
+              paddingRight: '4px',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            GST NO. :{' '}
+            <span
+              style={{
+                fontFamily: "'Arial Black', Arial, sans-serif",
+                fontWeight: 900,
+              }}
+            >
+              {info.gstin}
+            </span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
-            <span style={{ fontWeight: 600 }}>{info.website}</span>
-            <span style={{ fontSize: '9pt' }}>🌐</span>
+
+          {/* Email row — italic bold + envelope icon */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px',
+              fontSize: '9pt',
+              fontWeight: 700,
+              fontStyle: 'italic',
+              color: NAVY,
+              paddingRight: '4px',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <span>Info@ghanshyameng.com</span>
+            <EnvelopeIcon size={15} />
+          </div>
+
+          {/* Website row — italic bold + globe icon */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px',
+              fontSize: '9pt',
+              fontWeight: 700,
+              fontStyle: 'italic',
+              color: NAVY,
+              paddingRight: '4px',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <span>ghanshyameng.com</span>
+            <GlobeIcon size={15} />
           </div>
         </div>
       </div>
 
-      {/* Document Title Center Badge */}
-      <div style={{ textAlign: 'center', margin: '4px 0 6px 0' }}>
-        <span 
-          style={{ 
-            display: 'inline-block',
-            backgroundColor: '#000000', 
-            color: '#ffffff', 
-            fontWeight: 900, 
-            fontSize: '11pt', 
-            padding: '3px 20px', 
-            borderRadius: '3px', 
-            letterSpacing: '1px',
-            textTransform: 'uppercase'
+      {/* ═══════════════════════════════════════════════════════
+          ROW 2 — Bottom bar
+          Left pill ("Mfg : …")  +  connecting navy line
+          ═══════════════════════════════════════════════════════ */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-end',
+          width: '100%',
+        }}
+      >
+        {/* Mfg tagline pill — rounded top-right corner only */}
+        <div
+          style={{
+            backgroundColor: NAVY,
+            color: '#ffffff',
+            fontSize: '8.5pt',
+            fontWeight: 700,
+            fontStyle: 'italic',
+            padding: '3px 16px 3px 6px',
+            borderRadius: '0 10px 0 0',
+            whiteSpace: 'nowrap',
+            lineHeight: 1.35,
+            ...printColorFix,
+          }}
+        >
+          {info.tagline}
+        </div>
+
+        {/* Connecting navy line — bottom-aligned with the pill */}
+        <div
+          style={{
+            flex: 1,
+            height: '2.5px',
+            backgroundColor: NAVY,
+            ...printColorFix,
+          }}
+        />
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════
+          ROW 3 — Document title  (bold black, centred)
+          ═══════════════════════════════════════════════════════ */}
+      <div style={{ textAlign: 'center', margin: '6px 0 4px 0' }}>
+        <div
+          style={{
+            color: '#000000',
+            fontWeight: 800,
+            fontSize: '12.5pt',
+            letterSpacing: '0.8px',
+            textTransform: 'uppercase',
+            fontFamily: 'Arial, Helvetica, sans-serif',
           }}
         >
           {docTitle}
-        </span>
+        </div>
         {extraSubtitle && (
-          <div style={{ fontSize: '8pt', color: '#000000', marginTop: '2px', fontWeight: 700 }}>
+          <div
+            style={{
+              fontSize: '8pt',
+              color: '#000000',
+              marginTop: '1px',
+              fontWeight: 700,
+            }}
+          >
             {extraSubtitle}
           </div>
         )}
