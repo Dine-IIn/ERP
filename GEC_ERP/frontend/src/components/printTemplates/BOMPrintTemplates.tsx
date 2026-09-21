@@ -1,12 +1,15 @@
 import React from 'react';
 import { BOM } from '../../types/erp';
 import { GECPrintHeader, GECPrintSignatory } from './WOPrintTemplates';
+import { CompanyPrintFooter } from './CompanyPrintFooter';
+import { PrintDocumentLayout } from './StandardCompanyHeaderFooter';
 
 // 1. Single BOM Technical Exploded Sheet
 export const SingleBOMPrintView: React.FC<{ bom: BOM; isExploded?: boolean }> = ({ bom, isExploded = false }) => (
-  <div>
-    <GECPrintHeader docTitle={`MASTER BILL OF MATERIALS ${isExploded ? '(EXPLODED)' : ''}`} refNo={bom.bomCode} date={bom.lastUpdated} />
-
+  <PrintDocumentLayout
+    header={<GECPrintHeader docTitle={`MASTER BILL OF MATERIALS ${isExploded ? '(EXPLODED)' : ''}`} refNo={bom.bomCode} date={bom.lastUpdated} />}
+    footer={<CompanyPrintFooter />}
+  >
     <div className="print-meta-grid">
       <div><strong>Machine Model:</strong> {bom.machineModel}</div>
       <div><strong>BOM Code:</strong> {bom.bomCode}</div>
@@ -42,7 +45,7 @@ export const SingleBOMPrintView: React.FC<{ bom: BOM; isExploded?: boolean }> = 
     </table>
 
     <GECPrintSignatory preparedBy="Design Engineer" checkedBy="R&D Head" authorizedBy="Technical Director" />
-  </div>
+  </PrintDocumentLayout>
 );
 
 // 2. BOM Catalog List Report
@@ -50,9 +53,10 @@ export const BOMListPrintView: React.FC<{ boms: BOM[]; filterLabel?: string }> =
   boms,
   filterLabel = 'Master BOM Catalog'
 }) => (
-  <div>
-    <GECPrintHeader docTitle="BOM MASTER SPECIFICATION CATALOG" />
-
+  <PrintDocumentLayout
+    header={<GECPrintHeader docTitle="BOM MASTER SPECIFICATION CATALOG" />}
+    footer={<CompanyPrintFooter />}
+  >
     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.8rem', color: '#4b5563' }}>
       <div>Scope: <strong>{filterLabel}</strong> ({boms.length} models)</div>
       <div>Generated: {new Date().toLocaleString()}</div>
@@ -86,5 +90,5 @@ export const BOMListPrintView: React.FC<{ boms: BOM[]; filterLabel?: string }> =
     </table>
 
     <GECPrintSignatory />
-  </div>
+  </PrintDocumentLayout>
 );

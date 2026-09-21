@@ -1,15 +1,18 @@
 import React from 'react';
 import { Item, Customer, Vendor } from '../../types/erp';
 import { GECPrintHeader, GECPrintSignatory } from './WOPrintTemplates';
+import { CompanyPrintFooter } from './CompanyPrintFooter';
+import { PrintDocumentLayout } from './StandardCompanyHeaderFooter';
 
 // 1. Item Master & Inventory Valuation Report
 export const ItemListPrintView: React.FC<{ items: Item[]; filterLabel?: string }> = ({
   items,
   filterLabel = 'Active Items Catalog'
 }) => (
-  <div>
-    <GECPrintHeader docTitle="ITEM MASTER & STOCK VALUATION REPORT" />
-
+  <PrintDocumentLayout
+    header={<GECPrintHeader docTitle="ITEM MASTER & STOCK VALUATION REPORT" />}
+    footer={<CompanyPrintFooter />}
+  >
     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.8rem', color: '#4b5563' }}>
       <div>Scope: <strong>{filterLabel}</strong> ({items.length} items)</div>
       <div>Generated: {new Date().toLocaleString()}</div>
@@ -51,7 +54,7 @@ export const ItemListPrintView: React.FC<{ items: Item[]; filterLabel?: string }
     </div>
 
     <GECPrintSignatory preparedBy="Store Inventory Officer" checkedBy="Finance Officer" authorizedBy="Stores Manager" />
-  </div>
+  </PrintDocumentLayout>
 );
 
 // 2. Customer Directory Print View
@@ -59,9 +62,10 @@ export const CustomerListPrintView: React.FC<{ customers: Customer[]; filterLabe
   customers,
   filterLabel = 'Customer Directory'
 }) => (
-  <div>
-    <GECPrintHeader docTitle="CUSTOMER DIRECTORY & ACCOUNTS REPORT" />
-
+  <PrintDocumentLayout
+    header={<GECPrintHeader docTitle="CUSTOMER DIRECTORY & ACCOUNTS REPORT" />}
+    footer={<CompanyPrintFooter />}
+  >
     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.8rem', color: '#4b5563' }}>
       <div>Scope: <strong>{filterLabel}</strong> ({customers.length} accounts)</div>
       <div>Generated: {new Date().toLocaleString()}</div>
@@ -93,7 +97,7 @@ export const CustomerListPrintView: React.FC<{ customers: Customer[]; filterLabe
     </table>
 
     <GECPrintSignatory />
-  </div>
+  </PrintDocumentLayout>
 );
 
 // 3. Vendor Directory Print View
@@ -101,9 +105,10 @@ export const VendorListPrintView: React.FC<{ vendors: Vendor[]; filterLabel?: st
   vendors,
   filterLabel = 'Vendor Directory'
 }) => (
-  <div>
-    <GECPrintHeader docTitle="APPROVED VENDOR & SUPPLIER DIRECTORY" />
-
+  <PrintDocumentLayout
+    header={<GECPrintHeader docTitle="APPROVED VENDOR & SUPPLIER DIRECTORY" />}
+    footer={<CompanyPrintFooter />}
+  >
     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.8rem', color: '#4b5563' }}>
       <div>Scope: <strong>{filterLabel}</strong> ({vendors.length} vendors)</div>
       <div>Generated: {new Date().toLocaleString()}</div>
@@ -137,7 +142,7 @@ export const VendorListPrintView: React.FC<{ vendors: Vendor[]; filterLabel?: st
     </table>
 
     <GECPrintSignatory />
-  </div>
+  </PrintDocumentLayout>
 );
 
 export const ItemMasterListPrintView = ItemListPrintView;

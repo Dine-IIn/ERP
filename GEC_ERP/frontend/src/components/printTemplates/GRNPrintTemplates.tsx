@@ -1,12 +1,15 @@
 import React from 'react';
 import { GoodsReceivedNote } from '../../types/erp';
 import { GECPrintHeader, GECPrintSignatory } from './WOPrintTemplates';
+import { CompanyPrintFooter } from './CompanyPrintFooter';
+import { PrintDocumentLayout } from './StandardCompanyHeaderFooter';
 
 // 1. Single Goods Received Notice (GRN) Inward Slip
 export const SingleGRNPrintView: React.FC<{ grn: GoodsReceivedNote }> = ({ grn }) => (
-  <div>
-    <GECPrintHeader docTitle="GOODS RECEIVED NOTICE (GRN)" refNo={grn.grnNumber} date={grn.receivedDate} />
-
+  <PrintDocumentLayout
+    header={<GECPrintHeader docTitle="GOODS RECEIVED NOTICE (GRN)" refNo={grn.grnNumber} date={grn.receivedDate} />}
+    footer={<CompanyPrintFooter />}
+  >
     <div className="print-meta-grid">
       <div><strong>GRN Number:</strong> {grn.grnNumber}</div>
       <div><strong>PO Reference:</strong> {grn.poNumber}</div>
@@ -50,7 +53,7 @@ export const SingleGRNPrintView: React.FC<{ grn: GoodsReceivedNote }> = ({ grn }
     </div>
 
     <GECPrintSignatory preparedBy="Store Inward Incharge" checkedBy="Inward QC Inspector" authorizedBy="Store Manager" />
-  </div>
+  </PrintDocumentLayout>
 );
 
 // 2. Filtered GRN List Report
@@ -58,9 +61,10 @@ export const GRNListPrintView: React.FC<{ grns: GoodsReceivedNote[]; filterLabel
   grns,
   filterLabel = 'Active Inward GRNs'
 }) => (
-  <div>
-    <GECPrintHeader docTitle="MATERIAL INWARD GRN LEDGER" />
-
+  <PrintDocumentLayout
+    header={<GECPrintHeader docTitle="MATERIAL INWARD GRN LEDGER" />}
+    footer={<CompanyPrintFooter />}
+  >
     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.8rem', color: '#4b5563' }}>
       <div>Scope: <strong>{filterLabel}</strong> ({grns.length} records)</div>
       <div>Generated: {new Date().toLocaleString()}</div>
@@ -96,5 +100,5 @@ export const GRNListPrintView: React.FC<{ grns: GoodsReceivedNote[]; filterLabel
     </table>
 
     <GECPrintSignatory />
-  </div>
+  </PrintDocumentLayout>
 );

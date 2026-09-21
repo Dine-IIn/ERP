@@ -3,7 +3,7 @@ import { useERP } from '../../context/ERPContext';
 import { AutocompleteSelect, AutocompleteOption } from '../common/AutocompleteSelect';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { SingleWOPrintView, WOListPrintView } from '../printTemplates/WOPrintTemplates';
-import { Wrench, Plus, Trash2, Sliders, CheckCircle, Search, Printer, FileSpreadsheet, ArrowLeft, X, Package, Filter, Zap, Layers, FolderTree, FolderPlus, ChevronRight, ChevronDown, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw } from 'lucide-react';
+import { Wrench, Plus, Trash2, Sliders, CheckCircle, Search, Printer, FileSpreadsheet, ArrowLeft, X, Package, Filter, Zap, Layers, FolderTree, FolderPlus, ChevronRight, ChevronDown, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw, Edit } from 'lucide-react';
 import { WorkOrder, WOStage, WOStatus, WOCustomComponent, BOM, BOMComponent, generateNextWorkOrderNumber } from '../../types/erp';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
 import { getExplodedBOMSummary } from '../../utils/nestedBOMHelper';
@@ -12,14 +12,23 @@ type SortField = 'workOrderNo' | 'machineModel' | 'quantity' | 'targetCompletion
 
 export const WorkOrderModule: React.FC = () => {
   const { 
-    workOrders, boms, items, itemCategories, addWorkOrder, updateWorkOrderStage, updateWorkOrderComponents, 
+    workOrders, boms, items, itemCategories, addWorkOrder, updateWorkOrderStage, updateWorkOrderComponents, updateWorkOrderDetails, deleteWorkOrder,
     searchTerm, setSearchTerm, selectedWOIdForEdit, setSelectedWOIdForEdit 
   } = useERP();
 
   const [selectedWO, setSelectedWO] = useState<WorkOrder | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   const [isStageModalOpen, setIsStageModalOpen] = useState(false);
+  const [editWoForm, setEditWoForm] = useState({
+    workOrderNo: '',
+    quantity: 1,
+    assignedLead: '',
+    startDate: '',
+    targetCompletionDate: '',
+    remarks: ''
+  });
   const [sortField, setSortField] = useState<SortField>('workOrderNo');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [selectedStageFilter, setSelectedStageFilter] = useState<string>('ALL');
@@ -443,12 +452,36 @@ export const WorkOrderModule: React.FC = () => {
     setIsCustomModalOpen(false);
   };
 
+  const handleOpenEditModal = (wo: WorkOrder) => {
+    setSelectedWO(wo);
+    setEditWoForm({
+      workOrderNo: wo.workOrderNo || wo.woNumber || '',
+      quantity: wo.quantity || wo.targetQuantity || 1,
+      assignedLead: wo.assignedLead || '',
+      startDate: wo.startDate || '',
+      targetCompletionDate: wo.targetCompletionDate || '',
+      remarks: wo.remarks || ''
+    });
+    setIsEditModalOpen(true);
+    setIsModalOpen(false);
+    setIsCustomModalOpen(false);
+    setIsStageModalOpen(false);
+  };
+
+  const handleUpdateWoSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedWO) return;
+    updateWorkOrderDetails(selectedWO.id, editWoForm);
+    setIsEditModalOpen(false);
+  };
+
   const handleOpenStageModal = (wo: WorkOrder) => {
     setSelectedWO(wo);
     setNewStage(wo.stage || 'BASE_FABRICATION');
     setIsStageModalOpen(true);
     setIsModalOpen(false);
     setIsCustomModalOpen(false);
+    setIsEditModalOpen(false);
   };
 
   const handleUpdateStageSubmit = (e: React.FormEvent) => {
@@ -485,7 +518,7 @@ export const WorkOrderModule: React.FC = () => {
     (wo) => handlePrintSingleWO(wo)
   );
 
-  const activePanelOpen = isModalOpen || isCustomModalOpen || isStageModalOpen;
+  const activePanelOpen = isModalOpen || isEditModalOpen || isCustomModalOpen || isStageModalOpen;
 
   return (
     <div className="module-layout-container">
@@ -493,12 +526,12 @@ export const WorkOrderModule: React.FC = () => {
       <div className="sticky-module-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           {activePanelOpen && (
-            <button className="btn btn-outline" style={{ padding: '0.35rem 0.65rem', gap: '0.35rem', fontWeight: 600 }} onClick={() => { setIsModalOpen(false); setIsCustomModalOpen(false); setIsStageModalOpen(false); }}>
+            <button className="btn btn-outline" style={{ padding: '0.35rem 0.65rem', gap: '0.35rem', fontWeight: 600 }} onClick={() => { setIsModalOpen(false); setIsEditModalOpen(false); setIsCustomModalOpen(false); setIsStageModalOpen(false); }}>
               <ArrowLeft size={16} /> Back to Work Orders <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>(ESC)</span>
             </button>
           )}
           <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-secondary)' }}>
-            {isModalOpen ? 'Create Machine Production Work Order' : (isCustomModalOpen ? `Customize Assembly Components: ${selectedWO?.workOrderNo || selectedWO?.woNumber}` : (isStageModalOpen ? `Update Production Stage: ${selectedWO?.workOrderNo || selectedWO?.woNumber}` : `All Production Work Orders (${filteredWOs.length})`))}
+            {isModalOpen ? 'Create Machine Production Work Order' : (isEditModalOpen ? `Edit Work Order Details: ${selectedWO?.workOrderNo || selectedWO?.woNumber}` : (isCustomModalOpen ? `Customize Assembly Components: ${selectedWO?.workOrderNo || selectedWO?.woNumber}` : (isStageModalOpen ? `Update Production Stage: ${selectedWO?.workOrderNo || selectedWO?.woNumber}` : `All Production Work Orders (${filteredWOs.length})`)))}
           </span>
         </div>
 
@@ -1206,6 +1239,103 @@ export const WorkOrderModule: React.FC = () => {
             </button>
           </div>
         </div>
+      ) : isEditModalOpen ? (
+        /* In-Screen Panel: Edit Work Order Details */
+        <div className="card" style={{ padding: '1.25rem', backgroundColor: 'var(--bg-card)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
+              Edit Work Order Details: {selectedWO?.workOrderNo || selectedWO?.woNumber}
+            </h3>
+            <button type="button" className="btn btn-outline" style={{ padding: '0.25rem 0.5rem', fontSize: '0.78rem' }} onClick={() => setIsEditModalOpen(false)}>
+              <X size={15} /> Close (ESC)
+            </button>
+          </div>
+
+          <form onSubmit={handleUpdateWoSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1fr', gap: '1rem' }}>
+              <div>
+                <label>Work Order No</label>
+                <input
+                  type="text"
+                  required
+                  className="input-field"
+                  value={editWoForm.workOrderNo}
+                  onChange={(e) => setEditWoForm({ ...editWoForm, workOrderNo: e.target.value })}
+                />
+              </div>
+              <div>
+                <label>Machine Model / Item (Read-only)</label>
+                <input
+                  type="text"
+                  disabled
+                  className="input-field"
+                  style={{ opacity: 0.7, backgroundColor: 'var(--bg-tertiary)' }}
+                  value={selectedWO?.machineModel || ''}
+                />
+              </div>
+              <div>
+                <label>Build Quantity</label>
+                <input
+                  type="number"
+                  min="1"
+                  required
+                  className="input-field"
+                  value={editWoForm.quantity}
+                  onChange={(e) => setEditWoForm({ ...editWoForm, quantity: Number(e.target.value) })}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+              <div>
+                <label>Production Lead</label>
+                <input
+                  type="text"
+                  required
+                  className="input-field"
+                  value={editWoForm.assignedLead}
+                  onChange={(e) => setEditWoForm({ ...editWoForm, assignedLead: e.target.value })}
+                />
+              </div>
+              <div>
+                <label>Start Date</label>
+                <input
+                  type="date"
+                  required
+                  className="input-field"
+                  value={editWoForm.startDate}
+                  onChange={(e) => setEditWoForm({ ...editWoForm, startDate: e.target.value })}
+                />
+              </div>
+              <div>
+                <label>Target Completion Date</label>
+                <input
+                  type="date"
+                  required
+                  className="input-field"
+                  value={editWoForm.targetCompletionDate}
+                  onChange={(e) => setEditWoForm({ ...editWoForm, targetCompletionDate: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label>Production Notes & Instructions</label>
+              <input
+                type="text"
+                className="input-field"
+                placeholder="e.g. Expedite assembly for scheduled batch delivery"
+                value={editWoForm.remarks}
+                onChange={(e) => setEditWoForm({ ...editWoForm, remarks: e.target.value })}
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setIsEditModalOpen(false)}>Cancel (ESC)</button>
+              <button type="submit" className="btn btn-primary">Save Changes</button>
+            </div>
+          </form>
+        </div>
       ) : isStageModalOpen ? (
         /* In-Screen Panel: Update Assembly Stage */
         <div className="card" style={{ padding: '1.25rem', backgroundColor: 'var(--bg-card)' }}>
@@ -1357,6 +1487,9 @@ export const WorkOrderModule: React.FC = () => {
                         <td style={{ fontSize: '0.85rem' }}>{wo.targetCompletionDate || wo.startDate}</td>
                         <td onClick={(e) => e.stopPropagation()}>
                           <div style={{ display: 'flex', gap: '0.35rem' }}>
+                            <button className="btn btn-outline" style={{ padding: '0.25rem 0.45rem' }} title="Edit Work Order Details" onClick={() => handleOpenEditModal(wo)}>
+                              <Edit size={13} />
+                            </button>
                             <button className="btn btn-outline" style={{ padding: '0.25rem 0.45rem' }} title="Print WO Job Card / Traveller" onClick={() => handlePrintSingleWO(wo)}>
                               <Printer size={13} />
                             </button>
@@ -1365,6 +1498,18 @@ export const WorkOrderModule: React.FC = () => {
                             </button>
                             <button className="btn btn-outline" style={{ padding: '0.25rem 0.45rem' }} title="Update Stage" onClick={() => handleOpenStageModal(wo)}>
                               <CheckCircle size={13} />
+                            </button>
+                            <button 
+                              className="btn btn-outline" 
+                              style={{ padding: '0.25rem 0.45rem', color: 'var(--danger)', borderColor: 'rgba(239, 68, 68, 0.4)' }} 
+                              title="Delete Work Order" 
+                              onClick={() => {
+                                if (window.confirm(`Are you sure you want to delete Work Order ${woNo}?`)) {
+                                  deleteWorkOrder(wo.id);
+                                }
+                              }}
+                            >
+                              <Trash2 size={13} />
                             </button>
                           </div>
                         </td>

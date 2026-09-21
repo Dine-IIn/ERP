@@ -14,13 +14,17 @@ type JWSortKey = 'challanNo' | 'vendorName' | 'itemName' | 'processRequired' | '
 
 export const ExternalInventoryModule: React.FC = () => {
   const { 
-    jobworks, vendors, items, workOrders, boms, grns, addJobworkChallan, recordJobworkReturn, searchTerm, setSearchTerm,
+    jobworks, vendors, items, workOrders, boms, grns, addJobworkChallan, recordJobworkReturn, cancelJobworkChallan, searchTerm, setSearchTerm,
     itemProcessCards, setActiveModule, jobCards, finishedGoods, drawings, isDrawingAcknowledged
   } = useERP();
 
   const [activeMainTab, setActiveMainTab] = useState<'CHALLANS' | 'DEBIT_NOTES' | 'SHORTAGE'>('CHALLANS');
   const [isIssueModalOpen, setIsIssueModalOpen] = useState(false);
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [cancellingJW, setCancellingJW] = useState<JobworkChallan | null>(null);
+  const [cancellationQty, setCancellationQty] = useState<number>(1);
+  const [cancellationReason, setCancellationReason] = useState('');
   const [isShortageWizardOpen, setIsShortageWizardOpen] = useState(false);
   const [isExplodeShortage, setIsExplodeShortage] = useState(false);
   const [isShortagePrintOpen, setIsShortagePrintOpen] = useState(false);
@@ -181,8 +185,8 @@ export const ExternalInventoryModule: React.FC = () => {
   const indexedJobworks = useMemo(() => {
     return jobworks.map(j => ({
       j,
-      _searchStr: `${j.challanNo} ${j.vendorName} ${j.itemName} ${j.itemCode} ${j.processRequired || ''}`.toLowerCase(),
-      isCompleted: j.status === 'COMPLETED' || j.pendingBalance === 0 || !!(j as any).isDeleted,
+      _searchStr: `${j.challanNo} ${j.vendorName} ${j.itemName} ${j.itemCode} ${j.processRequired || ''} ${j.cancellationChallanNo || ''}`.toLowerCase(),
+      isCompleted: j.status === 'COMPLETED' || j.status === 'CANCELLED' || j.pendingBalance === 0 || !!(j as any).isDeleted,
       isDeleted: !!(j as any).isDeleted
     }));
   }, [jobworks]);
@@ -537,6 +541,29 @@ export const ExternalInventoryModule: React.FC = () => {
     );
 
     setIsReturnModalOpen(false);
+  };
+
+  const handleOpenCancelModal = (j: JobworkChallan) => {
+    setCancellingJW(j);
+    const avail = j.pendingBalance !== undefined ? j.pendingBalance : Math.max(0, (j.sentQuantity || 0) - (j.receivedQuantity || 0) - (j.scrapQuantity || 0));
+    setCancellationQty(avail);
+    setCancellationReason('');
+    setIsCancelModalOpen(true);
+  };
+
+  const handleIssueCancelSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cancellingJW || !cancellationReason.trim()) {
+      alert('Please provide a reason for cancelling this Jobwork Challan.');
+      return;
+    }
+
+    const ok = cancelJobworkChallan(cancellingJW.id, Number(cancellationQty), cancellationReason.trim());
+    if (ok) {
+      alert(`✅ Cancellation Challan issued for Jobwork ${cancellingJW.challanNo}. ${cancellationQty} units voided and raw material stock restored.`);
+      setIsCancelModalOpen(false);
+      setCancellingJW(null);
+    }
   };
 
   const deferredWizardSearchTerm = useDeferredValue(wizardSearchTerm);
@@ -1082,22 +1109,44 @@ export const ExternalInventoryModule: React.FC = () => {
                     {isOverdue && <span style={{ display: 'block', fontSize: '0.7rem' }}>⚠️ OVERDUE</span>}
                   </td>
                   <td>
-                    <span className={`badge ${j.status === 'COMPLETED' ? 'badge-success' : 'badge-warning'}`}>
+                    <span className={`badge ${
+                      j.status === 'COMPLETED' ? 'badge-success' : 
+                      j.status === 'CANCELLED' ? 'badge-danger' : 'badge-warning'
+                    }`}>
                       {j.status}
                     </span>
+                    {j.cancellationChallanNo && (
+                      <div style={{ fontSize: '0.68rem', color: 'var(--danger)', fontWeight: 700, marginTop: '2px' }}>
+                        CNCL: {j.cancellationChallanNo} {j.cancelledQuantity ? `(${j.cancelledQuantity} cancelled)` : ''}
+                      </div>
+                    )}
                   </td>
                   <td>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
                       <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem' }} title="Print Outward Challan Gatepass" onClick={() => handlePrintSingleChallan(j)}>
                         <Printer size={14} />
                       </button>
                       <button className="btn btn-outline" style={{ padding: '0.3rem 0.5rem' }} title="Share via Email" onClick={() => setEmailJW(j)}>
                         <Mail size={14} />
                       </button>
-                      {j.status === 'PENDING' ? (
-                        <button className="btn btn-primary" style={{ padding: '0.3rem 0.5rem', fontSize: '0.75rem' }} onClick={() => handleOpenReturnModal(j)}>
-                          <ArrowRightLeft size={14} /> Receive Return
-                        </button>
+                      {j.status === 'CANCELLED' ? (
+                        <span style={{ fontSize: '0.72rem', color: 'var(--danger)', fontWeight: 700, padding: '0.2rem 0.4rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', borderRadius: '4px' }}>
+                          ⛔ Cancelled
+                        </span>
+                      ) : j.pendingBalance > 0 ? (
+                        <>
+                          <button className="btn btn-primary" style={{ padding: '0.3rem 0.5rem', fontSize: '0.75rem' }} onClick={() => handleOpenReturnModal(j)}>
+                            <ArrowRightLeft size={14} /> Receive Return
+                          </button>
+                          <button 
+                            className="btn btn-outline" 
+                            style={{ padding: '0.3rem 0.5rem', fontSize: '0.75rem', color: 'var(--danger)', borderColor: 'var(--danger)' }} 
+                            title="Cancel Jobwork (Full or Partial balance)" 
+                            onClick={() => handleOpenCancelModal(j)}
+                          >
+                            Cancel
+                          </button>
+                        </>
                       ) : (
                         <span style={{ fontSize: '0.75rem', color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
                           <CheckCircle size={14} /> Complete
@@ -1345,6 +1394,83 @@ export const ExternalInventoryModule: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {/* Modal: Issue Jobwork Cancellation Challan */}
+      {isCancelModalOpen && cancellingJW && (
+        <Modal
+          isOpen={isCancelModalOpen}
+          onClose={() => { setIsCancelModalOpen(false); setCancellingJW(null); }}
+          title={`Issue Jobwork Cancellation Challan (${cancellingJW.challanNo})`}
+        >
+          <form onSubmit={handleIssueCancelSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ padding: '0.75rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--danger)', borderRadius: '0.375rem', fontSize: '0.82rem', color: 'var(--danger)' }}>
+              <strong>⚠️ Formal Cancellation Notice:</strong> Cancelling this jobwork challan will void the unprocessed pending quantity, generate a cancellation challan, restore raw material stock back to your in-house store, and move the cancelled record to History.
+            </div>
+
+            <div style={{ padding: '0.75rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: '0.5rem', fontSize: '0.82rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+              <div><strong>Challan:</strong> {cancellingJW.challanNo} &bull; <strong>Vendor:</strong> {cancellingJW.vendorName}</div>
+              <div><strong>Item:</strong> {cancellingJW.itemName} ({cancellingJW.itemCode})</div>
+              <div><strong>Sent Qty:</strong> {cancellingJW.sentQuantity} &bull; <strong>Already Received:</strong> {cancellingJW.receivedQuantity || 0} &bull; <strong>Pending:</strong> {cancellingJW.pendingBalance}</div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.25rem' }}>
+                  Quantity to Cancel *
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max={cancellingJW.pendingBalance > 0 ? cancellingJW.pendingBalance : (cancellingJW.sentQuantity || 1)}
+                  required
+                  className="input-field"
+                  value={cancellationQty}
+                  onChange={(e) => setCancellationQty(Number(e.target.value))}
+                />
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px', display: 'block' }}>
+                  Max cancellable: {cancellingJW.pendingBalance} units
+                </span>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.25rem' }}>
+                  Cancellation Mode
+                </label>
+                <input
+                  type="text"
+                  readOnly
+                  className="input-field"
+                  value={cancellationQty >= (cancellingJW.pendingBalance || 1) ? 'Full Cancellation' : 'Partial Cancellation'}
+                  style={{ backgroundColor: 'var(--bg-tertiary)' }}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.25rem' }}>
+                Cancellation Reason / Justification *
+              </label>
+              <textarea
+                required
+                className="input-field"
+                rows={3}
+                placeholder="e.g., Vendor inability to process, revision in production route, machining in-house instead..."
+                value={cancellationReason}
+                onChange={(e) => setCancellationReason(e.target.value)}
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => { setIsCancelModalOpen(false); setCancellingJW(null); }}>
+                Close
+              </button>
+              <button type="submit" className="btn btn-danger" style={{ backgroundColor: 'var(--danger)', color: '#fff' }}>
+                Issue Cancellation Challan
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
 
       {/* Feature-Wise Modular Print Manager Modal */}
       <PrintManagerModal

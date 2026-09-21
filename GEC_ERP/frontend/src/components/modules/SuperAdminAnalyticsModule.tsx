@@ -21,7 +21,7 @@ export const SuperAdminAnalyticsModule: React.FC = () => {
   const { 
     currentUser, users, auditLogs, systemErrors, addSystemError, clearSystemErrors,
     items, workOrders, purchaseOrders, salesOrders, boms, jobworks, jobCards, 
-    grns, qcInspections, assemblies, dispatchRecords, backups, resetOperationalData,
+    grns, qcInspections, assemblies, dispatchRecords, backups, resetOperationalData, resetInventory, wipeFullDatabase, createBackup, restoreBackup,
     vendors, customers, processDefinitions, itemProcessCards,
     massUpsertItems, massUpsertBOMs, massUpsertVendors, massUpsertCustomers, massUpsertProcesses, massUpsertItemProcessCards, massUpdateInventory, massIngestPlanning,
     addAuditLog
@@ -1004,6 +1004,178 @@ export const SuperAdminAnalyticsModule: React.FC = () => {
                 </div>
                 <button onClick={clearSystemErrors} className="btn btn-outline" style={{ marginTop: '1rem', fontSize: '0.78rem', color: 'var(--danger)', borderColor: 'rgba(239, 68, 68, 0.4)' }}>
                   Clear Error Cache
+                </button>
+              </div>
+            </div>
+
+            {/* FULL APP DATA MIGRATION (EXPORT / IMPORT ALL DATA) */}
+            <div style={{ marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-color)' }}>
+              <h4 style={{ fontSize: '0.95rem', fontWeight: 800, margin: '0 0 0.5rem', color: '#7c3aed', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                <FileJson size={18} /> Full Application Data Migration & Snapshot Backup (Dev ↔ Main Server)
+              </h4>
+              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0 0 1rem' }}>
+                Export your entire ERP database (Users, Items, BOMs, Process Cards, Sales Orders, Work Orders, Job Cards, POs, GRNs, QC, Vendors, Customers, Dispatches & Settings) into a single portable `.json` file to migrate from dev server to main server, or restore from a file.
+              </p>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
+                {/* Export Full App Data */}
+                <div style={{ padding: '1.25rem', backgroundColor: 'rgba(124, 58, 237, 0.08)', borderRadius: '0.5rem', border: '1px solid rgba(124, 58, 237, 0.3)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                  <div>
+                    <h5 style={{ fontSize: '0.9rem', fontWeight: 700, margin: '0 0 0.35rem', color: '#7c3aed', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <Download size={16} /> Export Complete App Data (.json)
+                    </h5>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>
+                      Generates a complete database dump containing all master files, transactions, inventory levels, and system settings.
+                    </p>
+                  </div>
+                  <button 
+                    className="btn btn-primary" 
+                    style={{ marginTop: '1rem', fontSize: '0.78rem', backgroundColor: '#7c3aed', borderColor: '#7c3aed' }}
+                    onClick={() => {
+                      try {
+                        const fullData = createBackup();
+                        const blob = new Blob([JSON.stringify(fullData, null, 2)], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `GEC_ERP_FULL_DATABASE_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                        alert('✅ Complete App Data exported successfully! You can now import this file on your main server.');
+                      } catch (err: any) {
+                        alert('❌ Export failed: ' + err.message);
+                      }
+                    }}
+                  >
+                    <Download size={14} /> Export All App Data to One File
+                  </button>
+                </div>
+
+                {/* Import Full App Data */}
+                <div style={{ padding: '1.25rem', backgroundColor: 'rgba(16, 185, 129, 0.08)', borderRadius: '0.5rem', border: '1px solid rgba(16, 185, 129, 0.3)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                  <div>
+                    <h5 style={{ fontSize: '0.9rem', fontWeight: 700, margin: '0 0 0.35rem', color: '#10b981', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <Upload size={16} /> Import Complete App Data (.json)
+                    </h5>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>
+                      Restores all master records, inventory, and operations from a single exported JSON file.
+                    </p>
+                  </div>
+                  <label className="btn btn-primary" style={{ marginTop: '1rem', fontSize: '0.78rem', backgroundColor: '#10b981', borderColor: '#10b981', textAlign: 'center', cursor: 'pointer' }}>
+                    <Upload size={14} style={{ marginRight: '0.3rem', display: 'inline' }} /> Import App Data File
+                    <input
+                      type="file"
+                      accept=".json"
+                      style={{ display: 'none' }}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            try {
+                              const json = JSON.parse(event.target?.result as string);
+                              const res = restoreBackup(json);
+                              alert(res.message);
+                              if (res.success) {
+                                window.location.reload();
+                              }
+                            } catch (err: any) {
+                              alert('❌ Failed to parse JSON file: ' + err.message);
+                            }
+                          };
+                          reader.readAsText(file);
+                          e.target.value = '';
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* SYSTEM RESET CONTROLS SECTION */}
+            <div style={{ marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-color)' }}>
+              <h4 style={{ fontSize: '0.95rem', fontWeight: 800, margin: '0 0 0.75rem', color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                <ShieldAlert size={18} /> System Reset & Full Wipe Controls
+              </h4>
+
+              {/* 1. Inventory Reset */}
+              <div className="card" style={{ padding: '1rem 1.25rem', backgroundColor: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.35)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '0.75rem' }}>
+                <div style={{ maxWidth: '750px' }}>
+                  <h5 style={{ fontSize: '0.9rem', fontWeight: 800, margin: 0, color: '#2563eb', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <RefreshCw size={15} />
+                    Reset Inventory (Zero All Stock Levels)
+                  </h5>
+                  <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0', lineHeight: 1.45 }}>
+                    Sets In-House Store Stock, External Vendor Stock, and Quarantine QC Stock to zero across all items. Keeps Item Master, BOMs, and Process Master 100% intact.
+                  </p>
+                </div>
+                <button 
+                  className="btn btn-primary" 
+                  style={{ backgroundColor: '#2563eb', borderColor: '#2563eb', color: '#ffffff', fontWeight: 700, padding: '0.45rem 1rem', fontSize: '0.78rem' }}
+                  onClick={async () => {
+                    if (window.confirm('⚠️ Are you sure you want to reset all inventory stock levels to zero (0)? Item Master records and specifications will be preserved.')) {
+                      const res = await resetInventory();
+                      alert(res.message);
+                    }
+                  }}
+                >
+                  <RefreshCw size={14} /> Reset Inventory
+                </button>
+              </div>
+
+              {/* 2. Operational Data Reset */}
+              <div className="card" style={{ padding: '1rem 1.25rem', backgroundColor: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.35)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '0.75rem' }}>
+                <div style={{ maxWidth: '750px' }}>
+                  <h5 style={{ fontSize: '0.9rem', fontWeight: 800, margin: 0, color: '#d97706', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <RefreshCw size={15} />
+                    Reset Operational Data (Keep Item Master, BOM Master, Process Master, Vendors, Customers & Admin Accounts)
+                  </h5>
+                  <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0', lineHeight: 1.45 }}>
+                    Clears all Sales Orders, Work Orders, Job Cards, POs, GRNs, Jobwork Challans, QC, Assembly Line, and Dispatches. Master records and Admin accounts remain intact.
+                  </p>
+                </div>
+                <button 
+                  className="btn btn-primary" 
+                  style={{ backgroundColor: '#d97706', borderColor: '#d97706', color: '#ffffff', fontWeight: 700, padding: '0.45rem 1rem', fontSize: '0.78rem' }}
+                  onClick={async () => {
+                    if (window.confirm('⚠️ Are you sure you want to reset all operational data? Master records will be preserved.')) {
+                      const res = await resetOperationalData();
+                      alert(res.message);
+                    }
+                  }}
+                >
+                  <RefreshCw size={14} /> Reset Operational Data
+                </button>
+              </div>
+
+              {/* 3. Full Database Wipe */}
+              <div className="card" style={{ padding: '1rem 1.25rem', backgroundColor: 'rgba(239, 68, 68, 0.06)', border: '1px solid rgba(239, 68, 68, 0.25)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                <div>
+                  <h5 style={{ fontSize: '0.9rem', fontWeight: 800, margin: 0, color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <Trash2 size={15} />
+                    Full Database Wipe (Clean Start - Zero Records)
+                  </h5>
+                  <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0' }}>
+                    Permanently wipes all records including items and BOMs, capturing a safety backup, and preserving default Admin accounts.
+                  </p>
+                </div>
+                <button 
+                  className="btn btn-outline" 
+                  style={{ color: 'var(--danger)', borderColor: 'var(--danger)', fontWeight: 700, padding: '0.45rem 1rem', fontSize: '0.78rem' }}
+                  onClick={async () => {
+                    if (window.confirm('⚠️ Super Admin Warning: Are you sure you want to completely wipe all records and start fresh? An automated safety backup will be captured before wiping.')) {
+                      try {
+                        const res = await wipeFullDatabase();
+                        alert(`✅ ${res.message}\n\nReloading application now...`);
+                        window.location.reload();
+                      } catch (err: any) {
+                        alert(`❌ Database wipe failed: ${err?.message || 'Unknown error'}`);
+                      }
+                    }
+                  }}
+                >
+                  <Trash2 size={14} /> Wipe Everything & Start Fresh
                 </button>
               </div>
             </div>

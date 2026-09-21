@@ -1,12 +1,15 @@
 import React from 'react';
 import { JobworkChallan } from '../../types/erp';
 import { GECPrintHeader, GECPrintSignatory } from './WOPrintTemplates';
+import { CompanyPrintFooter } from './CompanyPrintFooter';
+import { PrintDocumentLayout } from './StandardCompanyHeaderFooter';
 
 // 1. Single Jobwork Outward / Return Challan
 export const SingleJobworkPrintView: React.FC<{ challan: JobworkChallan }> = ({ challan }) => (
-  <div>
-    <GECPrintHeader docTitle="JOBWORK OUTWARD CHALLAN" refNo={challan.challanNo} date={challan.issueDate} />
-
+  <PrintDocumentLayout
+    header={<GECPrintHeader docTitle="JOBWORK OUTWARD CHALLAN" refNo={challan.challanNo} date={challan.issueDate} />}
+    footer={<CompanyPrintFooter />}
+  >
     <div className="print-meta-grid">
       <div><strong>Challan No:</strong> {challan.challanNo}</div>
       <div><strong>Vendor / Jobworker:</strong> {challan.vendorName}</div>
@@ -20,24 +23,26 @@ export const SingleJobworkPrintView: React.FC<{ challan: JobworkChallan }> = ({ 
       <thead>
         <tr>
           <th style={{ width: '35px' }}>#</th>
-          <th>Raw Part Code</th>
-          <th>Description & Specification</th>
-          <th style={{ width: '90px', textAlign: 'right' }}>Sent Qty</th>
-          <th style={{ width: '90px', textAlign: 'right' }}>Received Back</th>
-          <th style={{ width: '60px' }}>UOM</th>
+          <th style={{ width: '120px' }}>Item Code</th>
+          <th>Item Description</th>
+          <th style={{ width: '80px', textAlign: 'right' }}>Sent Qty</th>
+          <th style={{ width: '80px', textAlign: 'right' }}>Received</th>
+          <th style={{ width: '80px', textAlign: 'right' }}>Balance</th>
+          <th style={{ width: '100px' }}>Remarks</th>
         </tr>
       </thead>
       <tbody>
         {(challan.items && challan.items.length > 0 ? challan.items : [
-          { itemCode: challan.itemCode || 'PART-001', itemName: challan.itemName || 'Machined Component', sentQuantity: challan.sentQuantity || 1, receivedQuantity: challan.receivedQuantity || 0, unit: 'Pcs' }
+          { itemCode: challan.itemCode || 'PART-001', itemName: challan.itemName || 'Machined Component', sentQuantity: challan.sentQuantity || 1, unit: 'Pcs' }
         ]).map((item: any, idx: number) => (
           <tr key={idx}>
             <td>{idx + 1}</td>
             <td style={{ fontFamily: 'monospace', fontWeight: 700, color: '#2563eb' }}>{item.itemCode || '-'}</td>
-            <td>{item.itemName || '-'}</td>
-            <td style={{ textAlign: 'right', fontWeight: 700 }}>{item.sentQuantity || 0}</td>
-            <td style={{ textAlign: 'right', fontWeight: 700, color: '#059669' }}>{item.receivedQuantity || 0}</td>
-            <td>{item.unit || 'Pcs'}</td>
+            <td>{item.itemName || item.description || '-'}</td>
+            <td style={{ textAlign: 'right', fontWeight: 700 }}>{item.sentQuantity || item.quantity || item.qty || 1} {item.unit || 'Pcs'}</td>
+            <td style={{ textAlign: 'right' }}>{item.receivedQuantity || 0}</td>
+            <td style={{ textAlign: 'right', fontWeight: 700, color: '#dc2626' }}>{(item.sentQuantity || item.quantity || item.qty || 1) - (item.receivedQuantity || 0)}</td>
+            <td>{item.remarks || ''}</td>
           </tr>
         ))}
       </tbody>
@@ -48,7 +53,7 @@ export const SingleJobworkPrintView: React.FC<{ challan: JobworkChallan }> = ({ 
     </div>
 
     <GECPrintSignatory preparedBy="Jobwork Dispatch Incharge" checkedBy="Gate Security Officer" authorizedBy="Stores Incharge" />
-  </div>
+  </PrintDocumentLayout>
 );
 
 // 2. Filtered Jobwork Challan List Report
@@ -56,9 +61,10 @@ export const JobworkListPrintView: React.FC<{ challans: JobworkChallan[]; filter
   challans,
   filterLabel = 'Active Jobwork Challans'
 }) => (
-  <div>
-    <GECPrintHeader docTitle="JOBWORK OUTWARD & PROCESS TRACKING REPORT" />
-
+  <PrintDocumentLayout
+    header={<GECPrintHeader docTitle="JOBWORK OUTWARD & PROCESS TRACKING REPORT" />}
+    footer={<CompanyPrintFooter />}
+  >
     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.8rem', color: '#4b5563' }}>
       <div>Scope: <strong>{filterLabel}</strong> ({challans.length} records)</div>
       <div>Generated: {new Date().toLocaleString()}</div>
@@ -92,5 +98,5 @@ export const JobworkListPrintView: React.FC<{ challans: JobworkChallan[]; filter
     </table>
 
     <GECPrintSignatory />
-  </div>
+  </PrintDocumentLayout>
 );

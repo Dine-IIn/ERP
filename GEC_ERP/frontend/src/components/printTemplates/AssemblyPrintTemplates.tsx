@@ -1,6 +1,8 @@
 import React from 'react';
 import { FloorStation, MachineAssembly } from '../../types/erp';
 import { GECPrintHeader, GECPrintSignatory } from './WOPrintTemplates';
+import { CompanyPrintFooter } from './CompanyPrintFooter';
+import { PrintDocumentLayout } from './StandardCompanyHeaderFooter';
 
 // 1. Assembly Floor Stage Status Report
 export const AssemblyFloorPrintView: React.FC<{ stations: FloorStation[]; assemblies?: MachineAssembly[]; filterLabel?: string }> = ({
@@ -8,9 +10,10 @@ export const AssemblyFloorPrintView: React.FC<{ stations: FloorStation[]; assemb
   assemblies = [],
   filterLabel = 'Active Assembly Floor Stations'
 }) => (
-  <div>
-    <GECPrintHeader docTitle="ASSEMBLY FLOOR & WORKSTATION TRACKING REPORT" />
-
+  <PrintDocumentLayout
+    header={<GECPrintHeader docTitle="ASSEMBLY FLOOR & WORKSTATION TRACKING REPORT" />}
+    footer={<CompanyPrintFooter />}
+  >
     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.8rem', color: '#4b5563' }}>
       <div>Scope: <strong>{filterLabel}</strong> ({stations.length} stations)</div>
       <div>Generated: {new Date().toLocaleString()}</div>
@@ -46,7 +49,7 @@ export const AssemblyFloorPrintView: React.FC<{ stations: FloorStation[]; assemb
     </table>
 
     <GECPrintSignatory preparedBy="Shop Floor Incharge" checkedBy="Production Lead" authorizedBy="Works Director" />
-  </div>
+  </PrintDocumentLayout>
 );
 
 // 2. Sub-Assembly Units Floor Status Report
@@ -54,11 +57,12 @@ export const AssemblyListPrintView: React.FC<{ assemblies: any[]; filterLabel?: 
   assemblies,
   filterLabel = 'Active Assembly Units'
 }) => (
-  <div>
-    <GECPrintHeader docTitle="MACHINE SUB-ASSEMBLY STATIONS PROGRESS REPORT" />
-
+  <PrintDocumentLayout
+    header={<GECPrintHeader docTitle="MACHINE SUB-ASSEMBLY STATIONS PROGRESS REPORT" />}
+    footer={<CompanyPrintFooter />}
+  >
     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.8rem', color: '#4b5563' }}>
-      <div>Scope: <strong>{filterLabel}</strong> ({assemblies.length} sub-assemblies)</div>
+      <div>Scope: <strong>{filterLabel}</strong> ({assemblies.length} units)</div>
       <div>Generated: {new Date().toLocaleString()}</div>
     </div>
 
@@ -67,34 +71,30 @@ export const AssemblyListPrintView: React.FC<{ assemblies: any[]; filterLabel?: 
         <tr>
           <th style={{ width: '30px' }}>#</th>
           <th>Assembly Code</th>
-          <th>Work Order Ref</th>
-          <th>Machine Model</th>
-          <th>Sub-Assembly Station</th>
-          <th style={{ width: '90px', textAlign: 'center' }}>Progress %</th>
+          <th>Assembly Name</th>
+          <th>WO Ref</th>
+          <th>Station</th>
+          <th>Lead Tech</th>
+          <th>Progress</th>
           <th>Status</th>
         </tr>
       </thead>
       <tbody>
-        {assemblies.map((a, i) => (
+        {assemblies.map((asm, i) => (
           <tr key={i}>
             <td>{i + 1}</td>
-            <td style={{ fontFamily: 'monospace', fontWeight: 700, color: '#2563eb' }}>{a.assemblyCode}</td>
-            <td style={{ fontWeight: 600 }}>{a.workOrderNo || '-'}</td>
-            <td>{a.machineModel}</td>
-            <td>{a.subAssemblyType}</td>
-            <td style={{ textAlign: 'center', fontWeight: 800, color: a.progressPercentage === 100 ? '#16a34a' : '#2563eb' }}>
-              {a.progressPercentage}%
-            </td>
-            <td>
-              <span className={`badge ${a.progressPercentage === 100 ? 'badge-success' : 'badge-warning'}`}>
-                {String(a.status || (a.progressPercentage === 100 ? 'TESTED_READY' : 'IN_PROGRESS')).replace(/_/g, ' ')}
-              </span>
-            </td>
+            <td style={{ fontFamily: 'monospace', fontWeight: 700, color: '#2563eb' }}>{asm.assemblyCode || asm.code || asm.id}</td>
+            <td style={{ fontWeight: 600 }}>{asm.assemblyName || asm.name || asm.machineModel}</td>
+            <td style={{ fontFamily: 'monospace' }}>{asm.workOrderNo || asm.woNumber || '-'}</td>
+            <td>{asm.stationName || asm.subAssemblyType || '-'}</td>
+            <td>{asm.leadTechnician || '-'}</td>
+            <td style={{ textAlign: 'center', fontWeight: 700 }}>{asm.progressPercentage ?? asm.progress ?? 0}%</td>
+            <td style={{ fontWeight: 700 }}>{asm.status || 'IN_PROGRESS'}</td>
           </tr>
         ))}
       </tbody>
     </table>
 
     <GECPrintSignatory preparedBy="Floor Lead" checkedBy="Plant Head" authorizedBy="Managing Director" />
-  </div>
+  </PrintDocumentLayout>
 );

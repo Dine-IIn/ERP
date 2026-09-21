@@ -14,6 +14,60 @@ export const StandardCompanyPrintFooter: React.FC<CompanyPrintFooterProps> = (pr
   return <CompanyPrintFooter {...props} />;
 };
 
+export interface PrintDocumentLayoutProps {
+  header?: React.ReactNode;
+  footer?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}
+
+/**
+ * Multi-page Print Document Layout
+ * Browser print engine automatically repeats the <thead> header and <tfoot> footer on every page
+ */
+export const PrintDocumentLayout: React.FC<PrintDocumentLayoutProps> = ({
+  header,
+  footer,
+  children,
+  className = ''
+}) => {
+  return (
+    <table className={`print-document-layout ${className}`} style={{ width: '100%', borderCollapse: 'collapse', border: 'none', background: 'transparent' }}>
+      {header && (
+        <thead>
+          <tr>
+            <td style={{ border: 'none', padding: 0, background: 'transparent' }}>
+              <div className="print-header-wrapper">
+                {header}
+              </div>
+            </td>
+          </tr>
+        </thead>
+      )}
+      <tbody>
+        <tr>
+          <td style={{ border: 'none', padding: 0, background: 'transparent' }}>
+            <div className="print-content-wrapper">
+              {children}
+            </div>
+          </td>
+        </tr>
+      </tbody>
+      {footer && (
+        <tfoot>
+          <tr>
+            <td style={{ border: 'none', padding: 0, background: 'transparent' }}>
+              <div className="print-footer-wrapper">
+                {footer}
+              </div>
+            </td>
+          </tr>
+        </tfoot>
+      )}
+    </table>
+  );
+};
+
 /**
  * Number to Indian Currency Words helper
  */

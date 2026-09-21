@@ -29,12 +29,13 @@ type SortField =
 
 export interface PlanningModuleProps {
   hideHeader?: boolean;
+  printTrigger?: number;
 }
 
-export const PlanningModule: React.FC<PlanningModuleProps> = ({ hideHeader = false }) => {
+export const PlanningModule: React.FC<PlanningModuleProps> = ({ hideHeader = false, printTrigger }) => {
   const { 
-    items, purchaseOrders, workOrders, jobCards, jobworks, boms, qcInspections, finishedGoods,
-    searchTerm, setSearchTerm, itemProcessCards 
+    items, purchaseOrders, workOrders, jobCards, jobworks, boms, qcInspections, finishedGoods, grns,
+    searchTerm, setSearchTerm, itemProcessCards, itemClasses 
   } = useERP();
 
   // Filters State
@@ -48,6 +49,13 @@ export const PlanningModule: React.FC<PlanningModuleProps> = ({ hideHeader = fal
 
   // Print Modal State
   const [printModalOpen, setPrintModalOpen] = useState<boolean>(false);
+
+  // Trigger print modal from parent if requested
+  useEffect(() => {
+    if (printTrigger && printTrigger > 0) {
+      setPrintModalOpen(true);
+    }
+  }, [printTrigger]);
 
   // Keyboard navigation
   const [selectedIndex, setSelectedIndex] = useState<number>(-1);
@@ -154,9 +162,42 @@ export const PlanningModule: React.FC<PlanningModuleProps> = ({ hideHeader = fal
       });
     });
 
-    // Pre-index QC pending inspection quantities (O(N))
+    // Pre-index QC pending inspection quantities from GRNs (inward quarantine) + open QC inspection records
     const pendingQCMap = new Map<string, number>();
-    qcInspections.forEach(q => {
+
+    // 1. Uninspected GRN inward items sitting in QC Quarantine Queue
+    (grns || []).forEach(grn => {
+      if (grn.status === 'NO_QC') return;
+      (grn.items || []).forEach(lineItem => {
+        const itemObj = items.find(i => i.id === lineItem.itemId || i.itemCode === lineItem.itemCode);
+        if (itemObj?.qcTrigger === 'NO_QC') return;
+
+        const received = Number(lineItem.acceptedQty ?? lineItem.receivedQty ?? 0);
+        const directJobwork = Number(
+          lineItem.directJWQty ?? 
+          (lineItem as any).directJobworkQty ?? 
+          (lineItem.isDirectJobwork ? (lineItem.directJWQty || 0) : 0)
+        );
+        const totalInwardQty = Math.max(0, received - directJobwork);
+        if (totalInwardQty <= 0) return;
+
+        const alreadyInspected = (qcInspections || [])
+          .filter(q => (q.grnId === grn.id || q.referenceNo === grn.grnNumber) && (q.itemId === lineItem.itemId || q.itemCode === lineItem.itemCode))
+          .reduce((sum, q) => sum + Number(q.inspectedQuantity || q.inspectedQty || 0), 0);
+
+        const remainingQty = Math.max(0, totalInwardQty - alreadyInspected);
+        if (remainingQty > 0) {
+          if (lineItem.itemId) pendingQCMap.set(lineItem.itemId, (pendingQCMap.get(lineItem.itemId) || 0) + remainingQty);
+          if (lineItem.itemCode) {
+            const c = lineItem.itemCode.toLowerCase();
+            pendingQCMap.set(c, (pendingQCMap.get(c) || 0) + remainingQty);
+          }
+        }
+      });
+    });
+
+    // 2. Open QC Inspection records
+    (qcInspections || []).forEach(q => {
       const isOpen = q.status === 'IN_INSPECTION' || (q.status as string) === 'PENDING' || q.disposition === 'PENDING' || !q.status;
       if (isOpen) {
         const inspected = q.inspectedQuantity || q.inspectedQty || 0;
@@ -169,6 +210,19 @@ export const PlanningModule: React.FC<PlanningModuleProps> = ({ hideHeader = fal
             const c = q.itemCode.toLowerCase();
             pendingQCMap.set(c, (pendingQCMap.get(c) || 0) + remainingQC);
           }
+        }
+      }
+    });
+
+    // 3. Fallback: item.pendingQCStock if present and higher
+    items.forEach(item => {
+      if (item.pendingQCStock && item.pendingQCStock > 0) {
+        const idVal = item.id ? (pendingQCMap.get(item.id) || 0) : 0;
+        const codeVal = item.itemCode ? (pendingQCMap.get(item.itemCode.toLowerCase()) || 0) : 0;
+        const currentVal = Math.max(idVal, codeVal);
+        if (item.pendingQCStock > currentVal) {
+          if (item.id) pendingQCMap.set(item.id, item.pendingQCStock);
+          if (item.itemCode) pendingQCMap.set(item.itemCode.toLowerCase(), item.pendingQCStock);
         }
       }
     });
@@ -348,7 +402,7 @@ export const PlanningModule: React.FC<PlanningModuleProps> = ({ hideHeader = fal
       // Calculations
       const totalRequired = pendingWO;
       const shortage = Math.max(0, totalRequired - currentStock);
-      const minShortage = Math.max(0, (totalRequired + minStockLevel) - currentStock);
+      const minShortage = Math.max(0, shortage + minStockLevel - pendingJobCard - pendingPO - pendingJW - pendingQC);
 
       const pSources: string[] = item.materialProcessSources && item.materialProcessSources.length > 0
         ? item.materialProcessSources
@@ -380,7 +434,7 @@ export const PlanningModule: React.FC<PlanningModuleProps> = ({ hideHeader = fal
         _searchStr: `${partCode} ${itemCode} ${name} ${item.category || ''}`.toLowerCase()
       };
     });
-  }, [items, purchaseOrders, workOrders, jobCards, jobworks, boms, qcInspections, finishedGoods, itemProcessCards]);
+  }, [items, purchaseOrders, workOrders, jobCards, jobworks, boms, qcInspections, finishedGoods, grns, itemProcessCards]);
 
   // Dedicated Local Search Term for Planning Module
   const [localSearch, setLocalSearch] = useState('');
@@ -606,7 +660,7 @@ export const PlanningModule: React.FC<PlanningModuleProps> = ({ hideHeader = fal
           <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', marginRight: '0.25rem' }}>
             <Filter size={12} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '3px' }} /> Class:
           </span>
-          {FIXED_ITEM_CLASSES.map(cls => {
+          {(itemClasses && itemClasses.length > 0 ? itemClasses : FIXED_ITEM_CLASSES).map(cls => {
             const isSelected = selectedClasses.includes(cls.code);
             return (
               <button
@@ -624,7 +678,7 @@ export const PlanningModule: React.FC<PlanningModuleProps> = ({ hideHeader = fal
                   cursor: 'pointer',
                   transition: 'all 0.15s ease'
                 }}
-                title={cls.name}
+                title={cls.name || cls.description || cls.code}
               >
                 {cls.code}
               </button>

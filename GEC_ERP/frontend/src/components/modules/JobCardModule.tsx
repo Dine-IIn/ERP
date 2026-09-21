@@ -15,7 +15,7 @@ type JCSortKey = 'jobCardNo' | 'itemType' | 'itemName' | 'woNumber' | 'targetQua
 
 export const JobCardModule: React.FC = () => {
   const { 
-    jobCards, items, workOrders, boms, addJobCard, updateJobCard, updateJobCardProgress, closeJobCard, reopenJobCard, deleteJobCard,
+    jobCards, items, workOrders, boms, addJobCard, updateJobCard, updateJobCardProgress, closeJobCard, reopenJobCard, deleteJobCard, cancelJobCard,
     jobCardMaterialReissues, addJobCardMaterialReissue, currentUser, finishedGoods,
     searchTerm, setSearchTerm, drawings
   } = useERP();
@@ -23,6 +23,9 @@ export const JobCardModule: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingJC, setEditingJC] = useState<JobCard | null>(null);
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [cancellingJC, setCancellingJC] = useState<JobCard | null>(null);
+  const [cancellationReason, setCancellationReason] = useState('');
   const [emailJC, setEmailJC] = useState<JobCard | null>(null);
   const [isShortageWizardOpen, setIsShortageWizardOpen] = useState(false);
   const [isExplodeShortage, setIsExplodeShortage] = useState(false);
@@ -414,6 +417,27 @@ export const JobCardModule: React.FC = () => {
     }
     if (window.confirm(`Are you sure you want to delete Job Card ${jc.jobCardNo}?\n\nIt will be safely archived (soft-deleted) and can be viewed via @history or @deleted.`)) {
       deleteJobCard(jc.id);
+    }
+  };
+
+  const handleOpenCancelChallan = (jc: JobCard) => {
+    setCancellingJC(jc);
+    setCancellationReason('');
+    setIsCancelModalOpen(true);
+  };
+
+  const handleIssueCancelChallan = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cancellingJC || !cancellationReason.trim()) {
+      alert('Please provide a reason for cancelling this Job Card.');
+      return;
+    }
+
+    const ok = cancelJobCard(cancellingJC.id, cancellationReason.trim());
+    if (ok) {
+      alert(`✅ Cancellation Challan issued for Job Card ${cancellingJC.jobCardNo}. Record moved to history.`);
+      setIsCancelModalOpen(false);
+      setCancellingJC(null);
     }
   };
 
@@ -859,6 +883,7 @@ export const JobCardModule: React.FC = () => {
             { key: 'OPEN', label: 'Open' },
             { key: 'IN_PROGRESS', label: 'In Progress' },
             { key: 'COMPLETED', label: 'Completed (History)' },
+            { key: 'CANCELLED', label: 'Cancelled (History)' },
             { key: 'DELETED', label: 'Deleted' }
           ].map(opt => (
             <button 
@@ -966,10 +991,16 @@ export const JobCardModule: React.FC = () => {
                     <td>
                       <span className={`badge ${
                         jc.status === 'COMPLETED' ? 'badge-success' : 
+                        jc.status === 'CANCELLED' ? 'badge-danger' :
                         jc.status === 'IN_PROGRESS' ? 'badge-warning' : 'badge-neutral'
                       }`}>
                         {jc.status}
                       </span>
+                      {jc.cancellationChallanNo && (
+                        <div style={{ fontSize: '0.68rem', color: 'var(--danger)', fontWeight: 700, marginTop: '2px' }}>
+                          CNCL: {jc.cancellationChallanNo}
+                        </div>
+                      )}
                     </td>
                     <td onClick={(e) => e.stopPropagation()} style={{ textAlign: 'center' }}>
                       <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -990,7 +1021,11 @@ export const JobCardModule: React.FC = () => {
                           <Mail size={13} />
                         </button>
                         
-                        {jc.isDeleted ? null : isComplete ? (
+                        {jc.isDeleted ? null : jc.status === 'CANCELLED' ? (
+                          <span style={{ fontSize: '0.72rem', color: 'var(--danger)', fontWeight: 700, padding: '0.2rem 0.4rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', borderRadius: '4px' }}>
+                            ⛔ Cancelled
+                          </span>
+                        ) : isComplete ? (
                           <>
                             <span style={{ fontSize: '0.75rem', color: 'var(--success)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
                               <CheckCircle size={14} /> Closed & In Stock
@@ -1016,7 +1051,7 @@ export const JobCardModule: React.FC = () => {
                             </button>
                             <button 
                               className="btn btn-outline" 
-                              style={{ padding: '0.2rem 0.45rem', fontSize: '0.75rem' }}
+                              style={{ padding: '0.2rem 0.45rem', fontSize: '0.75rem' }} 
                               title="Update progress"
                               onClick={() => { setSelectedJC(jc); setProgressQtyInput(jc.completedQuantity + 1); }}
                             >
@@ -1024,11 +1059,19 @@ export const JobCardModule: React.FC = () => {
                             </button>
                             <button 
                               className="btn btn-primary" 
-                              style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
+                              style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }} 
                               title="Close and credit to inventory"
                               onClick={() => handleCloseAndStore(jc)}
                             >
                               <CheckCircle size={13} /> Close
+                            </button>
+                            <button
+                              className="btn btn-outline"
+                              style={{ padding: '0.2rem 0.45rem', fontSize: '0.75rem', color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                              title="Cancel Job Card & Issue Cancellation Challan"
+                              onClick={() => handleOpenCancelChallan(jc)}
+                            >
+                              Cancel
                             </button>
                             <button 
                               className="btn btn-outline" 
@@ -1297,6 +1340,52 @@ export const JobCardModule: React.FC = () => {
               </button>
               <button type="submit" className="btn btn-primary" style={{ fontWeight: 700 }}>
                 💾 Save Job Card Changes
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Cancellation Challan Modal */}
+      {isCancelModalOpen && cancellingJC && (
+        <Modal
+          isOpen={isCancelModalOpen}
+          onClose={() => { setIsCancelModalOpen(false); setCancellingJC(null); }}
+          title={`Issue Job Card Cancellation Challan (${cancellingJC.jobCardNo})`}
+        >
+          <form onSubmit={handleIssueCancelChallan} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ padding: '0.75rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--danger)', borderRadius: '0.375rem', fontSize: '0.82rem', color: 'var(--danger)' }}>
+              <strong>⚠️ Formal Cancellation Notice:</strong> Cancelling Job Card <strong>{cancellingJC.jobCardNo}</strong> ({cancellingJC.itemName}) will halt production, generate a cancellation challan, and move this record to History.
+            </div>
+
+            <div>
+              <label style={{ fontWeight: 700 }}>Job Card Reference</label>
+              <input type="text" className="input-field" readOnly value={`${cancellingJC.jobCardNo} - ${cancellingJC.itemName} (${cancellingJC.itemCode})`} />
+            </div>
+
+            <div>
+              <label style={{ fontWeight: 700 }}>Target Quantity</label>
+              <input type="text" className="input-field" readOnly value={`${cancellingJC.targetQuantity} units (Completed: ${cancellingJC.completedQuantity || 0})`} />
+            </div>
+
+            <div>
+              <label style={{ fontWeight: 700 }}>Cancellation Reason / Justification *</label>
+              <textarea
+                required
+                className="input-field"
+                rows={3}
+                placeholder="e.g., Work order canceled by customer, design engineering change, scrap..."
+                value={cancellationReason}
+                onChange={(e) => setCancellationReason(e.target.value)}
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => { setIsCancelModalOpen(false); setCancellingJC(null); }}>
+                Close
+              </button>
+              <button type="submit" className="btn btn-danger" style={{ backgroundColor: 'var(--danger)', color: '#fff' }}>
+                Issue Cancellation Challan
               </button>
             </div>
           </form>

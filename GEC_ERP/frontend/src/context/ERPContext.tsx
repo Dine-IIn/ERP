@@ -234,8 +234,10 @@ interface ERPContextType {
 
   // Work Order methods with custom components & Job Card Exchange
   addWorkOrder: (wo: Omit<WorkOrder, 'id'>) => void;
+  updateWorkOrderDetails: (woId: string, updates: Partial<WorkOrder>) => void;
   updateWorkOrderComponents: (woId: string, woComponents: WorkOrder['woComponents'], oldComponents?: WorkOrder['woComponents']) => void;
   updateWorkOrderStage: (woId: string, stage: WorkOrder['stage'], status?: WorkOrder['status']) => void;
+  deleteWorkOrder: (id: string) => boolean;
 
   // Job Cards Methods
   addJobCard: (jc: Omit<JobCard, 'id' | 'jobCardNo'>) => void;
@@ -244,6 +246,7 @@ interface ERPContextType {
   closeJobCard: (id: string) => void;
   reopenJobCard: (id: string) => void;
   deleteJobCard: (id: string) => boolean;
+  cancelJobCard: (id: string, reason: string) => boolean;
   createExchangeJobCard: (woId: string, returnParts: any[], newParts: any[]) => void;
 
   // Material Issue Methods
@@ -344,6 +347,7 @@ interface ERPContextType {
   addJobworkChallan: (challan: Omit<JobworkChallan, 'id' | 'pendingBalance' | 'status'>) => void;
   updateJobworkChallan: (challan: JobworkChallan) => void;
   recordJobworkReturn: (challanId: string, receivedQty: number, scrapQty: number) => void;
+  cancelJobworkChallan: (challanId: string, cancelQty: number, reason: string) => boolean;
 
   addPurchaseOrder: (po: Omit<PurchaseOrder, 'id' | 'status' | 'subtotal' | 'taxAmount' | 'totalAmount'>) => void;
   updatePurchaseOrder: (po: PurchaseOrder) => void;
@@ -1697,6 +1701,35 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addAuditLog('CREATE_WO', 'Work Orders', `Created Work Order ${newWO.workOrderNo || newWO.woNumber} for ${newWO.machineModel} (Qty: ${newWO.quantity})`);
   };
 
+  const updateWorkOrderDetails = (woId: string, updates: Partial<WorkOrder>) => {
+    const oldWO = workOrders.find(w => w.id === woId);
+    setWorkOrders(prev => prev.map(w => {
+      if (w.id === woId) {
+        const updated = { ...w, ...updates };
+        if (updates.workOrderNo) {
+          updated.woNumber = updates.workOrderNo;
+        }
+        return updated;
+      }
+      return w;
+    }));
+
+    // If work order number changed, sync woNumber on linked Job Cards
+    if (updates.workOrderNo && oldWO) {
+      const oldNo = oldWO.workOrderNo || oldWO.woNumber;
+      if (oldNo && oldNo !== updates.workOrderNo) {
+        setJobCards(prev => prev.map(jc => {
+          if (jc.woId === woId || jc.woNumber === oldNo) {
+            return { ...jc, woNumber: updates.workOrderNo! };
+          }
+          return jc;
+        }));
+      }
+    }
+
+    addAuditLog('UPDATE_WO_DETAILS', 'Work Orders', `Updated Work Order details for ${updates.workOrderNo || oldWO?.workOrderNo || woId}`);
+  };
+
   const updateWorkOrderComponents = (woId: string, woComponents: WorkOrder['woComponents'], oldComponents?: WorkOrder['woComponents']) => {
     const targetWO = workOrders.find(w => w.id === woId);
     setWorkOrders(prev => prev.map(w => w.id === woId ? { ...w, woComponents } : w));
@@ -1734,6 +1767,30 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateWorkOrderStage = (woId: string, stage: WorkOrder['stage'], status?: WorkOrder['status']) => {
     setWorkOrders(prev => prev.map(w => w.id === woId ? { ...w, stage, ...(status ? { status } : {}) } : w));
+  };
+
+  const deleteWorkOrder = (id: string): boolean => {
+    const targetWO = workOrders.find(w => w.id === id);
+    if (!targetWO) return false;
+
+    setWorkOrders(prev => prev.map(w => {
+      if (w.id === id) {
+        return {
+          ...w,
+          status: 'CANCELLED',
+          isDeleted: true
+        };
+      }
+      return w;
+    }));
+
+    // Reset linked SO status if applicable
+    if (targetWO.soId) {
+      setSalesOrders(prev => prev.map(so => so.id === targetWO.soId ? { ...so, status: 'CONFIRMED' } : so));
+    }
+
+    addAuditLog('DELETE_WO', 'Work Orders', `Deleted Work Order ${targetWO.workOrderNo || targetWO.woNumber}`);
+    return true;
   };
 
   // Job Cards Methods
@@ -1867,6 +1924,32 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
 
     addAuditLog('DELETE_JOB_CARD', 'Job Cards', `Soft-deleted Job Card ${targetJC.jobCardNo} (Archived to history).`);
+    return true;
+  };
+
+  const cancelJobCard = (id: string, reason: string): boolean => {
+    const targetJC = jobCards.find(jc => jc.id === id);
+    if (!targetJC) return false;
+
+    const nowIso = new Date().toISOString();
+    const userDisplay = currentUser?.fullName || currentUser?.username || 'Production Lead';
+    const challanNo = `JC-CNCL-${Date.now().toString().slice(-4)}`;
+
+    setJobCards(prev => prev.map(jc => {
+      if (jc.id === id) {
+        return {
+          ...jc,
+          status: 'CANCELLED',
+          cancellationChallanNo: challanNo,
+          cancellationReason: reason.trim(),
+          cancelledBy: userDisplay,
+          cancelledAt: nowIso
+        };
+      }
+      return jc;
+    }));
+
+    addAuditLog('CANCEL_JOB_CARD', 'Job Cards', `Issued Cancellation Challan ${challanNo} for Job Card ${targetJC.jobCardNo}. Reason: ${reason}`);
     return true;
   };
 
@@ -2641,6 +2724,63 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return item;
       }));
     }
+  };
+
+  const cancelJobworkChallan = (challanId: string, cancelQty: number, reason: string): boolean => {
+    const target = jobworks.find(j => j.id === challanId);
+    if (!target) return false;
+
+    const availableToCancel = target.pendingBalance !== undefined 
+      ? target.pendingBalance 
+      : Math.max(0, (target.sentQuantity || 0) - (target.receivedQuantity || 0) - (target.scrapQuantity || 0));
+    
+    const qtyToCancel = Math.min(Math.max(1, cancelQty), availableToCancel);
+    if (qtyToCancel <= 0) return false;
+
+    const challanNo = `JW-CNCL-${Date.now().toString().slice(-4)}`;
+    const nowIso = new Date().toISOString();
+    const userDisplay = currentUser?.fullName || currentUser?.username || 'Outward Lead';
+    const isFullCancel = qtyToCancel >= availableToCancel;
+    const newPending = Math.max(0, availableToCancel - qtyToCancel);
+
+    // If fully cancelled and nothing was ever received, status is CANCELLED.
+    // If partial cancel or some goods already received, status is COMPLETED if newPending === 0 else PARTIALLY_RECEIVED
+    const newStatus = (isFullCancel && (target.receivedQuantity || 0) === 0)
+      ? 'CANCELLED'
+      : (newPending === 0 ? 'COMPLETED' : 'PARTIALLY_RECEIVED');
+
+    setJobworks(prev => prev.map(j => {
+      if (j.id === challanId) {
+        return {
+          ...j,
+          pendingBalance: newPending,
+          status: newStatus,
+          cancelledQuantity: (j.cancelledQuantity || 0) + qtyToCancel,
+          cancellationChallanNo: challanNo,
+          cancellationReason: reason.trim(),
+          cancelledBy: userDisplay,
+          cancelledAt: nowIso
+        };
+      }
+      return j;
+    }));
+
+    // Restore un-machined raw material stock back to in-house inventory and reduce external stock
+    if (target.itemId) {
+      setItems(prevItems => prevItems.map(item => {
+        if (item.id === target.itemId || item.itemCode === target.itemCode) {
+          return {
+            ...item,
+            inHouseStock: item.inHouseStock + qtyToCancel,
+            externalStock: Math.max(0, item.externalStock - qtyToCancel)
+          };
+        }
+        return item;
+      }));
+    }
+
+    addAuditLog('CANCEL_JOBWORK', 'Jobwork & Subcontracting', `Issued Cancellation Challan ${challanNo} for Jobwork ${target.challanNo} (Cancelled ${qtyToCancel} units). Reason: ${reason}`);
+    return true;
   };
 
   const addPurchaseOrder = (poData: Omit<PurchaseOrder, 'id' | 'status' | 'subtotal' | 'taxAmount' | 'totalAmount'>) => {
@@ -3607,14 +3747,17 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updateSOStatus,
       generateWOFromSO,
       addWorkOrder,
+      updateWorkOrderDetails,
       updateWorkOrderComponents,
       updateWorkOrderStage,
+      deleteWorkOrder,
       addJobCard,
       updateJobCard,
       updateJobCardProgress,
       closeJobCard,
       reopenJobCard,
       deleteJobCard,
+      cancelJobCard,
       createExchangeJobCard,
       materialIssueRecords,
       issueMaterialForJobCard,
@@ -3682,6 +3825,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addJobworkChallan,
       updateJobworkChallan,
       recordJobworkReturn,
+      cancelJobworkChallan,
       addPurchaseOrder,
       updatePurchaseOrder,
       deletePurchaseOrder,

@@ -221,7 +221,7 @@ export const ShortageModule: React.FC = () => {
   };
 
   // Print Modal State
-  const [printModalOpen, setPrintModalOpen] = useState(false);
+  const [planningPrintTrigger, setPlanningPrintTrigger] = useState<number>(0);
 
   // Dual Source Split Modal State
   const [dualModalData, setDualModalData] = useState<{
@@ -1201,8 +1201,11 @@ export const ShortageModule: React.FC = () => {
       .filter(jw => jw.status !== 'COMPLETED' && jw.status !== 'CANCELLED' && !(jw as any).isDeleted)
       .reduce((sum, jw) => (jw.itemId === c.itemId || jw.itemCode === c.itemCode) ? sum + (jw.pendingBalance ?? jw.sentQuantity ?? 0) : sum, 0);
     const pendingQC = c.itemObj?.pendingQCStock || 0;
-    const totalPipelineSupply = c.inHouseStock + openPO + pendingJW + pendingQC;
-    const netShortage = Math.max(0, (c.totalRequired + minStock) - totalPipelineSupply);
+    const pendingJobCard = jobCards
+      .filter(jc => jc.status !== 'COMPLETED' && jc.status !== 'CANCELLED' && !(jc as any).isDeleted)
+      .reduce((sum, jc) => (jc.itemId === c.itemId || jc.itemCode === c.itemCode) ? sum + Math.max(0, (jc.targetQuantity || 1) - (jc.completedQuantity || 0)) : sum, 0);
+    const shortage = Math.max(0, c.totalRequired - c.inHouseStock);
+    const netShortage = Math.max(0, shortage + minStock - pendingJobCard - openPO - pendingJW - pendingQC);
     return {
       ...c,
       minStockQty: minStock,
@@ -1810,55 +1813,71 @@ export const ShortageModule: React.FC = () => {
           </div>
 
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <button 
-              type="button" 
-              className={`btn ${isExplodeAllBOMs ? 'btn-primary' : 'btn-outline'}`} 
-              onClick={() => setIsExplodeAllBOMs(!isExplodeAllBOMs)} 
-              title="Explode all components and sub-assemblies across multi-level BOMs"
-              style={{ fontWeight: 700, fontSize: '0.82rem', gap: '0.35rem', display: 'inline-flex', alignItems: 'center' }}
-            >
-              <Layers size={14} />
-              {isExplodeAllBOMs ? '💥 Multi-Level BOMs Exploded' : '💥 Explode All BOMs'}
-            </button>
+            {activeTab !== 'PLANNING' && (
+              <>
+                <button 
+                  type="button" 
+                  className={`btn ${isExplodeAllBOMs ? 'btn-primary' : 'btn-outline'}`} 
+                  onClick={() => setIsExplodeAllBOMs(!isExplodeAllBOMs)} 
+                  title="Explode all components and sub-assemblies across multi-level BOMs"
+                  style={{ fontWeight: 700, fontSize: '0.82rem', gap: '0.35rem', display: 'inline-flex', alignItems: 'center' }}
+                >
+                  <Layers size={14} />
+                  {isExplodeAllBOMs ? '💥 Multi-Level BOMs Exploded' : '💥 Explode All BOMs'}
+                </button>
 
-            {/* Universal Shortage vs All Items Mode Toggle */}
-            <div style={{ display: 'inline-flex', borderRadius: '0.375rem', border: '1px solid var(--border-color)', overflow: 'hidden' }}>
-              <button
-                type="button"
-                className={`btn ${shortageFilterMode === 'SHORTAGE_ONLY' ? 'btn-warning' : 'btn-outline'}`}
-                style={{ 
-                  padding: '0.3rem 0.65rem', 
-                  fontSize: '0.78rem', 
-                  fontWeight: 700, 
-                  border: 'none', 
-                  borderRadius: 0,
-                  backgroundColor: shortageFilterMode === 'SHORTAGE_ONLY' ? '#d97706' : undefined,
-                  color: shortageFilterMode === 'SHORTAGE_ONLY' ? '#fff' : undefined
-                }}
-                onClick={() => setShortageFilterMode('SHORTAGE_ONLY')}
-              >
-                ⚠️ Shortage Only
-              </button>
-              <button
-                type="button"
-                className={`btn ${shortageFilterMode === 'ALL_ITEMS' ? 'btn-primary' : 'btn-outline'}`}
-                style={{ padding: '0.3rem 0.65rem', fontSize: '0.78rem', fontWeight: 700, border: 'none', borderRadius: 0 }}
-                onClick={() => setShortageFilterMode('ALL_ITEMS')}
-              >
-                📋 All Items (Full BOM)
-              </button>
-            </div>
+                {/* Universal Shortage vs All Items Mode Toggle */}
+                <div style={{ display: 'inline-flex', borderRadius: '0.375rem', border: '1px solid var(--border-color)', overflow: 'hidden' }}>
+                  <button
+                    type="button"
+                    className={`btn ${shortageFilterMode === 'SHORTAGE_ONLY' ? 'btn-warning' : 'btn-outline'}`}
+                    style={{ 
+                      padding: '0.3rem 0.65rem', 
+                      fontSize: '0.78rem', 
+                      fontWeight: 700, 
+                      border: 'none', 
+                      borderRadius: 0,
+                      backgroundColor: shortageFilterMode === 'SHORTAGE_ONLY' ? '#d97706' : undefined,
+                      color: shortageFilterMode === 'SHORTAGE_ONLY' ? '#fff' : undefined
+                    }}
+                    onClick={() => setShortageFilterMode('SHORTAGE_ONLY')}
+                  >
+                    ⚠️ Shortage Only
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn ${shortageFilterMode === 'ALL_ITEMS' ? 'btn-primary' : 'btn-outline'}`}
+                    style={{ padding: '0.3rem 0.65rem', fontSize: '0.78rem', fontWeight: 700, border: 'none', borderRadius: 0 }}
+                    onClick={() => setShortageFilterMode('ALL_ITEMS')}
+                  >
+                    📋 All Items (Full BOM)
+                  </button>
+                </div>
+              </>
+            )}
 
             {/* Direct Print Button */}
-            <button 
-              type="button" 
-              className="btn btn-primary" 
-              onClick={handleQuickPrint} 
-              title="Direct Print Shortage Report"
-              style={{ fontSize: '0.8rem', padding: '0.45rem 0.85rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
-            >
-              <Printer size={15} /> Print Shortage Report
-            </button>
+            {activeTab === 'PLANNING' ? (
+              <button 
+                type="button" 
+                className="btn btn-primary" 
+                onClick={() => setPlanningPrintTrigger(Date.now())} 
+                title="Print Planning Report (Choose Landscape or Portrait in dialog)"
+                style={{ fontSize: '0.8rem', padding: '0.45rem 0.85rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+              >
+                <Printer size={15} /> Print Planning Report
+              </button>
+            ) : (
+              <button 
+                type="button" 
+                className="btn btn-primary" 
+                onClick={handleQuickPrint} 
+                title="Direct Print Shortage Report"
+                style={{ fontSize: '0.8rem', padding: '0.45rem 0.85rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+              >
+                <Printer size={15} /> Print Shortage Report
+              </button>
+            )}
           </div>
         </div>
 
@@ -1909,15 +1928,29 @@ export const ShortageModule: React.FC = () => {
         </div>
       </div>
 
-      {/* MAIN SHORTAGE CONTENT AREA - Single Page Vertical Scroll */}
-      <div className="shortage-single-scroll-container" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%' }}>
+      {/* MAIN SHORTAGE CONTENT AREA */}
+      <div 
+        className="shortage-single-scroll-container" 
+        style={{ 
+          flex: 1, 
+          minHeight: 0, 
+          overflow: 'hidden',
+          // overflowY: (activeTab === 'PLANNING' || activeTab === 'ITEM_WISE_SHORTAGE') ? 'hidden' : 'auto', 
+          overflowX: 'hidden', 
+          display: 'flex', 
+          flexDirection: 'column', 
+          gap: '0.5rem', 
+          width: '100%',
+          height: (activeTab === 'PLANNING' || activeTab === 'ITEM_WISE_SHORTAGE') ? '100%' : 'auto'
+        }}
+      >
         
         {/* ========================================================= */}
         {/* TAB 0: PRODUCTION PLANNING                                */}
         {/* ========================================================= */}
         {activeTab === 'PLANNING' && (
-          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', width: '100%' }}>
-            <PlanningModule />
+          <div style={{ flex: 1, minHeight: 0, height: '100%', display: 'flex', flexDirection: 'column', width: '100%', overflow: 'hidden' }}>
+            <PlanningModule hideHeader={true} printTrigger={planningPrintTrigger} />
           </div>
         )}
 
@@ -1925,10 +1958,10 @@ export const ShortageModule: React.FC = () => {
         {/* TAB 1: ITEM-WISE SHORTAGE & CONSOLIDATED CAPACITY ($X+Y$) */}
         {/* ========================================================= */}
         {activeTab === 'ITEM_WISE_SHORTAGE' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%', flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
             
             {/* Top Panel: Search & Add Parent Finished Items / Assemblies */}
-            <div className="card" style={{ padding: '0.65rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', flexShrink: 0, width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
+            <div className="card" style={{ padding: '0.65rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', flexShrink: 0, maxHeight: '180px', overflowY: 'auto', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
                 <div>
                   <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-primary)' }}>
@@ -2124,12 +2157,16 @@ export const ShortageModule: React.FC = () => {
 
           {/* Consolidated Component Table ($X + Y$) - Single Unified Container */}
           <div 
-            className="table-container-flow" 
+            className="card" 
             style={{ 
               backgroundColor: 'var(--bg-card)', 
-              border: '1px solid var(--border-color)', 
-              borderRadius: '0.5rem', 
-              overflow: 'visible',
+              padding: '0.75rem',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.65rem',
+              flex: 1,
+              minHeight: 0,
+              overflow: 'hidden',
               width: '100%', 
               maxWidth: '100%',
               margin: 0
@@ -2274,311 +2311,245 @@ export const ShortageModule: React.FC = () => {
                   : 'No components found matching the active search or filters.'}
               </div>
             ) : (
-              <>
-                {/* Sticky Header Container (Synchronized with Body horizontal scroll) */}
-                <div 
-                  ref={itemWiseHeaderScrollRef}
-                  style={{ 
-                    position: 'sticky',
-                    top: `${card2Height > 0 ? card2Height : 76}px`,
-                    zIndex: 25,
-                    overflow: 'hidden',
-                    width: '100%',
-                    backgroundColor: 'var(--bg-tertiary)',
-                    borderBottom: '1px solid var(--border-color)'
-                  }}
-                >
-                  <table className="shortage-itemwise-table" style={{ width: '100%', minWidth: '1910px', tableLayout: 'fixed', margin: 0, borderCollapse: 'separate', borderSpacing: 0 }}>
-                    <colgroup>
-                      <col style={{ width: '38px' }} />
-                      <col style={{ width: '65px' }} />
-                      <col style={{ width: '85px' }} />
-                      <col style={{ width: '110px' }} />
-                      <col style={{ width: '120px' }} />
-                      <col style={{ width: '280px' }} />
-                      <col style={{ width: '70px' }} />
-                      <col style={{ width: '175px' }} />
-                      <col style={{ width: '140px' }} />
-                      <col style={{ width: '95px' }} />
-                      <col style={{ width: '90px' }} />
-                      <col style={{ width: '85px' }} />
-                      <col style={{ width: '85px' }} />
-                      <col style={{ width: '85px' }} />
-                      <col style={{ width: '95px' }} />
-                      <col style={{ width: '105px' }} />
-                      <col style={{ width: '165px' }} />
-                    </colgroup>
-                    <thead>
-                      <tr>
-                        {/* 1. # */}
-                        <th onClick={() => handleItemWiseSortToggle('srNo')} style={{ width: '38px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
-                            # {itemWiseSortField === 'srNo' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={10} color="var(--text-muted)" />}
-                          </div>
-                        </th>
+              <div className="table-container" style={{ flex: 1, minHeight: 0, backgroundColor: 'var(--bg-card)' }}>
+                <table>
+                  <thead>
+                    <tr>
+                      {/* 1. # */}
+                      <th onClick={() => handleItemWiseSortToggle('srNo')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', whiteSpace: 'nowrap', textAlign: 'center', width: '38px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
+                          # {itemWiseSortField === 'srNo' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={10} color="var(--text-muted)" />}
+                        </div>
+                      </th>
 
-                        {/* 1b. Priority */}
-                        <th onClick={() => handleItemWiseSortToggle('priority')} style={{ width: '65px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
-                            Priority {itemWiseSortField === 'priority' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={10} color="var(--text-muted)" />}
-                          </div>
-                        </th>
+                      {/* 1b. Priority */}
+                      <th onClick={() => handleItemWiseSortToggle('priority')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', whiteSpace: 'nowrap', textAlign: 'center', width: '65px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
+                          Priority {itemWiseSortField === 'priority' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={10} color="var(--text-muted)" />}
+                        </div>
+                      </th>
 
-                        {/* 1c. Lead Time */}
-                        <th onClick={() => handleItemWiseSortToggle('leadTimeDays')} style={{ width: '85px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
-                            Lead Time {itemWiseSortField === 'leadTimeDays' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={10} color="var(--text-muted)" />}
-                          </div>
-                        </th>
+                      {/* 1c. Lead Time */}
+                      <th onClick={() => handleItemWiseSortToggle('leadTimeDays')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', whiteSpace: 'nowrap', textAlign: 'center', width: '85px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
+                          Lead Time {itemWiseSortField === 'leadTimeDays' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={10} color="var(--text-muted)" />}
+                        </div>
+                      </th>
 
-                        {/* 2. Part Code */}
-                        <th onClick={() => handleItemWiseSortToggle('partCode')} style={{ width: '110px', cursor: 'pointer', userSelect: 'none' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
-                            Part Code {itemWiseSortField === 'partCode' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
-                          </div>
-                        </th>
+                      {/* 2. Part Code */}
+                      <th onClick={() => handleItemWiseSortToggle('partCode')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                          Part Code {itemWiseSortField === 'partCode' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+                        </div>
+                      </th>
 
-                        {/* 3. Item Code */}
-                        <th onClick={() => handleItemWiseSortToggle('itemCode')} style={{ width: '120px', cursor: 'pointer', userSelect: 'none' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
-                            Item Code {itemWiseSortField === 'itemCode' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
-                          </div>
-                        </th>
+                      {/* 3. Item Code */}
+                      <th onClick={() => handleItemWiseSortToggle('itemCode')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                          Item Code {itemWiseSortField === 'itemCode' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+                        </div>
+                      </th>
 
-                        {/* 4. Item Description */}
-                        <th onClick={() => handleItemWiseSortToggle('itemName')} style={{ width: '280px', cursor: 'pointer', userSelect: 'none' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
-                            Item Description {itemWiseSortField === 'itemName' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
-                          </div>
-                        </th>
+                      {/* 4. Item Description */}
+                      <th onClick={() => handleItemWiseSortToggle('itemName')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', minWidth: '200px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                          Item Description {itemWiseSortField === 'itemName' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+                        </div>
+                      </th>
 
-                        {/* 5. Class */}
-                        <th onClick={() => handleItemWiseSortToggle('category')} style={{ width: '70px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
-                            Class {itemWiseSortField === 'category' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
-                          </div>
-                        </th>
+                      {/* 5. Class */}
+                      <th onClick={() => handleItemWiseSortToggle('category')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
+                          Class {itemWiseSortField === 'category' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+                        </div>
+                      </th>
 
-                        {/* 6. Source */}
-                        <th onClick={() => handleItemWiseSortToggle('processType')} style={{ width: '175px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
-                            Source {itemWiseSortField === 'processType' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
-                          </div>
-                        </th>
+                      {/* 6. Source */}
+                      <th onClick={() => handleItemWiseSortToggle('processType')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
+                          Source {itemWiseSortField === 'processType' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+                        </div>
+                      </th>
 
-                        {/* 7. Demand From */}
-                        <th onClick={() => handleItemWiseSortToggle('demandFrom')} style={{ width: '140px', cursor: 'pointer', userSelect: 'none' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
-                            Demand From {itemWiseSortField === 'demandFrom' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
-                          </div>
-                        </th>
+                      {/* 7. Demand From */}
+                      <th onClick={() => handleItemWiseSortToggle('demandFrom')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', minWidth: '130px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                          Demand From {itemWiseSortField === 'demandFrom' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+                        </div>
+                      </th>
 
-                        {/* 8. Total Req */}
-                        <th onClick={() => handleItemWiseSortToggle('totalRequired')} style={{ width: '95px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
-                            Total Req {itemWiseSortField === 'totalRequired' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
-                          </div>
-                        </th>
+                      {/* 8. Total Req */}
+                      <th onClick={() => handleItemWiseSortToggle('totalRequired')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
+                          Total Req {itemWiseSortField === 'totalRequired' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+                        </div>
+                      </th>
 
-                        {/* 9. In Stock */}
-                        <th onClick={() => handleItemWiseSortToggle('inHouseStock')} style={{ width: '90px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
-                            In Stock {itemWiseSortField === 'inHouseStock' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
-                          </div>
-                        </th>
+                      {/* 9. In Stock */}
+                      <th onClick={() => handleItemWiseSortToggle('inHouseStock')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
+                          In Stock {itemWiseSortField === 'inHouseStock' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+                        </div>
+                      </th>
 
-                        {/* 10. Pend PO */}
-                        <th onClick={() => handleItemWiseSortToggle('pendingPO')} style={{ width: '85px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
-                            Pend PO {itemWiseSortField === 'pendingPO' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
-                          </div>
-                        </th>
+                      {/* 10. Pend PO */}
+                      <th onClick={() => handleItemWiseSortToggle('pendingPO')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
+                          Pend PO {itemWiseSortField === 'pendingPO' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+                        </div>
+                      </th>
 
-                        {/* 11. Pend JW */}
-                        <th onClick={() => handleItemWiseSortToggle('pendingJW')} style={{ width: '85px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
-                            Pend JW {itemWiseSortField === 'pendingJW' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
-                          </div>
-                        </th>
+                      {/* 11. Pend JW */}
+                      <th onClick={() => handleItemWiseSortToggle('pendingJW')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
+                          Pend JW {itemWiseSortField === 'pendingJW' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+                        </div>
+                      </th>
 
-                        {/* 12. Pend QC */}
-                        <th onClick={() => handleItemWiseSortToggle('pendingQC')} style={{ width: '85px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
-                            Pend QC {itemWiseSortField === 'pendingQC' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
-                          </div>
-                        </th>
+                      {/* 12. Pend QC */}
+                      <th onClick={() => handleItemWiseSortToggle('pendingQC')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
+                          Pend QC {itemWiseSortField === 'pendingQC' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+                        </div>
+                      </th>
 
-                        {/* 13. Shortage */}
-                        <th onClick={() => handleItemWiseSortToggle('shortage')} style={{ width: '95px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
-                            Shortage {itemWiseSortField === 'shortage' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
-                          </div>
-                        </th>
+                      {/* 13. Shortage */}
+                      <th onClick={() => handleItemWiseSortToggle('shortage')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
+                          Shortage {itemWiseSortField === 'shortage' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+                        </div>
+                      </th>
 
-                        {/* 14. Min Stock */}
-                        <th onClick={() => handleItemWiseSortToggle('minStockLevel')} style={{ width: '105px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
-                            Min Stock {itemWiseSortField === 'minStockLevel' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
-                          </div>
-                        </th>
+                      {/* 14. Min Stock */}
+                      <th onClick={() => handleItemWiseSortToggle('minStockLevel')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
+                          Min Stock {itemWiseSortField === 'minStockLevel' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+                        </div>
+                      </th>
 
-                        {/* 15. Min Level Shortage */}
-                        <th onClick={() => handleItemWiseSortToggle('minShortage')} style={{ width: '165px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
-                            Min Level Shortage {itemWiseSortField === 'minShortage' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
-                          </div>
-                        </th>
-                      </tr>
-                    </thead>
-                  </table>
-                </div>
+                      {/* 15. Min Level Shortage */}
+                      <th onClick={() => handleItemWiseSortToggle('minShortage')} style={{ padding: '0.4rem 0.5rem', cursor: 'pointer', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}>
+                          Min Level Shortage {itemWiseSortField === 'minShortage' ? (itemWiseSortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ArrowUpDown size={11} color="var(--text-muted)" />}
+                        </div>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredConsolidatedItems.map((comp, idx) => {
+                      const isLineShortage = comp.shortage > 0 || comp.minShortage > 0;
 
-                {/* Table Body Container (Horizontal Scrollable) */}
-                <div 
-                  className="shortage-table-scroll-wrapper"
-                  onScroll={(e) => {
-                    if (itemWiseHeaderScrollRef.current) {
-                      itemWiseHeaderScrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
-                    }
-                  }}
-                  style={{ overflowX: 'auto', width: '100%', maxWidth: '100%', borderRadius: '0 0 0.5rem 0.5rem' }}
-                >
-                  <table className="shortage-itemwise-table" style={{ width: '100%', minWidth: '1910px', tableLayout: 'fixed', margin: 0, borderCollapse: 'separate', borderSpacing: 0 }}>
-                    <colgroup>
-                      <col style={{ width: '38px' }} />
-                      <col style={{ width: '65px' }} />
-                      <col style={{ width: '85px' }} />
-                      <col style={{ width: '110px' }} />
-                      <col style={{ width: '120px' }} />
-                      <col style={{ width: '280px' }} />
-                      <col style={{ width: '70px' }} />
-                      <col style={{ width: '175px' }} />
-                      <col style={{ width: '140px' }} />
-                      <col style={{ width: '95px' }} />
-                      <col style={{ width: '90px' }} />
-                      <col style={{ width: '85px' }} />
-                      <col style={{ width: '85px' }} />
-                      <col style={{ width: '85px' }} />
-                      <col style={{ width: '95px' }} />
-                      <col style={{ width: '105px' }} />
-                      <col style={{ width: '165px' }} />
-                    </colgroup>
-                    <tbody>
-                      {filteredConsolidatedItems.map((comp, idx) => {
-                        const isLineShortage = comp.shortage > 0 || comp.minShortage > 0;
+                      return (
+                        <tr 
+                          key={idx} 
+                          style={{ backgroundColor: isLineShortage ? 'rgba(239, 68, 68, 0.06)' : 'transparent' }}
+                        >
+                          {/* 1. # */}
+                          <td style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '0.45rem 0.5rem' }}>{idx + 1}</td>
 
-                        return (
-                          <tr 
-                            key={idx} 
-                            style={{ backgroundColor: isLineShortage ? 'rgba(239, 68, 68, 0.06)' : 'transparent' }}
-                          >
-                            {/* 1. # */}
-                            <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}>{idx + 1}</td>
+                          {/* 1b. Priority */}
+                          <td style={{ textAlign: 'center', padding: '0.45rem 0.5rem' }}>
+                            <span 
+                              className={`badge ${comp.priorityNum <= 3 ? 'badge-p1' : comp.priorityNum <= 8 ? 'badge-p2' : 'badge-neutral'}`}
+                              style={{ fontSize: '0.72rem', minWidth: '32px', justifyContent: 'center' }}
+                              title={`Priority #${comp.priorityNum} (Lead Time: ${comp.leadTimeDays} Days)`}
+                            >
+                              {comp.priorityRank}
+                            </span>
+                          </td>
 
-                            {/* 1b. Priority */}
-                            <td style={{ textAlign: 'center' }}>
-                              <span 
-                                className={`badge ${comp.priorityNum <= 3 ? 'badge-p1' : comp.priorityNum <= 8 ? 'badge-p2' : 'badge-neutral'}`}
-                                style={{ fontSize: '0.72rem', minWidth: '32px', justifyContent: 'center' }}
-                                title={`Priority #${comp.priorityNum} (Lead Time: ${comp.leadTimeDays} Days)`}
-                              >
-                                {comp.priorityRank}
-                              </span>
-                            </td>
+                          {/* 1c. Lead Time */}
+                          <td style={{ textAlign: 'center', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', padding: '0.45rem 0.5rem' }}>
+                            {comp.leadTimeDays} D
+                          </td>
 
-                            {/* 1c. Lead Time */}
-                            <td style={{ textAlign: 'center', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                              {comp.leadTimeDays} D
-                            </td>
+                          {/* 2. Part Code */}
+                          <td style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--text-primary)', padding: '0.45rem 0.5rem' }}>
+                            {comp.partCode || '-'}
+                          </td>
 
-                            {/* 2. Part Code */}
-                            <td style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--text-primary)' }}>
-                              {comp.partCode || '-'}
-                            </td>
+                          {/* 3. Item Code */}
+                          <td style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)', padding: '0.45rem 0.5rem' }}>
+                            {comp.itemCode}
+                          </td>
 
-                            {/* 3. Item Code */}
-                            <td style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>
-                              {comp.itemCode}
-                            </td>
+                          {/* 4. Description */}
+                          <td style={{ padding: '0.45rem 0.5rem' }}>
+                            <div style={{ fontWeight: 600, whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: '1.35', fontSize: '0.8rem' }} title={comp.itemName}>
+                              {comp.itemName}
+                            </div>
+                          </td>
 
-                            {/* 4. Description (Full multi-line wrap, completely visible) */}
-                            <td>
-                              <div style={{ fontWeight: 600, whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: '1.35', fontSize: '0.8rem' }} title={comp.itemName}>
-                                {comp.itemName}
-                              </div>
-                            </td>
+                          {/* 5. Class */}
+                          <td style={{ textAlign: 'center', padding: '0.45rem 0.5rem' }}>
+                            <span className="badge badge-neutral" style={{ fontSize: '0.72rem' }}>
+                              {comp.category}
+                            </span>
+                          </td>
 
-                            {/* 5. Class */}
-                            <td style={{ textAlign: 'center' }}>
-                              <span className="badge badge-neutral" style={{ fontSize: '0.72rem' }}>
-                                {comp.category}
-                              </span>
-                            </td>
+                          {/* 6. Source */}
+                          <td style={{ textAlign: 'center', padding: '0.45rem 0.5rem' }}>
+                            <span className={`badge ${comp.processType === 'Bought out' || comp.processType === 'Job work + Bought out' ? 'badge-primary' : comp.processType === 'In-house' ? 'badge-success' : comp.processType === 'Job work' ? 'badge-purple' : 'badge-neutral'}`} style={{ fontSize: '0.72rem', whiteSpace: 'normal', lineHeight: '1.2' }}>
+                              {comp.processType || 'In-house'}
+                            </span>
+                          </td>
 
-                            {/* 6. Source */}
-                            <td style={{ textAlign: 'center' }}>
-                              <span className={`badge ${comp.processType === 'Bought out' || comp.processType === 'Job work + Bought out' ? 'badge-primary' : comp.processType === 'In-house' ? 'badge-success' : comp.processType === 'Job work' ? 'badge-purple' : 'badge-neutral'}`} style={{ fontSize: '0.72rem', whiteSpace: 'normal', lineHeight: '1.2' }}>
-                                {comp.processType || 'In-house'}
-                              </span>
-                            </td>
+                          {/* 7. Demand From */}
+                          <td style={{ padding: '0.45rem 0.5rem' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '0.72rem' }}>
+                              {(comp.requiredByItems || []).map((req: any, rIdx: number) => (
+                                <span key={rIdx} style={{ color: 'var(--text-secondary)' }}>
+                                  <strong>{req.itemCode}</strong>: {req.requiredQty} {comp.unit}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
 
-                            {/* 7. Demand From */}
-                            <td>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '0.72rem' }}>
-                                {(comp.requiredByItems || []).map((req: any, rIdx: number) => (
-                                  <span key={rIdx} style={{ color: 'var(--text-secondary)' }}>
-                                    <strong>{req.itemCode}</strong>: {req.requiredQty} {comp.unit}
-                                  </span>
-                                ))}
-                              </div>
-                            </td>
+                          {/* 8. Total Req */}
+                          <td style={{ textAlign: 'center', fontWeight: 800, color: 'var(--text-primary)', padding: '0.45rem 0.5rem' }}>
+                            {comp.totalRequired} {comp.unit}
+                          </td>
 
-                            {/* 8. Total Req */}
-                            <td style={{ textAlign: 'center', fontWeight: 800, color: 'var(--text-primary)' }}>
-                              {comp.totalRequired} {comp.unit}
-                            </td>
+                          {/* 9. In Stock */}
+                          <td style={{ textAlign: 'center', fontWeight: 700, padding: '0.45rem 0.5rem' }}>
+                            {comp.inHouseStock} {comp.unit}
+                          </td>
 
-                            {/* 9. In Stock */}
-                            <td style={{ textAlign: 'center', fontWeight: 700 }}>
-                              {comp.inHouseStock} {comp.unit}
-                            </td>
+                          {/* 10. Pend PO */}
+                          <td style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '0.45rem 0.5rem' }}>
+                            {comp.pendingPO || 0}
+                          </td>
 
-                            {/* 10. Pend PO */}
-                            <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
-                              {comp.pendingPO || 0}
-                            </td>
+                          {/* 11. Pend JW */}
+                          <td style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '0.45rem 0.5rem' }}>
+                            {comp.pendingJW || 0}
+                          </td>
 
-                            {/* 11. Pend JW */}
-                            <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
-                              {comp.pendingJW || 0}
-                            </td>
+                          {/* 12. Pend QC */}
+                          <td style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '0.45rem 0.5rem' }}>
+                            {comp.pendingQC || 0}
+                          </td>
 
-                            {/* 12. Pend QC */}
-                            <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
-                              {comp.pendingQC || 0}
-                            </td>
+                          {/* 13. Shortage */}
+                          <td style={{ textAlign: 'center', fontWeight: 900, color: comp.shortage > 0 ? 'var(--danger)' : 'var(--success)', padding: '0.45rem 0.5rem' }}>
+                            {comp.shortage > 0 ? `${comp.shortage} ${comp.unit}` : 'OK (0)'}
+                          </td>
 
-                            {/* 13. Shortage */}
-                            <td style={{ textAlign: 'center', fontWeight: 900, color: comp.shortage > 0 ? 'var(--danger)' : 'var(--success)' }}>
-                              {comp.shortage > 0 ? `${comp.shortage} ${comp.unit}` : 'OK (0)'}
-                            </td>
+                          {/* 14. Min Stock */}
+                          <td style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '0.45rem 0.5rem' }}>
+                            {comp.minStockLevel || 0} {comp.unit}
+                          </td>
 
-                            {/* 14. Min Stock */}
-                            <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
-                              {comp.minStockLevel || 0} {comp.unit}
-                            </td>
-
-                            {/* 15. Min Level Shortage */}
-                            <td style={{ textAlign: 'center', fontWeight: 800, color: comp.minShortage > 0 ? 'var(--warning-text, #d97706)' : 'var(--text-secondary)' }}>
-                              {comp.minShortage > 0 ? `${comp.minShortage} ${comp.unit}` : '0'}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </>
+                          {/* 15. Min Level Shortage */}
+                          <td style={{ textAlign: 'center', fontWeight: 800, color: comp.minShortage > 0 ? 'var(--warning-text, #d97706)' : 'var(--text-secondary)', padding: '0.45rem 0.5rem' }}>
+                            {comp.minShortage > 0 ? `${comp.minShortage} ${comp.unit}` : '0'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             )}
             </div>
         </div>

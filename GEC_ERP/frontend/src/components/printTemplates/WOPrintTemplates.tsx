@@ -1,7 +1,9 @@
 import React from 'react';
 import { WorkOrder } from '../../types/erp';
+import { useERP } from '../../context/ERPContext';
 import { CompanyPrintHeader } from './CompanyPrintHeader';
 import { CompanyPrintFooter } from './CompanyPrintFooter';
+import { PrintDocumentLayout } from './StandardCompanyHeaderFooter';
 
 // Header section for GEC Moulding Machines (Pure Code)
 export const GECPrintHeader: React.FC<{ docTitle: string; refNo?: string; date?: string }> = ({
@@ -27,14 +29,45 @@ export const GECPrintSignatory: React.FC<{ preparedBy?: string; checkedBy?: stri
 
 // 1. Single Work Order Job Card / Production Traveller
 export const SingleWOPrintView: React.FC<{ wo: WorkOrder }> = ({ wo }) => {
+  const { items } = useERP();
   const comps = wo.woComponents || [];
   const standardComps = comps.filter(c => !c.isCustomExtra);
   const extraComps = comps.filter(c => c.isCustomExtra);
 
-  return (
-    <div>
-      <GECPrintHeader docTitle="PRODUCTION WORK ORDER JOB CARD" refNo={wo.workOrderNo || wo.woNumber} date={wo.startDate} />
+  // O(1) Item Master map for exact fallback lookup of partCode, oldItemCode, location
+  const itemMap = React.useMemo(() => {
+    const map = new Map<string, any>();
+    (items || []).forEach(it => {
+      if (it.id) map.set(it.id, it);
+      if (it.itemCode) map.set(it.itemCode.toLowerCase(), it);
+    });
+    return map;
+  }, [items]);
 
+  const renderComponentRow = (c: any, i: number, isExtra = false) => {
+    const itemObj = itemMap.get(c.itemId) || itemMap.get((c.itemCode || '').toLowerCase());
+    const partCode = c.partCode || itemObj?.partCode || c.itemCode || '-';
+    const oldCode = c.oldItemCode || c.oldCode || itemObj?.oldItemCode || '-';
+    const location = c.location || itemObj?.location || '-';
+
+    return (
+      <tr key={i}>
+        <td>{i + 1}</td>
+        <td style={{ fontFamily: 'monospace', fontWeight: 700, color: isExtra ? '#7c3aed' : undefined }}>{partCode}</td>
+        <td>{c.itemName || c.description || itemObj?.name || '-'}</td>
+        <td style={{ fontFamily: 'monospace' }}>{oldCode}</td>
+        <td>{location}</td>
+        <td style={{ fontWeight: 700, textAlign: 'right' }}>{c.qtyRequired || c.qty || 1} {c.unit || 'Pcs'}</td>
+        <td></td>
+      </tr>
+    );
+  };
+
+  return (
+    <PrintDocumentLayout
+      header={<GECPrintHeader docTitle="PRODUCTION WORK ORDER JOB CARD" refNo={wo.workOrderNo || wo.woNumber} date={wo.startDate} />}
+      footer={<CompanyPrintFooter />}
+    >
       <div className="print-meta-grid">
         <div><strong>Machine Model:</strong> {wo.machineModel}</div>
         <div><strong>Build Quantity:</strong> {wo.quantity || wo.targetQuantity || 1} Units</div>
@@ -55,24 +88,16 @@ export const SingleWOPrintView: React.FC<{ wo: WorkOrder }> = ({ wo }) => {
         <thead>
           <tr>
             <th style={{ width: '35px' }}>#</th>
-            <th>Item Code</th>
-            <th>Part Description</th>
-            <th>Sub-Assembly Section</th>
-            <th style={{ width: '90px' }}>Qty Req</th>
-            <th style={{ width: '60px' }}>UOM</th>
+            <th style={{ width: '120px' }}>Part Code</th>
+            <th>Item Description</th>
+            <th style={{ width: '110px' }}>Old Code</th>
+            <th style={{ width: '90px' }}>Location</th>
+            <th style={{ width: '80px', textAlign: 'right' }}>Qty</th>
+            <th style={{ width: '100px' }}>Remarks / Sign</th>
           </tr>
         </thead>
         <tbody>
-          {standardComps.map((c, i) => (
-            <tr key={i}>
-              <td>{i + 1}</td>
-              <td style={{ fontFamily: 'monospace', fontWeight: 700 }}>{c.itemCode}</td>
-              <td>{c.itemName}</td>
-              <td>{c.subAssemblyTag || 'Base Frame'}</td>
-              <td style={{ fontWeight: 700 }}>{c.qtyRequired}</td>
-              <td>{c.unit || 'Pcs'}</td>
-            </tr>
-          ))}
+          {standardComps.map((c: any, i) => renderComponentRow(c, i, false))}
         </tbody>
       </table>
 
@@ -83,30 +108,23 @@ export const SingleWOPrintView: React.FC<{ wo: WorkOrder }> = ({ wo }) => {
             <thead>
               <tr style={{ backgroundColor: '#f5f3ff' }}>
                 <th style={{ width: '35px' }}>#</th>
-                <th>Item Code</th>
-                <th>Additional Product Description</th>
-                <th style={{ width: '90px' }}>Qty Req</th>
-                <th style={{ width: '60px' }}>UOM</th>
+                <th style={{ width: '120px' }}>Part Code</th>
+                <th>Item Description</th>
+                <th style={{ width: '110px' }}>Old Code</th>
+                <th style={{ width: '90px' }}>Location</th>
+                <th style={{ width: '80px', textAlign: 'right' }}>Qty</th>
+                <th style={{ width: '100px' }}>Remarks / Sign</th>
               </tr>
             </thead>
             <tbody>
-              {extraComps.map((c, i) => (
-                <tr key={i}>
-                  <td>{i + 1}</td>
-                  <td style={{ fontFamily: 'monospace', fontWeight: 700, color: '#7c3aed' }}>{c.itemCode}</td>
-                  <td>{c.itemName}</td>
-                  <td style={{ fontWeight: 700 }}>{c.qtyRequired}</td>
-                  <td>{c.unit || 'Pcs'}</td>
-                </tr>
-              ))}
+              {extraComps.map((c: any, i) => renderComponentRow(c, i, true))}
             </tbody>
           </table>
         </>
       )}
 
       <GECPrintSignatory />
-      <CompanyPrintFooter />
-    </div>
+    </PrintDocumentLayout>
   );
 };
 
@@ -115,9 +133,10 @@ export const WOListPrintView: React.FC<{ workOrders: WorkOrder[]; filterLabel?: 
   workOrders,
   filterLabel = 'Active Work Orders'
 }) => (
-  <div>
-    <GECPrintHeader docTitle="WORK ORDERS STATUS REPORT" />
-
+  <PrintDocumentLayout
+    header={<GECPrintHeader docTitle="WORK ORDERS STATUS REPORT" />}
+    footer={<CompanyPrintFooter />}
+  >
     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.8rem', color: '#4b5563' }}>
       <div>Report Scope: <strong>{filterLabel}</strong> ({workOrders.length} records)</div>
       <div>Generated: {new Date().toLocaleString()}</div>
@@ -159,6 +178,5 @@ export const WOListPrintView: React.FC<{ workOrders: WorkOrder[]; filterLabel?: 
     </div>
 
     <GECPrintSignatory />
-    <CompanyPrintFooter />
-  </div>
+  </PrintDocumentLayout>
 );

@@ -3,6 +3,7 @@ import { PurchaseOrder } from '../../types/erp';
 import { 
   StandardCompanyPrintHeader, 
   StandardCompanyPrintFooter, 
+  PrintDocumentLayout,
   DEFAULT_COMPANY_INFO, 
   formatAmountInWords 
 } from './StandardCompanyHeaderFooter';
@@ -83,14 +84,19 @@ export const SinglePOPrintView: React.FC<{
 
   return (
     <div className="po-print-document" style={{ fontFamily: 'Arial, sans-serif', color: '#000000', fontSize: '8.5pt', lineHeight: 1.35, backgroundColor: '#ffffff' }}>
-      
-      {/* 1. Official Standard Header */}
-      <StandardCompanyPrintHeader 
-        docTitle="PURCHASE ORDER" 
-        docNumber={po.poNumber} 
-        docDate={po.orderDate} 
-        companyInfo={DEFAULT_COMPANY_INFO}
-      />
+      <PrintDocumentLayout
+        header={
+          <StandardCompanyPrintHeader 
+            docTitle="PURCHASE ORDER" 
+            docNumber={po.poNumber} 
+            docDate={po.orderDate} 
+            companyInfo={DEFAULT_COMPANY_INFO}
+          />
+        }
+        footer={
+          <StandardCompanyPrintFooter companyInfo={DEFAULT_COMPANY_INFO} />
+        }
+      >
 
       {/* 2. Vendor & PO Information (Borderless 2-Column Layout, PO shifted right) */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr', gap: '0.75rem', fontSize: '8.5pt', marginBottom: '0.65rem', color: '#000000' }}>
@@ -299,12 +305,8 @@ export const SinglePOPrintView: React.FC<{
             </div>
           </div>
         </div>
-
       </div>
-
-      {/* 6. Standard Modular Footer */}
-      <StandardCompanyPrintFooter companyInfo={DEFAULT_COMPANY_INFO} />
-
+      </PrintDocumentLayout>
     </div>
   );
 };
@@ -318,72 +320,77 @@ export const POListPrintView: React.FC<{
   filterLabel = 'Active Purchase Orders'
 }) => (
   <div style={{ fontFamily: 'Arial, sans-serif', color: '#000000', fontSize: '8.5pt' }}>
-    <StandardCompanyPrintHeader 
-      docTitle="PURCHASE ORDERS STATUS REPORT" 
-      extraSubtitle={`Scope: ${filterLabel} (${purchaseOrders.length} orders)`}
-      companyInfo={DEFAULT_COMPANY_INFO}
-    />
-
-    <table 
-      className="po-print-table"
-      style={{ 
-        width: '100%', 
-        tableLayout: 'fixed',
-        borderCollapse: 'collapse', 
-        borderSpacing: 0,
-        fontSize: '8.5pt', 
-        margin: '0.5rem 0', 
-        border: '1px solid #000000', 
-        color: '#000000' 
-      }}
+    <PrintDocumentLayout
+      header={
+        <StandardCompanyPrintHeader 
+          docTitle="PURCHASE ORDERS STATUS REPORT" 
+          extraSubtitle={`Scope: ${filterLabel} (${purchaseOrders.length} orders)`}
+          companyInfo={DEFAULT_COMPANY_INFO}
+        />
+      }
+      footer={
+        <StandardCompanyPrintFooter companyInfo={DEFAULT_COMPANY_INFO} />
+      }
     >
-      <thead>
-        <tr style={{ backgroundColor: '#ffffff', color: '#000000', fontWeight: 800 }}>
-          <th style={{ width: '30px', padding: '5px 4px', border: '1px solid #000000', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800 }}>#</th>
-          <th style={{ width: '100px', padding: '5px 6px', border: '1px solid #000000', textAlign: 'left', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800 }}>PO Number</th>
-          <th style={{ padding: '5px 6px', border: '1px solid #000000', textAlign: 'left', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800 }}>Vendor Name</th>
-          <th style={{ width: '80px', padding: '5px 6px', border: '1px solid #000000', textAlign: 'center', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800 }}>PO Date</th>
-          <th style={{ width: '80px', padding: '5px 6px', border: '1px solid #000000', textAlign: 'center', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800 }}>Delivery Date</th>
-          <th style={{ width: '50px', padding: '5px 6px', border: '1px solid #000000', textAlign: 'center', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800 }}>Items</th>
-          <th style={{ width: '100px', padding: '5px 6px', border: '1px solid #000000', textAlign: 'right', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800 }}>Total Value (₹)</th>
-          <th style={{ width: '75px', padding: '5px 6px', border: '1px solid #000000', textAlign: 'center', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800 }}>Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        {purchaseOrders.map((po, i) => (
-          <tr key={i} style={{ color: '#000000' }}>
-            <td style={{ textAlign: 'center', padding: '5px 4px', border: '1px solid #000000', boxSizing: 'border-box' }}>{i + 1}</td>
-            <td style={{ fontFamily: 'monospace', fontWeight: 700, padding: '5px 6px', border: '1px solid #000000', boxSizing: 'border-box' }}>
-              {po.poNumber}
-            </td>
-            <td style={{ fontWeight: 700, padding: '5px 6px', border: '1px solid #000000', boxSizing: 'border-box', overflowWrap: 'break-word' }}>{po.vendorName}</td>
-            <td style={{ textAlign: 'center', padding: '5px 6px', border: '1px solid #000000', boxSizing: 'border-box' }}>{po.orderDate}</td>
-            <td style={{ textAlign: 'center', padding: '5px 6px', border: '1px solid #000000', boxSizing: 'border-box' }}>{po.expectedDeliveryDate || po.deliveryDate || '-'}</td>
-            <td style={{ textAlign: 'center', padding: '5px 6px', border: '1px solid #000000', boxSizing: 'border-box' }}>{po.items?.length || 0}</td>
-            <td style={{ textAlign: 'right', fontWeight: 700, padding: '5px 6px', border: '1px solid #000000', boxSizing: 'border-box' }}>
-              {(po.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </td>
-            <td style={{ textAlign: 'center', padding: '5px 6px', border: '1px solid #000000', boxSizing: 'border-box' }}>
-              <span style={{ fontWeight: 700, fontSize: '7.5pt' }}>
-                {po.status}
-              </span>
-            </td>
+      <table 
+        className="po-print-table"
+        style={{ 
+          width: '100%', 
+          tableLayout: 'fixed',
+          borderCollapse: 'collapse', 
+          borderSpacing: 0,
+          fontSize: '8.5pt', 
+          margin: '0.5rem 0', 
+          border: '1px solid #000000', 
+          color: '#000000' 
+        }}
+      >
+        <thead>
+          <tr style={{ backgroundColor: '#ffffff', color: '#000000', fontWeight: 800 }}>
+            <th style={{ width: '30px', padding: '5px 4px', border: '1px solid #000000', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800 }}>#</th>
+            <th style={{ width: '100px', padding: '5px 6px', border: '1px solid #000000', textAlign: 'left', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800 }}>PO Number</th>
+            <th style={{ padding: '5px 6px', border: '1px solid #000000', textAlign: 'left', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800 }}>Vendor Name</th>
+            <th style={{ width: '80px', padding: '5px 6px', border: '1px solid #000000', textAlign: 'center', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800 }}>PO Date</th>
+            <th style={{ width: '80px', padding: '5px 6px', border: '1px solid #000000', textAlign: 'center', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800 }}>Delivery Date</th>
+            <th style={{ width: '50px', padding: '5px 6px', border: '1px solid #000000', textAlign: 'center', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800 }}>Items</th>
+            <th style={{ width: '100px', padding: '5px 6px', border: '1px solid #000000', textAlign: 'right', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800 }}>Total Value (₹)</th>
+            <th style={{ width: '75px', padding: '5px 6px', border: '1px solid #000000', textAlign: 'center', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800 }}>Status</th>
           </tr>
-        ))}
-      </tbody>
-      <tfoot>
-        <tr style={{ fontWeight: 800 }}>
-          <td colSpan={6} style={{ padding: '6px 8px', textAlign: 'right', border: '1px solid #000000', boxSizing: 'border-box' }}>
-            Total Procurement Portfolio:
-          </td>
-          <td style={{ padding: '6px 8px', textAlign: 'right', border: '1px solid #000000', fontSize: '9pt', boxSizing: 'border-box' }}>
-            {purchaseOrders.reduce((sum, p) => sum + (p.totalAmount || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </td>
-          <td style={{ border: '1px solid #000000', boxSizing: 'border-box' }}></td>
-        </tr>
-      </tfoot>
-    </table>
-
-    <StandardCompanyPrintFooter companyInfo={DEFAULT_COMPANY_INFO} />
+        </thead>
+        <tbody>
+          {purchaseOrders.map((po, i) => (
+            <tr key={i} style={{ color: '#000000' }}>
+              <td style={{ textAlign: 'center', padding: '5px 4px', border: '1px solid #000000', boxSizing: 'border-box' }}>{i + 1}</td>
+              <td style={{ fontFamily: 'monospace', fontWeight: 700, padding: '5px 6px', border: '1px solid #000000', boxSizing: 'border-box' }}>
+                {po.poNumber}
+              </td>
+              <td style={{ fontWeight: 700, padding: '5px 6px', border: '1px solid #000000', boxSizing: 'border-box', overflowWrap: 'break-word' }}>{po.vendorName}</td>
+              <td style={{ textAlign: 'center', padding: '5px 6px', border: '1px solid #000000', boxSizing: 'border-box' }}>{po.orderDate}</td>
+              <td style={{ textAlign: 'center', padding: '5px 6px', border: '1px solid #000000', boxSizing: 'border-box' }}>{po.expectedDeliveryDate || po.deliveryDate || '-'}</td>
+              <td style={{ textAlign: 'center', padding: '5px 6px', border: '1px solid #000000', boxSizing: 'border-box' }}>{po.items?.length || 0}</td>
+              <td style={{ textAlign: 'right', fontWeight: 700, padding: '5px 6px', border: '1px solid #000000', boxSizing: 'border-box' }}>
+                {(po.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </td>
+              <td style={{ textAlign: 'center', padding: '5px 6px', border: '1px solid #000000', boxSizing: 'border-box' }}>
+                <span style={{ fontWeight: 700, fontSize: '7.5pt' }}>
+                  {po.status}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr style={{ fontWeight: 800 }}>
+            <td colSpan={6} style={{ padding: '6px 8px', textAlign: 'right', border: '1px solid #000000', boxSizing: 'border-box' }}>
+              Total Procurement Portfolio:
+            </td>
+            <td style={{ padding: '6px 8px', textAlign: 'right', border: '1px solid #000000', fontSize: '9pt', boxSizing: 'border-box' }}>
+              {purchaseOrders.reduce((sum, p) => sum + (p.totalAmount || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </td>
+            <td style={{ border: '1px solid #000000', boxSizing: 'border-box' }}></td>
+          </tr>
+        </tfoot>
+      </table>
+    </PrintDocumentLayout>
   </div>
 );

@@ -253,30 +253,9 @@ export const SalesOrderModule: React.FC = () => {
               />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '0.25rem' }}>Order Quantity</label>
-                <input 
-                  type="number" 
-                  min="1" 
-                  required 
-                  className="input-field" 
-                  value={soForm.quantity === 0 ? '' : soForm.quantity} 
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setSoForm({ ...soForm, quantity: val === '' ? 0 : Number(val) });
-                  }}
-                  onBlur={(e) => {
-                    if (!e.target.value || Number(e.target.value) < 1) {
-                      setSoForm({ ...soForm, quantity: 1 });
-                    }
-                  }}
-                />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '0.25rem' }}>Target Delivery Date</label>
-                <input type="date" required className="input-field" value={soForm.deliveryDate} onChange={(e) => setSoForm({ ...soForm, deliveryDate: e.target.value })} />
-              </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '0.25rem' }}>Target Delivery Date</label>
+              <input type="date" required className="input-field" value={soForm.deliveryDate} onChange={(e) => setSoForm({ ...soForm, deliveryDate: e.target.value })} />
             </div>
 
             <div>
@@ -365,12 +344,7 @@ export const SalesOrderModule: React.FC = () => {
                   </th>
                   <th onClick={() => handleSortToggle('machineModel')} style={{ cursor: 'pointer' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                      Item {sortField === 'machineModel' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
-                    </div>
-                  </th>
-                  <th onClick={() => handleSortToggle('quantity')} style={{ cursor: 'pointer' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                      Order Qty {sortField === 'quantity' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
+                      Item / Model {sortField === 'machineModel' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} color="var(--text-muted)" />}
                     </div>
                   </th>
                   <th onClick={() => handleSortToggle('orderDate')} style={{ cursor: 'pointer' }}>
@@ -399,22 +373,21 @@ export const SalesOrderModule: React.FC = () => {
                       }}
                       title="Double click or press Enter to view SO document"
                     >
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <span style={{ fontWeight: 700, color: 'var(--accent-primary)', fontFamily: 'monospace' }}>
-                          {so.soNumber}
-                        </span>
-                        {isCompleted && (
-                          <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#fff', fontSize: '0.65rem', padding: '0.1rem 0.35rem' }}>
-                            📜 HISTORY
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                          <span style={{ fontWeight: 700, color: 'var(--accent-primary)', fontFamily: 'monospace' }}>
+                            {so.soNumber}
                           </span>
-                        )}
-                      </div>
-                    </td>
-                    <td style={{ fontWeight: 600 }}>{so.customerName}</td>
-                    <td>{so.machineModel}</td>
-                    <td style={{ fontWeight: 700 }}>{so.quantity} Machine(s)</td>
-                    <td style={{ fontSize: '0.85rem' }}>{so.orderDate}</td>
+                          {isCompleted && (
+                            <span className="badge" style={{ backgroundColor: '#7c3aed', color: '#fff', fontSize: '0.65rem', padding: '0.1rem 0.35rem' }}>
+                              📜 HISTORY
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td style={{ fontWeight: 600 }}>{so.customerName}</td>
+                      <td>{so.machineModel}</td>
+                      <td style={{ fontSize: '0.85rem' }}>{so.orderDate}</td>
                     <td style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{so.deliveryDate}</td>
                     <td>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
@@ -631,15 +604,9 @@ export const SalesOrderModule: React.FC = () => {
               />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '0.25rem' }}>Order Quantity</label>
-                <input type="number" min="1" required className="input-field" value={editingSO.quantity} onChange={(e) => setEditingSO({ ...editingSO, quantity: Number(e.target.value) })} />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '0.25rem' }}>Target Delivery Date</label>
-                <input type="date" required className="input-field" value={editingSO.deliveryDate} onChange={(e) => setEditingSO({ ...editingSO, deliveryDate: e.target.value })} />
-              </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '0.25rem' }}>Target Delivery Date</label>
+              <input type="date" required className="input-field" value={editingSO.deliveryDate} onChange={(e) => setEditingSO({ ...editingSO, deliveryDate: e.target.value })} />
             </div>
 
             <div>

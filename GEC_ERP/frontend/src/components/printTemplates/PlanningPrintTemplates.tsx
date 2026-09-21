@@ -1,4 +1,10 @@
 import React from 'react';
+import { 
+  StandardCompanyPrintHeader, 
+  StandardCompanyPrintFooter, 
+  PrintDocumentLayout, 
+  DEFAULT_COMPANY_INFO 
+} from './StandardCompanyHeaderFooter';
 import './printStyles.css';
 
 export interface PlanningPrintRow {
@@ -39,7 +45,7 @@ export interface PlanningPrintReportProps {
   filters?: PlanningPrintFilters;
 }
 
-export const PlanningPrintReport: React.FC<PlanningPrintReportProps> = ({ data = [] }) => {
+export const PlanningPrintReport: React.FC<PlanningPrintReportProps> = ({ data = [], filters }) => {
   const thBaseStyle: React.CSSProperties = {
     padding: '4px 2px',
     fontWeight: 800,
@@ -60,6 +66,8 @@ export const PlanningPrintReport: React.FC<PlanningPrintReportProps> = ({ data =
     boxSizing: 'border-box'
   };
 
+  const subtitle = `Total Items: ${data.length}${filters?.searchTerm ? ` | Search: "${filters.searchTerm}"` : ''}${filters?.selectedProcessType && filters.selectedProcessType !== 'ALL' ? ` | Process: ${filters.selectedProcessType}` : ''}`;
+
   return (
     <div 
       className="planning-print-root"
@@ -73,6 +81,18 @@ export const PlanningPrintReport: React.FC<PlanningPrintReportProps> = ({ data =
         padding: '0.1rem'
       }}
     >
+      <PrintDocumentLayout
+        header={
+          <StandardCompanyPrintHeader 
+            docTitle="PRODUCTION & MATERIAL PLANNING MATRIX"
+            extraSubtitle={subtitle}
+            companyInfo={DEFAULT_COMPANY_INFO}
+          />
+        }
+        footer={
+          <StandardCompanyPrintFooter companyInfo={DEFAULT_COMPANY_INFO} />
+        }
+      >
       {/* ------------------------------------------------------------- */}
       {/* 16-COLUMN INDUSTRIAL PLANNING DATA TABLE */}
       {/* ------------------------------------------------------------- */}
@@ -194,6 +214,7 @@ export const PlanningPrintReport: React.FC<PlanningPrintReportProps> = ({ data =
           )}
         </tbody>
       </table>
+      </PrintDocumentLayout>
     </div>
   );
 };

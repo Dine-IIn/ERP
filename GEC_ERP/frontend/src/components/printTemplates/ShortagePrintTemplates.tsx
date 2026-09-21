@@ -1,5 +1,11 @@
 import React from 'react';
 import { GECPrintHeader, GECPrintSignatory } from './WOPrintTemplates';
+import { 
+  StandardCompanyPrintHeader, 
+  StandardCompanyPrintFooter, 
+  PrintDocumentLayout,
+  DEFAULT_COMPANY_INFO 
+} from './StandardCompanyHeaderFooter';
 import './printStyles.css';
 
 export interface ConsolidatedComponentRow {
@@ -71,6 +77,8 @@ export const ConsolidatedItemWiseShortagePrintReport: React.FC<ConsolidatedItemW
     boxSizing: 'border-box'
   };
 
+  const subtitle = `Total Demand of ${selectedItems.length} Selected Planned Items / Assemblies`;
+
   return (
     <div 
       className="planning-print-root"
@@ -84,41 +92,38 @@ export const ConsolidatedItemWiseShortagePrintReport: React.FC<ConsolidatedItemW
         padding: '0.1rem'
       }}
     >
-      {/* Document Header */}
-      <div style={{ marginBottom: '6px', borderBottom: '1.5px solid #000000', paddingBottom: '4px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <PrintDocumentLayout
+        header={
           <div>
-            <span style={{ fontSize: '11pt', fontWeight: 900, letterSpacing: '-0.02em', textTransform: 'uppercase' }}>
-              CONSOLIDATED ITEM-WISE SHORTAGE & CAPACITY REPORT
-            </span>
-            <span style={{ marginLeft: '8px', fontSize: '7.5pt', color: '#475569' }}>
-              (Total Demand of {selectedItems.length} Selected Planned Items / Assemblies)
-            </span>
+            <StandardCompanyPrintHeader 
+              docTitle="CONSOLIDATED ITEM-WISE SHORTAGE & CAPACITY REPORT"
+              extraSubtitle={subtitle}
+              companyInfo={DEFAULT_COMPANY_INFO}
+            />
+            {/* Selected Parent Items Summary Bar */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', margin: '4px 0 6px 0' }}>
+              {selectedItems.map((it, idx) => (
+                <span 
+                  key={idx} 
+                  style={{ 
+                    fontSize: '7pt', 
+                    backgroundColor: '#f1f5f9', 
+                    border: '1px solid #cbd5e1', 
+                    borderRadius: '3px', 
+                    padding: '2px 5px',
+                    color: '#1e293b'
+                  }}
+                >
+                  <strong>{it.itemCode}</strong>: Plan <strong>{it.targetQuantity}</strong> (Max: <span style={{ color: it.maxBuildableQty >= it.targetQuantity ? '#059669' : '#dc2626', fontWeight: 700 }}>{it.maxBuildableQty}</span>)
+                </span>
+              ))}
+            </div>
           </div>
-          <div style={{ fontSize: '7.5pt', color: '#475569', fontWeight: 600 }}>
-            Generated: {new Date().toLocaleString()}
-          </div>
-        </div>
-
-        {/* Selected Parent Items Summary Bar */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
-          {selectedItems.map((it, idx) => (
-            <span 
-              key={idx} 
-              style={{ 
-                fontSize: '7pt', 
-                backgroundColor: '#f1f5f9', 
-                border: '1px solid #cbd5e1', 
-                borderRadius: '3px', 
-                padding: '2px 5px',
-                color: '#1e293b'
-              }}
-            >
-              <strong>{it.itemCode}</strong>: Plan <strong>{it.targetQuantity}</strong> (Max: <span style={{ color: it.maxBuildableQty >= it.targetQuantity ? '#059669' : '#dc2626', fontWeight: 700 }}>{it.maxBuildableQty}</span>)
-            </span>
-          ))}
-        </div>
-      </div>
+        }
+        footer={
+          <StandardCompanyPrintFooter companyInfo={DEFAULT_COMPANY_INFO} />
+        }
+      >
 
       {/* ------------------------------------------------------------- */}
       {/* 17-COLUMN CONSOLIDATED SHORTAGE DATA TABLE */}
@@ -288,6 +293,7 @@ export const ConsolidatedItemWiseShortagePrintReport: React.FC<ConsolidatedItemW
       </table>
 
       <GECPrintSignatory preparedBy="Shortage Planner" checkedBy="Store & Materials Lead" authorizedBy="Plant Head" />
+      </PrintDocumentLayout>
     </div>
   );
 };
@@ -323,9 +329,10 @@ export const ItemWiseShortagePrintView: React.FC<{
   selectedItemsData,
   filterLabel = 'Item-Wise Shortage Analysis'
 }) => (
-  <div>
-    <GECPrintHeader docTitle="ITEM-WISE PRODUCTION SHORTAGE & CAPACITY REPORT" />
-
+  <PrintDocumentLayout
+    header={<GECPrintHeader docTitle="ITEM-WISE PRODUCTION SHORTAGE & CAPACITY REPORT" />}
+    footer={<StandardCompanyPrintFooter companyInfo={DEFAULT_COMPANY_INFO} />}
+  >
     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem', fontSize: '0.8rem', color: '#4b5563' }}>
       <div>Scope: <strong>{filterLabel}</strong> ({selectedItemsData.length} planned assemblies/items)</div>
       <div>Generated: {new Date().toLocaleString()}</div>
@@ -353,50 +360,44 @@ export const ItemWiseShortagePrintView: React.FC<{
           </div>
           {itemPlan.constrainingComponent && (
             <div style={{ fontSize: '0.75rem', color: '#b91c1c', marginTop: '2px', fontWeight: 600 }}>
-              ⚠️ Bottleneck Constraining Component: {itemPlan.constrainingComponent}
+              Bottleneck: Constrained by {itemPlan.constrainingComponent}
             </div>
           )}
         </div>
 
-        {/* Required Child Components Breakdown Table */}
+        {/* Components Table */}
         <table className="print-table">
           <thead>
             <tr>
               <th style={{ width: '30px' }}>#</th>
-              <th style={{ width: '50px', textAlign: 'center' }}>Priority</th>
-              <th style={{ width: '60px', textAlign: 'center' }}>Lead Time</th>
               <th>Component Code</th>
-              <th>Component Name</th>
+              <th>Component Description</th>
               <th>Class</th>
-              <th>Source / Process</th>
-              <th style={{ width: '70px', textAlign: 'right' }}>Qty / Item</th>
-              <th style={{ width: '80px', textAlign: 'right' }}>Total Req</th>
-              <th style={{ width: '80px', textAlign: 'right' }}>In Stock</th>
-              <th style={{ width: '85px', textAlign: 'right' }}>Net Shortage</th>
+              <th>Process</th>
+              <th style={{ width: '65px', textAlign: 'right' }}>Per Unit</th>
+              <th style={{ width: '75px', textAlign: 'right' }}>Total Req</th>
+              <th style={{ width: '75px', textAlign: 'right' }}>In Stock</th>
+              <th style={{ width: '80px', textAlign: 'right' }}>Shortage</th>
             </tr>
           </thead>
           <tbody>
             {itemPlan.components.length === 0 ? (
               <tr>
-                <td colSpan={11} style={{ textAlign: 'center', padding: '8px', color: '#6b7280' }}>
-                  No BOM sub-components found for this item.
-                </td>
+                <td colSpan={9} style={{ textAlign: 'center', color: '#6b7280', padding: '8px' }}>No BOM components defined</td>
               </tr>
             ) : (
               itemPlan.components.map((comp, cIdx) => (
                 <tr key={cIdx} style={{ backgroundColor: comp.netShortage > 0 ? '#fef2f2' : 'transparent' }}>
                   <td>{cIdx + 1}</td>
-                  <td style={{ textAlign: 'center', fontWeight: 800 }}>{comp.priorityRank || `P${cIdx + 1}`}</td>
-                  <td style={{ textAlign: 'center' }}>{comp.leadTimeDays || 10}D</td>
                   <td style={{ fontFamily: 'monospace', fontWeight: 700, color: '#2563eb' }}>{comp.itemCode}</td>
                   <td style={{ fontWeight: 600 }}>{comp.itemName}</td>
                   <td>{comp.category}</td>
-                  <td>{comp.processType || 'In-house'}</td>
+                  <td>{comp.processType}</td>
                   <td style={{ textAlign: 'right' }}>{comp.qtyPerItem}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 600 }}>{comp.totalRequired} {comp.unit}</td>
+                  <td style={{ textAlign: 'right' }}>{comp.totalRequired} {comp.unit}</td>
                   <td style={{ textAlign: 'right' }}>{comp.inHouseStock} {comp.unit}</td>
                   <td style={{ textAlign: 'right', fontWeight: 800, color: comp.netShortage > 0 ? '#dc2626' : '#059669' }}>
-                    {comp.netShortage > 0 ? `${comp.netShortage} ${comp.unit}` : 'OK (0)'}
+                    {comp.netShortage > 0 ? `${comp.netShortage} ${comp.unit}` : '✓ OK'}
                   </td>
                 </tr>
               ))
@@ -407,7 +408,7 @@ export const ItemWiseShortagePrintView: React.FC<{
     ))}
 
     <GECPrintSignatory preparedBy="Shortage Planner" checkedBy="Store & Materials Lead" authorizedBy="Plant Head" />
-  </div>
+  </PrintDocumentLayout>
 );
 
 // 2. Work Order Shortage Tree Report
@@ -418,9 +419,10 @@ export const WOShortagePrintView: React.FC<{
   shortageData,
   filterLabel = 'Work Order Shortages'
 }) => (
-  <div>
-    <GECPrintHeader docTitle="WORK ORDER MANUFACTURING SHORTAGE TREE" />
-
+  <PrintDocumentLayout
+    header={<GECPrintHeader docTitle="WORK ORDER MANUFACTURING SHORTAGE TREE" />}
+    footer={<StandardCompanyPrintFooter companyInfo={DEFAULT_COMPANY_INFO} />}
+  >
     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem', fontSize: '0.8rem', color: '#4b5563' }}>
       <div>Scope: <strong>{filterLabel}</strong> ({shortageData.length} Work Orders)</div>
       <div>Generated: {new Date().toLocaleString()}</div>
@@ -462,7 +464,7 @@ export const WOShortagePrintView: React.FC<{
     ))}
 
     <GECPrintSignatory preparedBy="PPC Executive" checkedBy="Production Lead" authorizedBy="Works Director" />
-  </div>
+  </PrintDocumentLayout>
 );
 
 // 3. Purchase Order Bought-Out Shortage Summary
@@ -473,9 +475,10 @@ export const POShortagePrintView: React.FC<{
   items,
   filterLabel = 'Bought-Out Purchase Order Shortage'
 }) => (
-  <div>
-    <GECPrintHeader docTitle="BOUGHT-OUT ITEMS PROCUREMENT SHORTAGE REPORT" />
-
+  <PrintDocumentLayout
+    header={<GECPrintHeader docTitle="BOUGHT-OUT ITEMS PROCUREMENT SHORTAGE REPORT" />}
+    footer={<StandardCompanyPrintFooter companyInfo={DEFAULT_COMPANY_INFO} />}
+  >
     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem', fontSize: '0.8rem', color: '#4b5563' }}>
       <div>Scope: <strong>{filterLabel}</strong> ({items.length} shortage items)</div>
       <div>Generated: {new Date().toLocaleString()}</div>
@@ -515,7 +518,7 @@ export const POShortagePrintView: React.FC<{
     </table>
 
     <GECPrintSignatory preparedBy="Purchase Officer" checkedBy="Procurement Lead" authorizedBy="Commercial Director" />
-  </div>
+  </PrintDocumentLayout>
 );
 
 // 4. Unified Tabular Shortage Print View
@@ -548,9 +551,10 @@ export const TabularShortagePrintView: React.FC<{
   filterLabel = 'Shortage Summary',
   showMOQAndInPO = true
 }) => (
-  <div>
-    <GECPrintHeader docTitle={title.toUpperCase()} />
-
+  <PrintDocumentLayout
+    header={<GECPrintHeader docTitle={title.toUpperCase()} />}
+    footer={<StandardCompanyPrintFooter companyInfo={DEFAULT_COMPANY_INFO} />}
+  >
     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem', fontSize: '0.8rem', color: '#4b5563' }}>
       <div>Scope: <strong>{filterLabel}</strong> ({rows.length} Shortage Items)</div>
       <div>Generated: {new Date().toLocaleString()}</div>
@@ -611,5 +615,5 @@ export const TabularShortagePrintView: React.FC<{
     </table>
 
     <GECPrintSignatory preparedBy="Materials Planner" checkedBy="Store & Purchase Lead" authorizedBy="Operations Head" />
-  </div>
+  </PrintDocumentLayout>
 );

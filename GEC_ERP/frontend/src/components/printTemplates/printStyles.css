@@ -60,11 +60,71 @@
     display: none !important;
   }
 
+  /* Multi-page Repeating Print Header & Footer Layout */
+  table.print-document-layout,
+  .print-document-layout {
+    width: 100% !important;
+    max-width: 100% !important;
+    border-collapse: collapse !important;
+    border: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    table-layout: auto !important;
+  }
+
+  table.print-document-layout > thead,
+  .print-document-layout > thead {
+    display: table-header-group !important;
+    border: none !important;
+    background: transparent !important;
+  }
+
+  table.print-document-layout > tfoot,
+  .print-document-layout > tfoot {
+    display: table-footer-group !important;
+    border: none !important;
+    background: transparent !important;
+  }
+
+  table.print-document-layout > tbody,
+  .print-document-layout > tbody {
+    display: table-row-group !important;
+    border: none !important;
+    background: transparent !important;
+  }
+
+  table.print-document-layout > thead > tr > td,
+  table.print-document-layout > tfoot > tr > td,
+  table.print-document-layout > tbody > tr > td,
+  .print-document-layout > thead > tr > td,
+  .print-document-layout > tfoot > tr > td,
+  .print-document-layout > tbody > tr > td {
+    border: none !important;
+    padding: 0 !important;
+    background: transparent !important;
+    box-sizing: border-box !important;
+  }
+
+  .print-header-wrapper {
+    width: 100%;
+    margin-bottom: 4px;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .print-footer-wrapper {
+    width: 100%;
+    margin-top: 6px;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
   /* Crisp, deterministic border rendering for PO and all print tables */
-  .po-print-document table,
+  .po-print-document table:not(.print-document-layout),
   .po-print-table,
-  #printable-area table,
-  #direct-print-area table {
+  #printable-area table:not(.print-document-layout),
+  #direct-print-area table:not(.print-document-layout) {
     width: 100% !important;
     max-width: 100% !important;
     min-width: 0 !important;

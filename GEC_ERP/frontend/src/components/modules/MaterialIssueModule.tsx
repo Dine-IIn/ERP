@@ -36,6 +36,9 @@ export const MaterialIssueModule: React.FC = () => {
 
   const [historySearchTerm, setHistorySearchTerm] = useState('');
   const deferredHistorySearchTerm = useDeferredValue(historySearchTerm);
+  const [historyStartDate, setHistoryStartDate] = useState('');
+  const [historyEndDate, setHistoryEndDate] = useState('');
+  const [historyTypeFilter, setHistoryTypeFilter] = useState<'ALL' | 'JOB_CARD' | 'WORK_ORDER' | 'MANUAL'>('ALL');
 
   const [reissueSearchTerm, setReissueSearchTerm] = useState('');
   const deferredReissueSearchTerm = useDeferredValue(reissueSearchTerm);
@@ -359,14 +362,21 @@ export const MaterialIssueModule: React.FC = () => {
   // Filtered Material Issue Records for History Tab
   const filteredHistoryRecords = useMemo(() => {
     const term = deferredHistorySearchTerm.trim().toLowerCase();
-    if (!term) return materialIssueRecords;
-    const tokens = term.split(/\s+/).filter(Boolean);
+    const tokens = term ? term.split(/\s+/).filter(Boolean) : [];
 
     return materialIssueRecords.filter(rec => {
-      const str = `${rec.issueNo} ${rec.referenceNo} ${rec.itemCode} ${rec.itemName} ${rec.issuedTo || ''} ${rec.issuedBy || ''} ${rec.notes || ''}`.toLowerCase();
-      return tokens.every(t => str.includes(t));
+      if (historyTypeFilter !== 'ALL' && rec.type !== historyTypeFilter) return false;
+      if (historyStartDate && rec.issuedDate && rec.issuedDate < historyStartDate) return false;
+      if (historyEndDate && rec.issuedDate && rec.issuedDate > historyEndDate) return false;
+
+      if (tokens.length > 0) {
+        const str = `${rec.issueNo} ${rec.referenceNo} ${rec.itemCode} ${rec.itemName} ${rec.issuedTo || ''} ${rec.issuedBy || ''} ${rec.notes || ''}`.toLowerCase();
+        if (!tokens.every(t => str.includes(t))) return false;
+      }
+
+      return true;
     });
-  }, [materialIssueRecords, deferredHistorySearchTerm]);
+  }, [materialIssueRecords, deferredHistorySearchTerm, historyTypeFilter, historyStartDate, historyEndDate]);
 
   // Filtered Reissues for Tab 3
   const filteredReissues = useMemo(() => {
@@ -828,24 +838,6 @@ export const MaterialIssueModule: React.FC = () => {
                           </span>
                         </div>
 
-                        {/* Add Item to this Card Button */}
-                        <button
-                          type="button"
-                          className="btn btn-outline"
-                          style={{ padding: '0.2rem 0.55rem', fontSize: '0.72rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
-                          onClick={() => {
-                            setAddMaterialCard({
-                              cardId: card.id,
-                              cardType: card.cardType,
-                              refNumber: card.refNumber
-                            });
-                            setAddMaterialIssuedTo(card.assignedTo || currentUser?.fullName || '');
-                          }}
-                          title="Add an extra item directly from Store to this Card"
-                        >
-                          <Plus size={12} /> + Add Material
-                        </button>
-
                         {/* Issue All Available Button */}
                         <button
                           type="button"
@@ -1069,27 +1061,78 @@ export const MaterialIssueModule: React.FC = () => {
       {/* ========================================================= */}
       {activeTab === 'ISSUE_HISTORY' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: 1, minHeight: 0 }}>
-          {/* Search & Stats Bar */}
+          {/* Search & Filter Bar */}
           <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', flexShrink: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
               <span style={{ fontSize: '0.84rem', fontWeight: 800 }}>
                 Material Issuance Ledger ({materialIssueRecords.length} Transactions)
               </span>
-              <span className="badge badge-primary" style={{ fontSize: '0.74rem' }}>
-                {fullyIssuedCards.length} Fully Issued Cards in History
-              </span>
+
+              {/* Target Type Filter Pills */}
+              <div style={{ display: 'flex', gap: '0.3rem' }}>
+                {[
+                  { key: 'ALL', label: 'All Issues' },
+                  { key: 'JOB_CARD', label: 'Job Cards' },
+                  { key: 'WORK_ORDER', label: 'Work Orders' },
+                  { key: 'MANUAL', label: 'Store / Dept' }
+                ].map(p => (
+                  <button
+                    key={p.key}
+                    type="button"
+                    className={`btn ${historyTypeFilter === p.key ? 'btn-primary' : 'btn-outline'}`}
+                    style={{ fontSize: '0.74rem', padding: '0.2rem 0.5rem' }}
+                    onClick={() => setHistoryTypeFilter(p.key as any)}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <div style={{ position: 'relative', width: '280px', maxWidth: '100%' }}>
-              <Search size={14} style={{ position: 'absolute', left: '0.65rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-              <input
-                type="text"
-                placeholder="Search Voucher, Item, Card No..."
-                className="input-field"
-                style={{ paddingLeft: '2rem', paddingRight: '0.5rem', paddingTop: '0.25rem', paddingBottom: '0.25rem', fontSize: '0.78rem', width: '100%' }}
-                value={historySearchTerm}
-                onChange={(e) => setHistorySearchTerm(e.target.value)}
-              />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
+              {/* Date Filters */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <span style={{ fontSize: '0.74rem', fontWeight: 600, color: 'var(--text-secondary)' }}>From:</span>
+                <input
+                  type="date"
+                  className="input-field"
+                  style={{ padding: '0.25rem 0.45rem', fontSize: '0.78rem', width: '130px' }}
+                  value={historyStartDate}
+                  onChange={(e) => setHistoryStartDate(e.target.value)}
+                  title="Filter issues from this date"
+                />
+                <span style={{ fontSize: '0.74rem', fontWeight: 600, color: 'var(--text-secondary)' }}>To:</span>
+                <input
+                  type="date"
+                  className="input-field"
+                  style={{ padding: '0.25rem 0.45rem', fontSize: '0.78rem', width: '130px' }}
+                  value={historyEndDate}
+                  onChange={(e) => setHistoryEndDate(e.target.value)}
+                  title="Filter issues to this date"
+                />
+                {(historyStartDate || historyEndDate) && (
+                  <button
+                    className="btn btn-outline"
+                    style={{ padding: '0.2rem 0.45rem', fontSize: '0.72rem', color: 'var(--danger)' }}
+                    onClick={() => { setHistoryStartDate(''); setHistoryEndDate(''); }}
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              {/* Search Box */}
+              <div style={{ position: 'relative', width: '240px', maxWidth: '100%' }}>
+                <Search size={14} style={{ position: 'absolute', left: '0.65rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <input
+                  type="text"
+                  placeholder="Search Voucher, Item, Card No..."
+                  className="input-field"
+                  style={{ paddingLeft: '2rem', paddingRight: '0.5rem', paddingTop: '0.25rem', paddingBottom: '0.25rem', fontSize: '0.78rem', width: '100%' }}
+                  value={historySearchTerm}
+                  onChange={(e) => setHistorySearchTerm(e.target.value)}
+                />
+              </div>
             </div>
           </div>
 

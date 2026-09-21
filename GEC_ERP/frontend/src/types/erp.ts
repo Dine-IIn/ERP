@@ -714,6 +714,14 @@ export interface JobworkChallan {
   sentQuantity?: number;
   receivedQuantity?: number;
   scrapQuantity?: number;
+  cancelledQuantity?: number;
+  cancellationChallanNo?: string;
+  cancellationReason?: string;
+  cancelledBy?: string;
+  cancelledAt?: string;
+  isDeleted?: boolean;
+  deletedAt?: string;
+  deletedBy?: string;
   pendingBalance: number;
   stepNumber?: number;
   notes?: string;
@@ -850,6 +858,10 @@ export interface JobCard {
   completionDate?: string;
   remarks?: string;
   stationName?: string;
+  cancellationChallanNo?: string;
+  cancellationReason?: string;
+  cancelledBy?: string;
+  cancelledAt?: string;
   isDeleted?: boolean;
   deletedAt?: string;
   deletedBy?: string;

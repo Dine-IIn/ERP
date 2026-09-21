@@ -2,15 +2,17 @@ import React from 'react';
 import { SalesOrder } from '../../types/erp';
 import { GECPrintHeader, GECPrintSignatory } from './WOPrintTemplates';
 import { CompanyPrintFooter } from './CompanyPrintFooter';
+import { PrintDocumentLayout } from './StandardCompanyHeaderFooter';
 
 // 1. Single Sales Order Commercial Confirmation
 export const SingleSOPrintView: React.FC<{ so: SalesOrder; customerDetails?: any }> = ({
   so,
   customerDetails
 }) => (
-  <div>
-    <GECPrintHeader docTitle="SALES ORDER CONFIRMATION" refNo={so.soNumber} date={so.orderDate} />
-
+  <PrintDocumentLayout
+    header={<GECPrintHeader docTitle="SALES ORDER CONFIRMATION" refNo={so.soNumber} date={so.orderDate} />}
+    footer={<CompanyPrintFooter />}
+  >
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
       <div style={{ padding: '8px 12px', backgroundColor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '4px', fontSize: '0.8rem' }}>
         <h5 style={{ margin: '0 0 4px 0', fontSize: '0.82rem', fontWeight: 800, color: '#2563eb' }}>CUSTOMER BILL TO / SHIP TO:</h5>
@@ -74,8 +76,7 @@ export const SingleSOPrintView: React.FC<{ so: SalesOrder; customerDetails?: any
     </div>
 
     <GECPrintSignatory preparedBy="Sales Engineer" checkedBy="Commercial Head" authorizedBy="Director" />
-    <CompanyPrintFooter />
-  </div>
+  </PrintDocumentLayout>
 );
 
 // 2. Filtered Sales Orders List Report
@@ -83,9 +84,10 @@ export const SOListPrintView: React.FC<{ salesOrders: SalesOrder[]; filterLabel?
   salesOrders,
   filterLabel = 'Active Sales Orders'
 }) => (
-  <div>
-    <GECPrintHeader docTitle="SALES ORDERS SUMMARY REPORT" />
-
+  <PrintDocumentLayout
+    header={<GECPrintHeader docTitle="SALES ORDERS SUMMARY REPORT" />}
+    footer={<CompanyPrintFooter />}
+  >
     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.8rem', color: '#4b5563' }}>
       <div>Scope: <strong>{filterLabel}</strong> ({salesOrders.length} records)</div>
       <div>Generated: {new Date().toLocaleString()}</div>
@@ -125,6 +127,5 @@ export const SOListPrintView: React.FC<{ salesOrders: SalesOrder[]; filterLabel?
     </div>
 
     <GECPrintSignatory />
-    <CompanyPrintFooter />
-  </div>
+  </PrintDocumentLayout>
 );
