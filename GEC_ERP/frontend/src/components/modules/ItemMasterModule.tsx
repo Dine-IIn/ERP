@@ -1046,6 +1046,20 @@ export const ItemMasterModule: React.FC = () => {
 
       {/* Export Field Selector Modal */}
       
+      {/* Bulk Upload Modal */}
+      <BulkUploadModal<Omit<Item, 'id'>>
+        isOpen={isBulkModalOpen}
+        onClose={() => setIsBulkModalOpen(false)}
+        title="Bulk Import & Register Catalog Items"
+        templateFileName="gec_item_catalog_template.csv"
+        templateCSV={`Item Code,Component Name,Category / Class,Unit,Purchase UOM,Conversion Factor,In-House Stock,Reorder Level,Unit Price,Store Location,Specification\nGEC0000001,Directional Control Valve D03,BO,PCS,PCS,1,25,5,6500.00,Central Store,Parker 24V Solenoid\nGEC0000002,Tie Bar Raw Rod 80mm EN8D,RM,PCS,PCS,1,50,10,2450.00,Store A,EN8D Round Bar`}
+        onParse={(text) => parseItemsSheet(text, items)}
+        onConfirmImport={(validRows) => {
+          bulkAddItems(validRows as any);
+          alert(`Successfully imported ${validRows.length} items.`);
+        }}
+      />
+
       {/* Feature-Wise Modular Print Manager Modal */}
       <PrintManagerModal
         isOpen={printModalOpen}

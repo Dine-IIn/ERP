@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 
 // ─────────────────────────────────────────────────────────────
 // Types & Defaults
@@ -15,6 +15,7 @@ export interface CompanyInfo {
   email?: string;
   website?: string;
   logoUrl?: string;
+  headerImageUrl?: string;
 }
 
 export const DEFAULT_COMPANY_INFO: CompanyInfo = {
@@ -29,6 +30,7 @@ export const DEFAULT_COMPANY_INFO: CompanyInfo = {
   email: 'info@ghanshyameng.com',
   website: 'ghanshyameng.com',
   logoUrl: 'assets/images/gec_logo.png',
+  headerImageUrl: 'assets/images/gec_header.png',
 };
 
 export interface CompanyPrintHeaderProps {
@@ -41,23 +43,21 @@ export interface CompanyPrintHeaderProps {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Brand colour constant
+// Brand colour constant & Print Fix
 // ─────────────────────────────────────────────────────────────
 
 const NAVY = '#2e2d6b';
 
-// Shorthand for the print-color-adjust declarations we repeat
-// on every element that carries a background colour.
 const printColorFix: React.CSSProperties = {
   WebkitPrintColorAdjust: 'exact',
   printColorAdjust: 'exact',
 };
 
+/*
 // ─────────────────────────────────────────────────────────────
-// Inline SVG micro-icons  (no emoji — crisp at any DPI)
+// PRESERVED VECTOR HEADER COMPONENTS (Commented out for now as requested)
 // ─────────────────────────────────────────────────────────────
 
-/** Envelope icon inside a navy-bordered circle */
 const EnvelopeIcon: React.FC<{ size?: number }> = ({ size = 16 }) => (
   <span
     style={{
@@ -84,7 +84,6 @@ const EnvelopeIcon: React.FC<{ size?: number }> = ({ size = 16 }) => (
   </span>
 );
 
-/** Globe icon inside a navy-bordered circle */
 const GlobeIcon: React.FC<{ size?: number }> = ({ size = 16 }) => (
   <span
     style={{
@@ -114,15 +113,6 @@ const GlobeIcon: React.FC<{ size?: number }> = ({ size = 16 }) => (
   </span>
 );
 
-// ─────────────────────────────────────────────────────────────
-// GEC Logo — SVG fallback (used when gec_logo.png is missing)
-//
-// The real logo is a 3D geometric cube/shield mark.  This SVG
-// is a close approximation; drop the actual PNG at
-//   public/assets/images/gec_logo.png
-// for pixel-perfect rendering.
-// ─────────────────────────────────────────────────────────────
-
 const GECLogoFallback: React.FC<{ size?: number }> = ({ size = 54 }) => (
   <svg
     viewBox="0 0 56 56"
@@ -131,34 +121,19 @@ const GECLogoFallback: React.FC<{ size?: number }> = ({ size = 54 }) => (
     xmlns="http://www.w3.org/2000/svg"
     aria-label="GEC Logo"
   >
-    {/* Outer rounded frame */}
     <rect x="1" y="1" width="54" height="54" rx="8" ry="8" fill="#4a4867" />
-    {/* 3-D isometric cube — top face */}
     <polygon points="28,12 44,21 28,30 12,21" fill="#6e6c8e" />
-    {/* Left face */}
     <polygon points="12,21 28,30 28,44 12,35" fill="#35355a" />
-    {/* Right face */}
     <polygon points="28,30 44,21 44,35 28,44" fill="#55557a" />
-    {/* Highlight accent */}
     <polygon points="28,16 37,22 28,28 19,22" fill="#8886a6" opacity="0.4" />
   </svg>
 );
+*/
 
 // ─────────────────────────────────────────────────────────────
 // Main Component
 // ─────────────────────────────────────────────────────────────
 
-/**
- * Pixel-accurate, fully-vectorised Company Print Header.
- *
- * Every visual element is a discrete DOM node so that:
- *   • Text remains selectable / searchable in PDFs
- *   • Colours honour `-webkit-print-color-adjust: exact`
- *   • The header scales cleanly at any DPI / zoom level
- *
- * Reusable across PO, WO, Job Card, SO, Challan, Quotation,
- * Assembly, GRN, QC — pass docTitle to customise.
- */
 export const CompanyPrintHeader: React.FC<CompanyPrintHeaderProps> = ({
   docTitle,
   docNumber,
@@ -168,7 +143,6 @@ export const CompanyPrintHeader: React.FC<CompanyPrintHeaderProps> = ({
   showLogo = true,
 }) => {
   const info = { ...DEFAULT_COMPANY_INFO, ...companyInfo };
-  const [logoErr, setLogoErr] = useState(false);
 
   return (
     <div
@@ -182,11 +156,25 @@ export const CompanyPrintHeader: React.FC<CompanyPrintHeaderProps> = ({
         ...printColorFix,
       }}
     >
-      {/* ═══════════════════════════════════════════════════════
-          ROW 1 — Top section
-          Left : Logo icon  +  GEC™ brand  +  tagline
-          Right: Company pill  +  GST  +  email  +  website
-          ═══════════════════════════════════════════════════════ */}
+      {/* Official Header Image (Active) */}
+      <div style={{ width: '100%', marginBottom: '4px' }}>
+        <img
+          src={info.headerImageUrl || 'assets/images/gec_header.png'}
+          alt="Ghanshyam Engineering Co."
+          style={{
+            width: '100%',
+            height: 'auto',
+            display: 'block',
+            maxHeight: '82px',
+            objectFit: 'contain',
+          }}
+        />
+      </div>
+
+      {/* 
+      ═══════════════════════════════════════════════════════
+      VECTOR HEADER LAYOUT (COMMENTED OUT AS REQUESTED)
+      ═══════════════════════════════════════════════════════
       <div
         style={{
           display: 'flex',
@@ -195,32 +183,23 @@ export const CompanyPrintHeader: React.FC<CompanyPrintHeaderProps> = ({
           paddingBottom: '4px',
         }}
       >
-        {/* ── LEFT: Logo + Brand ─────────────────────────── */}
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-          {/* Logo icon (img → SVG fallback) */}
           {showLogo && (
             <div style={{ flexShrink: 0, paddingTop: '2px' }}>
-              {!logoErr ? (
-                <img
-                  src={info.logoUrl || 'assets/images/gec_logo.png'}
-                  alt="GEC"
-                  style={{
-                    height: '54px',
-                    width: 'auto',
-                    objectFit: 'contain',
-                    display: 'block',
-                  }}
-                  onError={() => setLogoErr(true)}
-                />
-              ) : (
-                <GECLogoFallback size={54} />
-              )}
+              <img
+                src={info.logoUrl || 'assets/images/gec_logo.png'}
+                alt="GEC"
+                style={{
+                  height: '54px',
+                  width: 'auto',
+                  objectFit: 'contain',
+                  display: 'block',
+                }}
+              />
             </div>
           )}
 
-          {/* GEC™  +  Excellence assured. */}
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {/* GEC™ */}
             <div
               style={{
                 fontFamily: "'Arial Black', 'Impact', Arial, sans-serif",
@@ -244,7 +223,6 @@ export const CompanyPrintHeader: React.FC<CompanyPrintHeaderProps> = ({
               </sup>
             </div>
 
-            {/* Excellence assured. */}
             <div
               style={{
                 fontSize: '9pt',
@@ -260,7 +238,6 @@ export const CompanyPrintHeader: React.FC<CompanyPrintHeaderProps> = ({
           </div>
         </div>
 
-        {/* ── RIGHT: Company info block ──────────────────── */}
         <div
           style={{
             display: 'flex',
@@ -269,7 +246,6 @@ export const CompanyPrintHeader: React.FC<CompanyPrintHeaderProps> = ({
             gap: '2px',
           }}
         >
-          {/* Company name pill — rounded LEFT side only */}
           <div
             style={{
               backgroundColor: NAVY,
@@ -288,7 +264,6 @@ export const CompanyPrintHeader: React.FC<CompanyPrintHeaderProps> = ({
             Ghanshyam Engineering Co.
           </div>
 
-          {/* GST NO. — bold, NOT italic */}
           <div
             style={{
               fontSize: '10pt',
@@ -311,7 +286,6 @@ export const CompanyPrintHeader: React.FC<CompanyPrintHeaderProps> = ({
             </span>
           </div>
 
-          {/* Email row — italic bold + envelope icon */}
           <div
             style={{
               display: 'flex',
@@ -329,7 +303,6 @@ export const CompanyPrintHeader: React.FC<CompanyPrintHeaderProps> = ({
             <EnvelopeIcon size={15} />
           </div>
 
-          {/* Website row — italic bold + globe icon */}
           <div
             style={{
               display: 'flex',
@@ -349,10 +322,6 @@ export const CompanyPrintHeader: React.FC<CompanyPrintHeaderProps> = ({
         </div>
       </div>
 
-      {/* ═══════════════════════════════════════════════════════
-          ROW 2 — Bottom bar
-          Left pill ("Mfg : …")  +  connecting navy line
-          ═══════════════════════════════════════════════════════ */}
       <div
         style={{
           display: 'flex',
@@ -360,7 +329,6 @@ export const CompanyPrintHeader: React.FC<CompanyPrintHeaderProps> = ({
           width: '100%',
         }}
       >
-        {/* Mfg tagline pill — rounded top-right corner only */}
         <div
           style={{
             backgroundColor: NAVY,
@@ -378,7 +346,6 @@ export const CompanyPrintHeader: React.FC<CompanyPrintHeaderProps> = ({
           {info.tagline}
         </div>
 
-        {/* Connecting navy line — bottom-aligned with the pill */}
         <div
           style={{
             flex: 1,
@@ -388,10 +355,9 @@ export const CompanyPrintHeader: React.FC<CompanyPrintHeaderProps> = ({
           }}
         />
       </div>
+      */}
 
-      {/* ═══════════════════════════════════════════════════════
-          ROW 3 — Document title  (bold black, centred)
-          ═══════════════════════════════════════════════════════ */}
+      {/* Document Title (Bold Black Centered Text) */}
       <div style={{ textAlign: 'center', margin: '6px 0 4px 0' }}>
         <div
           style={{

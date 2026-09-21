@@ -4,7 +4,7 @@ import {
   MaterialProcessType, QCTrigger, ItemMappedVendor, generateNextVendorCode 
 } from '../types/erp';
 
-export type IngestionEntityType = 'ITEM_MASTER' | 'BOM_MASTER' | 'INVENTORY' | 'VENDORS' | 'CUSTOMERS' | 'PROCESS_MASTER';
+export type IngestionEntityType = 'ITEM_MASTER' | 'BOM_MASTER' | 'INVENTORY' | 'VENDORS' | 'CUSTOMERS' | 'PROCESS_MASTER' | 'CURRENT_PLANNING';
 
 export interface ParsedRowError {
   rowNumber: number;
@@ -37,6 +37,30 @@ export interface ParsedInventoryResult {
   totalRows: number;
   updates: ParsedInventoryItem[];
   missingItemCodes: string[];
+  errors: ParsedRowError[];
+}
+
+export interface ParsedPlanningItem {
+  itemId?: string;
+  itemCode: string;
+  partCode?: string;
+  itemName?: string;
+  category?: string;
+  materialProcessSources?: string[];
+  minStockQty: number;
+  pendingPOQty: number;
+  pendingJobworkQty: number;
+  pendingQCQty: number;
+  vendorCode?: string;
+  unitPrice?: number;
+  remarks?: string;
+}
+
+export interface ParsedPlanningResult {
+  entityType: 'CURRENT_PLANNING';
+  totalRows: number;
+  validRecords: ParsedPlanningItem[];
+  skippedRecords: { rowNumber: number; identifier: string; reason: string }[];
   errors: ParsedRowError[];
 }
 
@@ -188,6 +212,17 @@ export function detectCSVType(rawText: string): IngestionEntityType | 'UNKNOWN' 
   }
   if (row0Str.includes('customercode') || row0Str.includes('customername') || (row0Str.includes('customer') && row0Str.includes('gstin'))) {
     return 'CUSTOMERS';
+  }
+  // Check Current Planning Upload signatures
+  if (
+    combinedHeaderScan.includes('pendingpo') || combinedHeaderScan.includes('pendpo') ||
+    combinedHeaderScan.includes('pendingjobwork') || combinedHeaderScan.includes('pendjobwork') ||
+    combinedHeaderScan.includes('pendingjw') || combinedHeaderScan.includes('pendjw') ||
+    combinedHeaderScan.includes('pendingqc') || combinedHeaderScan.includes('pendqc') ||
+    combinedHeaderScan.includes('currentplanning') || combinedHeaderScan.includes('planningupload') ||
+    (combinedHeaderScan.includes('minstockqty') && combinedHeaderScan.includes('pending'))
+  ) {
+    return 'CURRENT_PLANNING';
   }
   if (row0Str.includes('inhousestock') && !row0Str.includes('materialprocess') && !row0Str.includes('category')) {
     return 'INVENTORY';
@@ -1315,6 +1350,165 @@ export function parseProcessesCSV(
 }
 
 // ============================================================
+// 7. CURRENT PLANNING SHEET PARSER & GENERATOR
+// ============================================================
+export function parsePlanningCSV(rawText: string, existingItems: Item[], existingVendors: Vendor[] = []): ParsedPlanningResult {
+  const rows = parseCSVTokens(rawText);
+  if (rows.length <= 1) {
+    return { entityType: 'CURRENT_PLANNING', totalRows: 0, validRecords: [], skippedRecords: [], errors: [{ rowNumber: 1, identifier: 'FILE', message: 'CSV file is empty or missing data rows.' }] };
+  }
+
+  const headerMap = getHeaderMap(rows[0]);
+  const dataRows = rows.slice(1);
+  const validRecords: ParsedPlanningItem[] = [];
+  const skippedRecords: { rowNumber: number; identifier: string; reason: string }[] = [];
+  const errors: ParsedRowError[] = [];
+
+  const itemByCode = new Map<string, Item>();
+  const itemByPart = new Map<string, Item>();
+  existingItems.forEach(i => {
+    if (i.itemCode) itemByCode.set(i.itemCode.toUpperCase().trim(), i);
+    if (i.partCode) itemByPart.set(i.partCode.toUpperCase().trim(), i);
+  });
+
+  dataRows.forEach((row, idx) => {
+    const rowNumber = idx + 2;
+    if (row.length === 0 || row.every(c => !c.trim())) return;
+
+    const itemCode = getColValue(row, headerMap, 'itemcode', 'code', 'item').toUpperCase();
+    const partCode = getColValue(row, headerMap, 'partcode', 'partno', 'drawingno', 'drawing').toUpperCase();
+    const itemName = getColValue(row, headerMap, 'itemname', 'name', 'componentname', 'description');
+
+    let matchedItem: Item | undefined = itemByCode.get(itemCode);
+    if (!matchedItem && partCode) matchedItem = itemByPart.get(partCode);
+    if (!matchedItem && itemName) {
+      matchedItem = existingItems.find(i => i.name.toLowerCase().trim() === itemName.toLowerCase().trim());
+    }
+
+    if (!matchedItem && !itemCode) {
+      errors.push({
+        rowNumber,
+        identifier: partCode || itemName || `Row-${rowNumber}`,
+        field: 'ItemCode',
+        message: 'Could not identify item code in system.'
+      });
+      return;
+    }
+
+    const finalItemCode = matchedItem?.itemCode || itemCode;
+    const finalItemName = matchedItem?.name || itemName;
+    const finalPartCode = matchedItem?.partCode || partCode;
+    const category = getColValue(row, headerMap, 'category', 'class') || matchedItem?.category || '';
+    const sourcesStr = getColValue(row, headerMap, 'materialprocesssources', 'processsource', 'sources') || '';
+    const sources = sourcesStr ? sourcesStr.split(/[,;/|]+/).map(s => s.trim()) : (matchedItem?.materialProcessSources || []);
+
+    const minStockRaw = getColValue(row, headerMap, 'minstockqty', 'minstock', 'minlevel', 'reorderlevel');
+    const minStockQty = minStockRaw !== '' ? (parseFloat(minStockRaw) || 0) : 2;
+
+    const pendingPORaw = getColValue(row, headerMap, 'pendingpoqty', 'pendingpo', 'pendpo', 'poqty', 'po');
+    const pendingPOQty = pendingPORaw !== '' ? (parseFloat(pendingPORaw) || 0) : 0;
+
+    const pendingJWRaw = getColValue(row, headerMap, 'pendingjobworkqty', 'pendingjw', 'pendingjobwork', 'pendjw', 'pendjobwork', 'jwqty', 'jobworkqty');
+    const pendingJobworkQty = pendingJWRaw !== '' ? (parseFloat(pendingJWRaw) || 0) : 0;
+
+    const pendingQCRaw = getColValue(row, headerMap, 'pendingqcqty', 'pendingqc', 'pendqc', 'qcqty', 'qc');
+    const pendingQCQty = pendingQCRaw !== '' ? (parseFloat(pendingQCRaw) || 0) : 0;
+
+    const mappedV = existingVendors.find(v => v.id === matchedItem?.mappedVendors?.[0]?.vendorId);
+    const vendorCode = getColValue(row, headerMap, 'vendorcode', 'vendor', 'preferredvendor', 'supplier') || mappedV?.vendorCode || '';
+    const unitPriceRaw = getColValue(row, headerMap, 'unitprice', 'price', 'rate');
+    const unitPrice = unitPriceRaw !== '' ? parseFloat(unitPriceRaw) : (matchedItem?.unitPrice || 0);
+    const remarks = getColValue(row, headerMap, 'remarks', 'notes', 'comment') || 'Current Planning Bulk Setup';
+
+    validRecords.push({
+      itemId: matchedItem?.id,
+      itemCode: finalItemCode,
+      partCode: finalPartCode,
+      itemName: finalItemName,
+      category,
+      materialProcessSources: sources,
+      minStockQty,
+      pendingPOQty,
+      pendingJobworkQty,
+      pendingQCQty,
+      vendorCode,
+      unitPrice,
+      remarks
+    });
+  });
+
+  return {
+    entityType: 'CURRENT_PLANNING',
+    totalRows: dataRows.length,
+    validRecords,
+    skippedRecords,
+    errors
+  };
+}
+
+export function generateCurrentPlanningSheetCSV(items: Item[], vendors: Vendor[] = []): string {
+  const headers = [
+    'ItemCode', 'PartCode', 'ItemName', 'Category', 'MaterialProcessSources',
+    'MinStockQty', 'PendingPOQty', 'PendingJobworkQty', 'PendingQCQty',
+    'VendorCode', 'UnitPrice', 'Remarks'
+  ];
+
+  const rows = items.map(it => {
+    const cat = (it.category || '').toUpperCase();
+    const isBO = (it.materialProcessSources && it.materialProcessSources.includes('Bought out')) || 
+                 it.processType === 'Bought out' || 
+                 it.processType === 'Job work + Bought out' ||
+                 cat === 'BO' || cat === 'RM' || cat === 'EL' || cat === 'HY' || cat === 'HW';
+    const isJW = (it.materialProcessSources && it.materialProcessSources.includes('Job work')) || 
+                 it.processType === 'Job work' || 
+                 it.processType === 'Job work + Bought out' ||
+                 cat === 'JW' || cat === 'MC';
+    const hasQC = it.qcTrigger ? it.qcTrigger !== 'NO_QC' : true; // Default to TRUE for QC unless explicitly NO_QC
+
+    const minStock = 2; // Default 2qty for all items
+    const poQty = isBO ? 5 : 0; // 5qty for Bought out / Raw Materials / Bought out parts
+    const jwQty = isJW ? 4 : 0; // 4qty for Job work / Machined components
+    const qcQty = hasQC ? 3 : 0; // 3qty for QC
+    
+    const prefMapped = vendors.find(v => v.id === it.mappedVendors?.[0]?.vendorId);
+    const prefVendor = prefMapped?.vendorCode || (vendors[0]?.vendorCode || 'VEN0000001');
+    const sources = it.materialProcessSources && it.materialProcessSources.length > 0 
+      ? it.materialProcessSources.join(';') 
+      : (it.processType || (isBO ? 'Bought out' : (isJW ? 'Job work' : 'In-house')));
+
+    return [
+      `"${(it.itemCode || '').replace(/"/g, '""')}"`,
+      `"${(it.partCode || '').replace(/"/g, '""')}"`,
+      `"${(it.name || '').replace(/"/g, '""')}"`,
+      `"${(it.category || '').replace(/"/g, '""')}"`,
+      `"${sources.replace(/"/g, '""')}"`,
+      minStock,
+      poQty,
+      jwQty,
+      qcQty,
+      `"${prefVendor.replace(/"/g, '""')}"`,
+      it.unitPrice || 0,
+      `"Initial Planning Setup"`
+    ].join(',');
+  });
+
+  return '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
+}
+
+export function downloadCurrentPlanningSheet(items: Item[], vendors: Vendor[] = []) {
+  const content = generateCurrentPlanningSheetCSV(items, vendors);
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `gec_current_planning_sheet_${new Date().toISOString().split('T')[0]}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+// ============================================================
 // TEMPLATE DOWNLOADERS (Auto-Generated fields marked optional)
 // ============================================================
 export const CSV_TEMPLATES: { [key in IngestionEntityType]: { filename: string; content: string; description: string } } = {
@@ -1380,6 +1574,15 @@ GEC-HY-PUMP-50KW,6,0,Hydraulics Store H-01,78000.00,2`
 4110000100,A-10145,STATIONARY PLATE TOGGLE - 90 TON,4001000100,11201,STATIONARY PLATE TOGGLE - 90 TON (CASTING),3,CNC Drilling & Tapping (Mold Mounting PCD),DRL,1,VEN0000002,M16 mold clamp tapped holes as per drawing
 4110000100,A-10145,STATIONARY PLATE TOGGLE - 90 TON,4001000100,11201,STATIONARY PLATE TOGGLE - 90 TON (CASTING),4,Stress Relieving & Heat Treatment,HT,2,VEN0000004,Normalize stress at 550°C
 4110000100,A-10145,STATIONARY PLATE TOGGLE - 90 TON,4001000100,11201,STATIONARY PLATE TOGGLE - 90 TON (CASTING),5,Surface Grinding & Anti-Rust Coating,GRD,1,VEN0000006,Precision surface grind & rust preventive oil`
+  },
+  CURRENT_PLANNING: {
+    filename: 'gec_current_planning_upload_template.csv',
+    description: 'Current Planning Upload Template (MinStock=2, Auto-Creates PO (5 qty for BO), JW (4 qty for JW), QC (3 qty for QC))',
+    content: `ItemCode,PartCode,ItemName,Category,MaterialProcessSources,MinStockQty,PendingPOQty,PendingJobworkQty,PendingQCQty,VendorCode,UnitPrice,Remarks
+GEC-BO-VALVE-01,BO-PARKER-01,Directional Control Valve D03,BO,Bought out,2,5,0,0,VEN0000008,6500.00,Initial Planning Setup
+GEC-MC-TB80-250T,DWG-TB-250,Tie Bar 80mm Finished Machined,MC,Job work,2,0,4,3,VEN0000002,4850.00,Initial Planning Setup
+GEC-RM-ROD80-EN8,DWG-TB-80,Tie Bar Raw Rod 80mm EN8D,RM,Bought out,2,5,0,3,VEN0000003,2450.00,Initial Planning Setup
+GEC-EL-PLC-S7,EL-SIEMENS-1200,Siemens S7-1200 CPU 1214C PLC,EL,Bought out,2,5,0,3,VEN0000009,32000.00,Initial Planning Setup`
   }
 };
 

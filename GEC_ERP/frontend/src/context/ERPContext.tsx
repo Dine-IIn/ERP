@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { apiClient } from '../services/apiClient';
 import { 
   User, Item, Customer, Vendor, JobworkChallan, 
-  PurchaseOrder, GoodsReceivedNotice, WorkOrder, 
+  PurchaseOrder, GoodsReceivedNotice, GRNItem, WorkOrder, 
   QCInspection, QCType, MachineAssembly, BOM, SalesOrder, Role, Department, CustomRole,
   JobCard, FloorStation, FinishedGoodUnit, DispatchRecord, UserActivityLog, BackupRecord, RBAC_FEATURES,
   JobCardMaterialReissue, MaterialIssueRecord, POItem, POStatus, SystemErrorLog,
@@ -14,6 +14,7 @@ import {
   generateNextGRNNumber, generateNextDispatchNumber, generateNextBOMNumber,
   generateNextDebitChallanNumber, generateNextItemCode
 } from '../types/erp';
+import { ParsedPlanningItem } from '../utils/massDataParser';
 import { 
   INITIAL_USERS, INITIAL_CUSTOMERS, INITIAL_VENDORS, INITIAL_ITEM_CATEGORIES, INITIAL_VENDOR_CATEGORIES, INITIAL_ITEMS, 
   INITIAL_BOMS, INITIAL_SALES_ORDERS, INITIAL_JOBWORK_CHALLANS, INITIAL_PURCHASE_ORDERS, INITIAL_GRNS, 
@@ -318,6 +319,7 @@ interface ERPContextType {
   massUpsertProcesses: (procs: ProcessDefinition[], mode: 'APPEND' | 'OVERWRITE') => void;
   massUpsertItemProcessCards: (cards: ItemProcessCard[], mode: 'APPEND' | 'OVERWRITE') => void;
   massUpdateInventory: (updates: { itemId?: string; itemCode: string; inHouseStock: number; externalStock: number; location?: string; unitPrice?: number; minStockQty?: number }[]) => void;
+  massIngestPlanning: (records: ParsedPlanningItem[]) => void;
 
   // Engineering Drawings & CAD Library
   drawings: ItemDrawingRecord[];
@@ -3291,6 +3293,227 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addAuditLog('MASS_UPDATE_INVENTORY', 'Super Admin Data Hub', `Updated stock balances for ${updates.length} items.`);
   };
 
+  const massIngestPlanning = (records: ParsedPlanningItem[]) => {
+    if (!records || records.length === 0) return;
+
+    // 1. Update Min Stock Qty (default 2), Pending QC stock, and Unit Price for all items
+    const recordMap = new Map(records.map(r => [r.itemCode.toUpperCase(), r]));
+    let updatedCatalogItems: Item[] = [];
+    setItems(prevItems => {
+      const updated = prevItems.map(item => {
+        const rec = recordMap.get(item.itemCode.toUpperCase());
+        if (!rec) return item;
+        return {
+          ...item,
+          minStockQty: rec.minStockQty !== undefined ? rec.minStockQty : 2,
+          pendingQCStock: rec.pendingQCQty > 0 ? Math.max(item.pendingQCStock || 0, rec.pendingQCQty) : item.pendingQCStock,
+          unitPrice: rec.unitPrice !== undefined && rec.unitPrice > 0 ? rec.unitPrice : item.unitPrice
+        };
+      });
+      updatedCatalogItems = updated;
+      apiClient.syncEntity('items', updated);
+      return updated;
+    });
+
+    const activeItems = updatedCatalogItems.length > 0 ? updatedCatalogItems : items;
+
+    // 2. Auto-create Purchase Orders for items with pendingPOQty > 0
+    const poItems = records.filter(r => r.pendingPOQty > 0);
+    if (poItems.length > 0) {
+      const vendorGroups = new Map<string, ParsedPlanningItem[]>();
+      poItems.forEach(pi => {
+        const itemObj = activeItems.find(i => i.itemCode.toUpperCase() === pi.itemCode.toUpperCase());
+        const mappedV = vendors.find(v => v.id === itemObj?.mappedVendors?.[0]?.vendorId);
+        const venCode = pi.vendorCode || mappedV?.vendorCode || (vendors[0]?.vendorCode || 'VEN0000001');
+        if (!vendorGroups.has(venCode)) vendorGroups.set(venCode, []);
+        vendorGroups.get(venCode)!.push(pi);
+      });
+
+      setPurchaseOrders(prevPOs => {
+        let runningPOs = [...prevPOs];
+        const newCreatedPOs: PurchaseOrder[] = [];
+
+        vendorGroups.forEach((vItems, venCode) => {
+          const venObj = vendors.find(v => v.vendorCode.toUpperCase() === venCode.toUpperCase()) || vendors[0];
+          const nextPONo = generateNextPONumber(runningPOs);
+          
+          let subtotal = 0;
+          const lineItems = vItems.map((vi, idx) => {
+            const itemObj = activeItems.find(i => i.itemCode.toUpperCase() === vi.itemCode.toUpperCase());
+            const price = vi.unitPrice || itemObj?.unitPrice || 0;
+            const qty = vi.pendingPOQty;
+            const lineTotal = qty * price;
+            subtotal += lineTotal;
+            return {
+              id: `poi-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
+              itemId: itemObj?.id || vi.itemId || `item-${vi.itemCode}`,
+              itemCode: vi.itemCode,
+              itemName: vi.itemName || itemObj?.name || vi.itemCode,
+              orderedQty: qty,
+              quantity: qty,
+              receivedQty: 0,
+              balanceQty: qty,
+              unit: itemObj?.purchaseUOM || itemObj?.unit || 'PCS',
+              unitPrice: price,
+              amount: lineTotal,
+              notes: vi.remarks || 'Current Planning Auto Setup'
+            };
+          });
+
+          const taxAmount = +(subtotal * 0.18).toFixed(2);
+          const totalAmount = +(subtotal + taxAmount).toFixed(2);
+
+          const newPO: PurchaseOrder = {
+            id: `po-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+            poNumber: nextPONo,
+            orderDate: new Date().toISOString().split('T')[0],
+            expectedDeliveryDate: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+            vendorId: venObj?.id || venCode,
+            vendorName: venObj?.name || 'Standard Vendor',
+            items: lineItems,
+            subtotal,
+            taxAmount,
+            totalAmount,
+            status: 'APPROVED',
+            notes: 'Auto-generated from Current Planning Upload Sheet'
+          };
+
+          runningPOs = [newPO, ...runningPOs];
+          newCreatedPOs.push(newPO);
+          apiClient.syncMutate('purchaseOrders', 'UPSERT', newPO);
+        });
+
+        return runningPOs;
+      });
+    }
+
+    // 3. Auto-create Job Work Challans for items with pendingJobworkQty > 0
+    const jwItems = records.filter(r => r.pendingJobworkQty > 0);
+    if (jwItems.length > 0) {
+      setJobworks(prevJWs => {
+        let runningJWs = [...prevJWs];
+        jwItems.forEach((ji, idx) => {
+          const itemObj = activeItems.find(i => i.itemCode.toUpperCase() === ji.itemCode.toUpperCase());
+          const mappedV = vendors.find(v => v.id === itemObj?.mappedVendors?.[0]?.vendorId);
+          const venCode = ji.vendorCode || mappedV?.vendorCode || (vendors[0]?.vendorCode || 'VEN0000001');
+          const venObj = vendors.find(v => v.vendorCode.toUpperCase() === venCode.toUpperCase()) || vendors[0];
+          const nextJWNo = generateNextJobworkNumber(runningJWs);
+
+          const newJW: JobworkChallan = {
+            id: `jw-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 5)}`,
+            challanNo: nextJWNo,
+            issueDate: new Date().toISOString().split('T')[0],
+            expectedReturnDate: new Date(Date.now() + 10 * 86400000).toISOString().split('T')[0],
+            vendorId: venObj?.id || venCode,
+            vendorName: venObj?.name || 'Standard Vendor',
+            itemId: itemObj?.id || ji.itemId || `item-${ji.itemCode}`,
+            itemCode: ji.itemCode,
+            itemName: ji.itemName || itemObj?.name || ji.itemCode,
+            sentQuantity: ji.pendingJobworkQty,
+            receivedQuantity: 0,
+            pendingBalance: ji.pendingJobworkQty,
+            status: 'SENT',
+            notes: ji.remarks || 'Auto-generated from Current Planning Upload Sheet'
+          };
+
+          runningJWs = [newJW, ...runningJWs];
+          apiClient.syncMutate('jobworks', 'UPSERT', newJW);
+        });
+        return runningJWs;
+      });
+    }
+
+    // 4. Auto-create GRN and QC Records for items with pendingQCQty > 0 (making them visible in Quality Control Quarantine)
+    const qcItems = records.filter(r => r.pendingQCQty > 0);
+    if (qcItems.length > 0) {
+      // 4a. Create baseline GRN so Quality Control Module picks them up in pendingQCItems
+      setGRNs(prevGRNs => {
+        const nextGRNNo = generateNextGRNNumber(prevGRNs);
+        const grnLineItems: GRNItem[] = qcItems.map((qi, idx) => {
+          const itemObj = activeItems.find(i => i.itemCode.toUpperCase() === qi.itemCode.toUpperCase());
+          return {
+            id: `grni-plan-${Date.now()}-${idx}`,
+            itemId: itemObj?.id || qi.itemId || `item-${qi.itemCode}`,
+            itemCode: qi.itemCode,
+            itemName: qi.itemName || itemObj?.name || qi.itemCode,
+            partCode: qi.partCode || itemObj?.partCode || '',
+            receivedQty: qi.pendingQCQty,
+            acceptedQty: qi.pendingQCQty,
+            rejectedQty: 0,
+            unit: itemObj?.purchaseUOM || itemObj?.unit || 'PCS',
+            unitPrice: qi.unitPrice || itemObj?.unitPrice || 0,
+            orderedQty: qi.pendingQCQty,
+            quantity: qi.pendingQCQty,
+            remarks: 'Planning Sheet Initial Quarantine Inward'
+          };
+        });
+
+        const venObj = vendors[0];
+        const planningGRN: GoodsReceivedNotice = {
+          id: `grn-plan-${Date.now()}`,
+          grnNumber: nextGRNNo,
+          sourceType: 'STANDALONE',
+          poNumber: 'PLANNING-INITIAL',
+          vendorId: venObj?.id || 'VEN0000001',
+          vendorName: venObj?.name || 'Initial Quarantine Store',
+          receivedDate: new Date().toISOString().split('T')[0],
+          receivedBy: currentUser?.fullName || 'System SuperAdmin',
+          items: grnLineItems,
+          status: 'PENDING_QC'
+        };
+
+        apiClient.syncMutate('grns', 'UPSERT', planningGRN);
+        return [planningGRN, ...prevGRNs];
+      });
+
+      // 4b. Create QCInspection records
+      setQCInspections(prevQCs => {
+        let runningQCs = [...prevQCs];
+        qcItems.forEach((qi, idx) => {
+          const itemObj = activeItems.find(i => i.itemCode.toUpperCase() === qi.itemCode.toUpperCase());
+          const mappedV = vendors.find(v => v.id === itemObj?.mappedVendors?.[0]?.vendorId);
+          const venCode = qi.vendorCode || mappedV?.vendorCode || (vendors[0]?.vendorCode || 'VEN0000001');
+          const venObj = vendors.find(v => v.vendorCode.toUpperCase() === venCode.toUpperCase()) || vendors[0];
+          const nextQCNo = generateNextQCNumber(runningQCs);
+
+          const newQC: QCInspection = {
+            id: `qc-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 5)}`,
+            inspectionNo: nextQCNo,
+            qcNumber: nextQCNo,
+            referenceType: 'GRN',
+            referenceNo: 'PLANNING-SETUP',
+            vendorId: venObj?.id || venCode,
+            vendorName: venObj?.name || 'Initial Quarantine Store',
+            itemId: itemObj?.id || qi.itemId || `item-${qi.itemCode}`,
+            itemCode: qi.itemCode,
+            itemName: qi.itemName || itemObj?.name || qi.itemCode,
+            grnQty: qi.pendingQCQty,
+            inspectedQty: qi.pendingQCQty,
+            inspectedQuantity: qi.pendingQCQty,
+            passedQuantity: 0,
+            approvedQty: 0,
+            failedQuantity: 0,
+            rejectedQty: 0,
+            status: 'IN_INSPECTION',
+            disposition: 'PENDING',
+            defectReason: '',
+            remarks: qi.remarks || 'Pending Initial QC Inspection from Planning Sheet',
+            inspectionDate: new Date().toISOString().split('T')[0],
+            timestamp: new Date().toISOString(),
+            inspectorName: currentUser?.fullName || 'QC Inspector',
+            type: 'GRN'
+          };
+
+          runningQCs = [newQC, ...runningQCs];
+          apiClient.syncMutate('qcInspections', 'UPSERT', newQC);
+        });
+        return runningQCs;
+      });
+    }
+
+    addAuditLog('MASS_INGEST_PLANNING', 'Bulk Planning Ingestion', `Ingested Current Planning: Set MinStock=2 for ${records.length} items, created ${poItems.length} PO lines, ${jwItems.length} JW challans, ${qcItems.length} QC quarantine items.`);
+  };
+
   return (
     <ERPContext.Provider value={{
       currentUser,
@@ -3442,6 +3665,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       massUpsertProcesses,
       massUpsertItemProcessCards,
       massUpdateInventory,
+      massIngestPlanning,
       drawings,
       saveDrawing,
       acknowledgeDrawingVersion,

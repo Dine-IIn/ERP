@@ -4,7 +4,7 @@ import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { SingleBOMPrintView, BOMListPrintView } from '../printTemplates/BOMPrintTemplates';
 import { BOMUploadModal } from '../common/BOMUploadModal';
 import { Plus, Trash2, Edit2, Search, Printer, FileSpreadsheet, Upload, ArrowUpDown, ArrowUp, ArrowDown, Layers, Filter, Eye, Zap, ArrowLeft, X, RefreshCw } from 'lucide-react';
-import { BOM, BOMComponent, Item, generateNextBOMNumber } from '../../types/erp';
+import { BOM, BOMComponent, Item, generateNextBOMNumber, FIXED_ITEM_CLASSES } from '../../types/erp';
 import { useTableKeyboardNav } from '../../hooks/useTableKeyboardNav';
 import { isCircularDependency, getExplodedBOMSummary } from '../../utils/nestedBOMHelper';
 
@@ -12,7 +12,7 @@ type SortField = 'bomCode' | 'machineModel' | 'version';
 
 export const BOMMasterModule: React.FC = () => {
   const { 
-    boms, items, itemCategories, addBOM, updateBOM, deleteBOM, bulkAddBOMs, searchTerm, setSearchTerm,
+    boms, items, itemCategories, itemClasses, addBOM, updateBOM, deleteBOM, bulkAddBOMs, searchTerm, setSearchTerm,
     selectedBOMIdForView, setSelectedBOMIdForView 
   } = useERP();
   
@@ -37,7 +37,7 @@ export const BOMMasterModule: React.FC = () => {
   }, [selectedBOMIdForView, boms]);
   const [bomHistoryStack, setBomHistoryStack] = useState<BOM[]>([]); // Navigation History Stack for Nested BOMs
   const [isExplodedView, setIsExplodedView] = useState(false);
-  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('ALL');
+  const [selectedClassFilters, setSelectedClassFilters] = useState<string[]>([]);
 
   // Print Document state
   const [printModalOpen, setPrintModalOpen] = useState(false);
@@ -151,13 +151,13 @@ export const BOMMasterModule: React.FC = () => {
         )
       );
 
-      // Category filter
-      const matchesCategory = selectedCategoryFilter === 'ALL' || b.components.some(c => {
+      // Class filter
+      const matchesClass = selectedClassFilters.length === 0 || b.components.some(c => {
         const itemObj = items.find(i => i.id === c.itemId || i.itemCode === c.itemCode);
-        return itemObj?.category === selectedCategoryFilter;
+        return itemObj?.category && selectedClassFilters.includes(itemObj.category);
       });
 
-      return matchesSearch && matchesCategory;
+      return matchesSearch && matchesClass;
     })
     .sort((a, b) => {
       let valA: any = a[sortField] || '';
@@ -649,21 +649,32 @@ export const BOMMasterModule: React.FC = () => {
                 </span>
               )}
 
-              {/* Common Category Filter Dropdown */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <Filter size={15} color="var(--text-muted)" />
-                <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>Category:</span>
-                <select
-                  className="input-field"
-                  style={{ padding: '0.3rem 0.65rem', fontSize: '0.82rem', width: '200px' }}
-                  value={selectedCategoryFilter}
-                  onChange={(e) => setSelectedCategoryFilter(e.target.value)}
+              {/* Dynamic Item Class Filter Badges */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>Class:</span>
+                <button
+                  type="button"
+                  className={`badge ${selectedClassFilters.length === 0 ? 'badge-primary' : 'badge-neutral'}`}
+                  style={{ cursor: 'pointer', padding: '0.2rem 0.45rem', fontSize: '0.72rem' }}
+                  onClick={() => setSelectedClassFilters([])}
                 >
-                  <option value="ALL">All Categories</option>
-                  {itemCategories.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
+                  ALL
+                </button>
+                {(itemClasses && itemClasses.length > 0 ? itemClasses : FIXED_ITEM_CLASSES).map(cls => {
+                  const isSelected = selectedClassFilters.includes(cls.code);
+                  return (
+                    <button
+                      key={cls.code}
+                      type="button"
+                      className={`badge ${isSelected ? 'badge-primary' : 'badge-neutral'}`}
+                      style={{ cursor: 'pointer', padding: '0.2rem 0.45rem', fontSize: '0.72rem' }}
+                      onClick={() => setSelectedClassFilters(prev => prev.includes(cls.code) ? prev.filter(c => c !== cls.code) : [...prev, cls.code])}
+                      title={cls.name}
+                    >
+                      {cls.code}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -755,9 +766,9 @@ export const BOMMasterModule: React.FC = () => {
                             (itemObj?.oldItemCode && itemObj.oldItemCode.toLowerCase().includes(q))
                           );
 
-                          const matchesCategory = selectedCategoryFilter === 'ALL' || itemObj?.category === selectedCategoryFilter;
+                          const matchesClass = selectedClassFilters.length === 0 || (itemObj?.category && selectedClassFilters.includes(itemObj.category));
 
-                          return matchesSearch && matchesCategory;
+                          return matchesSearch && matchesClass;
                         })
                         .map((c, i) => {
                           const itemObj = items.find(it => it.id === c.itemId || it.itemCode === c.itemCode);
@@ -853,9 +864,9 @@ export const BOMMasterModule: React.FC = () => {
                               (itemObj?.oldItemCode && itemObj.oldItemCode.toLowerCase().includes(q))
                             );
 
-                            const matchesCategory = selectedCategoryFilter === 'ALL' || itemObj?.category === selectedCategoryFilter;
+                            const matchesClass = selectedClassFilters.length === 0 || (itemObj?.category && selectedClassFilters.includes(itemObj.category));
 
-                            return matchesSearch && matchesCategory;
+                            return matchesSearch && matchesClass;
                           })
                           .map((c, i) => {
                             const itemObj = items.find(it => it.id === c.itemId || it.itemCode === c.itemCode);

@@ -89,7 +89,11 @@ export const QualityControlModule: React.FC = () => {
       if (itemObj?.qcTrigger === 'NO_QC') return;
 
       const received = Number(lineItem.acceptedQty ?? lineItem.receivedQty ?? 0);
-      const directJobwork = Number((lineItem as any).directJobworkQty ?? 0);
+      const directJobwork = Number(
+        lineItem.directJWQty ?? 
+        (lineItem as any).directJobworkQty ?? 
+        (lineItem.isDirectJobwork ? (lineItem.directJWQty || 0) : 0)
+      );
       const totalInwardQty = Math.max(0, received - directJobwork);
       if (totalInwardQty <= 0) return;
 

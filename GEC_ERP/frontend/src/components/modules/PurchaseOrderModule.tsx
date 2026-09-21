@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { Modal } from '../common/Modal';
+import { AutocompleteSelect, AutocompleteOption } from '../common/AutocompleteSelect';
 import { PrintManagerModal } from '../printTemplates/PrintManagerModal';
 import { ShareViaEmailModal } from '../common/ShareViaEmailModal';
 import { SinglePOPrintView, POListPrintView } from '../printTemplates/POPrintTemplates';
@@ -1568,10 +1569,35 @@ export const PurchaseOrderModule: React.FC = () => {
 
       {/* Manual PO Creation Modal */}
       {isManualModalOpen && (() => {
+        // Strict filter: only items whose Material Process Source contains 'Bought out', or processType is 'Bought out' / 'Job work + Bought out' or category is 'BO'
+        const isBoughtOut = (it: Item) => {
+          if (it.materialProcessSources && it.materialProcessSources.length > 0) {
+            return it.materialProcessSources.includes('Bought out');
+          }
+          return it.processType === 'Bought out' || 
+                 it.materialProcessType === 'Bought out' || 
+                 it.processType === 'Job work + Bought out' || 
+                 it.category === 'BO';
+        };
+
+        const boughtOutItems = items.filter(isBoughtOut);
         const selectedItemObj = items.find(i => i.id === manualSelectedItemId);
         const currentDemand = selectedItemObj ? getItemCurrentDemand(selectedItemObj.id, selectedItemObj.itemCode) : 0;
         const moq = selectedItemObj?.minOrderQty || 1;
         const totalEstimatedAmount = manualItemQty * manualItemPrice;
+
+        const manualItemOptions: AutocompleteOption[] = boughtOutItems.map(it => ({
+          value: it.id,
+          label: `${it.itemCode} - ${it.name}`,
+          sublabel: `Class: ${it.category} | Stock: ${it.inHouseStock} ${it.unit} | MOQ: ${it.minOrderQty || 1}`,
+          badge: it.partCode ? `Part: ${it.partCode}` : undefined
+        }));
+
+        const vendorOptions: AutocompleteOption[] = vendors.map(v => ({
+          value: v.id,
+          label: `${v.name} (${v.vendorCode})`,
+          sublabel: `${v.city || 'Vendor'} | GSTIN: ${v.gstin || '-'}`
+        }));
 
         return (
           <Modal
@@ -1581,16 +1607,17 @@ export const PurchaseOrderModule: React.FC = () => {
           >
             <form onSubmit={handleSaveManualPO} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               
-              {/* 1. Item Selection First */}
+              {/* 1. Item Selection First (Strictly Bought Out Items Only) */}
               <div>
-                <label style={{ fontWeight: 700, color: 'var(--accent-primary)' }}>1. Select Item to Purchase *</label>
-                <select 
-                  className="input-field" 
-                  required 
-                  style={{ border: '2px solid var(--accent-primary)', fontWeight: 600 }}
-                  value={manualSelectedItemId} 
-                  onChange={(e) => {
-                    const itId = e.target.value;
+                <label style={{ fontWeight: 700, color: 'var(--accent-primary)', display: 'block', marginBottom: '0.35rem' }}>
+                  1. Select Item to Purchase * <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>(Bought Out Items: {boughtOutItems.length})</span>
+                </label>
+                <AutocompleteSelect
+                  options={manualItemOptions}
+                  value={manualSelectedItemId}
+                  placeholder="Type to search Bought Out item by code, name, part code..."
+                  required
+                  onChange={(itId) => {
                     setManualSelectedItemId(itId);
                     const it = items.find(i => i.id === itId);
                     if (it) {
@@ -1601,14 +1628,7 @@ export const PurchaseOrderModule: React.FC = () => {
                       }
                     }
                   }}
-                >
-                  <option value="" disabled>-- Select Item to Order --</option>
-                  {items.map(it => (
-                    <option key={it.id} value={it.id}>
-                      {it.itemCode} - {it.name} [{it.category}] ({it.processType || 'Bought out'})
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
 
               {/* 2. Stock & Demand Overview Banner */}
@@ -1675,22 +1695,16 @@ export const PurchaseOrderModule: React.FC = () => {
                 </div>
               </div>
 
-              {/* 4. Select Vendor */}
+              {/* 4. Select Vendor (Searchable Autocomplete) */}
               <div>
-                <label style={{ fontWeight: 700 }}>3. Select Vendor *</label>
-                <select 
-                  className="input-field" 
-                  required 
-                  value={manualPOForm.vendorId} 
-                  onChange={(e) => setManualPOForm({ ...manualPOForm, vendorId: e.target.value })}
-                >
-                  <option value="" disabled>-- Select Vendor --</option>
-                  {vendors.map(v => (
-                    <option key={v.id} value={v.id}>
-                      {v.name} ({v.vendorCode}) - {v.city || 'Vendor'}
-                    </option>
-                  ))}
-                </select>
+                <label style={{ fontWeight: 700, display: 'block', marginBottom: '0.35rem' }}>3. Select Vendor *</label>
+                <AutocompleteSelect
+                  options={vendorOptions}
+                  value={manualPOForm.vendorId}
+                  placeholder="Type to search vendor by name or code..."
+                  required
+                  onChange={(vId) => setManualPOForm(prev => ({ ...prev, vendorId: vId }))}
+                />
               </div>
 
               {/* 5. Expected Delivery Date & PO Number */}

@@ -149,7 +149,7 @@ export const SinglePOPrintView: React.FC<{
             <th style={{ padding: '5px 6px', border: '1px solid #000000', textAlign: 'left', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800, fontSize: '8pt' }}>Item Description</th>
             <th style={{ width: '75px', padding: '5px 4px', border: '1px solid #000000', textAlign: 'left', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800, fontSize: '8pt' }}>Old Code</th>
             <th style={{ width: '38px', padding: '5px 2px', border: '1px solid #000000', textAlign: 'center', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800, fontSize: '8pt' }}>UOM</th>
-            <th style={{ width: '65px', padding: '5px 4px', border: '1px solid #000000', textAlign: 'right', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800, fontSize: '8pt' }}>Quantity</th>
+            <th style={{ width: '65px', padding: '5px 4px', border: '1px solid #000000', textAlign: 'right', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800, fontSize: '8pt' }}>QTY</th>
             <th style={{ width: '80px', padding: '5px 4px', border: '1px solid #000000', textAlign: 'right', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800, fontSize: '8pt' }}>Rate (₹)</th>
             <th style={{ width: '95px', padding: '5px 6px', border: '1px solid #000000', textAlign: 'right', position: 'static', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#000000', fontWeight: 800, fontSize: '8pt' }}>Amount (₹)</th>
           </tr>
@@ -187,7 +187,7 @@ export const SinglePOPrintView: React.FC<{
         <tfoot>
           <tr style={{ fontSize: '8.5pt', color: '#000000' }}>
             <td colSpan={5} style={{ padding: '5px 6px', border: '1px solid #000000', textAlign: 'right', boxSizing: 'border-box', fontWeight: 400 }}>
-              Total Quantity:
+              Total QTY:
             </td>
             <td style={{ padding: '5px 4px', border: '1px solid #000000', textAlign: 'right', boxSizing: 'border-box', fontWeight: 400 }}>
               {totalQty}

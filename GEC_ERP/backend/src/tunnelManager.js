@@ -3,14 +3,8 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 
-const getDirname = () => {
-  if (typeof __dirname !== 'undefined' && __dirname) return __dirname;
-  try {
-    if (typeof import.meta !== 'undefined' && import.meta.url) return path.dirname(fileURLToPath(import.meta.url));
-  } catch (e) {}
-  return process.cwd();
-};
-const __dirname = getDirname();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 class TunnelManager {
   constructor() {
@@ -44,10 +38,14 @@ class TunnelManager {
     }
 
     const binPath = this.findCloudflaredBinary();
+    const port = process.env.PORT || 5000;
+    const isDev = process.env.NODE_ENV === 'development' || String(port) === '5001';
+    this.publicUrl = isDev ? (process.env.VITE_DEV_CLOUD_URL || 'https://erp-dev.manavkalola.xyz') : (process.env.VITE_PROD_CLOUD_URL || 'https://erp.manavkalola.xyz');
+
     console.log(`\n======================================================`);
     console.log(`🌐 Initializing Automatic Cloudflare Tunnel Supervisor`);
     console.log(`   Binary: ${binPath}`);
-    console.log(`   Public Route: ${this.publicUrl} -> http://localhost:5000`);
+    console.log(`   Public Route: ${this.publicUrl} -> http://localhost:${port}`);
     console.log(`======================================================\n`);
 
     this.status = 'STARTING';

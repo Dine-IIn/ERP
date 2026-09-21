@@ -27,7 +27,11 @@ type SortField =
   | 'minStockLevel' 
   | 'minShortage';
 
-export const PlanningModule: React.FC = () => {
+export interface PlanningModuleProps {
+  hideHeader?: boolean;
+}
+
+export const PlanningModule: React.FC<PlanningModuleProps> = ({ hideHeader = false }) => {
   const { 
     items, purchaseOrders, workOrders, jobCards, jobworks, boms, qcInspections, finishedGoods,
     searchTerm, setSearchTerm, itemProcessCards 
@@ -465,40 +469,41 @@ export const PlanningModule: React.FC = () => {
   return (
     <div className="module-layout-container" style={{ flex: 1, minHeight: 0, height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingRight: '0.25rem' }}>
       {/* Top Header */}
-      <div className="sticky-module-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <div style={{ 
-            width: '32px', 
-            height: '32px', 
-            borderRadius: '0.4rem', 
-            backgroundColor: 'var(--accent-primary)', 
-            color: '#ffffff',
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'center' 
-          }}>
-            <FileSpreadsheet size={16} />
+      {!hideHeader && (
+        <div className="sticky-module-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div style={{ 
+              width: '32px', 
+              height: '32px', 
+              borderRadius: '0.4rem', 
+              backgroundColor: 'var(--accent-primary)', 
+              color: '#ffffff',
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center' 
+            }}>
+              <FileSpreadsheet size={16} />
+            </div>
+            <div>
+              <h2 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)', lineHeight: 1.1 }}>
+                Material & Production Planning Matrix
+              </h2>
+            </div>
           </div>
-          <div>
-            <h2 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)', lineHeight: 1.1 }}>
-              Material & Production Planning Matrix
-            </h2>
+
+          <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <button 
+              type="button" 
+              className="btn btn-primary" 
+              onClick={handleQuickPrint} 
+              title="Print Planning Report (Choose Landscape or Portrait in dialog)"
+              style={{ fontSize: '0.8rem', padding: '0.45rem 0.85rem' }}
+            >
+              <Printer size={15} /> Print Planning Report
+            </button>
           </div>
         </div>
-
-        <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          <button 
-            type="button" 
-            className="btn btn-primary" 
-            onClick={handleQuickPrint} 
-            title="Print Planning Report (Choose Landscape or Portrait in dialog)"
-            style={{ fontSize: '0.8rem', padding: '0.45rem 0.85rem' }}
-          >
-            <Printer size={15} /> Print Planning Report
-          </button>
-
-        </div>
-      </div>
+      )}
 
       {/* KPI Badges */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>

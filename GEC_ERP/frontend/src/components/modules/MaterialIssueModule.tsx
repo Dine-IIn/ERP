@@ -79,6 +79,9 @@ export const MaterialIssueModule: React.FC = () => {
   // Expanded cards state
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
 
+  // Per-Card Item Search state: key = cardId -> search string
+  const [cardItemSearches, setCardItemSearches] = useState<Record<string, string>>({});
+
   const toggleCardExpanded = (id: string) => {
     setExpandedCards(prev => ({
       ...prev,
@@ -857,119 +860,202 @@ export const MaterialIssueModule: React.FC = () => {
                     </div>
 
                     {/* Card Body - Components Table */}
-                    {isExpanded && (
-                      <div className="table-container" style={{ margin: 0, border: 'none', borderRadius: 0 }}>
-                        <table>
-                          <thead>
-                            <tr>
-                              <th style={{ width: '30px' }}>#</th>
-                              <th>Item Code</th>
-                              <th>Description</th>
-                              <th style={{ textAlign: 'right' }}>Total Req</th>
-                              <th style={{ textAlign: 'right' }}>Issued</th>
-                              <th style={{ textAlign: 'right' }}>Pending</th>
-                              <th style={{ textAlign: 'right' }}>Store Stock</th>
-                              <th style={{ width: '130px', textAlign: 'center' }}>Issue Qty</th>
-                              <th style={{ width: '150px' }}>Issued To</th>
-                              <th style={{ textAlign: 'center', width: '100px' }}>Action</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {card.components.map((comp, cIdx) => {
-                              const key = `${card.id}_${comp.itemId || comp.itemCode}`;
-                              const isLineDone = comp.unissuedQty === 0;
-                              const currentInputQty = customIssueQtys[key] !== undefined ? customIssueQtys[key] : Math.min(comp.unissuedQty, comp.inHouseStock);
-                              const currentIssuedTo = issuedToInputs[key] || '';
+                    {isExpanded && (() => {
+                      const cardSearch = (cardItemSearches[card.id] || '').trim().toLowerCase();
+                      const cardTokens = cardSearch ? cardSearch.split(/\s+/).filter(Boolean) : [];
+                      
+                      const visibleComponents = cardTokens.length === 0
+                        ? card.components
+                        : card.components.filter(comp => {
+                            const compStr = `${comp.itemCode} ${comp.itemName} ${comp.unit}`.toLowerCase();
+                            return cardTokens.every(t => compStr.includes(t));
+                          });
 
-                              return (
-                                <tr key={cIdx} style={{ backgroundColor: isLineDone ? 'rgba(34, 197, 94, 0.04)' : comp.inHouseStock < comp.unissuedQty ? 'rgba(239, 68, 68, 0.04)' : 'transparent' }}>
-                                  <td>{cIdx + 1}</td>
-                                  <td style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>
-                                    {comp.itemCode}
-                                  </td>
-                                  <td style={{ fontWeight: 600 }}>{comp.itemName}</td>
-                                  <td style={{ textAlign: 'right', fontWeight: 700 }}>
-                                    {comp.totalRequiredQty} {comp.unit}
-                                  </td>
-                                  <td style={{ textAlign: 'right', color: comp.issuedQty > 0 ? 'var(--success)' : 'var(--text-muted)', fontWeight: 600 }}>
-                                    {comp.issuedQty} {comp.unit}
-                                  </td>
-                                  <td style={{ textAlign: 'right', fontWeight: 800, color: isLineDone ? 'var(--success)' : 'var(--danger)' }}>
-                                    {comp.unissuedQty} {comp.unit}
-                                  </td>
-                                  <td style={{ textAlign: 'right', fontWeight: 700, color: comp.inHouseStock >= comp.unissuedQty ? 'var(--success)' : comp.inHouseStock > 0 ? '#d97706' : 'var(--danger)' }}>
-                                    {comp.inHouseStock} {comp.unit}
-                                    {comp.inHouseStock < comp.unissuedQty && (
-                                      <span style={{ display: 'block', fontSize: '0.65rem', color: 'var(--danger)' }}>
-                                        Short: {comp.unissuedQty - comp.inHouseStock}
-                                      </span>
-                                    )}
-                                  </td>
-                                  <td style={{ textAlign: 'center' }}>
-                                    {!isLineDone ? (
-                                      <input
-                                        type="number"
-                                        min="1"
-                                        max={Math.min(comp.unissuedQty, comp.inHouseStock)}
-                                        className="input-field"
-                                        style={{ width: '85px', textAlign: 'right', padding: '0.15rem 0.4rem', fontSize: '0.78rem' }}
-                                        value={currentInputQty}
-                                        title={`Max allowed: ${Math.min(comp.unissuedQty, comp.inHouseStock)} ${comp.unit} (Cannot exceed required: ${comp.totalRequiredQty} ${comp.unit})`}
-                                        onChange={(e) => {
-                                          const val = Number(e.target.value);
-                                          const maxLimit = Math.min(comp.unissuedQty, comp.inHouseStock);
-                                          const clamped = isNaN(val) ? 0 : Math.max(0, Math.min(val, maxLimit));
-                                          setCustomIssueQtys(prev => ({ ...prev, [key]: clamped }));
-                                        }}
-                                        disabled={comp.inHouseStock === 0}
-                                      />
-                                    ) : (
-                                      <span style={{ fontSize: '0.74rem', color: 'var(--success)', fontWeight: 700 }}>
-                                        ✓ Completed
-                                      </span>
-                                    )}
-                                  </td>
-                                  <td>
-                                    {!isLineDone && (
-                                      <input
-                                        type="text"
-                                        placeholder="Operator/Floor..."
-                                        className="input-field"
-                                        style={{ width: '100%', padding: '0.15rem 0.4rem', fontSize: '0.74rem' }}
-                                        value={currentIssuedTo}
-                                        onChange={(e) => {
-                                          const val = e.target.value;
-                                          setIssuedToInputs(prev => ({ ...prev, [key]: val }));
-                                        }}
-                                        disabled={comp.inHouseStock === 0}
-                                      />
-                                    )}
-                                  </td>
-                                  <td style={{ textAlign: 'center' }}>
-                                    {!isLineDone ? (
-                                      <button
-                                        type="button"
-                                        className="btn btn-success"
-                                        style={{ padding: '0.2rem 0.55rem', fontSize: '0.72rem', fontWeight: 700 }}
-                                        onClick={() => handleIssueSingleItem(card.id, card.cardType, comp)}
-                                        disabled={comp.inHouseStock === 0 || currentInputQty <= 0}
-                                        title={comp.inHouseStock === 0 ? 'No stock available in store' : 'Issue material from store'}
-                                      >
-                                        Issue
-                                      </button>
-                                    ) : (
-                                      <span className="badge badge-success" style={{ fontSize: '0.68rem' }}>
-                                        Fully Issued
-                                      </span>
-                                    )}
-                                  </td>
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          {/* Per-Card Item Search Bar Toolbar */}
+                          <div style={{ 
+                            padding: '0.45rem 1rem', 
+                            backgroundColor: 'var(--bg-secondary)', 
+                            borderBottom: '1px solid var(--border-color)',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            gap: '0.75rem',
+                            flexWrap: 'wrap'
+                          }}>
+                            <div style={{ position: 'relative', width: '320px', maxWidth: '100%' }}>
+                              <Search size={13} style={{ position: 'absolute', left: '0.6rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                              <input
+                                type="text"
+                                placeholder={`Search items in ${card.refNumber}...`}
+                                className="input-field"
+                                style={{ 
+                                  paddingLeft: '1.85rem', 
+                                  paddingRight: cardItemSearches[card.id] ? '1.8rem' : '0.5rem', 
+                                  paddingTop: '0.2rem', 
+                                  paddingBottom: '0.2rem', 
+                                  fontSize: '0.76rem', 
+                                  width: '100%',
+                                  backgroundColor: 'var(--bg-primary)'
+                                }}
+                                value={cardItemSearches[card.id] || ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setCardItemSearches(prev => ({ ...prev, [card.id]: val }));
+                                }}
+                              />
+                              {cardItemSearches[card.id] && (
+                                <button
+                                  type="button"
+                                  onClick={() => setCardItemSearches(prev => ({ ...prev, [card.id]: '' }))}
+                                  style={{
+                                    position: 'absolute',
+                                    right: '0.4rem',
+                                    top: '50%',
+                                    transform: 'translateY(-50%)',
+                                    background: 'none',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    color: 'var(--text-muted)',
+                                    padding: '0.1rem',
+                                    display: 'flex',
+                                    alignItems: 'center'
+                                  }}
+                                  title="Clear search"
+                                >
+                                  <X size={12} />
+                                </button>
+                              )}
+                            </div>
+
+                            <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                              Showing <strong>{visibleComponents.length}</strong> of {card.components.length} components
+                            </span>
+                          </div>
+
+                          <div className="table-container" style={{ margin: 0, border: 'none', borderRadius: 0 }}>
+                            <table>
+                              <thead>
+                                <tr>
+                                  <th style={{ width: '30px' }}>#</th>
+                                  <th>Item Code</th>
+                                  <th>Description</th>
+                                  <th style={{ textAlign: 'right' }}>Total Req</th>
+                                  <th style={{ textAlign: 'right' }}>Issued</th>
+                                  <th style={{ textAlign: 'right' }}>Pending</th>
+                                  <th style={{ textAlign: 'right' }}>Store Stock</th>
+                                  <th style={{ width: '130px', textAlign: 'center' }}>Issue Qty</th>
+                                  <th style={{ width: '150px' }}>Issued To</th>
+                                  <th style={{ textAlign: 'center', width: '100px' }}>Action</th>
                                 </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
+                              </thead>
+                              <tbody>
+                                {visibleComponents.length === 0 ? (
+                                  <tr>
+                                    <td colSpan={10} style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                                      No components match &quot;{cardItemSearches[card.id]}&quot; in this card.
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  visibleComponents.map((comp, cIdx) => {
+                                    const key = `${card.id}_${comp.itemId || comp.itemCode}`;
+                                    const isLineDone = comp.unissuedQty === 0;
+                                    const currentInputQty = customIssueQtys[key] !== undefined ? customIssueQtys[key] : Math.min(comp.unissuedQty, comp.inHouseStock);
+                                    const currentIssuedTo = issuedToInputs[key] || '';
+
+                                    return (
+                                      <tr key={cIdx} style={{ backgroundColor: isLineDone ? 'rgba(34, 197, 94, 0.04)' : comp.inHouseStock < comp.unissuedQty ? 'rgba(239, 68, 68, 0.04)' : 'transparent' }}>
+                                        <td>{cIdx + 1}</td>
+                                        <td style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>
+                                          {comp.itemCode}
+                                        </td>
+                                        <td style={{ fontWeight: 600 }}>{comp.itemName}</td>
+                                        <td style={{ textAlign: 'right', fontWeight: 700 }}>
+                                          {comp.totalRequiredQty} {comp.unit}
+                                        </td>
+                                        <td style={{ textAlign: 'right', color: comp.issuedQty > 0 ? 'var(--success)' : 'var(--text-muted)', fontWeight: 600 }}>
+                                          {comp.issuedQty} {comp.unit}
+                                        </td>
+                                        <td style={{ textAlign: 'right', fontWeight: 800, color: isLineDone ? 'var(--success)' : 'var(--danger)' }}>
+                                          {comp.unissuedQty} {comp.unit}
+                                        </td>
+                                        <td style={{ textAlign: 'right', fontWeight: 700, color: comp.inHouseStock >= comp.unissuedQty ? 'var(--success)' : comp.inHouseStock > 0 ? '#d97706' : 'var(--danger)' }}>
+                                          {comp.inHouseStock} {comp.unit}
+                                          {comp.inHouseStock < comp.unissuedQty && (
+                                            <span style={{ display: 'block', fontSize: '0.65rem', color: 'var(--danger)' }}>
+                                              Short: {comp.unissuedQty - comp.inHouseStock}
+                                            </span>
+                                          )}
+                                        </td>
+                                        <td style={{ textAlign: 'center' }}>
+                                          {!isLineDone ? (
+                                            <input
+                                              type="number"
+                                              min="1"
+                                              max={Math.min(comp.unissuedQty, comp.inHouseStock)}
+                                              className="input-field"
+                                              style={{ width: '85px', textAlign: 'right', padding: '0.15rem 0.4rem', fontSize: '0.78rem' }}
+                                              value={currentInputQty}
+                                              title={`Max allowed: ${Math.min(comp.unissuedQty, comp.inHouseStock)} ${comp.unit} (Cannot exceed required: ${comp.totalRequiredQty} ${comp.unit})`}
+                                              onChange={(e) => {
+                                                const val = Number(e.target.value);
+                                                const maxLimit = Math.min(comp.unissuedQty, comp.inHouseStock);
+                                                const clamped = isNaN(val) ? 0 : Math.max(0, Math.min(val, maxLimit));
+                                                setCustomIssueQtys(prev => ({ ...prev, [key]: clamped }));
+                                              }}
+                                              disabled={comp.inHouseStock === 0}
+                                            />
+                                          ) : (
+                                            <span style={{ fontSize: '0.74rem', color: 'var(--success)', fontWeight: 700 }}>
+                                              ✓ Completed
+                                            </span>
+                                          )}
+                                        </td>
+                                        <td>
+                                          {!isLineDone && (
+                                            <input
+                                              type="text"
+                                              placeholder="Operator/Floor..."
+                                              className="input-field"
+                                              style={{ width: '100%', padding: '0.15rem 0.4rem', fontSize: '0.74rem' }}
+                                              value={currentIssuedTo}
+                                              onChange={(e) => {
+                                                const val = e.target.value;
+                                                setIssuedToInputs(prev => ({ ...prev, [key]: val }));
+                                              }}
+                                              disabled={comp.inHouseStock === 0}
+                                            />
+                                          )}
+                                        </td>
+                                        <td style={{ textAlign: 'center' }}>
+                                          {!isLineDone ? (
+                                            <button
+                                              type="button"
+                                              className="btn btn-success"
+                                              style={{ padding: '0.2rem 0.55rem', fontSize: '0.72rem', fontWeight: 700 }}
+                                              onClick={() => handleIssueSingleItem(card.id, card.cardType, comp)}
+                                              disabled={comp.inHouseStock === 0 || currentInputQty <= 0}
+                                              title={comp.inHouseStock === 0 ? 'No stock available in store' : 'Issue material from store'}
+                                            >
+                                              Issue
+                                            </button>
+                                          ) : (
+                                            <span className="badge badge-success" style={{ fontSize: '0.68rem' }}>
+                                              Fully Issued
+                                            </span>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })

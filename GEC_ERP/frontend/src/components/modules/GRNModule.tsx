@@ -878,16 +878,29 @@ export const GRNModule: React.FC = () => {
                                                 const produceItems = items.filter(it => 
                                                   matchingCards.some(c => c.itemId === it.id || c.itemCode === it.itemCode)
                                                 );
-                                                const candidateItems = produceItems.length > 0 ? produceItems : items;
+
+                                                if (produceItems.length === 0) {
+                                                  return (
+                                                    <div style={{ padding: '0.4rem 0.6rem', backgroundColor: 'rgba(239, 68, 68, 0.08)', borderRadius: '0.375rem', border: '1px solid rgba(239, 68, 68, 0.3)', fontSize: '0.75rem', color: 'var(--danger)' }}>
+                                                      ⚠️ No finished items linked to <strong>{item.itemCode}</strong> in Process Master. Please configure a Process Card for this raw material.
+                                                    </div>
+                                                  );
+                                                }
+
+                                                const produceOptions: AutocompleteOption[] = produceItems.map(it => ({
+                                                  value: it.id,
+                                                  label: `${it.itemCode} - ${it.name}`,
+                                                  sublabel: `Class: ${it.category} | UOM: ${it.unit}`,
+                                                  badge: it.partCode ? `Part: ${it.partCode}` : undefined
+                                                }));
 
                                                 return (
-                                                  <select
-                                                    className="input-field"
-                                                    required
-                                                    style={{ fontSize: '0.82rem', padding: '0.35rem' }}
+                                                  <AutocompleteSelect
+                                                    options={produceOptions}
                                                     value={item.directJWProduceItemId || ''}
-                                                    onChange={(e) => {
-                                                      const pId = e.target.value;
+                                                    placeholder={`Select finished item (${produceItems.length} mapped in Process Master)...`}
+                                                    required
+                                                    onChange={(pId) => {
                                                       const pItem = items.find(i => i.id === pId);
                                                       const card = itemProcessCards.find(c => c.itemId === pId || c.itemCode === pItem?.itemCode);
                                                       const step1 = card?.steps?.[0];
@@ -903,18 +916,7 @@ export const GRNModule: React.FC = () => {
                                                         directJWVendorName: ''
                                                       } : it));
                                                     }}
-                                                  >
-                                                    <option value="">
-                                                      {produceItems.length > 0 
-                                                        ? `-- Choose Item to Create (${produceItems.length} Process Card Matches) --` 
-                                                        : '-- Choose Item to Create --'}
-                                                    </option>
-                                                    {candidateItems.map(it => (
-                                                      <option key={it.id} value={it.id}>
-                                                        {it.itemCode} - {it.name} {it.partCode ? `[Part: ${it.partCode}]` : ''}
-                                                      </option>
-                                                    ))}
-                                                  </select>
+                                                  />
                                                 );
                                               })()
                                             )}

@@ -11,9 +11,9 @@ import {
 import { SystemErrorLog, UserActivityLog, Item, BOM, Vendor, Customer, ProcessDefinition, ItemProcessCard } from '../../types/erp';
 import { 
   detectCSVType, parseItemsCSV, parseBOMsCSV, parseInventoryCSV, 
-  parseVendorsCSV, parseCustomersCSV, parseProcessesCSV, 
-  downloadCSVTemplate, CSV_TEMPLATES, IngestionEntityType, 
-  ParsedResult, ParsedInventoryResult, ParsedRowError,
+  parseVendorsCSV, parseCustomersCSV, parseProcessesCSV, parsePlanningCSV,
+  downloadCSVTemplate, downloadCurrentPlanningSheet, CSV_TEMPLATES, IngestionEntityType, 
+  ParsedResult, ParsedInventoryResult, ParsedPlanningResult, ParsedPlanningItem, ParsedRowError,
   parseWorkbookFile 
 } from '../../utils/massDataParser';
 
@@ -23,7 +23,7 @@ export const SuperAdminAnalyticsModule: React.FC = () => {
     items, workOrders, purchaseOrders, salesOrders, boms, jobworks, jobCards, 
     grns, qcInspections, assemblies, dispatchRecords, backups, resetOperationalData,
     vendors, customers, processDefinitions, itemProcessCards,
-    massUpsertItems, massUpsertBOMs, massUpsertVendors, massUpsertCustomers, massUpsertProcesses, massUpsertItemProcessCards, massUpdateInventory,
+    massUpsertItems, massUpsertBOMs, massUpsertVendors, massUpsertCustomers, massUpsertProcesses, massUpsertItemProcessCards, massUpdateInventory, massIngestPlanning,
     addAuditLog
   } = useERP();
 
@@ -372,6 +372,20 @@ export const SuperAdminAnalyticsModule: React.FC = () => {
         title = isRouting
           ? `Process Routing Master Preview (${sheets.length} Sheet${sheets.length > 1 ? 's' : ''}, ${allCards.length} Routing Cards)`
           : `Process Master Preview & Validation (${sheets.length} Sheet${sheets.length > 1 ? 's' : ''})`;
+      } else if (entityType === 'CURRENT_PLANNING') {
+        const allValid: ParsedPlanningItem[] = [];
+        const allSkipped: any[] = [];
+        const allErrors: any[] = [];
+        let totalRows = 0;
+        for (const sheet of sheets) {
+          const res = parsePlanningCSV(sheet.text, items, vendors);
+          totalRows += res.totalRows;
+          allValid.push(...res.validRecords);
+          allSkipped.push(...res.skippedRecords);
+          allErrors.push(...res.errors);
+        }
+        parsed = { entityType: 'CURRENT_PLANNING', totalRows, validRecords: allValid, skippedRecords: allSkipped, errors: allErrors };
+        title = `Current Planning Sheet Preview & Validation (${sheets.length} Sheet${sheets.length > 1 ? 's' : ''}, ${allValid.length} Items)`;
       }
 
       setSelectedPreview({
@@ -1070,9 +1084,10 @@ export const SuperAdminAnalyticsModule: React.FC = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', fontWeight: 700, color: '#a855f7' }}>
                 <FolderDown size={16} /> Download Ready-to-Use CSV Templates:
               </div>
-              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
                 {[
                   { key: 'ITEM_MASTER', label: 'Item Master (.CSV)' },
+                  { key: 'CURRENT_PLANNING', label: 'Current Planning (.CSV)' },
                   { key: 'BOM_MASTER', label: 'BOM Master (.CSV)' },
                   { key: 'INVENTORY', label: 'Inventory Stock (.CSV)' },
                   { key: 'VENDORS', label: 'Vendors (.CSV)' },
@@ -1088,6 +1103,14 @@ export const SuperAdminAnalyticsModule: React.FC = () => {
                     <Download size={12} /> {t.label}
                   </button>
                 ))}
+                <button
+                  onClick={() => downloadCurrentPlanningSheet(items, vendors)}
+                  className="btn btn-primary"
+                  style={{ fontSize: '0.75rem', padding: '0.28rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem', backgroundColor: '#7c3aed', borderColor: '#7c3aed', fontWeight: 700 }}
+                  title="Exports complete active catalog formatted for Planning Sheet with MinStock=2, PO=5 (Bought out), JW=4 (Job work), QC=3 (QC items)"
+                >
+                  <Sparkles size={13} /> Export Current Catalog Planning Sheet (MinStock:2, PO:5, JW:4, QC:3)
+                </button>
               </div>
             </div>
           </div>
@@ -1130,6 +1153,10 @@ export const SuperAdminAnalyticsModule: React.FC = () => {
 
                           if (detected === 'ITEM_MASTER') {
                             parsed = parseItemsCSV(sheet.text, items, vendors);
+                            validCount = parsed.validRecords.length;
+                            errorCount = parsed.errors.length;
+                          } else if (detected === 'CURRENT_PLANNING') {
+                            parsed = parsePlanningCSV(sheet.text, items, vendors);
                             validCount = parsed.validRecords.length;
                             errorCount = parsed.errors.length;
                           } else if (detected === 'BOM_MASTER') {
@@ -1202,6 +1229,7 @@ export const SuperAdminAnalyticsModule: React.FC = () => {
                         'CUSTOMERS',
                         'ITEM_MASTER',
                         'INVENTORY',
+                        'CURRENT_PLANNING',
                         'PROCESS_MASTER',
                         'BOM_MASTER'
                       ];
@@ -1228,6 +1256,9 @@ export const SuperAdminAnalyticsModule: React.FC = () => {
                           } else if (targetType === 'INVENTORY') {
                             massUpdateInventory(mf.parsed.updates);
                             logs.push(`  ✓ Updated stock for ${mf.parsed.updates.length} items from ${mf.displayName}`);
+                          } else if (targetType === 'CURRENT_PLANNING') {
+                            massIngestPlanning(mf.parsed.validRecords);
+                            logs.push(`  ✓ Ingested Current Planning for ${mf.parsed.validRecords.length} items from ${mf.displayName}`);
                           } else if (targetType === 'PROCESS_MASTER') {
                             massUpsertProcesses(mf.parsed.validRecords, ingestionMode);
                             logs.push(`  ✓ Ingested ${mf.parsed.validRecords.length} processes from ${mf.displayName}`);
@@ -1301,6 +1332,7 @@ export const SuperAdminAnalyticsModule: React.FC = () => {
                           <td>
                             <span className={`badge ${
                               mf.type === 'ITEM_MASTER' ? 'badge-primary' :
+                              mf.type === 'CURRENT_PLANNING' ? 'badge-primary' :
                               mf.type === 'BOM_MASTER' ? 'badge-purple' :
                               mf.type === 'INVENTORY' ? 'badge-success' :
                               mf.type === 'VENDORS' ? 'badge-warning' :
@@ -1651,6 +1683,60 @@ export const SuperAdminAnalyticsModule: React.FC = () => {
                 </div>
               </div>
 
+              {/* Card 7: Current Planning Setup & Sheet Ingestion */}
+              <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', border: '1.5px solid rgba(124, 58, 237, 0.4)', backgroundColor: 'rgba(124, 58, 237, 0.04)' }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                      <Sparkles size={18} color="#7c3aed" />
+                      <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: 'var(--text-primary)' }}>Current Planning Sheet</h4>
+                    </div>
+                    <span className="badge badge-purple" style={{ fontSize: '0.7rem' }}>Automated Auto-Setup</span>
+                  </div>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0 0 0.75rem' }}>
+                    Upload initial planning sheet: Sets <strong>Min Stock = 2</strong> on items, auto-creates <strong>POs (5 qty for Bought out)</strong>, <strong>Job Works (4 qty for JW)</strong>, and <strong>QC (3 qty for QC items)</strong>.
+                  </p>
+                  {singleUploadLogs.CURRENT_PLANNING && (
+                    <div style={{ padding: '0.4rem 0.6rem', backgroundColor: 'rgba(16, 185, 129, 0.1)', color: '#10b981', borderRadius: '0.35rem', fontSize: '0.72rem', marginBottom: '0.75rem' }}>
+                      {singleUploadLogs.CURRENT_PLANNING.message}
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <label className="btn btn-primary" style={{ flex: 1, fontSize: '0.75rem', padding: '0.4rem 0.6rem', textAlign: 'center', cursor: 'pointer', margin: 0, backgroundColor: '#7c3aed', borderColor: '#7c3aed' }}>
+                    <Upload size={13} style={{ marginRight: '0.3rem', display: 'inline' }} /> Upload planning sheet (.csv)
+                    <input 
+                      type="file" 
+                      accept=".xlsx,.xls,.csv,.tsv,.txt" 
+                      style={{ display: 'none' }}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          handleSingleFileUpload('CURRENT_PLANNING', file, ingestionMode);
+                          e.target.value = '';
+                        }
+                      }} 
+                    />
+                  </label>
+                  <button 
+                    className="btn btn-outline" 
+                    style={{ fontSize: '0.75rem', padding: '0.4rem 0.6rem' }}
+                    onClick={() => downloadCSVTemplate('CURRENT_PLANNING')}
+                    title="Download Template"
+                  >
+                    <Download size={13} />
+                  </button>
+                  <button 
+                    className="btn btn-outline" 
+                    style={{ fontSize: '0.75rem', padding: '0.4rem 0.6rem', color: '#7c3aed', borderColor: '#7c3aed' }}
+                    onClick={() => downloadCurrentPlanningSheet(items, vendors)}
+                    title="Export Live Catalog Planning Sheet"
+                  >
+                    <Sparkles size={13} />
+                  </button>
+                </div>
+              </div>
+
             </div>
           </div>
         </div>
@@ -1812,8 +1898,48 @@ export const SuperAdminAnalyticsModule: React.FC = () => {
                       </tr>
                     )
                   )}
+                  {selectedPreview.type === 'CURRENT_PLANNING' && (
+                    <tr>
+                      <th>#</th>
+                      <th>Item Code</th>
+                      <th>Part Code</th>
+                      <th>Item Name</th>
+                      <th>Class</th>
+                      <th>Process Sources</th>
+                      <th>Min Stock</th>
+                      <th>Pending PO</th>
+                      <th>Pending JW</th>
+                      <th>Pending QC</th>
+                      <th>Pref Vendor</th>
+                      <th>Unit Price</th>
+                    </tr>
+                  )}
                 </thead>
                 <tbody>
+                  {selectedPreview.type === 'CURRENT_PLANNING' && (selectedPreview.parsedData.validRecords as ParsedPlanningItem[]).slice(0, 50).map((p, i) => (
+                    <tr key={i}>
+                      <td style={{ color: 'var(--text-muted)' }}>{i + 1}</td>
+                      <td style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>{p.itemCode}</td>
+                      <td style={{ fontFamily: 'monospace', fontSize: '0.78rem' }}>{p.partCode || '-'}</td>
+                      <td style={{ fontWeight: 600 }}>{p.itemName || p.itemCode}</td>
+                      <td><span className="badge badge-info" style={{ fontSize: '0.68rem' }}>{p.category || '-'}</span></td>
+                      <td>
+                        <div style={{ display: 'flex', gap: '0.2rem', flexWrap: 'wrap' }}>
+                          {p.materialProcessSources?.map(s => (
+                            <span key={s} className={`badge ${s === 'Bought out' ? 'badge-primary' : s === 'In-house' ? 'badge-success' : 'badge-purple'}`} style={{ fontSize: '0.65rem' }}>
+                              {s}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td style={{ fontWeight: 700, color: '#3b82f6' }}>{p.minStockQty}</td>
+                      <td style={{ fontWeight: 700, color: p.pendingPOQty > 0 ? '#10b981' : 'var(--text-muted)' }}>{p.pendingPOQty || '-'}</td>
+                      <td style={{ fontWeight: 700, color: p.pendingJobworkQty > 0 ? '#8b5cf6' : 'var(--text-muted)' }}>{p.pendingJobworkQty || '-'}</td>
+                      <td style={{ fontWeight: 700, color: p.pendingQCQty > 0 ? '#f59e0b' : 'var(--text-muted)' }}>{p.pendingQCQty || '-'}</td>
+                      <td style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{p.vendorCode || '-'}</td>
+                      <td>₹{p.unitPrice || 0}</td>
+                    </tr>
+                  ))}
                   {selectedPreview.type === 'ITEM_MASTER' && (selectedPreview.parsedData.validRecords as Item[]).slice(0, 50).map((it, i) => (
                     <tr key={i}>
                       <td style={{ color: 'var(--text-muted)' }}>{i + 1}</td>
@@ -2006,6 +2132,18 @@ export const SuperAdminAnalyticsModule: React.FC = () => {
                           PROCESS_MASTER: { 
                             status: 'SUCCESS', 
                             message: `✓ Ingested ${cards.length > 0 ? `${cards.length} Process Routing Cards & ` : ''}${records.length} operations (${mode === 'OVERWRITE' ? 'Clean Overwrite' : 'Appended/Merged'}).`, 
+                            timestamp: new Date().toLocaleTimeString() 
+                          }
+                        }));
+                      } else if (type === 'CURRENT_PLANNING') {
+                        const records = (parsedData as ParsedPlanningResult).validRecords;
+                        if (records.length === 0) return alert('No valid planning records to commit.');
+                        massIngestPlanning(records);
+                        setSingleUploadLogs(prev => ({
+                          ...prev,
+                          CURRENT_PLANNING: { 
+                            status: 'SUCCESS', 
+                            message: `✓ Ingested current planning for ${records.length} items (MinStock=2, POs, JWs, and QCs generated).`, 
                             timestamp: new Date().toLocaleTimeString() 
                           }
                         }));

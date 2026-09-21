@@ -7,14 +7,8 @@ import { fileURLToPath } from 'url';
 import { exec, execSync } from 'child_process';
 import { sessionManager } from './sessionManager.js';
 
-const getDirname = () => {
-  if (typeof __dirname !== 'undefined' && __dirname) return __dirname;
-  try {
-    if (typeof import.meta !== 'undefined' && import.meta.url) return path.dirname(fileURLToPath(import.meta.url));
-  } catch (e) {}
-  return process.cwd();
-};
-const __dirname = getDirname();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const ROOT_DIR = path.resolve(__dirname, '../../');
 const BACKEND_PKG_FILE = path.join(__dirname, '../package.json');
 const FRONTEND_PKG_FILE = path.join(__dirname, '../../frontend/package.json');

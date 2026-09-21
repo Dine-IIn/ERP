@@ -1141,7 +1141,7 @@ export const Header: React.FC = () => {
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
                   <button
                     type="button"
-                    onClick={() => { setCustomLanInput('http://localhost:5000'); handleSaveAndTestServerConfig('http://localhost:5000'); }}
+                    onClick={() => { const u = `http://localhost:${apiClient.getLanUrl()?.includes('5001') ? '5001' : '5000'}`; setCustomLanInput(u); handleSaveAndTestServerConfig(u); }}
                     style={{
                       padding: '0.25rem 0.6rem',
                       borderRadius: '0.25rem',
@@ -1152,32 +1152,41 @@ export const Header: React.FC = () => {
                       cursor: 'pointer'
                     }}
                   >
-                    💻 Localhost (5000)
+                    💻 Localhost ({apiClient.getLanUrl()?.includes('5001') ? '5001' : '5000'})
                   </button>
-                  {detectedServerIps.map(ip => (
-                    <button
-                      key={ip}
-                      type="button"
-                      onClick={() => { const u = `http://${ip}:5000`; setCustomLanInput(u); handleSaveAndTestServerConfig(u); }}
-                      style={{
-                        padding: '0.25rem 0.6rem',
-                        borderRadius: '0.25rem',
-                        border: '1px solid var(--border-color)',
-                        backgroundColor: 'var(--bg-tertiary)',
-                        color: 'var(--text-primary)',
-                        fontSize: '0.72rem',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      📡 LAN ({ip}:5000)
-                    </button>
-                  ))}
+                  {detectedServerIps.map(ip => {
+                    const port = apiClient.getLanUrl()?.includes('5001') ? '5001' : '5000';
+                    const u = `http://${ip}:${port}`;
+                    return (
+                      <button
+                        key={ip}
+                        type="button"
+                        onClick={() => { setCustomLanInput(u); handleSaveAndTestServerConfig(u); }}
+                        style={{
+                          padding: '0.25rem 0.6rem',
+                          borderRadius: '0.25rem',
+                          border: '1px solid var(--border-color)',
+                          backgroundColor: 'var(--bg-tertiary)',
+                          color: 'var(--text-primary)',
+                          fontSize: '0.72rem',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        📡 LAN ({ip}:{port})
+                      </button>
+                    );
+                  })}
                   <button
                     type="button"
                     onClick={() => { 
-                      setCustomLanInput('http://192.168.1.88:5000'); 
-                      setCustomCloudInput('https://erp.manavkalola.xyz'); 
-                      handleSaveAndTestServerConfig('http://192.168.1.88:5000', 'https://erp.manavkalola.xyz'); 
+                      localStorage.removeItem('gec_erp_server_url');
+                      localStorage.removeItem('gec_erp_lan_url');
+                      localStorage.removeItem('gec_erp_cloud_url');
+                      const lan = apiClient.getLanUrl() || '';
+                      const cloud = apiClient.getCloudUrl() || '';
+                      setCustomLanInput(lan); 
+                      setCustomCloudInput(cloud); 
+                      handleSaveAndTestServerConfig(lan, cloud); 
                     }}
                     style={{
                       padding: '0.25rem 0.6rem',
@@ -1189,7 +1198,7 @@ export const Header: React.FC = () => {
                       cursor: 'pointer'
                     }}
                   >
-                    🔄 Reset Defaults
+                    🔄 Reset Defaults (.env)
                   </button>
                 </div>
               </div>

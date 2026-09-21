@@ -1,37 +1,46 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, lazy, Suspense } from 'react';
 import { ERPProvider, useERP } from './context/ERPContext';
 import { LoginSignup } from './components/auth/LoginSignup';
 import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
 import { UpdateEnforcementModal } from './components/common/UpdateEnforcementModal';
 import { updaterService, UpdateInfo } from './services/updaterService';
-import { DashboardModule } from './components/modules/DashboardModule';
-import { ItemMasterModule } from './components/modules/ItemMasterModule';
-import { ProcessMasterModule } from './components/modules/ProcessMasterModule';
-import { CustomerMasterModule } from './components/modules/CustomerMasterModule';
-import { VendorMasterModule } from './components/modules/VendorMasterModule';
-import { BOMMasterModule } from './components/modules/BOMMasterModule';
-import { SalesOrderModule } from './components/modules/SalesOrderModule';
-import { InHouseInventoryModule } from './components/modules/InHouseInventoryModule';
-import { ExternalInventoryModule } from './components/modules/ExternalInventoryModule';
-import { InventoryModule } from './components/modules/InventoryModule';
-import { PurchaseOrderModule } from './components/modules/PurchaseOrderModule';
-import { GRNModule } from './components/modules/GRNModule';
-import { WorkOrderModule } from './components/modules/WorkOrderModule';
-import { QualityControlModule } from './components/modules/QualityControlModule';
-import { AssemblyModule } from './components/modules/AssemblyModule';
-import { UserManagementModule } from './components/modules/UserManagementModule';
-import { ShortageModule } from './components/modules/ShortageModule';
-import { JobCardModule } from './components/modules/JobCardModule';
-import { FloorPlanningModule } from './components/modules/FloorPlanningModule';
-import { DispatchModule } from './components/modules/DispatchModule';
-import { PlanningModule } from './components/modules/PlanningModule';
-import { SuperAdminAnalyticsModule } from './components/modules/SuperAdminAnalyticsModule';
-import { MaterialIssueModule } from './components/modules/MaterialIssueModule';
-import { QuotationModule } from './components/modules/QuotationModule';
-import { DrawingsModule } from './components/modules/DrawingsModule';
 
-const MODULE_REGISTRY: Record<string, React.FC> = {
+// Module Components Lazy Loaded on Demand for Instant Startup (<0.4s)
+const DashboardModule = lazy(() => import('./components/modules/DashboardModule').then(m => ({ default: m.DashboardModule })));
+const ItemMasterModule = lazy(() => import('./components/modules/ItemMasterModule').then(m => ({ default: m.ItemMasterModule })));
+const ProcessMasterModule = lazy(() => import('./components/modules/ProcessMasterModule').then(m => ({ default: m.ProcessMasterModule })));
+const CustomerMasterModule = lazy(() => import('./components/modules/CustomerMasterModule').then(m => ({ default: m.CustomerMasterModule })));
+const VendorMasterModule = lazy(() => import('./components/modules/VendorMasterModule').then(m => ({ default: m.VendorMasterModule })));
+const BOMMasterModule = lazy(() => import('./components/modules/BOMMasterModule').then(m => ({ default: m.BOMMasterModule })));
+const SalesOrderModule = lazy(() => import('./components/modules/SalesOrderModule').then(m => ({ default: m.SalesOrderModule })));
+const InHouseInventoryModule = lazy(() => import('./components/modules/InHouseInventoryModule').then(m => ({ default: m.InHouseInventoryModule })));
+const ExternalInventoryModule = lazy(() => import('./components/modules/ExternalInventoryModule').then(m => ({ default: m.ExternalInventoryModule })));
+const InventoryModule = lazy(() => import('./components/modules/InventoryModule').then(m => ({ default: m.InventoryModule })));
+const PurchaseOrderModule = lazy(() => import('./components/modules/PurchaseOrderModule').then(m => ({ default: m.PurchaseOrderModule })));
+const GRNModule = lazy(() => import('./components/modules/GRNModule').then(m => ({ default: m.GRNModule })));
+const WorkOrderModule = lazy(() => import('./components/modules/WorkOrderModule').then(m => ({ default: m.WorkOrderModule })));
+const QualityControlModule = lazy(() => import('./components/modules/QualityControlModule').then(m => ({ default: m.QualityControlModule })));
+const AssemblyModule = lazy(() => import('./components/modules/AssemblyModule').then(m => ({ default: m.AssemblyModule })));
+const UserManagementModule = lazy(() => import('./components/modules/UserManagementModule').then(m => ({ default: m.UserManagementModule })));
+const ShortageModule = lazy(() => import('./components/modules/ShortageModule').then(m => ({ default: m.ShortageModule })));
+const JobCardModule = lazy(() => import('./components/modules/JobCardModule').then(m => ({ default: m.JobCardModule })));
+const FloorPlanningModule = lazy(() => import('./components/modules/FloorPlanningModule').then(m => ({ default: m.FloorPlanningModule })));
+const DispatchModule = lazy(() => import('./components/modules/DispatchModule').then(m => ({ default: m.DispatchModule })));
+const PlanningModule = lazy(() => import('./components/modules/PlanningModule').then(m => ({ default: m.PlanningModule })));
+const SuperAdminAnalyticsModule = lazy(() => import('./components/modules/SuperAdminAnalyticsModule').then(m => ({ default: m.SuperAdminAnalyticsModule })));
+const MaterialIssueModule = lazy(() => import('./components/modules/MaterialIssueModule').then(m => ({ default: m.MaterialIssueModule })));
+const QuotationModule = lazy(() => import('./components/modules/QuotationModule').then(m => ({ default: m.QuotationModule })));
+const DrawingsModule = lazy(() => import('./components/modules/DrawingsModule').then(m => ({ default: m.DrawingsModule })));
+
+const ModuleLoadingFallback: React.FC = () => (
+  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '320px', gap: '0.75rem', color: 'var(--text-muted)' }}>
+    <div style={{ width: '32px', height: '32px', border: '3px solid var(--border-color)', borderTopColor: 'var(--accent-primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+    <span style={{ fontSize: '0.82rem', fontWeight: 600 }}>Loading Module...</span>
+  </div>
+);
+
+const MODULE_REGISTRY: Record<string, React.LazyExoticComponent<React.FC<any>> | React.FC<any>> = {
   'superadmin-analytics': SuperAdminAnalyticsModule,
   'dashboard': DashboardModule,
   'quotations': QuotationModule,
@@ -183,7 +192,9 @@ const MainContent: React.FC = () => {
                   width: '100%'
                 }}
               >
-                <Component />
+                <Suspense fallback={<ModuleLoadingFallback />}>
+                  <Component />
+                </Suspense>
               </div>
             );
           })}

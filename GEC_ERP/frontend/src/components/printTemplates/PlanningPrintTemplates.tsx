@@ -34,12 +34,12 @@ export interface PlanningPrintFilters {
   searchTerm?: string;
 }
 
-interface PlanningPrintReportProps {
-  data: PlanningPrintRow[];
+export interface PlanningPrintReportProps {
+  data?: PlanningPrintRow[];
   filters?: PlanningPrintFilters;
 }
 
-export const PlanningPrintReport: React.FC<PlanningPrintReportProps> = ({ data }) => {
+export const PlanningPrintReport: React.FC<PlanningPrintReportProps> = ({ data = [] }) => {
   const thBaseStyle: React.CSSProperties = {
     padding: '4px 2px',
     fontWeight: 800,

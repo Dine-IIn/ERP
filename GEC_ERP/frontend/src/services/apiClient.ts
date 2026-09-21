@@ -16,9 +16,38 @@ export interface ServerHealthResponse {
   timestamp: string;
 }
 
+// Environment-aware helpers
+function getEnvMode(): 'production' | 'development' {
+  return (import.meta as any).env?.VITE_APP_ENV === 'production' ? 'production' : 'development';
+}
+
+function getEnvLanUrl(): string {
+  const mode = getEnvMode();
+  const envKey = mode === 'production' ? 'VITE_PROD_LAN_URL' : 'VITE_DEV_LAN_URL';
+  const val = (import.meta as any).env?.[envKey] as string | undefined;
+  if (val && val.trim()) return val.trim().replace(/\/$/, '');
+  // Legacy fallback
+  if ((import.meta as any).env?.VITE_API_LAN_URL) return ((import.meta as any).env.VITE_API_LAN_URL as string).trim().replace(/\/$/, '');
+  return mode === 'production' ? 'http://192.168.1.88:5000' : 'http://192.168.1.88:5001';
+}
+
+function getEnvCloudUrl(): string {
+  const mode = getEnvMode();
+  const envKey = mode === 'production' ? 'VITE_PROD_CLOUD_URL' : 'VITE_DEV_CLOUD_URL';
+  const val = (import.meta as any).env?.[envKey] as string | undefined;
+  if (val && val.trim()) return val.trim().replace(/\/$/, '');
+  // Legacy fallback
+  if ((import.meta as any).env?.VITE_API_CLOUD_URL) return ((import.meta as any).env.VITE_API_CLOUD_URL as string).trim().replace(/\/$/, '');
+  return mode === 'production' ? 'https://erp.manavkalola.xyz' : 'https://erp-dev.manavkalola.xyz';
+}
+
+function getEnvBackendPort(): number {
+  return getEnvMode() === 'production' ? 5000 : 5001;
+}
+
 export function getApiBaseUrl(): string {
   if (typeof window === 'undefined') {
-    return 'http://localhost:5000';
+    return `http://localhost:${getEnvBackendPort()}`;
   }
 
   // 1. User/Device Configured Server URL in localStorage (Takes Highest Priority)
@@ -35,11 +64,11 @@ export function getApiBaseUrl(): string {
     Boolean((window as any).__TAURI__);
   
   if (isTauri) {
-    // Check environment variable override for Tauri if provided
+    // Legacy VITE_API_URL override for Tauri if provided
     if ((import.meta as any).env?.VITE_API_URL) {
       return ((import.meta as any).env.VITE_API_URL as string).replace(/\/$/, '');
     }
-    return 'http://localhost:5000';
+    return getEnvLanUrl();
   }
 
   // 3. Capacitor Native Android / iOS App Detection
@@ -53,31 +82,29 @@ export function getApiBaseUrl(): string {
     }
     const savedCloud = localStorage.getItem('gec_erp_cloud_url');
     if (savedCloud && savedCloud.trim()) return savedCloud.trim().replace(/\/$/, '');
-    if ((import.meta as any).env?.VITE_API_CLOUD_URL) {
-      return ((import.meta as any).env.VITE_API_CLOUD_URL as string).replace(/\/$/, '');
-    }
-    return 'https://erp.manavkalola.xyz';
+    return getEnvCloudUrl();
   }
 
-  // 4. Vite Environment Variable Override
+  // 4. Legacy Vite Environment Variable Override (VITE_API_URL)
   if ((import.meta as any).env?.VITE_API_URL) {
     return ((import.meta as any).env.VITE_API_URL as string).replace(/\/$/, '');
   }
 
   const { protocol, hostname, port } = window.location;
+  const backendPort = getEnvBackendPort();
 
-  // 5. Standard Vite Dev Server Ports (5173, 3000, 3001) -> target backend on port 5000
+  // 5. Standard Vite Dev Server Ports (5173, 3000, 3001) -> target backend on env-aware port
   if (port === '5173' || port === '3000' || port === '3001') {
-    return `${protocol}//${hostname}:5000`;
+    return `${protocol}//${hostname}:${backendPort}`;
   }
 
-  // 6. Direct Backend Serve or Reverse Proxy (Port 5000, 80, 443)
-  if (port === '5000' || port === '80' || port === '443') {
+  // 6. Direct Backend Serve or Reverse Proxy (Port 5000/5001, 80, 443)
+  if (port === '5000' || port === '5001' || port === '80' || port === '443') {
     return `${protocol}//${hostname}${port && port !== '80' && port !== '443' ? `:${port}` : ''}`;
   }
 
-  // 7. Default fallback: target backend on port 5000 of the same hostname
-  return `${protocol}//${hostname || 'localhost'}:5000`;
+  // 7. Default fallback: target backend on env-aware port
+  return `${protocol}//${hostname || 'localhost'}:${backendPort}`;
 }
 
 class HybridApiClient {
@@ -145,25 +172,38 @@ class HybridApiClient {
   public getLanUrl(): string | null {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('gec_erp_lan_url');
-      if (stored) return stored;
-      if ((import.meta as any).env?.VITE_API_LAN_URL) {
-        return ((import.meta as any).env.VITE_API_LAN_URL as string).trim().replace(/\/$/, '');
+      if (stored) {
+        // If stored URL is on old production port but we are now in development mode (or vice-versa), prioritize current env
+        const currentDevPort = getEnvBackendPort();
+        try {
+          const parsed = new URL(stored);
+          if ((parsed.port === '5000' && currentDevPort === 5001) || (parsed.port === '5001' && currentDevPort === 5000)) {
+            // Environment toggle changed; use current environment LAN URL
+            return getEnvLanUrl();
+          }
+        } catch {}
+        return stored;
       }
-      return 'http://192.168.1.88:5000';
+      return getEnvLanUrl();
     }
-    return 'http://192.168.1.88:5000';
+    return getEnvLanUrl();
   }
 
   public getCloudUrl(): string | null {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('gec_erp_cloud_url');
-      if (stored) return stored;
-      if ((import.meta as any).env?.VITE_API_CLOUD_URL) {
-        return ((import.meta as any).env.VITE_API_CLOUD_URL as string).trim().replace(/\/$/, '');
+      if (stored) {
+        const mode = getEnvMode();
+        if ((mode === 'development' && stored.includes('erp.manavkalola.xyz') && !stored.includes('dev')) ||
+            (mode === 'production' && stored.includes('erp-dev.manavkalola.xyz'))) {
+          // Environment toggle changed; use current environment Cloud URL
+          return getEnvCloudUrl();
+        }
+        return stored;
       }
-      return 'https://erp.manavkalola.xyz';
+      return getEnvCloudUrl();
     }
-    return 'https://erp.manavkalola.xyz';
+    return getEnvCloudUrl();
   }
 
   public getLastHealth(): ServerHealthResponse | null {
@@ -234,6 +274,7 @@ class HybridApiClient {
     const customUrl = this.getCustomServerUrl();
     const lanUrl = this.getLanUrl();
     const cloudUrl = this.getCloudUrl();
+    const activePort = getEnvBackendPort();
 
     let isInternetReachable = false;
     let isLanReachable = false;
@@ -268,22 +309,29 @@ class HybridApiClient {
       }
     }
 
-    // 2. Candidate LAN endpoints: Prioritize direct LAN connection
+    // 2. Candidate LAN endpoints: Prioritize direct LAN connection & localhost
     const lanCandidates: string[] = [];
-    if (lanUrl) lanCandidates.push(lanUrl);
+
+    // Prioritize localhost with active backend port for local desktop/dev setups
+    const localActive = `http://localhost:${activePort}`;
+    lanCandidates.push(localActive);
+    lanCandidates.push(`http://127.0.0.1:${activePort}`);
+
+    if (lanUrl && !lanCandidates.includes(lanUrl)) lanCandidates.push(lanUrl);
 
     const defaultUrl = getApiBaseUrl();
     if (!lanCandidates.includes(defaultUrl) && !defaultUrl.startsWith('https://')) {
       lanCandidates.push(defaultUrl);
     }
 
-    if (!lanCandidates.includes('http://localhost:5000')) {
-      lanCandidates.push('http://localhost:5000');
+    const otherPort = activePort === 5001 ? 5000 : 5001;
+    if (!lanCandidates.includes(`http://localhost:${otherPort}`)) {
+      lanCandidates.push(`http://localhost:${otherPort}`);
     }
 
     if (this.lastHealth?.serverIps) {
       for (const ip of this.lastHealth.serverIps) {
-        const candidate = `http://${ip}:${this.lastHealth.serverPort || 5000}`;
+        const candidate = `http://${ip}:${this.lastHealth.serverPort || activePort}`;
         if (!lanCandidates.includes(candidate)) lanCandidates.push(candidate);
       }
     }

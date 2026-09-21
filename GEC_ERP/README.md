@@ -261,14 +261,52 @@ This comparison highlights the architectural transformations made to bring GEC E
 
 ## 🛠️ 6. Quick Build & Run Commands
 
+### 💻 Starting Development Server on Your Dev Laptop:
+
+#### Option A: Running from Repository Root (Recommended)
+Open two PowerShell / Terminal windows in `d:\ERP\GEC_ERP`:
+
+**Terminal 1 — Start Backend Server (Port 5001 in Dev):**
+```powershell
+corepack pnpm server
+# Backend runs at http://localhost:5001 and probes PostgreSQL on port 5437
+```
+
+**Terminal 2 — Start Frontend Client (Port 5173):**
+```powershell
+corepack pnpm dev
+# Frontend runs at http://localhost:5173 (press o + Enter to open in browser)
+```
+
+---
+
+#### Option B: Running from Individual Subfolders
+
+**Terminal 1 (Backend):**
+```powershell
+cd backend
+npm run dev
+# Or: node src/server.js
+```
+
+**Terminal 2 (Frontend):**
+```powershell
+cd frontend
+npm run dev
+```
+
+---
+
+### 📦 Complete Monorepo Command Reference:
+
 ```powershell
 # 1. Install all dependencies across monorepo
 corepack pnpm install
 
-# 2. Run Frontend in Development Mode (Vite)
+# 2. Run Frontend in Development Mode (Vite on port 5173)
 corepack pnpm dev
 
-# 3. Run Central Server in Development Mode
+# 3. Run Central Server in Development Mode (port 5001)
 corepack pnpm server
 
 # 4. Compile Production Web Bundle
@@ -286,9 +324,109 @@ corepack pnpm server:manage
 
 ---
 
+## 🚀 7. Step-by-Step Release & Update Deployment Guide
+
+### 🌐 A. Central Server Update & Dual Cloudflare Tunnels
+
+The GEC ERP infrastructure runs a dual-environment architecture with zero-downtime Cloudflare tunneling:
+
+| Environment | Public Domain Endpoint | Local Server Port | Database Instance | Purpose |
+| :--- | :--- | :--- | :--- | :--- |
+| **Production** | `https://erp.manavkalola.xyz` | `http://127.0.0.1:5000` | `gec_erp_production` | Live factory production, sales orders & stores. |
+| **Development / Staging** | `https://erp-dev.manavkalola.xyz` | `http://127.0.0.1:5001` | `gec_erp_development` | Feature testing, template dry-runs & schema migrations. |
+
+#### Pushing Updates to the Production Server:
+```bash
+# 1. SSH into the server / open server terminal
+cd /var/www/gec_erp   # (or D:\ERP\GEC_ERP on Windows Server)
+
+# 2. Pull the latest tested codebase from GitHub
+git pull origin main
+
+# 3. Install any updated dependencies
+cd backend && npm install
+cd ../frontend && npm install
+
+# 4. Build the optimized production frontend bundle
+npm run build
+
+# 5. Zero-Downtime Reload of the Backend Process via PM2
+pm2 reload gec-erp-backend
+# Or restart both if dev is also running:
+pm2 restart ecosystem.config.json
+
+# 6. Verify Cloudflare Tunnel status
+cloudflared tunnel status
+# Check health endpoints:
+curl -I https://erp.manavkalola.xyz/api/health
+curl -I https://erp-dev.manavkalola.xyz/api/health
+```
+
+---
+
+### 🖥️ B. Windows Desktop App Update (Tauri .exe / .msi)
+
+The desktop client is built on **Tauri v2 + Rust**, delivering sub-40MB RAM usage and native Windows window framing.
+
+#### Steps to Compile & Distribute Desktop Update:
+1. **Prepare Frontend Distribution**:
+   ```powershell
+   cd frontend
+   npm run build
+   ```
+2. **Build Native Windows Installer**:
+   ```powershell
+   # Option 1: Automated one-click Python build script
+   python build_desktop.py
+
+   # Option 2: Direct Tauri CLI
+   npm run tauri build
+   ```
+3. **Locate the Output Binaries**:
+   - NSIS Executable Installer: `frontend/src-tauri/target/release/bundle/nsis/GEC_ERP_x64_en-US.exe`
+   - MSI Package: `frontend/src-tauri/target/release/bundle/msi/GEC_ERP_x64_en-US.msi`
+4. **Push Update to Client PCs**:
+   - **LAN Shared Drive**: Copy `GEC_ERP_x64_en-US.exe` to factory shared folder `\\SERVER\ERP_Installers\`.
+   - **Auto-Update Engine**: Create a GitHub Release with tag `v1.x.x` and upload `GEC_ERP_x64_en-US.exe` + `.sig` signature. Client apps will detect the new release via `updaterService.ts` and prompt users on launch.
+
+---
+
+### 📱 C. Android Mobile App Update (Capacitor .apk)
+
+The Android tablet client is built on **Capacitor + Android SDK**, providing full offline resilience, native camera barcode/drawing scanning, and LAN-first syncing.
+
+#### Steps to Compile & Distribute Android Update:
+1. **Build & Sync Web Assets into Native Android Project**:
+   ```powershell
+   cd frontend
+   npm run build
+   npx cap sync android
+   ```
+2. **Compile the APK**:
+   ```powershell
+   # Option 1: Automated Python builder
+   python build_android.py
+
+   # Option 2: Direct Gradle Build via CLI
+   cd android
+   .\gradlew assembleRelease
+   # or for fast debug build:
+   .\gradlew assembleDebug
+   ```
+3. **Locate Generated APK**:
+   - Release APK: `frontend/android/app/build/outputs/apk/release/app-release-unsigned.apk`
+   - Debug APK: `frontend/android/app/build/outputs/apk/debug/app-debug.apk`
+4. **Deploying Update to Android Devices**:
+   - **Direct USB ADB Install (Instant)**:
+     ```powershell
+     adb install -r frontend/android/app/build/outputs/apk/debug/app-debug.apk
+     ```
+   - **In-Factory Wireless Distribution**:
+     Copy the built APK to `storage/apk/GEC_ERP_latest.apk` on the central server. Factory tablets can download and install directly by opening `https://erp.manavkalola.xyz/download/android` in Chrome.
+
+---
+
 ## 📄 License & Intellectual Property
 Proprietary Enterprise Software built for **GEC (Plastic Injection & Moulding Machines)**. All rights reserved.
-
-
 
 superadmin = GEC_SuperAdmin#2026!Secured$
