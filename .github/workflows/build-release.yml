@@ -51,6 +51,7 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         with:
           projectPath: "./Manual ERP/frontend"
           tagName: ${{ github.ref_name }}
@@ -58,7 +59,7 @@ jobs:
           releaseBody: "Automated multi-platform standalone release for Windows, macOS, Android, and iOS."
           releaseDraft: false
           prerelease: false
-          args: ${{ matrix.args }}
+          args: ${{ matrix.args }} --config '{"bundle":{"createUpdaterArtifacts": false}}'
 
   # -------------------------------------------------------------
   # 2. Android Mobile Build (.apk)
