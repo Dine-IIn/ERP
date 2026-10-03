@@ -30,12 +30,12 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Setup Corepack & PNPM
         run: |
           corepack enable
-          corepack prepare pnpm@latest --activate
+          corepack prepare pnpm@9 --activate
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -44,7 +44,7 @@ jobs:
 
       - name: Install frontend dependencies
         run: |
-          cd frontend
+          cd "Manual ERP/frontend"
           pnpm install
 
       - name: Build Tauri Desktop Application
@@ -52,7 +52,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          projectPath: "./frontend"
+          projectPath: "./Manual ERP/frontend"
           tagName: ${{ github.ref_name }}
           releaseName: "ERP App Release ${{ github.ref_name }}"
           releaseBody: "Automated multi-platform standalone release for Windows, macOS, Android, and iOS."
@@ -75,7 +75,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Setup Java JDK
         uses: actions/setup-java@v4
@@ -86,18 +86,18 @@ jobs:
       - name: Setup Corepack & PNPM
         run: |
           corepack enable
-          corepack prepare pnpm@latest --activate
+          corepack prepare pnpm@9 --activate
 
       - name: Install dependencies & sync Capacitor Android
         run: |
-          cd frontend
+          cd "Manual ERP/frontend"
           pnpm install
           pnpm build
           npx cap sync android || true
 
       - name: Build Android APK
         run: |
-          cd frontend/android
+          cd "Manual ERP/frontend/android"
           chmod +x gradlew
           ./gradlew assembleRelease || ./gradlew assembleDebug
 
@@ -105,7 +105,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: frontend/android/app/build/outputs/apk/**/*.apk
+          files: Manual ERP/frontend/android/app/build/outputs/apk/**/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -124,23 +124,23 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Setup Corepack & PNPM
         run: |
           corepack enable
-          corepack prepare pnpm@latest --activate
+          corepack prepare pnpm@9 --activate
 
       - name: Install dependencies & sync Capacitor iOS
         run: |
-          cd frontend
+          cd "Manual ERP/frontend"
           pnpm install
           pnpm build
           npx cap sync ios || true
 
       - name: Build iOS App Archive via Xcode
         run: |
-          cd frontend/ios/App
+          cd "Manual ERP/frontend/ios/App"
           xcodebuild -workspace App.xcworkspace -scheme App -sdk iphoneos -configuration Release CODE_SIGNING_ALLOWED=NO archive -archivePath build/App.xcarchive || true
           cd build
           zip -r App.ipa App.xcarchive || true
@@ -149,6 +149,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: frontend/ios/App/build/App.ipa
+          files: Manual ERP/frontend/ios/App/build/App.ipa
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
