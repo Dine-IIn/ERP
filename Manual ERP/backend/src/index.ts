@@ -258,7 +258,8 @@ if (fs.existsSync(configEnvPath)) {
 }
 
 if (!process.env.CENTRAL_SERVICES_URL) {
-  throw new Error("CENTRAL_SERVICES_URL environment variable is required");
+  process.env.CENTRAL_SERVICES_URL = 'http://localhost:5000';
+  console.log("ℹ️ [Standalone Mode] CENTRAL_SERVICES_URL omitted. Defaulting to local backend (http://localhost:5000).");
 }
 
 if (!process.env.JWT_SECRET) {
@@ -1087,6 +1088,26 @@ async function seedDatabase() {
           where: { id: adminRole.id },
           data: { permissions: JSON.stringify(permissions) }
         });
+
+        // Ensure default 'admin' user exists for the company
+        const adminUserExists = await prisma.user.findFirst({
+          where: { companyId: company.id, username: 'admin' }
+        });
+        if (!adminUserExists) {
+          const passHash = await hashPassword('123456');
+          await prisma.user.create({
+            data: {
+              companyId: company.id,
+              username: 'admin',
+              email: `admin@${company.companyCode.toLowerCase()}.com`,
+              mobileNo: '9999999999',
+              passwordHash: passHash,
+              status: 'ACTIVE',
+              roleId: adminRole.id
+            }
+          });
+          console.log(`🌱 [Database Seeding] Seeded default user 'admin' (password: 123456) for company ${company.companyCode}`);
+        }
       }
     }
     console.log("🌱 [Database Seeding] Seeding completed successfully!");

@@ -514,6 +514,12 @@ export default function App() {
     setProfileSuccess(null);
 
     const targetUrl = getDiscoveryServiceUrl();
+    if (!targetUrl || targetUrl.trim() === '') {
+      logToConsole('info', `[Tauri Reconnect] Standalone mode active (Direct backend connection to "${getActiveBaseUrl()}").`);
+      setProfileSuccess(`Standalone Connection active`);
+      setProfileLoading(false);
+      return;
+    }
     console.log("=== DISCOVERY DEBUG (RECONNECT) ===");
     console.log("Discovery URL:", targetUrl);
     console.log("Environment URL:", import.meta.env.VITE_DISCOVERY_SERVICE_URL);
@@ -630,17 +636,20 @@ export default function App() {
           if (code.toUpperCase() === 'SUPERADMIN') {
             logToConsole('info', `[Tauri Startup] Bypassing discovery re-validation for static SUPERADMIN`);
           } else {
-            logToConsole('info', `[Tauri Startup] Re-validating company code "${code}"...`);
             const targetUrl = getDiscoveryServiceUrl();
-            console.log("=== DISCOVERY DEBUG (STARTUP VALIDATION) ===");
-            console.log("Discovery URL:", targetUrl);
-            console.log("Environment URL:", import.meta.env.VITE_DISCOVERY_SERVICE_URL);
-            console.log("=======================");
-            getActiveFetch()(targetUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ companyCode: code })
-            })
+            if (!targetUrl || targetUrl.trim() === '') {
+              logToConsole('info', `[Tauri Startup] Standalone mode active. Bypassing central discovery re-validation.`);
+            } else {
+              logToConsole('info', `[Tauri Startup] Re-validating company code "${code}"...`);
+              console.log("=== DISCOVERY DEBUG (STARTUP VALIDATION) ===");
+              console.log("Discovery URL:", targetUrl);
+              console.log("Environment URL:", import.meta.env.VITE_DISCOVERY_SERVICE_URL);
+              console.log("=======================");
+              getActiveFetch()(targetUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ companyCode: code })
+              })
             .then(res => {
               if (!res.ok) throw new Error(`Discovery server returned status: ${res.status}`);
               return res.json();
@@ -660,6 +669,7 @@ export default function App() {
             .catch(err => {
               logToConsole('error', `[Tauri Startup] Discovery revalidation failed: ${err.message || err.toString()}`);
             });
+            }
           }
         } catch (err: any) {
           setAppVersion('0.0.1');

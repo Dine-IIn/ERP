@@ -19,6 +19,9 @@ const controllers_1 = require("./controllers");
 const controllers_2 = require("./controllers");
 const chat_1 = require("./controllers/chat");
 const taxes_1 = require("./controllers/taxes");
+const sheetsController_1 = require("./controllers/sheetsController");
+const mrpController_1 = require("./controllers/mrpController");
+const dueRemindersController_1 = require("./controllers/dueRemindersController");
 const crm_1 = require("./controllers/crm");
 const purchases_1 = require("./controllers/purchases");
 const inventory_1 = require("./controllers/inventory");
@@ -57,7 +60,8 @@ if (fs_1.default.existsSync(configEnvPath)) {
     }
 }
 if (!process.env.CENTRAL_SERVICES_URL) {
-    throw new Error("CENTRAL_SERVICES_URL environment variable is required");
+    process.env.CENTRAL_SERVICES_URL = 'http://localhost:5000';
+    console.log("ℹ️ [Standalone Mode] CENTRAL_SERVICES_URL omitted. Defaulting to local backend (http://localhost:5000).");
 }
 if (!process.env.JWT_SECRET) {
     throw new Error('JWT_SECRET is missing in environment variables');
@@ -245,6 +249,17 @@ app.post('/api/auth/logout', auth_1.authenticateToken, controllers_1.logout);
 app.patch('/api/auth/profile', auth_1.authenticateToken, controllers_1.updateSelfProfile);
 app.post('/api/auth/reset-password', controllers_1.resetPassword);
 app.post('/api/auth/forgot-password-otp', controllers_1.requestForgotPasswordOTP);
+// Local spreadsheet synchronization routes
+app.post('/api/sheets/sync', auth_1.authenticateToken, sheetsController_1.syncLocalSheet);
+app.post('/api/sheets/open', auth_1.authenticateToken, sheetsController_1.openLocalSheet);
+// Smart MRP, Dynamic Pricing & Cost Roll-Up routes
+app.get('/api/manufacturing/mrp', auth_1.authenticateToken, mrpController_1.getMrpRecommendations);
+app.get('/api/sales/customer-price', auth_1.authenticateToken, mrpController_1.getLastCustomerPrice);
+app.post('/api/master/products/update-cost', auth_1.authenticateToken, mrpController_1.updateRawMaterialCost);
+// Payment Due Reminders, Combined Settlements & Outstanding Balances routes
+app.get('/api/finance/due-alerts', auth_1.authenticateToken, dueRemindersController_1.checkDueAndOverduePayments);
+app.post('/api/finance/combined-settlement', auth_1.authenticateToken, dueRemindersController_1.processCombinedPayment);
+app.get('/api/reports/party-balances', auth_1.authenticateToken, dueRemindersController_1.getCustomerVendorBalances);
 // 2. Super Admin Routes (Create Companies & Manage Global Tiers)
 app.post('/api/super/company', auth_1.authenticateToken, auth_1.requireSuperAdmin, controllers_1.createCompany);
 app.get('/api/super/companies', auth_1.authenticateToken, auth_1.requireSuperAdmin, controllers_1.listCompanies);
