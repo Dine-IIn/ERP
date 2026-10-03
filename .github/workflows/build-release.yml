@@ -48,7 +48,7 @@ jobs:
           pnpm install
 
       - name: Build Tauri Desktop Application
-        uses: tauri-apps/action-release@v2
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -81,7 +81,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '17'
+          java-version: '21'
 
       - name: Setup Corepack & PNPM
         run: |
@@ -93,6 +93,7 @@ jobs:
           cd "Manual ERP/frontend"
           pnpm install
           pnpm build
+          npx cap add android || true
           npx cap sync android || true
 
       - name: Build Android APK
@@ -136,14 +137,18 @@ jobs:
           cd "Manual ERP/frontend"
           pnpm install
           pnpm build
+          npx cap add ios || true
           npx cap sync ios || true
 
       - name: Build iOS App Archive via Xcode
         run: |
-          cd "Manual ERP/frontend/ios/App"
-          xcodebuild -workspace App.xcworkspace -scheme App -sdk iphoneos -configuration Release CODE_SIGNING_ALLOWED=NO archive -archivePath build/App.xcarchive || true
-          cd build
-          zip -r App.ipa App.xcarchive || true
+          cd "Manual ERP/frontend"
+          if [ -d "ios/App" ]; then
+            cd ios/App
+            xcodebuild -workspace App.xcworkspace -scheme App -sdk iphoneos -configuration Release CODE_SIGNING_ALLOWED=NO archive -archivePath build/App.xcarchive || true
+            cd build
+            zip -r App.ipa App.xcarchive || true
+          fi
 
       - name: Upload iOS Build Archive to Release
         uses: softprops/action-gh-release@v2
