@@ -59,7 +59,8 @@ jobs:
           releaseBody: "Automated multi-platform standalone release for Windows, macOS, Android, and iOS."
           releaseDraft: false
           prerelease: false
-          args: ${{ matrix.args }} --config '{"bundle":{"createUpdaterArtifacts": false}}'
+          args: >-
+            ${{ matrix.args }} --config '{"bundle":{"createUpdaterArtifacts": false}}'
 
   # -------------------------------------------------------------
   # 2. Android Mobile Build (.apk)
